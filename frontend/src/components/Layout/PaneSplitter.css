@@ -1,0 +1,40 @@
+.pane-splitter {
+  flex-shrink: 0;
+  width: 6px;
+  cursor: col-resize;
+  position: relative;
+  background: transparent;
+}
+
+/* 通常時は細い境界線程度に留め、hover時のみ強調する (要件9)。
+   実際のヒット領域(6px)より細い線を中央に描くことで、太いSplitterに見えないようにする。 */
+.pane-splitter::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+  background: #e5e7eb;
+}
+
+.pane-splitter:hover::after {
+  background: #93c5fd;
+}
+
+/* Phase 1.11 指示書24章: Master領域の高さ変更用の横方向Splitter。
+   縦方向Splitterと役割を入れ替えるだけで、当たり判定・hover強調の考え方は共通。 */
+.pane-splitter--horizontal {
+  width: auto;
+  height: 6px;
+  cursor: row-resize;
+}
+
+.pane-splitter--horizontal::after {
+  top: 2px;
+  bottom: auto;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 2px;
+}

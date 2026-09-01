@@ -1,0 +1,140 @@
+.drawing-navigator {
+  height: 100%;
+  overflow-y: auto;
+  border-right: 1px solid #e5e7eb;
+  background: #fafafa;
+  padding: 0.5rem;
+  box-sizing: border-box;
+}
+
+.drawing-navigator__heading {
+  font-size: 0.82rem; /* Phase 1.10: 約12.3px → 追加修正 第4ラウンド15章〜18章で約7%縮小(約11.5px) */
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: #374151;
+}
+
+.drawing-navigator__status {
+  font-size: 0.82rem; /* Phase 1.10 フォント見直し: 約11.5px */
+  color: #9ca3af;
+  padding: 0.5rem 0.1rem;
+}
+
+.drawing-navigator__status--error {
+  color: #b91c1c;
+}
+
+.drawing-navigator__group-title {
+  font-size: 0.75rem; /* Phase 1.10: 約11.2px → 追加修正 第4ラウンドで約6%縮小 */
+  color: #6b7280;
+  margin: 0.75rem 0 0.25rem;
+}
+
+/* 図面種別見出しの短い説明文 (Phase 1.11 UI改修指示20章)。長い説明文にはせず、
+   小さく控えめな1行にとどめる。 */
+.drawing-navigator__group-description {
+  font-size: 0.68rem; /* 追加修正 第4ラウンドで0.72remから縮小(約5.6%) */
+  color: #9ca3af;
+  margin: -0.1rem 0 0.35rem;
+}
+
+/* Phase 1.8: PNGサムネイルカード表示へ変更。ペイン幅いっぱいに1枚ずつ縦積みし、
+   ペインのリサイズにサムネイルが追従する (要件23)。 */
+.drawing-navigator__cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.drawing-navigator__card {
+  width: 100%;
+  padding: 0;
+  border: 2px solid #e5e7eb;
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+}
+
+.drawing-navigator__card:hover {
+  border-color: #93c5fd;
+}
+
+.drawing-navigator__card--selected {
+  border-color: #2563eb;
+}
+
+/* サムネイル本体。position:relativeにして、子要素(画像+ラベル)を
+   画像の実際の描画サイズ(width:100%, height:auto = アスペクト比維持)に
+   position:absoluteで正確に重ねる (要件17/23/24)。盤領域(赤色)Overlayは
+   ここには表示しない (中央Viewer側のProductPanelOverlay参照)。 */
+.drawing-navigator__thumb-wrap {
+  position: relative;
+  width: 100%;
+  background: #111827;
+  line-height: 0; /* imgの下に生じる余白を消す */
+}
+
+.drawing-navigator__thumb-img {
+  display: block;
+  width: 100%;
+  height: auto; /* 縦横比を維持し、引き伸ばさない (要件23) */
+}
+
+.drawing-navigator__thumb-fallback {
+  aspect-ratio: 1.4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  font-size: 0.78rem; /* Phase 1.10 フォント見直し: 約10.9px */
+  background: #1f2937;
+  line-height: 1.4;
+}
+
+.drawing-navigator__thumb-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+  /* 根本原因の修正: 親要素(.drawing-navigator__thumb-wrap)がimg下の余白除去のため
+     line-height:0を指定しており、line-heightは継承プロパティのためこのラベルにも
+     そのまま適用されてしまう。line-height:0の行ボックスは高さがほぼ0になり、
+     text-overflow:ellipsis用のoverflow:hiddenと組み合わさることで文字が実質的に
+     クリップされ、DOM上には存在するのに画面には見えない状態になっていた
+     (実UI上で確認できないという不具合の実際の原因)。ここで明示的に上書きする。 */
+  line-height: 1.4;
+  /* 追加修正 第4ラウンド11章〜14章: サムネイル画像の内容(図面線)を隠しすぎている
+     という指摘を受け、不透明度を大きく下げる (旧0.82→0.45)。可読性は白文字+
+     text-shadowで確保し、再び濃い不透明背景へは戻さない。 */
+  background: rgba(17, 24, 39, 0.45);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  padding: 0.25rem 0.4rem;
+  border-bottom-right-radius: 4px;
+}
+
+/* PAGE行 / BAN一覧行の2行表示 (Phase 1.9 UI改修指示1章: 情報を簡潔にする)。
+   各行independentlyに省略記号を適用し、カード幅を超えて崩れないようにする。 */
+.drawing-navigator__thumb-label-line {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 実画面未達 修正指示 3章: 「5〜8px相当の極小表示」を禁止し、通常視力で図面一覧として
+   瞬時に識別できるサイズへ変更する。ルートfont-sizeは14px (index.css) のため、
+   rem値は目安のpx値から逆算している。 */
+.drawing-navigator__thumb-label-line--page {
+  font-size: 0.9rem; /* 14px基準で約13.3px → 追加修正 第4ラウンドで約5%縮小(約12.6px) */
+  font-weight: 700;
+}
+
+.drawing-navigator__thumb-label-line--ban {
+  font-size: 0.82rem; /* 14px基準で約12.3px → 追加修正 第4ラウンドで約7%縮小(約11.5px) */
+}

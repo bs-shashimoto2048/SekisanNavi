@@ -1,0 +1,125 @@
+.product-selector__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.product-selector {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem;
+  width: min(420px, 92vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.product-selector__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.product-selector__header h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.product-selector__header button {
+  border: none;
+  background: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.product-selector__current {
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin: 0 0 0.6rem;
+}
+
+.product-selector__form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.product-selector__form input {
+  flex: 1;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.product-selector__form button {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.product-selector__form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.product-selector__error {
+  color: #b91c1c;
+  font-size: 0.8rem;
+  margin: 0 0 0.4rem;
+}
+
+.product-selector__status {
+  color: #9ca3af;
+  font-size: 0.75rem;
+  margin: 0 0 0.4rem;
+}
+
+.product-selector__candidates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.product-selector__candidates button {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  text-align: left;
+}
+
+.product-selector__candidates button:hover:not(:disabled) {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.product-selector__empty {
+  color: #9ca3af;
+  font-size: 0.78rem;
+  padding: 0.3rem 0;
+}
+
+.product-selector__truncated {
+  color: #b45309;
+  font-size: 0.78rem; /* Phase 1.10 フォント見直し: 約10.9px */
+  margin: 0.4rem 0 0;
+}

@@ -1,0 +1,395 @@
+import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { DrawingNavigator } from './DrawingNavigator'
+import type { PanelPreview, ProductDrawing } from '../../types/domain'
+
+function makeRect(overrides: Partial<PanelPreview['normalized_rect']> = {}) {
+  return { x: 0.1, y: 0.2, w: 0.05, h: 0.1, ...overrides }
+}
+
+function makePanel(overrides: Partial<PanelPreview> = {}): PanelPreview {
+  return {
+    page_no: 1,
+    ban_menno: 1,
+    ban_no: 1,
+    ban_meisyou: '高圧受電盤',
+    ban_type: '正面図',
+    ban_h1: null,
+    ban_h2: null,
+    ban_w: null,
+    ban_d: null,
+    normalized_rect: makeRect(),
+    ...overrides,
+  }
+}
+
+function makePage(overrides: Partial<ProductDrawing> = {}): ProductDrawing {
+  return {
+    page_no: 1,
+    thumbnail_url: '/api/products/A1TEST01/drawings/1/thumbnail',
+    drawing_type: '外形図',
+    drawing_name: '外形図',
+    panels: [],
+    ...overrides,
+  }
+}
+
+describe('DrawingNavigator (Phase 1.8: PNGサムネイル表示)', () => {
+  it('groups pages by drawing_type (要件27)', () => {
+    const pages = [
+      makePage({ page_no: 13, drawing_type: '外形図' }),
+      makePage({ page_no: 14, drawing_type: '外形図' }),
+      makePage({ page_no: 27, drawing_type: '正面図' }),
+    ]
+
+    render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+
+    expect(screen.getByText('外形図')).toBeInTheDocument()
+    expect(screen.getByText('正面図')).toBeInTheDocument()
+  })
+
+  it('groups pages with no drawing_type under an "その他" fallback group', () => {
+    const pages = [makePage({ page_no: 99, drawing_type: null })]
+    render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    expect(screen.getByText('その他')).toBeInTheDocument()
+  })
+
+  it('shows a short description under a group with BAN info, mentioning ページ/クロスリファレンス番号・盤番号 (Phase 1.11 UI改修指示20章)', () => {
+    const pages = [
+      makePage({
+        page_no: 16,
+        drawing_type: '外形図',
+        panels: [makePanel({ ban_menno: 5, ban_no: 5 })],
+      }),
+    ]
+    render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    expect(screen.getByText(/クロスリファレンス番号/)).toBeInTheDocument()
+    expect(screen.getByText(/盤番号/)).toBeInTheDocument()
+  })
+
+  it('shows a shorter description (no BAN mention) for a group whose pages have no product_df panels', () => {
+    const pages = [makePage({ page_no: 18, drawing_type: '基礎図', panels: [] })]
+    render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    expect(screen.getByText('P：ページ番号')).toBeInTheDocument()
+    expect(screen.queryByText(/クロスリファレンス番号/)).not.toBeInTheDocument()
+  })
+
+  it('shows no description for the "その他" fallback group', () => {
+    const pages = [makePage({ page_no: 99, drawing_type: null })]
+    render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    expect(document.querySelector('.drawing-navigator__group-description')).not.toBeInTheDocument()
+  })
+
+  it('keeps the description short (not a long sentence, 指示書20章)', () => {
+    const pages = [
+      makePage({
+        page_no: 16,
+        drawing_type: '外形図',
+        panels: [makePanel({ ban_menno: 5, ban_no: 5 })],
+      }),
+    ]
+    render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    const description = document.querySelector('.drawing-navigator__group-description')
+    expect(description?.textContent?.length ?? 0).toBeLessThanOrEqual(30)
+  })
+
+  it('renders a PNG thumbnail img sourced from thumbnail_url', () => {
+    const pages = [makePage({ page_no: 16, thumbnail_url: '/api/products/A1TEST01/drawings/16/thumbnail' })]
+    render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    const img = screen.getByRole('img', { name: 'P16' }) as HTMLImageElement
+    expect(img.src).toContain('/api/products/A1TEST01/drawings/16/thumbnail')
+  })
+
+  it('falls back to a placeholder when the PNG fails to load, without breaking the whole screen', () => {
+    const pages = [makePage({ page_no: 25 })]
+    const { container } = render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    const img = screen.getByRole('img', { name: 'P25' })
+    fireEvent.error(img)
+
+    expect(screen.queryByRole('img', { name: 'P25' })).not.toBeInTheDocument()
+    const fallback = container.querySelector('.drawing-navigator__thumb-fallback') as HTMLElement
+    expect(fallback).not.toBeNull()
+    expect(fallback.textContent).toContain('画像なし')
+    expect(fallback.textContent).toContain('P25')
+  })
+
+  it('shows the page number and BAN_MENNO/BAN_NO as two compact lines when a single panel exists (Phase 1.9 UI改修指示1章)', () => {
+    const pages = [makePage({ page_no: 25, panels: [makePanel({ ban_menno: 3, ban_no: 1 })] })]
+    render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    expect(screen.getByText('P25')).toBeInTheDocument()
+    expect(screen.getByText('3/1')).toBeInTheDocument()
+  })
+
+  it('shows all distinct BAN_MENNO/BAN_NO pairs joined by "、" when a page has multiple panels (要件11/12。Phase 1.11 UI改修指示21章で区切りを読点へ変更)', () => {
+    const pages = [
+      makePage({
+        page_no: 25,
+        panels: [
+          makePanel({ ban_menno: 3, ban_no: 1 }),
+          makePanel({ ban_menno: 3, ban_no: 2 }),
+          makePanel({ ban_menno: 4, ban_no: 1 }),
+        ],
+      }),
+    ]
+    render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    expect(screen.getByText('P25')).toBeInTheDocument()
+    expect(screen.getByText('3/1、3/2、4/1')).toBeInTheDocument()
+  })
+
+  it('does not show a long BAN_MEISYOU/BAN_TYPE description on the thumbnail (要件1: 簡潔にする)', () => {
+    const pages = [
+      makePage({
+        page_no: 25,
+        panels: [makePanel({ ban_menno: 3, ban_no: 1, ban_meisyou: 'No.2-1低圧動力盤', ban_type: '正面図' })],
+      }),
+    ]
+    render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    expect(screen.queryByText(/No\.2-1低圧動力盤/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/正面図/)).not.toBeInTheDocument()
+  })
+
+  it('regression: the label must actually be visible (not just present in the DOM) — line-height must not be 0', () => {
+    // 修正依頼の再修正指示: 「サムネイル上に表示」がテスト・DOM上では確認できても
+    // 実UI上で見えていなかった不具合の根本原因は、親要素(.thumb-wrap)が
+    // img下の余白除去のため指定している line-height:0 が継承プロパティのため
+    // ラベルにもそのまま適用され、line-height:0の行ボックス(高さ実質0)と
+    // overflow:hidden(text-overflow:ellipsis用)の組み合わせで文字が
+    // 実質的にクリップされていたこと。line-heightを明示的に上書きしたことを
+    // 実際のCSSカスケード解決 (getComputedStyle, vite.config.tsのcss:true) で確認する。
+    const pages = [makePage({ page_no: 18, panels: [makePanel({ ban_menno: 1, ban_no: 1 })] })]
+    const { container } = render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    const wrap = container.querySelector('.drawing-navigator__thumb-wrap') as HTMLElement
+    const label = container.querySelector('.drawing-navigator__thumb-label') as HTMLElement
+    // 親のline-height:0そのものは維持されていること (imgの余白除去自体は壊さない)。
+    expect(getComputedStyle(wrap).lineHeight).toBe('0')
+    // ラベル側は明示的に上書きされ、0を継承していないこと。
+    expect(getComputedStyle(label).lineHeight).not.toBe('0')
+  })
+
+  it('regression: PAGE/BAN labels are not rendered at an unreadably small size (実画面未達 修正指示3章)', () => {
+    // ルートfont-sizeは14px (index.css)。5〜8px相当の極小表示 (0.5rem前後) を禁止し、
+    // PAGE行は13px前後、BAN行は12px前後を最低限とする (指示書の目安)。
+    const pages = [makePage({ page_no: 16, panels: [makePanel({ ban_menno: 5, ban_no: 5 })] })]
+    const { container } = render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    const pageLine = container.querySelector(
+      '.drawing-navigator__thumb-label-line--page',
+    ) as HTMLElement
+    const banLine = container.querySelector(
+      '.drawing-navigator__thumb-label-line--ban',
+    ) as HTMLElement
+    // jsdomのgetComputedStyleは実ブラウザと異なりrem→px解決を行わず、指定値
+    // (例: "0.95rem") をそのまま文字列で返す。ルートfont-size (index.css: 14px)を
+    // 掛けて概算pxへ変換して比較する。
+    const ROOT_FONT_SIZE_PX = 14
+    const pagePx = parseFloat(getComputedStyle(pageLine).fontSize) * ROOT_FONT_SIZE_PX
+    const banPx = parseFloat(getComputedStyle(banLine).fontSize) * ROOT_FONT_SIZE_PX
+    expect(pagePx).toBeGreaterThanOrEqual(12)
+    expect(banPx).toBeGreaterThanOrEqual(11)
+  })
+
+  it('the thumbnail label background is much more transparent than before, so the drawing underneath is visible (追加修正 第4ラウンド11章〜13章)', () => {
+    const pages = [makePage({ page_no: 16, panels: [makePanel({ ban_menno: 5, ban_no: 5 })] })]
+    const { container } = render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    const label = container.querySelector('.drawing-navigator__thumb-label') as HTMLElement
+    const bg = getComputedStyle(label).backgroundColor
+    const alpha = Number(bg.match(/[\d.]+\)$/)?.[0].replace(')', ''))
+    // 旧0.82(濃色でほぼ不透明)から、指示書の目安(0.35〜0.50)へ薄くしたこと。
+    expect(alpha).toBeGreaterThanOrEqual(0.35)
+    expect(alpha).toBeLessThanOrEqual(0.5)
+    // 薄くしても文字自体は読めるよう、白文字であることは維持する。
+    expect(getComputedStyle(label).color).toMatch(/255, 255, 255|#fff/i)
+  })
+
+  it('does NOT render red panel-area overlays on the left pane, even with multiple panel rows (実画面未反映調査・修正指示 1章/7章)', () => {
+    const pages = [
+      makePage({
+        page_no: 25,
+        panels: [
+          makePanel({ ban_menno: 1, ban_no: 1, normalized_rect: makeRect({ x: 0.1 }) }),
+          makePanel({ ban_menno: 2, ban_no: 1, normalized_rect: makeRect({ x: 0.2 }) }),
+          makePanel({ ban_menno: 3, ban_no: 1, normalized_rect: makeRect({ x: 0.3 }) }),
+        ],
+      }),
+    ]
+    const { container } = render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    // 赤色盤領域Overlayは中央Drawing Viewer側 (ProductPanelOverlay) にのみ表示し、
+    // 左ペインのサムネイルには一切表示しない。
+    expect(container.querySelectorAll('.drawing-navigator__panel-overlay')).toHaveLength(0)
+    expect(container.querySelector('.product-panel-overlay')).toBeNull()
+    // データ自体 (panels) はラベル表示のために保持されている (BAN情報は消えていない)。
+    expect(screen.getByText('1/1、2/1、3/1')).toBeInTheDocument()
+  })
+
+  it('calls onSelectPage when a thumbnail card is clicked', () => {
+    const pages = [makePage({ page_no: 42 })]
+    const onSelectPage = vi.fn()
+    render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={onSelectPage}
+        loading={false}
+        error={null}
+      />,
+    )
+    fireEvent.click(screen.getByRole('img', { name: 'P42' }))
+    expect(onSelectPage).toHaveBeenCalledWith(42)
+  })
+
+  it('marks the currently selected page visually (要件26)', () => {
+    const pages = [makePage({ page_no: 1 }), makePage({ page_no: 2 })]
+    render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={2}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    const selectedButton = screen.getByRole('img', { name: 'P2' }).closest('button') as HTMLElement
+    const otherButton = screen.getByRole('img', { name: 'P1' }).closest('button') as HTMLElement
+    expect(selectedButton.className).toContain('drawing-navigator__card--selected')
+    expect(otherButton.className).not.toContain('drawing-navigator__card--selected')
+  })
+
+  it('shows a loading state instead of stale content', () => {
+    render(
+      <DrawingNavigator pages={[]} selectedPageNo={null} onSelectPage={() => {}} loading error={null} />,
+    )
+    expect(screen.getByText('読み込み中...')).toBeInTheDocument()
+  })
+
+  it('shows an error message instead of crashing the whole screen', () => {
+    render(
+      <DrawingNavigator
+        pages={[]}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error="製番が見つかりません"
+      />,
+    )
+    expect(screen.getByText('製番が見つかりません')).toBeInTheDocument()
+  })
+})

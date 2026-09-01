@@ -1,0 +1,72 @@
+.project-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.5rem 1rem;
+  background: #1f2937;
+  color: #f9fafb;
+  border-bottom: 1px solid #374151;
+}
+
+.project-header__title {
+  font-weight: 700;
+  font-size: 1.05rem;
+  white-space: nowrap;
+}
+
+.project-header__info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.88rem; /* Phase 1.10 フォント見直し: 約12.3px (旧0.85rem≈11.9px) */
+  flex-wrap: wrap;
+}
+
+.project-header__loading {
+  font-size: 0.88rem;
+  color: #d1d5db;
+}
+
+.project-header__status {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #374151;
+}
+
+.project-header__status--confirmed {
+  background: #065f46;
+}
+
+.project-header__status--needs_review {
+  background: #92400e;
+}
+
+.project-header__status--analyzing {
+  background: #1e40af;
+}
+
+.project-header__status--not_analyzed {
+  background: #4b5563;
+}
+
+.project-header__actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.project-header__actions button {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid #4b5563;
+  background: #374151;
+  color: #f9fafb;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem; /* Phase 1.10 フォント見直し: 約11.9px (旧0.78rem≈10.9px) */
+  white-space: nowrap;
+}
+
+.project-header__actions button:hover {
+  background: #4b5563;
+}

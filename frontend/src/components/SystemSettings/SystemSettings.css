@@ -1,0 +1,113 @@
+.system-settings__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.system-settings {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1.25rem;
+  width: min(480px, 90vw);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.system-settings__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.system-settings__header h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.system-settings__header button {
+  border: none;
+  background: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.system-settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+  color: #374151;
+}
+
+.system-settings__field input {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.system-settings__badge {
+  margin-left: 0.5rem;
+  font-size: 0.78rem; /* Phase 1.10 フォント見直し: 約10.9px */
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+}
+
+.system-settings__badge.ok {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.system-settings__badge.ng {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.system-settings__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.system-settings__actions button {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f9fafb;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.system-settings__actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.system-settings__result {
+  font-size: 0.8rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  background: #f3f4f6;
+}
+
+.system-settings__result.ok {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.system-settings__result.ng {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.system-settings__note {
+  font-size: 0.78rem; /* Phase 1.10 フォント見直し: 約10.9px */
+  color: #9ca3af;
+  margin-top: 0.5rem;
+}

@@ -1,0 +1,78 @@
+/* UIレイアウト追加修正指示: 右ペインをHeader直下〜画面下端まで全高化し、
+   積算コードMasterは左ペイン+Viewerの幅のみを使う (右ペインの下へ潜り込ませない)。
+   RightPaneとMainAreaを同階層のflexアイテムとして扱うことで、
+   Masterへ重ならない構造を確保している (指示書7章)。 */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-layout__error {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 0.4rem 1rem;
+  font-size: 0.85rem; /* Phase 1.10 フォント見直し (旧0.8rem≈11.2px→約11.9px) */
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.app-layout__error button {
+  padding: 0.15rem 0.6rem;
+  border: 1px solid #991b1b;
+  background: #fff;
+  color: #991b1b;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.82rem; /* Phase 1.10 フォント見直し (旧0.75rem≈10.5px→約11.5px) */
+  white-space: nowrap;
+}
+
+.app-layout__error button:hover {
+  background: #fef2f2;
+}
+
+/* Header直下の残り全体。MainArea(左ペイン+Viewer+Master)とRightPaneを
+   同階層の横並びflexアイテムにする (指示書7章の核心)。 */
+.app-workspace {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 左ペイン+Viewer(上段) と 積算コードMaster(下段) の縦2分割。 */
+.app-workspace__main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 図面一覧(左ペイン) + Drawing Viewer の横並び。積算コードMasterはここに含まない
+   (指示書8章: 図面一覧の高さはこの上段までとし、Master横まで伸ばさない)。 */
+.app-workspace__upper {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
+
+.app-workspace__nav {
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+/* 右ペイン: Header直下から画面下端まで1本のペインとして全高表示する。
+   内部は盤パラメータ(可変・上限あり)+積算結果(残り全部)の縦積みで、
+   それぞれが自分自身の内部でスクロールする (指示書15章、画面全体はスクロールしない)。 */
+.app-workspace__right {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid #e5e7eb;
+}

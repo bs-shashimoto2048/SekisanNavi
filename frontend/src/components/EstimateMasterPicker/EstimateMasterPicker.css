@@ -1,0 +1,153 @@
+.master-picker {
+  /* MainArea(左ペイン+Viewer)の幅のみを使用し、右ペインの下へは潜り込まない
+     (指示書3章/7章)。親のapp-workspace__mainがflex-columnのため、
+     このブロックは下段に固定表示される。
+     高さはApp.tsx側からinline style(height)で指定する (Phase 1.11 指示書24章〜26章:
+     中央ViewerとMasterの境界のResize Handleでユーザーが変更できる)。
+     このCSSのheightは、heightをまだ指定していない場合(単体テスト等)の既定値。 */
+  height: 260px;
+  border-top: 1px solid #e5e7eb;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.master-picker__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.35rem;
+}
+
+.master-picker__heading {
+  font-size: 0.88rem; /* Phase 1.10 フォント見直し: 約12.3px */
+  font-weight: 700;
+  color: #374151;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.master-picker__search {
+  flex: 1;
+  max-width: 320px;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.master-picker__loading {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.master-picker__count {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.master-picker__tabs {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  margin-bottom: 0.4rem;
+  flex-shrink: 0;
+}
+
+/* Phase 1.10指示書10章〜13章、Phase 1.11指示書1章で13カテゴリすべて固有色に拡張。
+   実際のHEX/RGBA値は`domain/masterCategoryPresentation.ts`にのみ存在し、
+   `toCssVars()`経由で各タブへCSSカスタムプロパティ(`--cat-tab-bg`等)として
+   注入される。CSS側は`var(--cat-tab-bg)`等を参照するだけで、色そのものは
+   一切書かない (指示書30章: HEX/RGB値をCSSへ重複記述しない)。同じ`--cat-*`
+   カスタムプロパティはManual BBox・引出線側でも共有して使う
+   (`DrawingViewer.css`参照)。 */
+.master-picker__tab {
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--cat-tab-border);
+  border-bottom: none;
+  border-top: 3px solid var(--cat-tab-border);
+  background: var(--cat-tab-bg);
+  color: var(--cat-tab-fg);
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  font-size: 0.85rem; /* Phase 1.10 フォント見直し: 約11.9px (旧0.75rem≈10.5px) */
+  white-space: nowrap;
+}
+
+.master-picker__tab:hover {
+  filter: brightness(0.97);
+}
+
+/* 選択中タブ (指示書13章): 背景を白くしつつ系統色の境界線・文字色は維持し、
+   上辺(border-top)をより濃い色にしてhoverや他タブと明確に区別する。
+   font-weightで強調するのは「選択中」等の限定的な対象のみとする (21章)。 */
+.master-picker__tab--active {
+  background: #fff;
+  font-weight: 700;
+  border-bottom: 1px solid #fff;
+  border-top-width: 3px;
+  position: relative;
+  top: 1px;
+}
+
+.master-picker__tab--active:hover {
+  filter: none;
+}
+
+.master-picker__table-wrap {
+  overflow: auto;
+  flex: 1;
+  border-top: 1px solid #d1d5db;
+}
+
+.master-picker__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem; /* Phase 1.10 フォント見直し: 約11.5px (表header/body共通) */
+}
+
+.master-picker__table th,
+.master-picker__table td {
+  border-bottom: 1px solid #f3f4f6;
+  padding: 0.3rem 0.5rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.master-picker__table th {
+  position: sticky;
+  top: 0;
+  background: #f9fafb;
+  color: #4b5563;
+}
+
+.master-picker__cell--numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.master-picker__row {
+  cursor: pointer;
+}
+
+.master-picker__row:hover {
+  background: #f3f4f6;
+}
+
+.master-picker__row--selected {
+  background: #fef3c7;
+}
+
+.master-picker__row--selected:hover {
+  background: #fde68a;
+}
+
+.master-picker__empty {
+  color: #9ca3af;
+  text-align: center;
+}

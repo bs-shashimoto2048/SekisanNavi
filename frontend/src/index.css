@@ -1,0 +1,37 @@
+:root {
+  /* Phase 1.10 UI改修指示16章/17章: 社内Windows利用を前提に、日本語の可読性を
+     優先したsystem font stackへ変更する。Webフォントの新規配信は行わず、
+     OS/ブラウザに存在するフォントのみを使う。Yu Gothic UI/Meiryo UIは
+     日本語UI向けに字面が大きく調整されており、既定のYu Gothic/Meiryoより
+     小さい文字サイズでも可読性が高いため優先する (18章の「9px前後の極小表示」
+     対策と合わせて、フォント自体の可読性でも底上げする狙い)。 */
+  font: 14px/1.5 'Yu Gothic UI', 'Meiryo UI', 'Meiryo', 'Segoe UI', system-ui,
+    'Hiragino Sans', 'Yu Gothic', sans-serif;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  color: #111827;
+  background: #fff;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+}

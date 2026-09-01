@@ -1,0 +1,27 @@
+# Backend
+backend/.venv/
+backend/data/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/.env
+*.pyc
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+
+# 環境変数 (実パスワード・ローカル固有のBackend接続先ポート等)。
+# *.example で終わるテンプレートファイルのみコミット対象とする。
+.env
+.env.local
+.env.*.local
+
+# 業務Master Excel・その他社内データ (GitHub同期指示6章: publicリポジトリへ
+# 誤って業務データを公開しないための除外)。配置方法はREADMEに記載する。
+/data/
+
+# OS
+.DS_Store
+Thumbs.db

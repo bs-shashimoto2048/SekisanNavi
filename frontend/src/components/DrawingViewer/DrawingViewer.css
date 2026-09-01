@@ -1,0 +1,397 @@
+.drawing-viewer {
+  /* 左右ペインのリサイズで残った幅を最優先で使用する (指示書11章)。固定幅にしない。 */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: #f3f4f6;
+  padding: 0.5rem;
+  overflow: hidden;
+}
+
+.drawing-viewer__heading {
+  font-size: 0.85rem; /* 追加修正 第4ラウンド15章〜18章: 0.9rem(約12.6px)から約6%縮小(約11.9px)。図面表示面積を少し増やす */
+  font-weight: 700;
+  color: #374151;
+  margin: 0 0 0.5rem;
+}
+
+.drawing-viewer__stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  /* 実画面未達 追加修正指示19章: 図面は中央寄せにせず、Viewer表示領域の左上を
+     基点とする。DrawingCanvas自体はwidth:100%で親いっぱいに広がるため実質的に
+     余地は生じないが、念のため明示してどのような条件でも中央寄せに戻らないように
+     しておく (旧: justify-content: center)。 */
+  justify-content: flex-start;
+}
+
+.drawing-viewer__empty {
+  color: #9ca3af;
+  font-size: 0.88rem;
+  margin-top: 2rem;
+}
+
+/* --- Overlay Layers ---
+   DrawingCanvas の content 領域 (zoom後のピクセルサイズを持つ) に
+   position:absolute; inset:0 で重ねる。個々の矩形は 0.0〜1.0 の正規化座標を
+   %に変換して配置しているため、zoom/pan/リサイズが起きても位置関係は保たれる。
+
+   実画面未達 修正指示 15章/16章: 「JSX描画順だけでイベント優先順位を成立させる」
+   実装を見直し、レイヤーごとの重なり(z-index)とクリック可否(pointer-events)を
+   明示する。実際に発生していた不具合: `.detection-overlay`(BBoxの親コンテナ)は
+   `position:absolute; inset:0` でViewer全域を覆っているが、`pointer-events`を
+   明示していなかったため既定値の`auto`のままだった。これにより、BBoxが1件も
+   無い座標であっても、この透明な親要素自体がクリックの対象(event.target)に
+   なってしまい、その下に描画されている`.product-panel-overlay__area`(盤領域の
+   <button>、DOM順ではDetectionOverlayより前=paint順では下)へクリックが
+   到達しない、という不具合が実際に起きていた(単体テストではDrawingCanvas全体を
+   スタブ化していたため検出できなかった)。
+   対策: 各Overlayの「コンテナ」はpointer-events:noneとし、実際にクリック/ドラッグ
+   させたい「個々の要素」側でpointer-events:autoを明示的に再指定する。
+   さらにz-indexで意図した重なり順を明示し、描画順(JSXの記述順)に暗黙に依存しない
+   ようにする。 */
+.drawing-canvas__canvas {
+  position: relative;
+  z-index: 0; /* PNG本体。最背面。 */
+}
+
+.panel-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.panel-overlay__area {
+  position: absolute;
+  border: 2px dashed #f59e0b;
+}
+
+.panel-overlay__label {
+  position: absolute;
+  top: -1.1rem;
+  left: 0;
+  font-size: 0.78rem;
+  color: #b45309;
+  background: #fff;
+  padding: 0 0.25rem;
+  white-space: nowrap;
+}
+
+/* product_df.csv由来の盤領域Overlay (Phase 1.8、Phase 1.9でクリック選択対応)。
+   中央Viewer専用、赤色半透明。左ペインのサムネイルには表示しない
+   (実画面未反映調査・修正指示 7章)。 */
+.product-panel-overlay {
+  position: absolute;
+  inset: 0;
+  /* コンテナ自体はクリックを奪わない (盤領域が無い部分は背景クリックとして
+     Viewer側へ通す)。各`.area`側で個別にpointer-eventsを再度有効化する。 */
+  pointer-events: none;
+  z-index: 10; /* Layer: product_df盤領域。DetectionOverlay(20)より下。 */
+}
+
+/* Phase 1.10 盤ホバー仕様変更 (指示書1章〜3章): 後工程のBBox作業を邪魔しないよう、
+   通常時は図面を赤く覆わない。塗りつぶしは「hoverした時だけ」表示し、常時の
+   全面半透明塗り (Phase 1.8〜1.9の rgba(255,0,0,0.08) 常時表示) は廃止した。
+   通常   = 赤枠のみ (背景transparent)
+   hover  = 赤枠 + 薄い赤背景 (旧「最薄状態」の値 rgba(255,0,0,0.08) を流用)
+   selected        = 赤太枠 (背景はhoverしない限りtransparent)
+   selected+hover  = 赤太枠 + 薄い赤背景 (`:hover`は`--selected`の有無に関係なく
+                      同じセレクタにマッチするため、追加のCSSなしで両立する) */
+.product-panel-overlay__area {
+  position: absolute;
+  /* <button>のUAスタイル(枠線・パディング・背景・フォント)をリセットする。
+     Phase 1.9でクリック可能にするため<div>から<button>へ変更した (要件10)。
+     DrawingCanvas側の既存ガード(closest('button'))によりPan/Manual BBox追加の
+     開始対象から自動的に除外される。 */
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  pointer-events: auto;
+  cursor: pointer;
+  background-color: transparent;
+  border: 1px solid rgba(220, 38, 38, 0.8);
+}
+
+.product-panel-overlay__area:hover {
+  background-color: rgba(255, 0, 0, 0.08);
+}
+
+/* 同一盤(PAGE+BAN_MENNO+BAN_NO)の別矢視の連動ハイライト (Phase 1.11 UI改修指示
+   17章/18章)。実際にhoverしている領域自体は上の`:hover`で強調されるため、
+   このクラスは「同じ盤の他の矢視」に対してのみ付与される。視覚的な強さは
+   `:hover`と同程度にしておく。 */
+.product-panel-overlay__area--group-hover {
+  background-color: rgba(255, 0, 0, 0.08);
+}
+
+/* 選択中盤 (要件7): 枠を太くするだけで、背景は通常時と同じtransparent
+   (hover時のみ薄い赤背景が付く。全面を濃く塗りつぶさずBBox作業を妨げない)。 */
+.product-panel-overlay__area--selected {
+  border-width: 3px;
+}
+
+/* 選択中以外の盤 (Phase 1.9, 要件8): 完全非表示にはせず、少し薄くする。 */
+.product-panel-overlay__area--dimmed {
+  opacity: 0.55;
+}
+
+/* Phase 1.10 指示書7章: 積算コード選択中(Manual BBox追加モード)は、
+   盤領域自体の操作(hover/click)を無効化し、Viewerドラッグを常にBBox作成として
+   扱えるようにする。見た目(赤枠・ラベル)は維持し、盤の位置確認は妨げない。
+   pointer-events:noneにすることで、この<button>はマウスイベントのヒットテスト
+   対象から外れ、mousedownは直接背後の要素(DrawingCanvasの描画領域)に届くため、
+   DrawingCanvas側の`closest('button')`ガードにも引っかからずBBox作成が開始できる。 */
+.product-panel-overlay__area--noninteractive {
+  pointer-events: none;
+  cursor: default;
+}
+
+/* 盤領域内ラベル。通常表示はBAN_MENNO/BAN_NOのみ (Phase 1.9 UI改修指示3章)。
+   詳細(BAN_MEISYOU/BAN_TYPE等)は独自Tooltipコンポーネントへ移した
+   (実画面未達 修正指示5章: title属性単体には依存しない)。 */
+.product-panel-overlay__label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* line-height:0 を継承すると行が潰れて文字が見えなくなる (実際に左ペインの
+     サムネイルラベルで発生した不具合と同根)。ここで明示的に上書きする。 */
+  line-height: 1.3;
+  /* 追加修正 第4ラウンド7章〜10章: 白背景Boxを削除し、図面へ文字を直接表示する
+     (旧: rgba(255,255,255,0.85)の背景矩形)。可読性は白いtext-shadowで確保する
+     (白背景Boxを再度作らない)。hover時も盤領域自体の薄い塗り(既存仕様)のみで、
+     ラベル側の背景は付けない。 */
+  background: transparent;
+  box-shadow: none;
+  color: #7f1d1d;
+  text-shadow:
+    0 0 2px #fff,
+    0 0 2px #fff;
+  /* 実画面未達 修正指示3章/24章: 中央Viewerの盤ラベルも極小表示にしない。
+     ルートfont-sizeは14px (index.css) のため、0.68rem(≈9.5px)から引き上げた。
+     追加修正 第4ラウンド15章〜18章でさらに約7%縮小(0.86rem→0.8rem)。 */
+  font-size: 0.8rem; /* 約11.2px */
+  font-weight: 700;
+  padding: 0.15rem 0.35rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* 選択中盤のラベル強調 (実画面未達 修正指示10章): `5/5` → `[5/5]`。過度な装飾は
+   避け、括弧付き表記+背景色変更程度に留める。 */
+.product-panel-overlay__label--selected {
+  background: #dc2626;
+  color: #fff;
+}
+
+/* hover詳細Tooltip (実画面未達 修正指示5章/6章)。title属性のブラウザ標準Tooltipに
+   代わる独自実装。position:fixedで画面(viewport)基準に配置し、
+   ProductPanelOverlay.tsx側でviewport端に対してクランプ計算済みの
+   left/topを受け取る。z-indexは全Overlayレイヤーの最前面(50)。 */
+.product-panel-overlay__tooltip {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  background: rgba(17, 24, 39, 0.92);
+  color: #fff;
+  font-size: 0.9rem; /* Phase 1.10 フォント見直し: 約12.6px (旧0.82rem≈11.5px) */
+  line-height: 1.5;
+  padding: 0.45rem 0.65rem;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+}
+
+.product-panel-overlay__tooltip-line {
+  white-space: nowrap;
+}
+
+/* 引出線Overlay (Phase 1.11)。積算Master Itemに紐づくManual BBoxの通常表示。
+   盤領域(10)より上、BBox本体(20)より下に置く (指示書16章の推奨Layer順)。
+   コンテナ自体はクリックを奪わない。個々の線のヒットエリア・ラベルボタン側で
+   pointer-events:autoを再指定する (他Overlayと同じ設計方針)。 */
+.leader-line-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 15;
+}
+
+.leader-line-overlay__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* SVG自体はクリックを奪わない。個々の<line>側でpointer-events:strokeを指定する
+     (指示書15章: 見た目の線幅より広いヒットエリアを持たせるため、透明な太い線を
+     重ねている)。 */
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* 引出線ラベルの文字表示 (追加修正 第3ラウンド1章〜5章)。
+   旧実装は白背景+下線ボーダー(border-bottom)を持つ「カード状」の見た目だったが、
+   水平線は既にSVG側のpolyline(引出線本体と同じ<path>)で描画しているため、
+   この border-bottom は実質的に「別の水平線」を重ねて表示しているのと同じ状態
+   だった (SVG側は文字幅の概算値、CSS側は実際のbutton幅で、両者の長さが
+   一致しないことがあり「水平線が長すぎる/短すぎる」という見た目のズレの一因に
+   なっていた)。今回、水平線はSVG側の1本のみに統一し、文字要素自体は完全に
+   透明な背景・枠なしの「図面へ直接描画された文字」にする。 */
+.leader-line-overlay__label {
+  position: absolute;
+  transform: translateY(-100%); /* アンカー座標を帯の左下角として扱う */
+  margin: 0;
+  padding: 0.05rem 0.15rem; /* 視覚的な背景は無いが、クリック/dragの当たり判定を文字ぴったりより少し広げる */
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--cat-leader-text);
+  font-size: 1rem; /* 旧0.82rem(≒11.48px)→新1rem(14px)。約22%拡大 (追加修正3章) */
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/* 背景を持たないため、hover/selectedは下線(text-decoration)で示す。
+   四角い枠(box-shadow)や背景の出し分けは行わない (追加修正1章/2章)。 */
+.leader-line-overlay__label:hover,
+.leader-line-overlay__label--hovered {
+  text-decoration: underline;
+  text-decoration-color: var(--cat-leader-color);
+}
+
+.leader-line-overlay__label--selected {
+  cursor: move;
+  text-decoration: underline;
+  text-decoration-color: var(--cat-leader-color);
+  text-decoration-thickness: 2px;
+}
+
+.detection-overlay {
+  position: absolute;
+  inset: 0;
+  /* 実画面未達 修正指示15章/16章で判明した不具合の修正: このコンテナ自体は
+     Viewer全域を覆う透明要素であり、pointer-eventsを明示していなかったため
+     既定値のautoのままBBoxが無い座標のクリックまで奪ってしまい、下(paint順)の
+     `.product-panel-overlay__area`へクリックが届かなくなっていた。
+     コンテナはクリックを奪わず、実際にクリック/ドラッグさせたい
+     `.detection-overlay__bbox`/`.detection-overlay__handle`側で
+     pointer-events:autoを明示的に再指定する。 */
+  pointer-events: none;
+  z-index: 20; /* Layer: Detection/Manual BBox。盤領域(10)より上、常に優先。 */
+}
+
+.detection-overlay__bbox {
+  position: absolute;
+  pointer-events: auto;
+  border: 2px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+  cursor: pointer;
+  padding: 0;
+}
+
+.detection-overlay__bbox:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-width: 3px;
+}
+
+/* Manual/AIの区別 (Phase 1.6)。ステータス系クラスより先に定義し、
+   selected/needs_review/excluded等が指定するプロパティはそちらを優先させる
+   (CSSの後勝ちで、このルールが設定していないプロパティ=border-styleは残る)。 */
+.detection-overlay__bbox--manual {
+  border-color: #7c3aed;
+  border-style: dashed;
+  background: rgba(124, 58, 237, 0.1);
+}
+
+.detection-overlay__bbox--reviewed {
+  border-color: #10b981;
+}
+
+.detection-overlay__bbox--needs_review {
+  border-color: #f59e0b;
+  border-style: dashed;
+}
+
+.detection-overlay__bbox--excluded {
+  border-color: #9ca3af;
+  border-style: dashed;
+  opacity: 0.55;
+}
+
+.detection-overlay__bbox--selected {
+  border-color: #dc2626;
+  border-width: 3px;
+  background: rgba(220, 38, 38, 0.12);
+  z-index: 30; /* Layer: 選択中BBox。同じ画面上の他のBBoxより前面に出す。 */
+}
+
+.detection-overlay__bbox--flash {
+  animation: detection-flash 0.6s ease-in-out 3;
+}
+
+/* Phase 1.11 指示書2章/9章: 積算Master Itemに紐づくBBoxは、固定の青/紫系ではなく
+   カテゴリ色を使う。`--selected`より後に定義することで、選択(編集)中も
+   border-widthはそのまま(選択時の3px)、色だけカテゴリ色を優先させる
+   (CSSはプロパティ単位でカスケードされるため、`--category`が上書きしない
+   border-widthは`--selected`の値が残る)。HEX/RGBA値そのものはCSSへ書かず、
+   `masterCategoryPresentation.ts`由来のCSSカスタムプロパティ(`--cat-bbox-*`)を
+   参照するだけにする (指示書30章)。 */
+.detection-overlay__bbox--category {
+  border-color: var(--cat-bbox-border);
+  background: var(--cat-bbox-fill);
+}
+
+.detection-overlay__bbox--category:hover {
+  filter: brightness(0.95);
+}
+
+/* 編集中のBBox内部をドラッグすると移動できることを示す (Phase 1.11 指示書4章)。 */
+.detection-overlay__bbox--move-cursor {
+  cursor: move;
+}
+
+@keyframes detection-flash {
+  0%, 100% { background: rgba(220, 38, 38, 0.05); }
+  50% { background: rgba(220, 38, 38, 0.35); }
+}
+
+.detection-overlay__label {
+  position: absolute;
+  top: -1.05rem;
+  left: -2px;
+  font-size: 0.75rem; /* Phase 1.10 フォント見直し: 約10.5px (旧0.6rem≈8.4px) */
+  background: #1f2937;
+  color: #fff;
+  padding: 0 0.25rem;
+  white-space: nowrap;
+}
+
+/* 四隅リサイズハンドル (Phase 1.7)。選択中のBBoxにのみ表示する。 */
+.detection-overlay__handle {
+  position: absolute;
+  pointer-events: auto; /* 親.detection-overlayがpointer-events:noneのため明示的に再指定 */
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px; /* transform:translate(-50%,-50%) 相当を旧ブラウザ非依存で */
+  border: 2px solid #dc2626;
+  background: #fff;
+  border-radius: 2px;
+  padding: 0;
+  z-index: 40; /* Layer: リサイズハンドル。BBox本体より必ず前面に出す。 */
+}
+
+.detection-overlay__handle--top-left,
+.detection-overlay__handle--bottom-right {
+  cursor: nwse-resize;
+}
+
+.detection-overlay__handle--top-right,
+.detection-overlay__handle--bottom-left {
+  cursor: nesw-resize;
+}

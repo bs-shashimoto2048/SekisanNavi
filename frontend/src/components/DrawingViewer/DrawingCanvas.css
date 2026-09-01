@@ -1,0 +1,142 @@
+.drawing-canvas {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+/* pngモード専用の非表示プリロード画像 (naturalWidth/naturalHeight検出のみに使う)。
+   display:noneではなくposition:absolute+視覚的に0サイズにし、onLoad/onErrorが
+   確実に発火する形で読み込む (要件5/6)。 */
+.drawing-canvas__preload-img {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.drawing-canvas__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.4rem;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-bottom: none;
+}
+
+.drawing-canvas__toolbar button {
+  min-width: 2rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem; /* 追加修正 第4ラウンド15章〜18章: 0.85remから約6%縮小 */
+}
+
+.drawing-canvas__toolbar button:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.drawing-canvas__zoom-label {
+  font-size: 0.78rem; /* Phase 1.10 フォント見直し: 約11.5px → 追加修正 第4ラウンドでさらに縮小 */
+  color: #6b7280;
+  min-width: 3rem;
+  text-align: center;
+}
+
+.drawing-canvas__mode-badge {
+  font-size: 0.76rem; /* Phase 1.10 フォント見直し: 約11.2px → 追加修正 第4ラウンドでさらに縮小 */
+  color: #7c3aed;
+  background: #ede9fe;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.drawing-canvas__selection-badge {
+  font-size: 0.76rem; /* Phase 1.10 フォント見直し: 約11.2px → 追加修正 第4ラウンドでさらに縮小 */
+  color: #991b1b;
+  white-space: nowrap;
+}
+
+/* ツールバー右端に配置する (Phase 1.7, 要件10)。 */
+.drawing-canvas__delete-button {
+  margin-left: auto;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid #dc2626;
+  background: #fff;
+  color: #dc2626;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.drawing-canvas__delete-button:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+.drawing-canvas__delete-button:disabled {
+  color: #d1d5db;
+  border-color: #e5e7eb;
+  cursor: not-allowed;
+}
+
+.drawing-canvas__viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #e5e7eb;
+  border: 1px solid #d1d5db;
+  cursor: grab;
+  position: relative;
+}
+
+.drawing-canvas__viewport:active {
+  cursor: grabbing;
+}
+
+/* Phase 1.6: 積算コードMasterで行選択中はドラッグ=Manual BBox追加になるため、
+   カーソルをcrosshairへ変更してモードの違いを分かりやすくする (要件13)。 */
+.drawing-canvas__viewport--draw {
+  cursor: crosshair;
+}
+
+.drawing-canvas__viewport--draw:active {
+  cursor: crosshair;
+}
+
+.drawing-canvas__content {
+  position: relative;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.drawing-canvas__canvas {
+  display: block;
+}
+
+.drawing-canvas__status {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  right: 1rem;
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.drawing-canvas__status--error {
+  color: #b91c1c;
+}
+
+.drawing-canvas__draft-rect {
+  position: absolute;
+  border: 2px dashed #7c3aed;
+  background: rgba(124, 58, 237, 0.15);
+  pointer-events: none;
+}

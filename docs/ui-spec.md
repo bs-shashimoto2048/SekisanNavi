@@ -1,0 +1,628 @@
+# ui-spec.md — Sekisan Navi UI仕様 (PoC)
+
+提供された画面構成案(要件8)を土台に、Phase 1 / Phase 1.5 で実装した内容を記述する。
+レイアウト・項目とも暫定であり、実機操作後の変更を前提とする(要件2)。
+
+## 1. 画面全体レイアウト
+
+**UIレイアウト追加修正指示 (2026-08) で右ペインを全高化**し、以下の構成へ変更した。
+右ペイン (盤パラメータ+積算結果) はHeader直下から画面下端まで1本のペインとして
+表示し、積算コードMasterはその下へ潜り込まず、左ペイン+Viewerの幅のみを使用する。
+
+```
++------------------------------------------------------+
+| Sekisan Navi / 案件情報 / 解析状態                    |  ProjectHeader
++------------┬─────────────────────────┬───────────────+
+|            │                         │               |
+| 図面一覧   │      図面 Viewer        │  盤パラメータ |  PanelProperties
+| (種類別    │   Detection BBox        │               |
+|  グループ) │   Panel Overlay(暫定)  ├───────────────+
+|            │                         │  積算結果     |  EstimateTree
++------------┴─────────────────────────┤  Tree         |
+|         積算コード選択 / 検索         │               |
++----------------------------------------┴───────────────+
+```
+
+`│` はマウスドラッグで幅を変更できるResize Handle (`PaneSplitter`)。左右2箇所に
+配置しており、左ペイン(図面一覧)・右ペイン双方を個別にリサイズできる
+(下記「左右ペインのリサイズ」参照)。中央のDrawing Viewerは左右ペイン幅変更で
+残った幅を可変で使用する (固定幅にしない)。
+
+CSS Flexboxで実装 (`App.css`。以前のCSS Gridから変更): `app-layout`
+(縦方向: Header → Workspace) → `app-workspace` (横方向: MainArea / 右ペイン、
+Resize Handleを挟む) → `app-workspace__main` (縦方向: 上段(図面一覧+Viewer) /
+積算コードMaster)。RightPaneとMainAreaを同階層のflexアイテムにすることで、
+右ペインをoverlay表示でMasterへ被せるのではなく、明確に別のCSSレイアウト領域として
+確保している。コンポーネント分割自体 (ProjectHeader/DrawingNavigator/DrawingViewer/
+PanelProperties/EstimateTree/EstimateMasterPicker) は要件15の構成を維持し、変更していない。
+
+### 左右ペインのリサイズ (2026-08 追加修正)
+
+- 図面一覧(左ペイン)・右ペインそれぞれの境界にResize Handle (`PaneSplitter`
+  コンポーネント) を配置し、マウスドラッグで幅をリアルタイムに変更できる。
+- 幅の範囲: 左ペイン 140px 〜 30vw (初期値220px)、右ペイン 220px 〜 40vw
+  (初期値300px)。範囲外にはドラッグできず、Drawing Viewerが消えるほど
+  狭くなることはない。
+- 右ペインの幅を変更すると、積算コードMaster (左ペイン+Viewerの幅のみを使用) も
+  親のFlexレイアウトにより自動的に追従する。Master側で右ペイン幅を計算して
+  marginを当てるような実装はしていない。
+- 変更した幅はブラウザの`localStorage`
+  (`sekisan-navi:left-pane-width` / `sekisan-navi:right-pane-width`) に保存し、
+  再読み込み後も復元する。保存値が壊れている・範囲外の場合は初期値へ
+  フォールバックする。Backend DBには保存しない (要件18)。
+- 通常時は細い境界線のみを表示し、hover時に強調表示 + `cursor: col-resize` になる
+  (太いSplitterにはしていない)。
+- Resize Handleのドラッグ操作は、Drawing Viewer側のPan・Manual BBox追加・
+  BBoxリサイズとして誤認識されない (`PaneSplitter`はDrawing Viewerの外側の
+  別要素であり、DOM構造上イベントが伝播しない。念のため`stopPropagation`も行う)。
+- ペイン幅の変更自体はPDF描画・0.0〜1.0正規化座標のOverlay(BBox等)に影響しない。
+  Viewerの表示領域が変わった状態でFitボタンを押せば、その時点のViewer領域に対して
+  正しくFitする。
+  **[2026-09 追加修正で仕様変更]** 旧仕様(上記)は「ペイン幅変更・ウィンドウリサイズに
+  伴う自動再Fitは行わない」だったが、`viewMode==='fit'`中に限りペイン幅変更・
+  Master高さ変更・ウィンドウリサイズのいずれでも自動的に再Fitするよう変更した。
+  詳細は「### Viewer自動Fit (2026-09 追加修正指示18章〜35章)」を参照。
+
+### 下部Master領域の高さリサイズ (Phase 1.11 指示書24章〜26章)
+
+- 中央Viewer(上段)と積算コードMaster(下段)の境界にも横方向のResize Handle
+  (`PaneSplitter` `axis="y"`) を配置し、上下ドラッグでMaster領域の高さを変更できる。
+- 高さの範囲: 120px 〜 60vh (初期値260px、旧CSSの固定値を踏襲)。Viewerが実質
+  見えなくなる高さ・Masterが操作不能になる高さにはならない (指示書25章)。
+- 変更した高さはlocalStorage (`sekisan-navi:master-pane-height`) に保存し、
+  再読み込み後も復元する。左右ペイン幅と同じフック(`usePaneWidth`。
+  `dimension: 'height'`として再利用)を使い、保存の仕組みを統一している
+  (指示書26章)。保存値が壊れている・範囲外の場合は初期値へフォールバックする。
+
+### ブラウザURLによる表示状態の復元 (Phase 1.11 指示書22章/23章)
+
+- 現在の製番・PAGEをURL query (`?product=A1GV2421&page=16`) へ反映し、ブラウザの
+  リロードや当該URLへの直接アクセスで表示状態を復元できるようにした
+  (`utils/urlState.ts`)。`history.replaceState`で更新するため、ページ切替のたびに
+  ブラウザの「戻る」履歴が積み増されることはない。
+- 復元対象は選択中製番・選択中PAGEのみ (指示書23章: BBox選択状態・Master行選択状態
+  まではリロード復元しない)。
+- URLで指定された製番が実在しない場合はアプリを壊さず、既定製番
+  (`A1GV2421`) へ自動的にfallbackする (無限ループを避けるため1回のみ試行)。
+  PAGE番号が存在しない・不正な値の場合も同様にアプリを壊さず、既存の
+  「先頭ページへのフォールバック」ロジック (Phase 1.8から継続) がそのまま働く。
+
+## 2. ProjectHeader
+
+- 表示項目: 整理番号 (seiri_no) / 製番 (seiban) / 盤名称 (panel_name) / 解析状態。
+- 解析状態は `not_analyzed / analyzing / needs_review / confirmed` の4値 (**暫定**、要件9)。
+- 「解析実行」ボタンは表示のみ実装し、`disabled` としている。実解析(YOLO推論)は
+  Phase 1.5でもスコープ外 (要件23)。
+- (Phase 1.5で追加) 右端に「製番を開く」「システム設定」ボタンを配置。
+  それぞれ `ProductSelector` (Phase 1.8で`ProductViewer`から役割変更。9章参照) /
+  `SystemSettings` のモーダルを開く。
+
+## 3. DrawingNavigator (左: 図面一覧) — Phase 1.8で実PNGサムネイル表示化
+
+- **Phase 1.8**: 表示内容をダミーDB (`drawing_pages`テーブル) 由来のプレースホルダー
+  から、現在の参照製番 (`ProductSelector` で切替可能。既定値 `A1GV2421`) 配下の
+  実PNGサムネイルへ全面変更した。
+- `drawing_type` (図面種類。product_df.csvのZUMEI列由来) ごとにグループ化して表示
+  (要件10/27を維持)。ZUMEIが取得できないページは「その他」グループへまとめる。
+- 各カードは `{page_no}.png` を `width:100%; height:auto` で表示し、縦横比を維持する
+  (引き伸ばさない。要件23)。ペイン幅のリサイズ (Phase 1.7追加修正) に追従する。
+- PNGが存在しない/読み込めない場合は「画像なし / P{page_no}」のフォールバック表示に
+  切り替え、画面全体をエラーにしない (要件7)。
+- 各カード左上に「ページ番号 / BAN_MENNO / BAN_NO」を表示する。1ページに複数の
+  盤情報がある場合は全件のBAN_MENNO-BAN_NO組を表示し、1件へ削減しない (要件10-12)。
+  **既知の不具合として、この表示がDOM上には存在するのに実画面では見えないという
+  問題が過去に発生していた** (原因: 親要素の`line-height:0`をラベルが継承し、
+  `overflow:hidden`と組み合わさって文字が実質的にクリップされていたため。
+  ラベル側に`line-height`を明示して修正した。`implementation-plan.md` 8.5章参照)。
+- **Phase 1.9: ラベル表示の簡素化**。長いBAN_MEISYOU/BAN_TYPEの説明文はサムネイルへ
+  出さず、2行構成に整理した: 1行目「P{page_no}」、2行目「{BAN_MENNO}/{BAN_NO}」を
+  区切り文字で並べたもの (例: `P16` / `1/1、2/2、3/3、4/4、5/5`)。BAN_MENNO/BAN_NO間の
+  区切りは「/」、複数組の区切りは**読点「、」** (Phase 1.11 指示書21章で中点「・」から
+  変更) で統一する。各行は個別に省略記号 (`text-overflow: ellipsis`) を適用し、
+  カード幅を超えても崩れない (`drawing-navigator__thumb-label-line`)。左ペインには
+  引き続き盤領域(赤色)Overlay・Detection・Manual BBox・積算情報は一切表示しない
+  (Phase 1.8からの方針を継続)。
+- **図面種別見出しの説明文 (Phase 1.11 指示書20章)**。「外形図」等の見出し直下に、
+  サムネイルラベルの意味が分かる短い説明を追加した (例:
+  `P：ページ / クロスリファレンス番号・盤番号`)。特定のdrawing_type文字列を
+  ハードコードするのではなく、そのグループに実際にBAN情報(product_df由来の
+  panels)を持つページが1件でもあるかで判定する (`groupDescription()`)。
+  BAN情報を持たないグループ (例: 基礎図) は `P：ページ番号` という、より短い説明に
+  なる。「その他」グループには説明を出さない。長い説明文にはしない。
+- **左ペインには盤領域(赤色)Overlayを表示しない** (実画面未反映調査・修正指示
+  1章/7章)。PNGサムネイルと左上のPAGE/BAN_MENNO/BAN_NOラベルのみを表示する。
+  盤領域Overlayは中央DrawingViewer側にのみ表示する (次項参照)。
+- クリックで選択ページ (製番+ページ番号) を切り替え、DrawingViewerに反映する
+  (要件25)。現在選択中のページは青枠で視覚的に選択状態にする (要件26)。
+
+## 4. DrawingViewer (中央) — Phase 1.5で実PDF表示化、Phase 1.8で実PNG表示化
+
+- **Phase 1.8重要仕様訂正**: `DrawingCanvas` は当初PDF.js (`pdfjs-dist`) による
+  実PDF表示のみだったが、実製番モードでは**左ペインと全く同じ`{page}.png`**を
+  表示するよう訂正した (`mode="png"`)。理由: product_df由来の盤領域Overlayは
+  PNGの実ピクセル寸法を正規化の基準にしており、PDFとPNGで余白・原点が異なると
+  Overlay位置がずれる可能性があるため (`architecture.md` 10章/14章、
+  `data-source.md` 5.1章参照)。PDF表示機能・Backend PDF配信APIは削除しておらず、
+  `DrawingCanvas`の`mode="pdf"`として引き続き利用可能。
+  - ツールバー: 縮小(−) / 拡大(＋) / 現在のzoom% 表示 / Fit to View
+    (PNGモードでも同じ操作性を維持。Fitは表示中PNGの縦横比を維持して現在の
+    Viewer領域へ合わせる)。
+  - ズーム: ツールバーのボタンに加え、マウスホイールでも操作可能
+    (カーソル位置を基準に拡大縮小)。
+  - パン: 図面上をドラッグしてスクロール移動 (BBoxのクリックとは干渉しないよう、
+    `button` 要素上のmousedownはパン開始として扱わない)。
+  - ロード中は「図面を読み込み中...」、失敗時は「図面ファイルを読み込めませんでした」/
+    「画像を読み込めませんでした。」を表示する (共有フォルダが一時的に利用できない場合等)。
+
+### Viewer自動Fit (2026-09 追加修正指示18章〜35章)
+
+旧仕様(「初回ロード時に自動でFit to Viewを1度適用する」のみ、それ以外は手動操作
+まかせ)から、以下の`viewMode`ステートマシンへ全面的に置き換えた
+(`DrawingCanvas.tsx`)。
+
+- **`viewMode: 'fit' | 'manual'`**。旧`hasFitOnce`(初回のみの一度きりフラグ)を廃止し、
+  「今Fitに従っている最中かどうか」を継続的に持つstateに変更した。
+- **基点は左上 (指示書19章)**。旧仕様はViewer領域内で画像を中央寄せしていたが、
+  中央寄せをやめ、Fit後は`translateX=0, translateY=0`でImageStageの左上を
+  Viewerの描画可能領域(ツールバー等を除く)の左上へ一致させる。
+  `.drawing-viewer__stage`のCSS (`justify-content`) も`center`から`flex-start`へ
+  変更し、中央寄せへ戻る余地を残さないようにした。
+- **Fit倍率の計算**: `fitScale = min(viewportWidth/imageWidth, viewportHeight/imageHeight)`
+  に安全マージン(`FIT_MARGIN=0.98`)を掛けたものを`applyFit()`で計算・適用する
+  (縦横比は維持)。
+- **自動再Fitのトリガー (`viewMode==='fit'`中のみ)**: 右ペイン幅リサイズ・左ペイン幅
+  リサイズ・下部Master領域の高さリサイズ・ブラウザウィンドウのリサイズ、
+  いずれも自動的に再Fitする。**旧仕様(前項「左右ペインのリサイズ」参照)から
+  変更**: 以前は「ペイン幅変更・ウィンドウリサイズに伴う自動再Fitは行わない」
+  だったが、今回`viewMode`概念を導入したことで、fitモード中に限りこれらの
+  レイアウト変化に追従して自動的に最適化されるようになった。
+  - 実装は`DrawingCanvas.tsx`の`.drawing-canvas__viewport`要素へ`ResizeObserver`を
+    1つ取り付けるのみ (`useEffect`, mount時に1度だけ)。左右ペイン幅・Master高さ・
+    ウィンドウ幅のいずれの変更も、最終的にはこの1要素のCSS計算後サイズを
+    変えるため、`window.innerWidth`から各ペイン幅を個別に差し引くような
+    脆い計算をせずに、単一のObserverで全パターンを検知できる。
+- **手動操作でfitモードを抜ける**: ツールバーの＋/−ボタン、マウスホイールズーム、
+  Pan(ドラッグ量が`MIN_DRAG_PX`(6px)を超えた場合のみ)のいずれかを行うと
+  `viewMode`が`'manual'`になり、以後はレイアウト変化があっても自動再Fitしない
+  (ユーザーが意図して特定領域を見ている状態を尊重する)。単純な背景クリック
+  (Detection選択解除)は`MIN_DRAG_PX`未満の移動として扱われるため、
+  誤ってfitモードを抜けることはない。
+- **Fitボタン**: クリックすると`viewMode`を明示的に`'fit'`へ戻し、その時点の
+  Viewer実効領域へ即座に再Fitする。
+- **初期表示**: ページを開いた直後・ブラウザリロード後の復元時は、常に
+  `viewMode='fit'`から始まる (zoom値自体はリロード間で永続化しない)。
+- **Overlay整合性**: PNGとProductPanelOverlay/DetectionOverlay/LeaderLineOverlay/
+  Resize Handleは全て同じImageStage・同じzoom/translate値を共有する既存の
+  アーキテクチャを維持しており、Fit方式の変更によってOverlayだけがずれる
+  ことはない。
+- **テスト**: jsdomは`ResizeObserver`を実装していないため、`frontend/src/testUtils/
+  mockResizeObserver.ts`に明示的な`.trigger()`呼び出しでリサイズを再現できる
+  `MockResizeObserver`を用意し、`setupTests.ts`でグローバルへ差し替えている。
+  `DrawingCanvas.test.tsx`に本ステートマシンの単体テストを12件追加した
+  (初期fit倍率計算・スクロール位置リセット・各種リサイズでの再Fit・手動zoom/pan後の
+  再Fit抑止・Fitボタンでの復帰・Overlay位置の非影響、等)。
+- **`DetectionOverlay`とBBox/引出線の役割分離 (Phase 1.11 指示書冒頭)**: 積算コードに
+  紐づくBBoxについて、「BBox=対象範囲を保持する内部・編集情報」「引出線=通常時に
+  図面上へ表示する積算情報」として分離した。
+  - **AI Detection (`master_item_id === null`)**: 表示方式はPhase 1.5〜1.10までと
+    変更していない (指示書29章)。常時BBoxを表示し、クリックで選択状態にする
+    (要件11)。状態ごとの表示: 通常=青枠 / hover=枠強調(CSS `:hover`) / 選択中=赤太枠 /
+    `needs_review`=橙破線 / `excluded`=グレー破線・半透明 / 一時強調表示(`--flash`)=点滅
+    (色・線幅は暫定)。
+  - **積算Master Itemに紐づくManual BBox (`master_item_id != null`, Phase 1.11)**:
+    通常時はBBox矩形・Resize Handleを表示せず、代わりに引出線 (次項参照) を表示する。
+    BBox矩形が実際に表示されるのは、(a) 引出線または「コード 型式」帯へのhover中
+    (対象範囲の確認用。薄いカテゴリ色で表示、Resize Handle無し)、(b) 選択中(編集中)
+    (カテゴリ色の枠+薄い塗り+四隅Resize Handle+内部dragによる移動、次々項参照)、
+    のいずれかの場合のみ。色は固定の青/紫系ではなく、`master_item_category`から
+    `masterCategoryPresentation.ts`経由で解決したカテゴリ色を使う (要件2。
+    CSSカスタムプロパティ`--cat-bbox-border`/`--cat-bbox-fill`として注入)。
+- `ProductPanelOverlay` (Phase 1.8、Phase 1.9でクリック選択対応): product_df由来の
+  盤領域を中央Viewerへ赤色半透明・全件描画する (先頭1件へ削減しない)。
+  DetectionOverlayと同じ0.0〜1.0正規化座標系を共有する。実データ
+  (A1GV2421のpage16外形図・page18基礎図) で赤色矩形と実際の盤外形線・基礎区画が
+  一致することを画像コンポジットによる目視で確認済み (`implementation-plan.md` 8.4章)。
+  - **ラベル簡素化 (Phase 1.9)**。通常表示は`{BAN_MENNO}/{BAN_NO}`のみ (例: `5/5`)。
+    選択中は`[5/5]`のように括弧付き表記+背景色反転で強調する (実画面未達 修正指示
+    10章)。ラベルのfont-sizeは0.86rem (ルート14px基準で約12px。旧0.68rem≈9.5pxから
+    引き上げ。同3章/24章)。
+  - **hover詳細Tooltip (実画面未達 修正指示5章/6章/7章で刷新)**。BAN_MEISYOU/
+    BAN_TYPE等の詳細はブラウザ標準の`title`属性には依存せず、`ProductPanelOverlay`
+    内で管理する`hover`state(hover中の盤key/カーソル座標)を基に、
+    `position:fixed`の独自`<div>`(`.product-panel-overlay__tooltip`)として描画する。
+    表示項目は面番号/盤番号/盤名称/種別/PAGEの順・全角コロン表記
+    (例: `面番号：5` `盤番号：5` `盤名称：No.2-1低圧動力盤` `種別：正面図` `PAGE：16`)、
+    値が空の項目は行ごと省略する。viewport端に対して簡易クランプし図面外へ
+    はみ出さないようにしている(概算サイズ見積もりによる簡易対応)。
+    `pointer-events:none`のためTooltip自体はクリック/hoverを奪わず、
+    `onMouseEnter`/`onMouseLeave`(hover)と`onClick`(選択)は独立したハンドラのため
+    両立する。1ページに複数盤がある場合、各領域は対応するproduct_df行の値を
+    個別に表示し、代表値の使い回しにはしない。塗りつぶしは図面の視認性を優先し
+    `rgba(255,0,0,0.08)` (旧`0.2`から大幅に減光) とした。
+  - **クリックによる盤選択 (Phase 1.9)**。各領域は`<button>`要素になり、クリックすると
+    `selectedPanel` (Detection/BBoxの選択状態とは独立の状態。`App.tsx`で保持) が
+    更新され、右側のPanelPropertiesへ反映される (次項参照)。識別キーは
+    `PAGE:BAN_MENNO:BAN_NO:BAN_TYPE:配列インデックス` (`utils/panel.ts::panelKey`) で、
+    生配列インデックス単体には依存しない — 実データ上、同一PAGE/BAN_MENNO/BAN_NOに
+    複数のBAN_TYPE(正面図/背面図/左側面図等)が存在するケースが実在するため
+    (例: A1GV2421 page16のBAN_NO=5は正面図/背面図/左側面図の3行)。
+    - **視覚状態 (Phase 1.10で見直し)**: 後工程のBBox作業(重畳する図面の視認性・
+      作業性)を優先し、常時の半透明塗りつぶしは廃止した。
+      - 通常 = 細枠のみ (塗りつぶし無し、`background-color: transparent`)。
+      - hover = 細枠 + 薄い赤塗り (`rgba(255,0,0,0.08)`、旧「最薄状態」の値を
+        hover専用に転用)。
+      - 選択中 = 太枠(3px)のみ (塗りつぶしは通常時と同じtransparent)。
+      - 選択中+hover = 太枠 + 薄い赤塗り (`:hover`は`--selected`修飾クラスの
+        有無に関係なく同じベースクラスへマッチするため、追加CSSなしで両立する)。
+        選択中ラベルは`[BAN_MENNO/BAN_NO]`のように括弧付き+背景色反転で強調する。
+      - 何か選択中で自分は非選択 = `opacity:0.55`で薄くするが、非表示にはしない
+        (他の盤位置も見える状態を維持する)。
+      - **同一盤の別矢視 連動ハイライト (Phase 1.11 指示書17章〜19章、追加修正1章〜4章で
+        条件を修正)**: 1枚のプレビュー内で同一PAGE/BAN_MENNO/BAN_NO(BAN_TYPEは
+        含まない。指示書18章)を持つ別矢視 (正面図/背面図/左側面図等) が複数存在する
+        場合、1つへhoverすると同じ盤の他の全領域も薄くハイライトする
+        (`utils/panel.ts::banGroupKey`、`product-panel-overlay__area--group-hover`)。
+        **追加修正で条件を変更**: この連動ハイライトは、そのページ内に
+        「異なるBAN_MENNO/BAN_NOの組が2種類以上存在する場合」のみ有効にする
+        (`uniqueBanPairs.size > 1`)。ページ内にBAN_MENNO/BAN_NOの組が1種類しか
+        存在しない場合 (例: 実データのA1GV2421 page21「内部機器配置図」は
+        正面図/側面図の2行とも1/1のみ) は、そもそも「別の盤」という区別が無いため
+        連動ハイライトを行わず、実際にhoverしている領域だけを塗りつぶす。
+        page16のBAN_NO=5(正面図/背面図/左側面図の3行)、page21のBAN_NO=1(正面図/
+        側面図の2行)の両方を実データで確認し、前者は連動ハイライトが有効、
+        後者は無効(実hover領域のみ)であることを確認済み。Tooltipは実際に
+        ポインタが載っている領域(の実データ行)の情報のみを表示し、グループの
+        代表値は使わない (要件19。この挙動は条件変更の前後で変わらない)。
+    - **積算コード選択中(Manual BBox追加モード)の扱い (Phase 1.10)**: 積算コード
+      Masterで行が選択されている間は、盤領域のTooltipを出さない(条件は文字通り
+      `selectedMasterItemId == null && hover`)。赤枠・BAN_MENNO/BAN_NOラベルは
+      表示を維持し盤の位置確認は妨げないが、盤領域自体の`pointer-events`を`none`に
+      してクリック/hoverを受け付けなくする。これにより、盤領域の上からのドラッグも
+      素通りしてDrawingCanvas本体のManual BBox作成ロジックへ届くようになり、
+      「盤領域のbutton/pointer-eventsがBBox作成開始を阻害する」問題を避けている。
+    - イベント優先順位: リサイズハンドル(z-index 40) > 選択中BBox(30) > BBox(20) >
+      盤領域(10) > Viewer背景。**実画面未達 修正指示15章/16章を受け、
+      「JSX描画順だけに暗黙で依存する」実装から、`DrawingViewer.css`側の明示的な
+      z-index/pointer-events宣言へ変更した**。根本原因: `.detection-overlay`
+      (BBoxの親コンテナ)が`pointer-events`を明示していなかったため既定値`auto`の
+      ままViewer全域のクリックを奪ってしまい、BBoxが無い座標でも下(paint順)の
+      盤領域`<button>`へクリックが届かない不具合が実際に発生していた
+      (`implementation-plan.md` 8.7章に根本原因調査の詳細)。修正後は
+      `.detection-overlay`/`.product-panel-overlay`ともコンテナ自体は
+      `pointer-events:none`とし、実際にクリックさせたい`.bbox`/`.handle`/`.area`側で
+      個別に`pointer-events:auto`を指定している。各領域が`<button>`であることにより、
+      `DrawingCanvas`側の既存ガード(`closest('button')`)がPan開始・Manual BBox作成の
+      対象から自動的に除外する。
+    - ページ切替 (左ペインのサムネイルクリック) で選択中の盤は解除される
+      (表示中ページと選択盤の不一致を防ぐ)。製番切替でも同様に解除する。
+    - Viewer内の空白領域 (BBoxでも盤領域でもない部分) をクリックすると選択解除する。
+      実Pan操作の終了とは`DrawingCanvas`側の移動量判定で区別しており、
+      ドラッグ後のmouseupを誤って空白クリックとして扱うことはない (Phase 1.7 要件26の
+      既存メカニズムをそのまま利用)。
+    - Manual BBoxを選択中盤へ自動的に紐付ける機能は今回未実装 (指示書14章)。
+- `PanelOverlay` (ダミーDB由来。Phase 1.5): 現在は中央Viewerで使用していない。
+  実製番モードでは`ProductPanelOverlay`に一本化し、二重表示を避けている
+  (`architecture.md` 14章参照)。コンポーネント自体は削除せず残置している。
+- Manual BBoxの追加・修正・除外操作のうち、**追加のみ** Phase 1.6で実装した
+  (詳細は次項)。Phase 1.7で選択中BBoxの**削除・リサイズ**を追加した (下記参照)。
+  「除外」(status変更) はまだ対象外。
+
+### Manual BBox追加 (Phase 1.6, 要件9-16)
+
+- 下部の積算コードMasterで行を選択すると、Viewerが「BBox追加モード」になる
+  (ツールバーに「✎ BBox追加モード」バッジを表示、カーソルがcrosshairに変化)。
+- この状態でViewer上をドラッグすると、Pan操作の代わりにManual BBoxの矩形選択になる
+  (ドラッグ中は紫の破線でプレビュー表示、マウスを離した時点で確定)。
+- 未選択時のドラッグは従来通りPan操作のまま (要件13)。
+- 一定未満 (画面上6px未満) の移動量はクリックとみなし、BBoxを作成しない (要件14)。
+- 確定したBBoxはBackendへ登録され (`POST /api/detections`)、即座に図面上へ表示される。
+- Manual BBoxはAI検出結果と視覚的に区別できる: 紫系の破線枠・背景、ラベルに
+  「✎」を付与する。ただし `selected`/`needs_review`/`excluded`/一時強調 等の
+  状態表示は引き続き優先される (要件16)。
+- 積算コードMasterの選択状態はBBox追加後も維持され、同じ積算コードで
+  複数のBBoxを連続追加できる (要件8)。
+
+### BBoxの選択・削除・リサイズ (Phase 1.7)
+
+- BBoxのクリックによる選択は、Manual/AIのどちらのDetectionでも同様に扱う
+  (`source_type` による制限なし)。選択中のBBoxには枠強調に加えて4隅にリサイズ用の
+  ハンドル (□) を表示する。
+- **ツールバー右端**にズーム操作等と同じ行で「BBox削除」ボタンを表示する。
+  未選択時は無効化 (disabled) しており、選択中のみ有効になる。選択中は
+  併せて「BBox編集: <class_name/コード>」という簡潔なテキストも表示する。
+- Windowsの **Deleteキー** でも同じ削除操作を行える。ただし検索欄など
+  `input`/`textarea`/`select`/編集可能要素にフォーカスがある間は無効化する
+  (誤操作防止)。
+- 削除するとViewer上から即座にBBoxが消え、選択状態も解除される。削除できるのは
+  Sekisan Navi自身のDetection行のみで、元の図面・画像・DXF・YOLOモデル・
+  共有フォルダ上のデータには一切影響しない。
+- **4隅ハンドルのドラッグでリサイズ**できる。ドラッグ中はクライアント側のみで
+  プレビューし、マウスを離した時点で1回だけBackendへ保存する。対角は固定されたまま
+  変形し、最小サイズを下回る操作やページ範囲(0.0〜1.0)を超える操作は自動的に
+  制限される (角の入れ替えは発生しない)。
+- **BBox内部dragによる移動 (Phase 1.11 指示書4章)**: 選択中(編集中)のBBox本体を
+  ドラッグすると、幅・高さを維持したままx/yのみ変更できる (`utils/bbox.ts::moveRect`)。
+  クリック(選択)との誤認防止のため、最小移動量(6px、Manual BBox作成時と同じ
+  `MIN_DRAG_PX`)未満はクリックとして扱いmoveを発生させない。0.0〜1.0の範囲(図面領域)
+  から出ないようclampする。四隅リサイズと同じ`PATCH /api/detections/{id}`を使い、
+  リサイズと移動が競合しないよう、mousedown時点でどちらの操作(ハンドル上か
+  BBox本体上か)かを判定してから片方のみを開始する。
+- 選択状態は、別のBBoxを選択する・別ページへ移動する・Viewer内の空白領域を
+  クリックする、**Escキーを押す (Phase 1.11 指示書3章/28章。次項参照)**、
+  のいずれの操作でも解除される。
+- リサイズ・移動・削除いずれもAI/Manualの両方で同様に動作する。AI Detectionを編集
+  しても元のAI推論結果やモデル自体は変更されない (`architecture.md` 13章参照)。
+
+### Escキーによる編集モード解除 (Phase 1.11 指示書3章/28章)
+
+- Escキーは、現在アクティブな状態に応じて1段階だけ解除する (一度のEscで複数の
+  状態を予期せず全消去しない):
+  1. BBox編集中 (`selectedDetectionId`) → その選択のみ解除
+  2. 積算コードMaster選択中 (`selectedMasterItemId`) → その選択のみ解除
+     (Manual BBox追加モード・crosshairカーソルも連動して終了する。
+     `bboxAddMode`は`selectedMasterItemId`から導出しているため自動的に解除される)
+  3. 盤選択中 (`selectedPanel`) → その選択のみ解除
+- SystemSettings/ProductSelectorのモーダルが開いている間は何もしない (将来モーダル
+  自身がEscで閉じる機能を実装しても競合しないようにするため)。
+- Deleteキー処理とは異なり、`input`/`textarea`等にフォーカスがあってもEscは
+  「モード解除」として機能する (検索欄にフォーカスしたままEscで選択解除できる)。
+
+### 引出線 (Leader Line、Phase 1.11 指示書5章〜16章。追加修正で形状・表示文字を修正)
+
+積算Master Itemに紐づくManual BBoxの通常表示。CAD図面の引出線に近い表示とし、
+図面全体が大量の矩形で覆われないようにする。`LeaderLineOverlay`コンポーネント。
+
+- **構成要素**: (1) BBox右上角のアンカー (`utils/bbox.ts::topRightCorner`。
+  BBoxをmove/resizeすると自動的に追従し、ユーザーが矢印先端だけを独立して動かす
+  機能は無い)、(2) 斜めの引出線、(3) 水平の帯 (ラベルの下線として表現)、
+  (4) 「コード 型式」の文字列 (例: `11001 OS2-816`。ratingや価格等は常時表示しない。
+  指示書14章)。
+- **1本の連続したpolylineとして描画 (追加修正5章〜9章)**: 斜線と水平線を別々の
+  SVG要素にせず、`M end L elbow L anchor`という1つの`<path>`で「水平線端(end) →
+  折れ点(elbow) → アンカー(anchor)」を描く。これにより斜線と水平線の間に隙間が
+  発生しない。折れ点(elbow)と水平線のもう一方の端(end)は、ラベルがアンカーの
+  右側にあるか左側にあるかで入れ替える (`labelX >= anchorX`なら折れ点=ラベルの
+  左端・水平線は右へ伸びる、`labelX < anchorX`なら折れ点=ラベルの右端・水平線は
+  左端から折れ点へ伸びる。指示書16章)。
+  **[2026-09 追加修正 第3ラウンドで実測ベースへ変更]** 旧仕様は水平線の長さを
+  実測ではなく文字数に基づく概算値としていた (`estimateLabelWidthFraction`) が、
+  実際の文字幅と一致せず「水平線が長すぎる/短すぎる」見た目のズレの原因になって
+  いたため、`CanvasRenderingContext2D.measureText()`による実測px幅 + 左右余白6px
+  を、`.leader-line-overlay`要素の現在の実表示px幅で割った正規化割合
+  (`computeLabelWidthFraction`)へ変更した。文字自体はCSS上固定pxサイズのため、
+  zoomでコンテナのpx幅が変わっても実際の文字幅と水平線の長さの対応関係は崩れない
+  (`.leader-line-overlay`への`ResizeObserver`でzoom/ペインリサイズ/Viewer Fit変更時の
+  再計算をトリガーする)。旧来の文字数概算は、コンテナ幅px自体が未確定な場合
+  (初回レンダー等)や`canvas` 2d contextが使えない環境専用のフォールバックとして
+  残している。
+- **矢印head (追加修正6章〜8章。2026-09 追加修正1章〜4章でサイズ変更)**: SVGの
+  `<marker>` (`orient="auto"`) を経路の終点(anchor)に取り付け、経路の進行方向
+  (elbow→anchor)から矢印の向きを自動計算させる。矢印の先端は常にBBox右上角
+  (anchor)を指す。一般的なCAD引出線と同様の三角形の矢印headとした
+  (線端の単純な処理ではない)。
+  **[2026-09 追加修正]** 実画面ではBBox四隅のResize Handle(10px, CSS固定)より
+  矢印の方が大きく見え、図面の文字に重なりやすかったため、`markerWidth`/
+  `markerHeight`を`0.018`→`0.010`(正規化座標。約56%に縮小、指示の50〜65%の
+  範囲内)へ変更した。`markerUnits`は意図的に`"userSpaceOnUse"`のまま
+  (線の太さ`strokeWidth`のチューニングから矢印サイズを独立させ、挙動を
+  予測しやすくするため)。実データ(page16, Detection id=16)でのPillow合成
+  検証では、旧11.4px相当→新6.4px相当(想定Viewer幅900pxの場合)で、
+  Resize Handle(10px)より明確に小さくなることを確認した。
+- **表示文字列の取得元 (追加修正11章〜14章)**: 「コード 型式」の型式部分は
+  `Detection.master_item_model`(Backendが`master_item_id`から都度JOINして返す
+  Master Itemの現在の型式)を使う。コード部分も同様に、可能な限り
+  `Detection.master_item_code`(同じくJOIN結果)を優先し、`class_name`
+  (Manual BBox登録時点でコピーされた値。将来Master Item側のcodeが変わっても
+  追従しない)への依存を減らした。`master_item_code`が取得できない異常系のみ
+  `class_name`へフォールバックする。型式が無い(null/空文字)場合はコード単独
+  表示にするが、型式が存在するのに表示されない場合は不具合として扱う。型式は
+  表示直前に`.trim()`し、空白のみの値もコード単独表示として扱う
+  (2026-09 追加修正14章、防御的ハードニング)。
+  **[2026-09 追加修正: 「型式が表示されない」報告の根本原因調査]** Repository JOIN
+  (`app/repositories/detections.py`) → Detection API応答 → Frontend型定義
+  (`types/domain.ts`) → `api/client.ts` → `App.tsx`のstate更新 → 各コンポーネントの
+  propsまで、パイプライン全体を実データ(curlによるAPI直接呼び出し)で追跡した結果、
+  現在のコード上には型式(`master_item_model`)を欠落させる不具合は見つからなかった。
+  実データ(Master Item id=170: code=`11526`, model=`IS2- 922`)に対し、現在稼働中の
+  Backendは`master_item_code`/`master_item_model`とも正しくJOINして返すことを
+  直接確認済み。本プロジェクトはBackendを`--reload`無しで起動しており(既知の
+  運用上の注意点。過去のPhase 1.8/1.9調査でも同じ論点が発生している)、コード変更後に
+  明示的な再起動をしないと画面に反映されない。報告された「11526のみ表示され型式が
+  出ない」事象は、このJOINコードが追加される前(または再起動前)の古いBackend応答を
+  ブラウザが取得していたタイミングの問題である可能性が高いと考えられる
+  (ただしブラウザ側の実操作ログが残っていないため、断定はできない — 未確認事項として
+  正直に記載する)。
+- **ラベル帯の独立した位置管理 (指示書10章〜12章)**: 帯部分は選択中(編集中)に
+  ドラッグ移動できる。ドラッグしてもBBox本体の位置・BBox右上角のアンカー位置は
+  変わらず、ラベルの表示位置のみが動く (「BBox位置 ≠ 引出線ラベル位置」)。
+  この位置は`Detection.leader_label_x/y`(0.0〜1.0正規化座標、BBoxとは独立)として
+  Backendへ保存し、ページ切替やブラウザリロード後も復元される。未設定(null)の
+  場合、BBox右上角を基準に、BBoxや図面を過度に隠さない位置へ自動配置する
+  (高度な自動衝突回避は行わない。指示書13章)。
+- **ラベルの見た目 (2026-09 追加修正 第3ラウンド1章〜5章)**: 旧仕様は白背景
+  (`rgba(255,255,255,0.85)`) + 下線ボーダー(`border-bottom`)を持つ「カード状」の
+  見た目だったが、この`border-bottom`はSVG側の引出線polyline(水平線部分)とは
+  別に「もう1本の水平線」を重ねているのと同じ状態であり、両者の長さが一致しない
+  ことがあった。今回、背景・枠・box-shadowを全て削除し(`background: transparent;
+  border: none; box-shadow: none;`)、水平線はSVG側の1本のみに統一した
+  (図面へ直接文字を描画する見た目)。hover/selected状態も背景は出さず、
+  `text-decoration: underline`(カテゴリ色)で示す。文字サイズは
+  `0.82rem`(≒11.48px)から`1rem`(14px、ルートと同じ)へ約22%拡大した。
+  font-weight(600)・font-family(Phase 1.10のUIフォント方針を継承。引出線だけ
+  別フォントにはしない)は変更していない。
+- **BBox編集中のリアルタイム追従 (2026-09 追加修正11章〜17章)**: 旧仕様では
+  move/resizeドラッグ中の引出線アンカーはmouseupで確定した後にしか更新されず、
+  ドラッグ中は古い位置のまま表示されていた。`DrawingViewer.tsx`が
+  `previewBBox: {detectionId, rect} | null` stateを保持し、`DetectionOverlay`
+  (ドラッグ操作の主体)が`onPreviewBBoxChange`経由でmousemove毎に都度これを更新、
+  `LeaderLineOverlay`は同じstateを読んでアンカー計算(`topRightCorner`)に
+  `previewBBox ?? persistedBBox`を使うことで、mouseup前(未確定)でもアンカー・
+  斜線・矢印がリアルタイムに追従するようにした。Backendへの保存(PATCH)は
+  従来通りmouseup時のみで、mousemove毎には送らない (要件14。既存の
+  「mousemove→Frontend previewのみ更新、mouseup→Backend PATCH」という
+  アーキテクチャは変更していない)。**ラベル自体の位置(`leader_label_x/y`)は
+  この追従の対象外**とし、常に確定済み(persisted)のBBoxから計算する
+  (`resolveLabel`は`previewBBox`を見ない)。これはBBox編集中にラベル位置が
+  ジッターするのを防ぐための明示的な設計判断であり、「ラベル位置は固定、
+  BBox右上=編集に追従」という要求を満たす。
+  なお`DetectionOverlay`は`onPreviewBBoxChange`が渡されない場合(既存の単体テスト等)
+  にも壊れないよう、その場合のみ内部にフォールバックのstateを持つ
+  (`onChange`を渡せばcontrolled、渡さなければuncontrolledという一般的なReactの
+  慣習と同じ考え方)。本番の`DrawingViewer`経由では常に両方渡すため常にcontrolled。
+- **hoverによるBBox確認表示 (指示書8章)**: 引出線(斜線)または「コード 型式」帯へ
+  hoverすると、対応するBBoxをカテゴリ色の薄い塗りつぶしで一時的に表示する
+  (Resize Handle無し)。細い線そのものだけをhover対象にすると操作しにくいため、
+  見た目の線幅(2px程度)とは別に透明な太いヒットエリアを重ねている (指示書15章)。
+- **クリックで編集状態へ (指示書8章)**: 引出線・ラベルいずれをクリックしても
+  対応するDetectionが選択状態(編集中)になり、BBox本体+Resize Handleが表示される。
+  引出線経由で選択したDetectionも、Toolbarの「BBox削除」ボタン・Deleteキーで
+  同じように削除できる (要件27)。
+- **色 (要件2/30)**: `master_item_category`から`masterCategoryPresentation.ts`
+  経由で解決したカテゴリ色を線・帯の下線・文字色に使う。色のHEX/RGBA値を
+  CSSへ重複記述せず、CSSカスタムプロパティ(`--cat-leader-color`/
+  `--cat-leader-text`)として注入する。
+- **Layer順序 (指示書16章)**: 盤領域(product_df, z-index 10) → 引出線(15) →
+  BBox本体(AI常時表示・Manual hover/editing表示、20) → 選択中BBox(30) →
+  Resize Handle(40) → Tooltip(50)。各Overlayのコンテナ自体は
+  `pointer-events:none`とし、実際に操作させたい個々の要素側で`auto`を
+  再指定する設計を踏襲しており、透明な親OverlayがViewer全体のクリックを
+  奪ってしまう不具合 (`implementation-plan.md` 8.7章) を再発させない。
+
+## 5. PanelProperties (右上: 盤パラメータ)
+
+- **Phase 1.9**: 中央Viewerでproduct_df盤領域が選択されている間は、その内容
+  (`selectedProductPanel`) を優先して表示する。表示項目はPAGE/面番号(BAN_MENNO)/
+  盤番号(BAN_NO)/盤名称(BAN_MEISYOU)/表示種別(BAN_TYPE)/H1/H2/W/D。
+  H1/H2/W/Dには単位「mm」を付与するが、元の数値そのものは変更しない
+  (表示上の整形のみ)。座標計算用の内部項目 (KITEN_X等) はこの表示には含めない。
+  値がnull/undefined/NaN/空文字の場合は「-」で表示し、`null`/`undefined`/`NaN`
+  という文字列をそのまま出さない (`PanelProperties.tsx::formatValue`)。
+- 盤が選択されていない場合は「盤が選択されていません」を表示する。
+- 上記のいずれも無い場合 (旧来の挙動。回帰確認用に維持): 選択中Detectionに紐づく盤
+  (`panel_id`) の情報を表示する。属性は `panel.attributes[]` をAPIから受け取った
+  まま描画するのみで、W/D/H/BAN_NO等の項目名をコンポーネントへハードコードしていない
+  (要件12)。各属性行に取得元 (`design_data` / `ai` / `manual`) を表示する。
+
+## 6. EstimateTree (右下: 積算結果)
+
+- `category` (品名) → 積算コード → 参照図面 の3階層ツリー (要件13)。
+- 各積算コード行に `source_type` (プログラム/AI/手動) と `status` (自動/確定/要確認/除外) の
+  バッジを表示。
+- 根拠図面リンクをクリックすると:
+  1. `selectedPageId` を更新 (Viewerが対象ページへ切り替わる)
+  2. 対象Detectionを選択状態にする
+  3. 一時的に強調表示 (`detection-overlay__bbox--flash`、約1.8秒間点滅)
+  を行う (要件13の目標を実装)。
+
+## 7. EstimateMasterPicker (下部: 積算コードMaster) — Phase 1.6で刷新、Phase 1.7で実データ対応
+
+- **Phase 1.7**: 参照元をExcel資料 (`data/master/estimate_master_a.xlsx`) に
+  切り替えた (ダミー21件は廃止)。Frontendは引き続きExcelを直接読まず、必ず
+  `GET /api/master-items` 経由でのみデータを取得する。
+- **Phase 1.7追加指示: 使用品名の限定・タブ順固定**。Sekisan Naviで使うのは
+  業務指定の13品名 (箱･単独/箱･左右/箱･中/内部ﾊﾟﾈﾙ/底板/盤間の仕切・遮蔽/
+  附属品加算価格/箱体価格倍率/ﾊﾟﾈﾙ/OPA用ｱﾝｸﾞﾙ枠/金網/入力（主回路銅帯）/銅帯) のみ。
+  それ以外の品名・取り消し線が設定された行はBackend (Master Importer) 側で
+  そもそもDBへ取り込まれないため、Frontendは特別な除外ロジックを持たない。
+- **品名ごとのタブ表示** (要件2): Masterデータに実在する `category` から動的に
+  タブを生成する (出現順で重複除去。Frontendへ品名一覧をハードコードしない)。
+  タブの並び順が業務指定の13品名順になるのは、Backend側のAPIが既にその順序で
+  データを返しているため (`architecture.md` 12章参照)。品名がNULLの行は
+  Importer側で取り込まれない前提のため、「未分類」タブは**廃止**した。
+- **タブ表記の全角統一・色分け (Phase 1.10、Phase 1.11で固有色化)**: `category`の
+  内部値 (Excel由来、半角カナ・半角中点混在。例: `箱･単独`/`内部ﾊﾟﾈﾙ`)はDB上で
+  書き換えず、表示専用の変換を`frontend/src/domain/masterCategoryPresentation.ts`
+  へ一元管理し、全角表記(`箱・単独`/`内部パネル`等)へ変換して表示する。
+  - **Phase 1.11: 13カテゴリすべて重複しない固有色**。旧Phase 1.10は5系統の
+    共有色(blue/green/orange/purple/brown)だったが、指示書1章を受けてHSLで
+    色相を分散させた13色へ変更した (関連カテゴリ(箱系/内部パネル系/附属品系/
+    パネル系/銅帯系)は近い色相にまとめつつ、13色すべてが重複しない)。
+  - 各カテゴリは`{tabBg, tabBorder, tabFg, bboxBorder, bboxFill, leaderColor,
+    leaderTextColor}`の配色一式を持つ (`MasterCategoryColors`)。tab用・
+    Manual BBox用・引出線用のすべての色をこの1か所から取得でき、CSSへ同じ
+    HEX/RGBA値を重複記述しない (指示書30章)。CSS側は`toCssVars()`が生成する
+    CSSカスタムプロパティ(`--cat-tab-bg`等)を`style`属性経由で受け取り、
+    `var(--cat-tab-bg)`等を参照するだけにしている。
+  - 選択中タブは背景を白く・上辺(border-top)を太く・font-weightを上げて区別し、
+    既存の行選択色(琥珀色)とは別クラス・別用途として独立させている。
+- **表示カラム** (要件3、この順序で固定): コード / 型式 / 定格 / 総合価格A /
+  箱・部品価格 / 塗装価格 / 設A / 板金 / 組立 / 検査。`COLUMNS` 定数配列で
+  定義しており、列の増減は配列を変更するだけで対応可能 (要件14)。
+  品名(category)は列としては表示しない (タブで表現するため)。`item_name`列は
+  Phase 1.7で廃止した (`data-model.md` 参照)。
+- 数値列は3桁区切りで表示する (元データの数値そのものは変更しない、表示上の整形のみ)。
+  値がない項目は空欄表示とし、ダミー値・計算値では埋めない (要件3/4)。
+- テキスト検索は現在アクティブなタブ内のコード/型式に対して絞り込む。
+- **大量データの表示 (Phase 1.7)**: 実データでは1タブ最大230件になるため、
+  ページ全体が伸び続けないよう表テーブル部分を内部スクロール (`overflow-y: auto`)
+  にした。検索・行選択は既存動作のまま、全件をDOM上に描画する (省略・打ち切りはしない。
+  `EstimateMasterPicker.test.tsx` の「大量データ表示」テストで231行 (ヘッダ+230件) が
+  実際にレンダリングされていることを確認済み)。
+- **行選択 (Manual BBox追加対象の選択)** (要件5-8):
+  - 行クリックで選択状態にする。背景色 (橙系) で明確に区別する。
+  - 別の行をクリックすると選択が切り替わる (同時に選択できるのは1件のみ)。
+  - 選択中の行を再クリックすると選択解除する。
+  - 選択状態はBBoxを1件追加しただけでは解除されず、別の行選択/再クリックまで維持される。
+  - 選択トグルのロジック自体は `App.tsx` が保持し、本コンポーネントは
+    クリックされた行のIDをそのまま親へ伝えるだけ (選択/解除の判断はしない)。
+
+## 8. SystemSettings (Phase 1.5で追加。管理者向けシステム設定)
+
+- ProjectHeaderの「システム設定」ボタンからモーダルとして開く。
+- 表示・編集項目: データ参照ルート (`root`)、現在パスが存在するかのバッジ表示。
+- 「接続確認」「変更を保存」のいずれも管理者パスワード入力が必須で、
+  Backend側 (`PUT/POST /api/settings/data-source*`) で検証される (要件12)。
+  Frontend側はパスワードの正誤を一切判定しない。
+- 接続確認の結果は「接続成功」または「接続失敗: <理由>」という分かりやすい文言で表示し、
+  内部例外の詳細は表示しない (要件15)。
+
+## 9. ProductSelector (Phase 1.5で`ProductViewer`として追加、Phase 1.8で役割変更)
+
+- ProjectHeaderの「製番を開く」ボタンからモーダルとして開く。
+- **Phase 1.8での役割変更**: Phase 1.5時点では「ダミー積算データとは無関係な、
+  製番の生ファイルを閲覧するためだけの独立画面」(旧`ProductViewer`。ページ一覧+
+  実PDF表示をこのモーダル内に持っていた) だったが、Phase 1.8でDrawingNavigator
+  (左ペイン) 自体が実製番のPNGサムネイルを表示するようになったため、このモーダルの
+  役割は「**メイン画面が参照する製番を切り替えるための検索・選択UI**」に変更した。
+  ページ一覧・PDF表示はこのモーダルから無くなり、メイン画面のDrawingNavigator/
+  DrawingViewerがその役割を引き継いだ。
+- 製番の入力は前方一致の候補検索 (デバウンス付き、2文字未満では検索しない) を基本とし、
+  ルート直下の製番一覧を無条件に全件表示するような実装は行っていない (要件2/3)。
+  候補件数には上限があり、超過時はその旨を表示する。
+- 候補に無い製番でも、完全に一致する製番であれば「開く」ボタンから直接存在確認して
+  切り替えられる (要件3)。
+- 製番を切り替えると、メイン画面のDrawingNavigatorがその製番の実PNGサムネイル一覧を
+  再取得して表示する。既存のダミー積算データ (Panel/Detection/EstimateItem) は
+  ダミーDB側の該当ページが一致する場合にのみ引き続き表示され、無理な紐付けは
+  行わない (`architecture.md` 14章参照)。
+- 管理者パスワードは不要 (要件18を維持)。
+
+## 10. Phase 1.8時点で未実装のUI操作 (暫定/未確定)
+
+- BBoxの「除外」(status変更操作自体。追加・削除・リサイズはPhase 1.6/1.7で実装済み)
+- 積算結果の確定・却下・数量修正等の編集操作
+- Manual BBoxからEstimateItem/EstimateReferenceを生成する操作 (要件19: 今回も
+  「積算コードを選択して図面上へBBoxを登録する/削除する/リサイズする」ところまで)
+- 案件切り替え (現在は単一案件のダミーデータのみ)
+- 解析実行ボタンの実処理
+- 削除したAI Detectionが将来の再推論で復活した場合の扱い (`data-model.md` 9章参照)
+- EstimateReference.detection_idがNULLになった行の専用UI表示
+- 盤領域Overlay (Phase 1.8) のクリックによる盤選択機能は**Phase 1.9で実装済み**
+  (本章「4. DrawingViewer」参照)。ただし選択した盤とManual BBoxの自動紐付けは
+  今回未実装のまま (指示書14章)。
+- Viewer見出し部への「P16｜5/5｜No.2-1低圧動力盤」のような選択盤の簡易表示
+  (Phase 1.9指示書11章で「必須ではない」とされたもの)
+- CCVサブディレクトリ検出可否のUI表示 (Phase 1.5では`ProductViewer`に
+  「⚠ CCV未検出」バッジがあったが、Phase 1.8で当該モーダルの役割が製番検索・切替へ
+  変わったことに伴い、この表示は一旦UIから無くなっている。CCVの実体自体が
+  未確認事項のままであることに変わりはない。`docs/data-source.md` 3章参照)
+- サムネイルの盤領域Overlayに対応する`product_df.csv`の列 (KITEN_X/Y,
+  DETECT_AREA_X/Y等) の公式な定義書は未入手で、実データ検算による確認に留まる
+  (`docs/data-source.md` 5.1章)
+- 選択中盤(`selectedPanel`)とManual BBoxの自動紐付けは、Phase 1.11でも引き続き
+  未実装のまま (色系統は共通の`masterCategoryPresentation.ts`を使うが、
+  盤選択とBBox作成対象選択が自動的に連動するわけではない)
+- BBoxの「除外」(status変更操作自体)、積算結果の確定・却下・数量修正等の編集操作、
+  実YOLO推論・本番積算Ruleは引き続きスコープ外 (Phase 1.11指示書冒頭でも明記)
+
+これらは `implementation-plan.md` の「Phase 2以降」に候補として記載する。
