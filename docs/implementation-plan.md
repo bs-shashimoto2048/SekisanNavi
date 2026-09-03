@@ -1130,6 +1130,231 @@ BBox move/resize追従・Viewer Fitに回帰がないこと(既存テスト無�
 **実ブラウザでの実際のhover/クリック/ドラッグ操作そのものは、引き続き本セッションの
 環境上ユーザー側での確認が必要である** (下記テスト結果参照)。
 
+## 8.13. Phase 1.12: detected_df.csv (YOLO検出結果) の中央プレビュー表示 (完了)
+
+実行済みYOLO推論の出力である`detected_df.csv`を製番フォルダから読み込み、
+`product_df.csv`のSCALE_X/SCALE_Yで座標補正した上で、中央Viewerへ検出BBoxの
+プレビューとして重畳表示する機能を追加した。新規YOLO推論は行わない。
+
+### 実データ調査で確定した列構成・座標系
+`A1GV2421/detected_df.csv` (cp932、product_df.csvと同じエンコード) を実際に
+共有フォルダから読み、列名・値を確認した:
+
+```text
+PAGE, YOLO_INDEX, SCORE, DEVICE,
+LEFT_TOP_X, LEFT_TOP_Y, RIGHT_TOP_X, RIGHT_TOP_Y,
+LEFT_BOTTOM_X, LEFT_BOTTOM_Y, RIGHT_BOTTOM_X, RIGHT_BOTTOM_Y,
+CENTER_X, CENTER_Y
+```
+
+- PAGE=ページ番号、YOLO_INDEX=同一PAGE内の通し番号(内部識別専用)、
+  SCORE=confidence、DEVICE=クラス名(例: roof_fan, panel, transformer, sidedoor_l)。
+- 4隅の実座標が個別に与えられている(軸並行の矩形であることを確認済み: 実データで
+  LEFT_TOP_YとRIGHT_TOP_Yが常に一致、LEFT_BOTTOM_YとRIGHT_BOTTOM_Yも常に一致)。
+  CENTER_X/Yは4隅の平均と一致 (座標計算には未使用)。
+- **Y軸原点の確定**: 実データでTOP側のY値がBOTTOM側より常に大きいことを確認した。
+  PNG/DOMは「下に行くほどYが大きい」原点左上系のため、これはraw座標系が
+  「原点左下・Y上向き」(product_df.csvのKITEN_Y等と全く同じCAD座標系) であることを
+  意味する。したがってproduct_df.pyの`1 - y`と同じ考え方でY軸反転が必要と判断した
+  (推測ではなく、生値の大小関係から確定)。
+
+### product_dfとのPAGE紐付け・SCALE一意性の確認
+`A1GV2421/product_df.csv`全32行を機械的に検算した結果、**同一PAGE内で
+SCALE_X/SCALE_Y/FRAME_MINI_X/FRAME_MINI_Yが異なる行は0件**だった(盤(BAN)ごと・
+矢視(BAN_TYPE)ごとに変わることはない)。そのため、同一PAGEの最初に出現した
+行の値をそのまま採用する方式で確定し(`product_df.load_page_scales()`)、
+追加の紐付けキーは導入していない (指示書4章の「一意に決められない場合」には
+該当しなかった)。
+
+### 座標補正式 (確定)
+```text
+px_x        = raw_x / SCALE_X
+raw_px_y    = raw_y / SCALE_Y            # まだCAD系(原点左下)
+dom_y       = FRAME_MINI_Y - raw_px_y    # PNG/DOM系(原点左上)へ反転
+normalized  = px座標 / FRAME_MINI_X (X系) または / FRAME_MINI_Y (Y系)
+```
+FRAME_MINI_X/Yは`{page}.png`の実px原寸と一致する(product_df.py側で既に確認済みの
+事実を流用)。今回もPillowで実画像のサイズと突き合わせ、page16(2077×1485)・
+page23(2062×1424)とも完全一致することを追加確認した。
+
+### 実データ・実画像による目視検証 (数式が通っただけで完了とはしていない)
+計算した正規化BBoxを実際の`{page}.png`へPillowで合成し、YOLOパイプラインが
+出力済みの参照画像(`{page}_detected.png`。ラベル付きBBoxが既に描画された
+確認用画像)と見比べた:
+- **page16** (roof_fan×7, roof_fan_r×1, sidedoor_l×1 の計9件): 正面図上部の
+  「換気扇」アイコン群・左側面図の「サイドドア」・右側面図の換気孔付近に、
+  各BBoxが実対象物と完全に一致して重なることを視覚的に確認した。
+- **page23** (panel×2, transformer×1): 正面図の2つのブレーカー群(panel)、
+  側面図のトランス(1φT 150kVA、transformer)にBBoxが正確に重なることを確認した。
+- X方向・Y方向・幅・高さ・Y軸反転のいずれも、この2ページ(形状・スケールが大きく
+  異なる)で問題なく一致した。
+
+### 実データ例 (指示書22章)
+| PAGE | DEVICE | raw (LEFT_TOP/RIGHT_BOTTOM) | SCALE_X/Y | corrected px (dom) | normalized |
+|---|---|---|---|---|---|
+| 16 | roof_fan | (9519,9699)-(10023,9444) | 7.6986/7.6970 | x=1236.5,y=224.9,w=65.5,h=33.1 | x=0.5953,y=0.1514,w=0.0315,h=0.0223 |
+| 23 | panel | (743,2481)-(1658,1069) | 2.7279/2.7212 | x=272.4,y=512.3,w=335.4,h=518.9 | x=0.1321,y=0.3597,w=0.1627,h=0.3644 |
+| 23 | transformer | (1550→省略) | 2.7279/2.7212 | (略) | x=0.7102,y=0.5123,w=0.0948,h=0.2057 |
+
+PAGE別Detection件数: 16=9件, 21=1件, 23=3件, 25=3件, 27=2件, 29=1件
+(detected_df.csv全19行を実データで確認済み)。
+
+### 実装構成
+- `backend/app/services/product_df.py`: `PageScale`データクラス、
+  `load_page_scales(product_dir)`を追加(既存`load_product_df`とは独立。
+  盤領域パース失敗の影響を受けない)。
+- `backend/app/services/detected_df.py` (新規): `load_detected_df()`。
+  ファイル自体が無い場合は`file_present=False`の空結果を返し、アプリ全体を
+  エラーにしない(指示書27章)。該当PAGEが無い場合も空リスト(指示書26章)。
+  SCALE_X/SCALE_Y==0やSCALE情報自体が見つからない行はスキップし、
+  `warnings`へ理由を記録してBackendログにも出す(指示書20章)。
+- `GET /api/products/{product_no}/drawings/{page_no}/detected-preview`
+  (新規、`DetectedPreviewItemOut`のlistを返す)。既存の`/drawings/{page_no}/
+  thumbnail`等と同じくpage_noはintパスパラメータのみで、Frontendへ任意の
+  ファイルパスは渡させない(指示書25章)。
+- Frontend: 新規`DetectedPreviewOverlay.tsx` (表示専用、クリック/リサイズ/削除の
+  対象にしない)。`App.tsx`が製番+ページ番号のみをキーに取得する新しいeffectを持ち
+  (ダミーDB側の`matchingDbPage`には依存しない。指示書1章/18章)、ページ切替時は
+  一旦空へリセットしてから再取得するため別ページのBBoxが残らない。Layer順序は
+  盤領域(z-index 10) → 検出BBoxプレビュー(12、新規) → 引出線(15) → Manual/AI
+  BBox本体(20) の指示書12章の推奨順に合わせた。見た目は既存AI Detection表示
+  (青系実線+暗色ラベル)と統合した(指示書13章)。
+
+### 既存Detection DBとの二重表示について (指示書15章/16章)
+Phase 1.5由来のseedデータには、page16(`drawing_page_id=1`)に紐づく
+ダミーのAI Detection(`roof_fan`、EstimateTreeの「根拠図面クリック→BBox選択→
+一時強調」という既存の回帰テスト対象の機能で使われている)が存在する。
+これは今回のdetected_df.csv由来の`roof_fan`と、同じページで概念上重複しうる。
+
+検討の結果、**今回はDBの`detections`テーブル側を一切変更・フィルタしない**方針とした。
+理由: (1) 上記のEstimateTree参照ナビゲーション機能は、この特定のseed Detectionを
+選択・ハイライトできることに依存した既存の回帰テストがあり、これを壊さずに
+「AI Detectionを非表示にする」ことは両立しない、(2) 実際にこのseedデータと
+detected_df.csvの両方が存在するのは、Phase 1のデモ用に作られたpage16という
+特定の1ページのみであり、他の全ページ(21, 23, 25, 27, 29等)はそもそもDB側に
+AI Detectionが存在しないため二重表示の問題自体が起こらない。したがって、
+「detected_df.csvを一次データとして扱う」という指示の趣旨は実質的に満たされている
+と判断した。**page16固有のこの重複は既知の残課題として開示する**
+(実際に確認したところ、本セッション時点の実行中DBでは、ユーザー操作により
+既にこのseed Detection自体が削除されており、現状は重複が発生していない)。
+
+### 完了条件チェック (指示書30章、14項目)
+自動テスト・実データ(A1GV2421)のAPI往復・実画像とのPillow合成による目視確認で
+検証できた: detected_df.csvの正式参照、ページごとの紐付け、SCALE_X/SCALE_Yに
+よる座標補正(X系/Y系を独立して適用)、PNG原寸への対応、normalized変換、
+同一PAGE全件表示、実対象物とBBox位置の一致(2ページで確認)、Manual BBoxとの
+視覚的区別、元CSV/PNGへの書き込みなし(read-onlyで実装)。**実ブラウザでの
+Zoom/Pan/Fit/ペインResize操作そのものによる位置ずれ確認は、既存Overlay群と
+全く同じ0.0〜1.0正規化座標方式・同じCSSレイヤー構造を踏襲しているため理論的には
+崩れないはずだが、これまでのラウンドと同様に実ブラウザでの目視確認はユーザー側で
+お願いしたい。**
+
+## 8.14. Phase 1.13: detected_df由来AI BBoxの表示整理・視認性改善 (完了)
+
+Phase 1.12で座標補正・表示自体は成立したAI検出BBox(`DetectedPreviewOverlay`)に
+ついて、座標ロジックは一切変更せず、表示の優先度・視認性のみを整理した。
+
+- **通常時**: `background: transparent`、`border: 1px solid #3b82f6`(旧2px+常時薄塗り
+  から変更)。ラベルは`DEVICE`名のみ (confidence/SCOREは常時表示しない。旧:
+  「roof_fan 0.96」のように黒帯背景で常時表示していたのをやめた)。
+- **hover時のみ**: `border-width: 2px` + `rgba(59,130,246,0.12)`の薄塗り +
+  DEVICE/SCORE/PAGE/YOLO_INDEXの詳細Tooltip (SCOREは小数2桁へ丸め表示。元データは
+  不変)。
+- **Master Item選択中(Manual BBox追加モード)**: `masterItemSelected`propが`true`の間、
+  個々のAI BBoxへ`pointer-events: none`を付与し、hover/Tooltipも二重に無効化する
+  (`ProductPanelOverlay`の`--noninteractive`と同じ設計)。ドラッグがAI BBoxを素通り
+  して背景のDrawingCanvasへ直接届くため、Manual BBox作成のドラッグ開始を妨げない。
+- Layer順序 (盤領域10 < AI BBox12 < 引出線15 < Manual/AI BBox本体20) はPhase 1.12
+  から変更なし (既にManual/Leaderより優先度が低い状態だった)。
+- 複数件のBBoxを統合・NMS再処理はせず、detected_df.csvの1行=1件のまま個別描画を
+  維持 (指示書11章)。クリックしても編集状態には入らない (表示・確認専用)。
+- Frontend: `vitest run` 305 passed (296→+9)。Backend変更なし(134 passed)。
+  `npm run build`成功。実データ(page16)をPillowで合成し、旧スタイル(2px+常時薄塗り+
+  黒帯ラベル)と新スタイル(1px+透明+DEVICE名のみ、1件をhover状態として再現し
+  Tooltip表示)の差を視覚的に確認した。実ブラウザでの実際のhover操作そのものは
+  未確認のまま。
+
+## 8.15. Phase 1.14: 右ペイン上部をestcode_df.csv実データ表示へ変更・積算集約領域の枠組み追加 (完了)
+
+右ペイン上部の「盤パラメータ」(`PanelProperties`) を廃止し、`estcode_df.csv`
+(盤ごとの積算コード基本情報) の実データを参照する`PanelInfo`コンポーネントへ
+置き換えた。右ペイン下部には「積算集約」(`EstimateAggregation`) を新設したが、
+今回は表示領域と基本構造のみで、本番の集約ロジックは実装していない。
+
+### 実データ調査で確定した列構成・紐付けキー
+`A1GV2421/estcode_df.csv`(cp932、他のdfファイルと同じエンコード、全5行)を実際に
+共有フォルダから読んだ結果:
+
+```text
+MODEL, BAN_MENNO, BAN_NO, BAN_MEISYOU, BAN_H, BAN_W, BAN_D, BAN_CONNECT,
+PANEL, TRANS, IN_PANEL, SHIELD, DOOR_FRONT, DOOR_BACK, DOOR_STACK, DOOR_SIDE,
+DOOR_SMALL, FAN_ROOF, FAN_DOOR, MAIN_LINE, WIRE_MESH, STACK_PLATE,
+DRAWER_DEVICE, VCT_STAND, BUS_DUCT, PASSAGE, INPUT_CU_COEFF, SORT_ORDER
+```
+
+**指示書は紐付けキー候補として`X_No`列を例示していたが、実ファイルにその列名は
+存在しなかった**。実際は`product_df.csv`と全く同じ列名`BAN_MENNO`が使われている。
+`A1GV2421/product_df.csv`のPAGE=16配下12行(盤5件×矢視違い)と`estcode_df.csv`の
+5行を`BAN_MENNO`で突き合わせ、`BAN_MEISYOU`(盤名称)の値が全件完全一致することを
+確認した(例: BAN_MENNO=5 → 両ファイルとも"No.2-1低圧動力盤")。したがって
+`product_df.csv`の`BAN_MENNO`と`estcode_df.csv`の`BAN_MENNO`は名称・値とも
+完全に同じ概念であり、変換・マッピングは不要と判断した。
+
+**紐付けキーの一意性**: `estcode_df.csv`(全5行)で`BAN_MENNO + BAN_NO`の組み合わせに
+重複は無い(5行とも一意)。追加キーは不要。
+
+**estcode_df.csvはPAGE列を持たない(製番単位のデータ)**: 1つの盤は複数ページ
+(矢視違い)に登場しうるが、estcode_df上の盤情報行は1つだけ。そのため
+`GET /api/products/{product_no}/estimate-panels`はページ番号を受け取らず、
+製番配下の全盤をまとめて返す(`load_estcode_df(product_dir)`はページ非依存の
+軽量な専用関数として実装)。
+
+### 実データ例 (指示書29章)
+```text
+MODEL=IS2, BAN_MENNO=5, BAN_NO=5.0, BAN_MEISYOU=No.2-1低圧動力盤,
+BAN_H=2300, BAN_W=1700, BAN_D=2200, BAN_CONNECT=箱･左右(L), SORT_ORDER=1
+```
+中央Viewerで対応盤(BAN_MENNO=5/BAN_NO=5)を選択した時、右ペイン上部に
+```text
+型式       IS2
+面番号     5 / 盤番号 5
+盤名称     No.2-1低圧動力盤
+盤寸法     H 2300 : W 1700 : D 2200 mm
+接続情報   箱・左右(L)
+並び順     1
+```
+と表示されることを、稼働中Backend(port 8010再起動後)への直接curlで確認した。
+
+### 実装構成
+- `backend/app/services/estcode_df.py` (新規): `load_estcode_df(product_dir,
+  product_no)`。ファイル自体が無い場合は空結果を返しアプリを止めない。
+  BAN_MENNO/BAN_NO欠損行はスキップ(誤った紐付けを避ける)、BAN_H/W/D等の表示専用
+  数値項目は欠損しても行全体をスキップせず個別に`None`にする。
+- `GET /api/products/{product_no}/estimate-panels` (新規、`EstimatePanelInfoOut`の
+  listを返す。ページ番号を受け取らない点が他のdf系APIと異なる)。
+- Frontend: `types/domain.ts`に`EstimatePanelInfo`(CSV列名をそのままsnake_caseの
+  Frontend型フィールド名として使用。指示書はcamelCase変換の例を示していたが、
+  既存コードベース全体の一貫した規約(`PanelPreview`等、backend/frontend間で
+  フィールド名を変えない)に合わせ、日本語ラベルへの変換はJSXの表示層のみで行う
+  設計とした)。
+- `components/PanelInfo/PanelInfo.tsx` (新規、旧`PanelProperties.tsx`を置き換え・
+  削除): 6行構成のCSS Gridレイアウト。表示優先順位は
+  `selectedProductPanel`+`estimatePanel`(estcode_df一致行) > 該当なしメッセージ >
+  旧来のダミーDB由来Panel表示(回帰確認用に維持) > 「盤が選択されていません」。
+- `components/EstimateAggregation/EstimateAggregation.tsx` (新規): props無し、
+  固定の空summary(`{confirmed:0, needsReview:0, shortage:0, unassigned:0}`)を
+  表示するのみ。将来のデータ構造(`{summary, estimateResults[], evidences[],
+  unassigned[]}`)を型として用意しているが、DB/APIの先回り実装はしていない。
+  `App.tsx`で`PanelInfo`のすぐ下、既存`EstimateTree`(旧seed積算結果)のさらに上に
+  配置し、実製番表示ではこちらを視覚的に優先する(`EstimateTree`自体は削除しない)。
+
+### 完了条件チェック (指示書30章、19項目)
+自動テスト・実データAPI往復(port 8010再起動後)で検証できた: estcode_df.csv正式
+参照、実列名・文字コード確認、選択盤との紐付け(BAN_MENNO+BAN_NO)、型式/面番号・
+盤番号1行/盤名称/H・W・D1行(mm単位)/接続情報/並び順の各表示、欠損値の"-"表示、
+盤未選択時・PAGE切替時の表示、右ペイン下部の積算集約領域(ロジック未実装)、
+既存BBox/Leader/AI表示への回帰なし(既存テスト無変更ロジックのまま通過)。
+
 ## 9. Phase 2以降の候補 (未確定・本Phaseでは未着手)
 
 以下は次フェーズの候補であり、実施順序・要否は未確定:
@@ -1432,3 +1657,70 @@ Master Importer・APIの主要経路、Frontendの主要表示ロジック(グ�
   水平線が一致)の違い、を視覚的に確認した。**実ブラウザでの実際のhover/
   クリック/ドラッグ操作そのものは、これまでのラウンドと同様に本セッションの
   環境上ユーザー側での確認が必要である。**
+
+## 20. テスト結果 (Phase 1.12時点)
+
+- Backend: `pytest` — **134 passed** (前回時点の116件に加え、今回純増18件:
+  `tests/test_detected_df.py` (新規、9件): `detected_df.csv`読み込み、実データ
+  (page16 roof_fan)の1行から実測済み正規化座標を再現、Y軸反転の検算(自明な
+  ケースでの往復計算)、同一PAGE複数Detectionの全件取得、該当PAGEなしはエラー
+  ではない、SCALE=0/SCALE情報なしのスキップとwarnings記録、confidence/
+  class_nameの保持。`tests/test_product_df.py`: `load_page_scales()`関連4件
+  (ファイルなし、SCALE取得、同一PAGE内の値一致時の採用方式、SCALE=0除外)。
+  `tests/test_api_products.py`: `/detected-preview`エンドポイント関連6件
+  (実データ1行の往復、同一PAGE複数件、該当PAGEなし、detected_df.csv自体なし、
+  製番なし404、path traversal拒否)。既存テストは全て無変更ロジックのまま
+  通過 = 回帰なし。
+- Frontend: `vitest run` — **296 passed** (22 files。前回時点(Phase 1.11追加修正
+  第4ラウンド)の284件に加え、今回純増12件:
+  - `components/DrawingViewer/DetectedPreviewOverlay.test.tsx` (新規、6件):
+    0件時は何も描画しない、正規化座標が%へ正しく変換されること、複数件を
+    全件描画すること(先頭1件に削減しない)、className+confidenceのラベル表示、
+    既存AI Detection表示(青系実線)との視覚的統合、コンテナ/個々のBBoxとも
+    pointer-events:noneで読み取り専用であること
+  - `App.test.tsx`: 3件追加。初期ページで製番+ページ番号のみをキーに取得される
+    こと(ダミーDB非依存)、ページ切替で該当ページの検出結果へ全件差し替わる
+    こと(別ページのBBoxが残らない)、該当データが無いページではエラーにならず
+    単に0件表示になること
+  - `components/DrawingViewer/DrawingViewer.test.tsx`: 3件追加。検出BBox
+    プレビューのLayer順序(盤領域10 < 検出プレビュー12 < Manual/AI BBox20)、
+    実際に描画されること、下にある盤領域のクリックを妨げないこと(表示専用で
+    pointer-eventsを奪わない)
+  - 既存テストは全て無変更ロジックのまま通過 = 回帰なし (BBoxクリック/
+    リサイズ/Manual BBox追加/Pan/Fit/ペインリサイズ/盤選択/Tooltip/引出線/
+    BBox削除エラー処理の既存挙動を含む)
+- Frontend: `npm run build` (tsc -b && vite build) — 成功、型エラーなし
+- 実データによる代替検証: 本章「8.13. Phase 1.12」参照。実際に共有フォルダから
+  `A1GV2421/detected_df.csv`・`product_df.csv`・`{page}.png`・
+  `{page}_detected.png`(YOLOパイプライン出力済みの参照画像)を取得し、
+  computed BBoxをPillowで実画像へ合成、参照画像と目視で突き合わせて
+  page16(9件)・page23(3件)の位置一致を確認した。稼働中Backend(port 8010、
+  再起動後)・Frontend(port 5175)の両方が新コードを配信していることも
+  直接確認済み。**実ブラウザでのZoom/Pan/Fit/ペインResize操作そのものによる
+  位置ずれ確認は、これまでのラウンドと同様に本セッションの環境上ユーザー側での
+  確認が必要である。**
+
+## 21. テスト結果 (Phase 1.14時点)
+
+- Backend: `pytest` — **146 passed** (前回時点の134件に加え、今回純増12件:
+  `tests/test_estcode_df.py` (新規、7件): estcode_df.csv読込、実データ
+  (BAN_MENNO=5)の1行から実測値を再現、製番配下全盤の取得(ページ非依存)、
+  盤寸法の一部欠損時に行全体をスキップしないこと、盤名称/接続情報欠損時の
+  None、紐付けキー(BAN_MENNO)欠損行のスキップ、SORT_ORDER欠損時のNone。
+  `tests/test_api_products.py`: `/estimate-panels`エンドポイント関連5件
+  (実データ1行の往復、製番単位で複数盤を返すこと、ファイルなし、製番なし404、
+  path traversal拒否)。既存テストは全て無変更ロジックのまま通過 = 回帰なし。
+- Frontend: `vitest run` — **313 passed** (23 files。前回時点(Phase 1.13)の
+  305件に加え、今回純増: `components/PanelInfo/PanelInfo.test.tsx` (新規、9件。
+  旧`PanelProperties.test.tsx`の回帰確認テストを引き継ぎつつ、estcode_df表示の
+  新規テストを追加)、`components/EstimateAggregation/EstimateAggregation.test.tsx`
+  (新規、3件)。`App.test.tsx`は右ペイン連動系のテストをestcode_df.csv fixtureに
+  合わせて更新(盤名称等の検証内容自体は維持、旧`表示種別`/`H1`単独表示への
+  依存のみ新しい6行フォーマットの検証へ置き換え)。既存テストは全て無変更
+  ロジックのまま通過 = 回帰なし (BBoxクリック/リサイズ/Manual BBox追加/Pan/Fit/
+  ペインリサイズ/盤選択/Tooltip/引出線/AI BBox/BBox削除エラー処理の既存挙動を含む)。
+- Frontend: `npm run build` (tsc -b && vite build) — 成功、型エラーなし
+- 実データによる代替検証: 本章「8.15. Phase 1.14」参照。稼働中Backend(port 8010
+  再起動後)へ直接curlし、A1GV2421の実estcode_df.csv全5盤が期待通り返ることを
+  確認した。**実ブラウザでの実際の盤クリック操作・右ペイン表示の見た目そのものは
+  これまでのラウンドと同様に本セッションの環境上ユーザー側での確認が必要である。**

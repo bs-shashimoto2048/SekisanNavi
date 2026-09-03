@@ -14,6 +14,14 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     server: {
+      // 社内LAN上の他端末からUI確認できるようにするための設定 (レビュー用途限定)。
+      // 既定の`localhost`のみlisten (127.0.0.1/::1) だと開発PC自身からしか
+      // 接続できないため、`true`にして全インターフェース (0.0.0.0 / ::) でlistenする。
+      // `/api`プロキシはVite devサーバー自身(Node側)からBackendへ発行される
+      // サーバー間通信であり、ブラウザから直接Backendへアクセスするわけではないため、
+      // この変更だけで他端末からの/api呼び出しも同一オリジンでそのまま動作する
+      // (BackendのCORS設定・bindアドレスの変更は不要)。
+      host: true,
       proxy: {
         '/api': {
           target: backendUrl,

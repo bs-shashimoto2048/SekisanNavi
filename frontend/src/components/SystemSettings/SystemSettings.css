@@ -41,20 +41,20 @@
   flex-direction: column;
   gap: 0.25rem;
   margin-bottom: 0.75rem;
-  font-size: 0.8rem;
+  font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
   color: #374151;
 }
 
 .system-settings__field input {
-  padding: 0.4rem 0.5rem;
+  padding: 0.45rem 0.55rem;
   border: 1px solid #d1d5db;
   border-radius: 4px;
-  font-size: 0.85rem;
+  font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
 }
 
 .system-settings__badge {
   margin-left: 0.5rem;
-  font-size: 0.78rem; /* Phase 1.10 フォント見直し: 約10.9px */
+  font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ */
   padding: 0.05rem 0.4rem;
   border-radius: 999px;
 }
@@ -76,12 +76,12 @@
 }
 
 .system-settings__actions button {
-  padding: 0.4rem 0.9rem;
+  padding: 0.45rem 1rem;
   border: 1px solid #d1d5db;
   border-radius: 4px;
   background: #f9fafb;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
 }
 
 .system-settings__actions button:disabled {
@@ -90,7 +90,7 @@
 }
 
 .system-settings__result {
-  font-size: 0.8rem;
+  font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
   padding: 0.4rem 0.5rem;
   border-radius: 4px;
   background: #f3f4f6;
@@ -107,7 +107,7 @@
 }
 
 .system-settings__note {
-  font-size: 0.78rem; /* Phase 1.10 フォント見直し: 約10.9px */
+  font-size: 0.82rem; /* 全体フォント拡大 指示1章: 補助注記のため控えめに引き上げ */
   color: #9ca3af;
   margin-top: 0.5rem;
 }

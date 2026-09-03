@@ -66,6 +66,40 @@ class ProductDrawingOut(BaseModel):
     panels: list[PanelPreviewOut] = []
 
 
+class EstimatePanelInfoOut(BaseModel):
+    """estcode_df.csv 1行相当。右ペイン上部「盤情報」表示用 (Phase 1.14指示書26章)。
+    CSVの生データをそのまま渡さず、正規化済みの表示用モデルへ変換してから返す。
+    PAGE列を持たない製番単位のデータのため、製番配下の全盤ぶんをまとめて返す
+    (Frontend側で選択中盤のBAN_MENNO/BAN_NOと突き合わせる)。"""
+
+    model: str | None = None
+    ban_menno: int
+    ban_no: int
+    ban_meisyou: str | None = None
+    ban_h: float | None = None
+    ban_w: float | None = None
+    ban_d: float | None = None
+    ban_connect: str | None = None
+    sort_order: int | None = None
+
+
+class DetectedPreviewItemOut(BaseModel):
+    """detected_df.csv (YOLO検出結果) 1行相当。中央Viewerへの検出BBoxプレビュー
+    表示用 (Phase 1.12指示書11章)。CSVの生データをそのまま渡さず、正規化済みの
+    表示用モデルへ変換してから返す。DBの`detections`テーブルとは無関係の
+    別データ源であり、`id`はDBのDetection.idとは異なる体系
+    (ページ内のYOLO_INDEXそのもの) であることに注意。"""
+
+    id: int
+    page_no: int
+    class_name: str
+    confidence: float
+    normalized_rect: NormalizedRectOut
+    # 常に "detected_csv" 固定。既存`Detection.source_type` ('ai'/'manual') とは
+    # 別の体系であることを明示し、Frontend側で誤って混同しないようにする。
+    source: str = "detected_csv"
+
+
 class ProductSearchOut(BaseModel):
     """製番の前方一致検索結果 (Phase 1.8, 要件3)。"""
 

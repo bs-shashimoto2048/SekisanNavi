@@ -1,18 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Detection } from '../../types/domain'
-import type { NormalizedRect } from '../../utils/bbox'
-import { topRightCorner } from '../../utils/bbox'
+import type { Detection, EstimateMasterItem } from '../../types/domain'
+import type { NormalizedRect, Point } from '../../utils/bbox'
+import { clamp01, computeInitialLabelPosition, topRightCorner } from '../../utils/bbox'
 import { getCategoryPresentation, toCssVars } from '../../domain/masterCategoryPresentation'
 import type { PreviewBBox } from './DetectionOverlay'
 
 // クリック(選択)とラベル帯dragの誤認防止 (DetectionOverlay/DrawingCanvasと同じ考え方)。
 const MIN_DRAG_PX = 6
-
-// 引出線ラベルの初期配置に使う概算オフセット (0.0〜1.0正規化座標)。
-// 高度な自動衝突回避は実装せず、BBoxや図面を過度に隠さない程度の単純なオフセットに
-// とどめる (Phase 1.11 UI改修指示13章)。ユーザーが帯部分をドラッグして修正できる。
-const INITIAL_OFFSET_X = 0.03
-const INITIAL_OFFSET_Y = 0.05
 
 // [第3ラウンド追加修正 7章〜14章] ラベル帯(水平線+文字)の幅は、実際の描画幅
 // (`CanvasRenderingContext2D.measureText`) を基準に計算する。文字数だけに基づく
@@ -30,7 +24,12 @@ const MIN_LABEL_WIDTH_FRACTION = 0.01 // 空文字列等の異常系で線が完
 // Phase 1.10のUIフォント方針(`index.css`の`:root`)をそのまま流用し、引出線だけ
 // 別フォントにはしない)。
 const LABEL_FONT_WEIGHT = 600
-const LABEL_FONT_SIZE_PX = 14 // 旧0.82rem(≒11.48px) → 新1rem(14px)。約22%拡大。
+// 全体フォント拡大・BBox編集追従回帰修正 指示1章: ルートfont-sizeを14px→15pxへ
+// 引き上げたことに伴い、`.leader-line-overlay__label`(font-size: 1rem)の実際の
+// 描画サイズも14px→15pxになった。ここが実CSSとずれると、水平線の長さ計算
+// (measureLabelWidthPx)が実際の文字幅と一致しなくなる(指示書の調査対象「LeaderLine
+// Overlayのラベル座標計算」に該当する不整合の一つ)ため、必ず一致させる。
+const LABEL_FONT_SIZE_PX = 15
 const LABEL_FONT_FAMILY =
   `'Yu Gothic UI', 'Meiryo UI', 'Meiryo', 'Segoe UI', system-ui, 'Hiragino Sans', 'Yu Gothic', sans-serif`
 
@@ -62,11 +61,6 @@ function measureLabelWidthPx(text: string): number {
   return ctx.measureText(text).width
 }
 
-interface Point {
-  x: number
-  y: number
-}
-
 interface Props {
   detections: Detection[]
   selectedDetectionId: number | null
@@ -79,19 +73,16 @@ interface Props {
   /** ドラッグ中(未確定)のBBoxプレビュー。DrawingViewer.tsxが保持するstateを
    * DetectionOverlayと共有で受け取る (Phase 1.11 追加修正11章〜17章)。
    * 引出線の「アンカー(BBox右上角)」はこの値をmouseupを待たずリアルタイムに
-   * 反映するが、ラベル自体の位置(`resolveLabel`)は常に確定済み(persisted)の
-   * BBoxのみから計算し、drag中の一時的なジッターを防ぐ (要件16)。 */
+   * 反映する。ラベル自体の位置(`resolveLabel`)も、全体フォント拡大・BBox編集
+   * 追従回帰修正 指示3章により、このアンカーの移動量ぶんだけ保存済み位置を
+   * リアルタイムにずらして追従させる(「BBoxだけ動いてラベルは元の場所に残る」
+   * という回帰の修正)。確定(mouseup)後はApp.tsx側が`leader_label_x/y`自体を
+   * 同じ移動量で更新して保存するため、ここでの見た目とズレない。 */
   previewBBox?: PreviewBBox | null
-}
-
-/** ラベルの初期位置を計算する。BBox右上角(アンカー)から右上方向へ少しずらすだけの
- *単純な規則とし、ページ端に近い場合のみ内側へ折り返す (指示書13章)。 */
-function computeInitialLabelPosition(anchor: Point): Point {
-  let x = anchor.x + INITIAL_OFFSET_X
-  let y = anchor.y - INITIAL_OFFSET_Y
-  if (x > 0.85) x = anchor.x - INITIAL_OFFSET_X - 0.1 // 右端に近い場合は左側へ
-  if (y < 0.05) y = anchor.y + INITIAL_OFFSET_Y // 上端に近い場合は下側へ
-  return { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) }
+  /** 積算コードMaster全件のid引きMap (次work指示1章)。省略時(未指定/単体テスト等)は
+   * 定格が常に「-」表示になるだけで、コード/分類/型式の表示・既存の引出線描画自体は
+   * 影響を受けない。 */
+  masterItemById?: Map<number, EstimateMasterItem>
 }
 
 function bboxOf(detection: Detection): NormalizedRect {
@@ -112,6 +103,74 @@ function buildLabelText(detection: Detection): string {
   const code = detection.master_item_code ?? detection.class_name
   const model = detection.master_item_model?.trim()
   return model ? `${code} ${model}` : code
+}
+
+// Hover Tooltipで値が無い項目に出す代替表示 (PanelInfo.tsx等、他コンポーネントと
+// 同じ"-"表記に揃える。null/undefined/空文字を出し分けず一律この値にする)。
+const MISSING_VALUE_PLACEHOLDER = '-'
+
+/** Hover Tooltipの1行 (ラベル:値)。次work指示1章。 */
+interface DetectionInfoRow {
+  label: string
+  value: string
+}
+
+/** Detectionのmaster_item_idから、Master全件Map経由で定格(rating)を引く。
+ * Detection自体にはBackend側で code/model/category のみJOIN済みで rating は
+ * 含まれないため (`app/repositories/detections.py`参照)、Frontend側で
+ * 既存の`/api/master-items`全件取得結果と突き合わせる。Backend API仕様は
+ * 変更しない方針 (次work指示7章) のための対応。 */
+function resolveRating(
+  detection: Detection,
+  masterItemById: Map<number, EstimateMasterItem>,
+): string | null {
+  if (detection.master_item_id == null) return null
+  return masterItemById.get(detection.master_item_id)?.rating ?? null
+}
+
+/**
+ * 積算コードHover Tooltip用の詳細行を組み立てる (次work指示1章: コード/型式/定格を
+ * 最低限表示)。
+ *
+ * 実データ調査の結果、積算コードMaster(estimate_master_items)には「品名」に
+ * 相当する独立列が存在しない(code/category/model/rating/noteのみ)。category
+ * (分類)を「品名」と読み替えて表示することはせず、正直に「分類」ラベルで表示する
+ * (指示: 実データを捏造しない)。model列は種別により型式番号(例:"OS2- 816")だったり、
+ * 附属品では品名的テキスト(例:"換気扇")だったりするが、値はそのまま表示するだけで
+ * 変換・言い換えはしない。
+ *
+ * 将来Backend側に正式な「品名」列が追加された場合は、この配列へ
+ * `{ label: '品名', value: ... }` の行を1つ足すだけで対応できる構造にしている。
+ */
+function buildDetectionInfoRows(
+  detection: Detection,
+  masterItemById: Map<number, EstimateMasterItem>,
+): DetectionInfoRow[] {
+  const rating = resolveRating(detection, masterItemById)
+  return [
+    { label: 'コード', value: detection.master_item_code ?? detection.class_name },
+    { label: '分類', value: detection.master_item_category ?? MISSING_VALUE_PLACEHOLDER },
+    { label: '型式', value: detection.master_item_model?.trim() || MISSING_VALUE_PLACEHOLDER },
+    { label: '定格', value: rating?.trim() || MISSING_VALUE_PLACEHOLDER },
+  ]
+}
+
+// Hover Tooltipのサイズ見積もり (概算)。ProductPanelOverlay/DetectedPreviewOverlayと
+// 同じ考え方のクランプ計算に使う。4行表示のため、他2つのTooltipより少し高さの
+// 見積もりを大きくしている。
+const TOOLTIP_WIDTH_ESTIMATE = 260
+const TOOLTIP_HEIGHT_ESTIMATE = 160
+const TOOLTIP_OFFSET = 14
+
+function clampDetectionTooltipPosition(clientX: number, clientY: number): { left: number; top: number } {
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1280
+  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800
+  const maxLeft = Math.max(8, viewportWidth - TOOLTIP_WIDTH_ESTIMATE - 8)
+  const maxTop = Math.max(8, viewportHeight - TOOLTIP_HEIGHT_ESTIMATE - 8)
+  return {
+    left: Math.min(clientX + TOOLTIP_OFFSET, maxLeft),
+    top: Math.min(clientY + TOOLTIP_OFFSET, maxTop),
+  }
 }
 
 /** フォールバック専用: コンテナ幅(px)自体がまだ取得できない場合
@@ -211,6 +270,11 @@ function pathD(geometry: LeaderGeometry): string {
  * 見た目の線幅(細)とは別に、hover/dragの対象を広く取るためSVG側で透明な
  * 太いヒットエリアを重ねている (指示書15章/18章。斜線・水平線の全体に沿わせる)。
  */
+// masterItemById省略時の既定値。毎レンダー新規Mapを作らないよう、モジュール
+// スコープに固定のインスタンスを1つだけ持つ (propsのデフォルト値としてのみ使う。
+// 書き換えは行わない)。
+const EMPTY_MASTER_ITEM_MAP: Map<number, EstimateMasterItem> = new Map()
+
 export function LeaderLineOverlay({
   detections,
   selectedDetectionId,
@@ -219,8 +283,18 @@ export function LeaderLineOverlay({
   onSelectDetection,
   onMoveLabel,
   previewBBox = null,
+  masterItemById = EMPTY_MASTER_ITEM_MAP,
 }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null)
+  // 積算コードHover Tooltip用のローカル状態 (次work指示1章)。onHoverDetection自体は
+  // 従来通りDrawingViewer.tsx側(通常非表示のBBoxを一時表示するため)へ伝播させつつ、
+  // Tooltipの表示位置(マウス座標)はこのコンポーネント内だけで完結させる
+  // (ProductPanelOverlay/DetectedPreviewOverlayと同じ設計)。
+  const [tooltipHover, setTooltipHover] = useState<{
+    detectionId: number
+    clientX: number
+    clientY: number
+  } | null>(null)
   const dragRef = useRef<{
     detectionId: number
     startClientX: number
@@ -301,6 +375,30 @@ export function LeaderLineOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onMoveLabel])
 
+  // PAGE切替等でdetections自体が入れ替わった時、古いTooltip状態を持ち越さない
+  // (DetectedPreviewOverlay.tsxと同じ考え方)。
+  useEffect(() => {
+    setTooltipHover(null)
+  }, [detections])
+
+  // 積算コードHover Tooltip (次work指示1章)。線本体・ラベルどちらをhoverしても
+  // 同じ情報が出るよう、両方の要素から共通のこの3関数を呼ぶ。
+  function handleDetectionHoverEnter(e: React.MouseEvent, detectionId: number) {
+    onHoverDetection(detectionId)
+    setTooltipHover({ detectionId, clientX: e.clientX, clientY: e.clientY })
+  }
+  function handleDetectionHoverMove(e: React.MouseEvent, detectionId: number) {
+    setTooltipHover((current) =>
+      current && current.detectionId === detectionId
+        ? { ...current, clientX: e.clientX, clientY: e.clientY }
+        : current,
+    )
+  }
+  function handleDetectionHoverLeave(detectionId: number) {
+    onHoverDetection(null)
+    setTooltipHover((current) => (current?.detectionId === detectionId ? null : current))
+  }
+
   function handleLabelMouseDown(e: React.MouseEvent, detection: Detection, label: Point) {
     // ラベル帯のdragは編集中(選択中)のみ有効にする (指示書10章はediting状態の
     // 操作として説明されている)。未選択時のmousedownは通常のクリック(選択)に任せる。
@@ -331,12 +429,30 @@ export function LeaderLineOverlay({
     return topRightCorner(rect)
   }
 
-  function resolveLabel(detection: Detection, anchor: Point): Point {
+  /** ラベルの表示位置を決める。優先順位:
+   * 1. ラベル帯自体をユーザーがドラッグ中 (`dragPreview`) → そちらを最優先。
+   * 2. BBox本体がドラッグ中(未確定、`previewBBox`) → 保存済み位置(`saved`)を
+   *    アンカーの移動量ぶんだけリアルタイムにずらして追従させる
+   *    (全体フォント拡大・BBox編集追従回帰修正 指示3章:
+   *    「ドラッグ中にもリアルタイム追従させる」)。確定(mouseup)後は
+   *    App.tsx側が`shiftLabelWithBBox`で`leader_label_x/y`自体をこの移動量ぶん
+   *    更新して保存するため、previewBBoxがnullに戻ってもラベルが元の位置へ
+   *    ジャンプして戻ることはない。
+   * 3. どちらもドラッグ中でなければ保存済み位置(`saved`)をそのまま使う。 */
+  function resolveLabel(detection: Detection, persistedAnchor: Point): Point {
     const saved =
       detection.leader_label_x != null && detection.leader_label_y != null
         ? { x: detection.leader_label_x, y: detection.leader_label_y }
-        : computeInitialLabelPosition(anchor)
-    return dragPreview?.detectionId === detection.id ? dragPreview.pos : saved
+        : computeInitialLabelPosition(persistedAnchor)
+    if (dragPreview?.detectionId === detection.id) return dragPreview.pos
+    if (previewBBox?.detectionId === detection.id) {
+      const liveAnchor = topRightCorner(previewBBox.rect)
+      return {
+        x: clamp01(saved.x + (liveAnchor.x - persistedAnchor.x)),
+        y: clamp01(saved.y + (liveAnchor.y - persistedAnchor.y)),
+      }
+    }
+    return saved
   }
 
   // 水平線の長さ計算の基準となる、現在のコンテナ実表示px幅
@@ -393,8 +509,9 @@ export function LeaderLineOverlay({
                 stroke="transparent"
                 strokeWidth={0.014}
                 style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
-                onMouseEnter={() => onHoverDetection(detection.id)}
-                onMouseLeave={() => onHoverDetection(null)}
+                onMouseEnter={(e) => handleDetectionHoverEnter(e, detection.id)}
+                onMouseMove={(e) => handleDetectionHoverMove(e, detection.id)}
+                onMouseLeave={() => handleDetectionHoverLeave(detection.id)}
                 onClick={() => onSelectDetection(detection.id)}
               />
               {/* 見た目の引出線 (アンカー→折れ点→水平線端の1本の連続したpolyline。
@@ -432,8 +549,9 @@ export function LeaderLineOverlay({
               top: `${label.y * 100}%`,
               ...toCssVars(colors),
             }}
-            onMouseEnter={() => onHoverDetection(detection.id)}
-            onMouseLeave={() => onHoverDetection(null)}
+            onMouseEnter={(e) => handleDetectionHoverEnter(e, detection.id)}
+            onMouseMove={(e) => handleDetectionHoverMove(e, detection.id)}
+            onMouseLeave={() => handleDetectionHoverLeave(detection.id)}
             onClick={() => onSelectDetection(detection.id)}
             onMouseDown={(e) => handleLabelMouseDown(e, detection, label)}
             title={isSelected ? 'ドラッグしてラベル位置を移動' : undefined}
@@ -442,6 +560,30 @@ export function LeaderLineOverlay({
           </button>
         )
       })}
+      {/* 積算コードHover Tooltip (次work指示1章)。他Overlayのtooltipと同じ
+          position:fixed + viewport端クランプ実装。pointer-events:noneで
+          Tooltip自体がクリック/hoverを奪わない。line-lengthに関わる引出線の
+          描画(SVG側)には一切影響しない、純粋な表示専用の追加要素。 */}
+      {tooltipHover &&
+        (() => {
+          const detection = masterLinked.find((d) => d.id === tooltipHover.detectionId)
+          if (!detection) return null
+          const rows = buildDetectionInfoRows(detection, masterItemById)
+          return (
+            <div
+              className="leader-line-overlay__tooltip"
+              role="tooltip"
+              style={clampDetectionTooltipPosition(tooltipHover.clientX, tooltipHover.clientY)}
+            >
+              {rows.map((row) => (
+                <div key={row.label} className="leader-line-overlay__tooltip-row">
+                  <span className="leader-line-overlay__tooltip-label">{row.label}</span>
+                  <span className="leader-line-overlay__tooltip-value">{row.value}</span>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
     </div>
   )
 }

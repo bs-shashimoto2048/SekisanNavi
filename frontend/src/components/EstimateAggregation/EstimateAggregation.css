@@ -1,0 +1,224 @@
+/* 右ペイン②「積算集約」。タイトル・製番合計・対象セレクト・表ヘッダ・小計を
+   固定し、表データ行のみを内部スクロールする (盤フォーカス・積算明細再設計
+   指示5章)。親(App.tsx側のラッパーdiv)から高さを直接指定される想定のため、
+   自分自身は100%を使い切る。 */
+.estimate-aggregation {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 0.5rem;
+}
+
+.estimate-aggregation__fixed-top {
+  flex-shrink: 0;
+}
+
+/* 3領域(盤情報・積算集約・積算明細)の見出しを統一する (指示9章)。
+   薄いコバルトブルー背景で「主要ブロックの先頭」であることを一目で示す。 */
+.estimate-aggregation__heading {
+  font-size: 0.98rem; /* 全体フォント拡大 指示1章 */
+  font-weight: 700;
+  color: #1e3a8a;
+  background: #eff6ff;
+  margin: 0 0 0.4rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+}
+
+.estimate-aggregation__empty {
+  font-size: 0.92rem; /* 全体フォント拡大 指示1章 */
+  color: #9ca3af;
+  margin: 0.3rem 0;
+}
+
+/* 製番合計は常に最上部付近に固定し、明細をスクロールしても見失わないようにする。 */
+.estimate-aggregation__grand-total {
+  font-size: 1.05rem; /* 全体フォント拡大 指示1章 */
+  font-weight: 700;
+  color: #1f2937;
+  background: #f3f4f6;
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.estimate-aggregation__grand-total strong {
+  color: #b45309;
+  margin-left: 0.3rem;
+}
+
+.estimate-aggregation__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ */
+  color: #4b5563;
+  margin-bottom: 0.4rem;
+}
+
+.estimate-aggregation__summary strong {
+  color: #1f2937;
+  font-weight: 700;
+}
+
+/* 単価未設定等、金額の一部を合計に含められなかった旨の注記
+   (推測で埋めず不足を報告する)。目立たせすぎず、かつ見落とされないよう
+   警告色にする。 */
+.estimate-aggregation__warn {
+  color: #b45309;
+  font-weight: 500;
+}
+
+.estimate-aggregation__warn--block {
+  display: block;
+  font-size: 0.88rem; /* 全体フォント拡大 指示1章 */
+  background: rgba(180, 83, 9, 0.08);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  margin: 0 0 0.4rem;
+}
+
+/* 対象セレクト。 */
+.estimate-aggregation__target-select-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.75rem→引き上げ */
+  color: #6b7280;
+  font-weight: 500;
+  margin-bottom: 0.45rem;
+}
+
+.estimate-aggregation__target-select {
+  font: inherit;
+  font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
+  color: #1f2937;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 0.3rem 0.45rem;
+  cursor: pointer;
+}
+
+.estimate-aggregation__target-select:hover {
+  border-color: #93c5fd;
+}
+
+/* Viewerが現在この対象へフォーカスしている(個別盤選択中)ことを示す
+   (指示8章「Viewer連動中の対象表示」)。コバルトブルーの枠+ごく薄い背景。 */
+.estimate-aggregation__target-select--focused {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 0 0 1px #2563eb;
+}
+
+/* 表データ行だけをスクロールさせる領域 (指示5章)。 */
+.estimate-aggregation__table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.estimate-aggregation__table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ (単価/金額列は
+    白抜きnowrap+右寄せのため、極端な拡大はせず折り返し・はみ出しを避ける) */
+  table-layout: fixed;
+}
+
+.estimate-aggregation__col-code {
+  width: 18%;
+}
+
+.estimate-aggregation__col-content {
+  width: 34%;
+  text-align: left;
+  overflow-wrap: break-word; /* 内容は必要に応じて2段表示を許容する */
+}
+
+.estimate-aggregation__col-price {
+  width: 20%;
+}
+
+.estimate-aggregation__col-qty {
+  width: 10%;
+}
+
+.estimate-aggregation__col-amount {
+  width: 18%;
+}
+
+/* 単価・金額は右寄せ、常に1行で収まる幅を確保する。 */
+.estimate-aggregation__col-price,
+.estimate-aggregation__col-amount {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.estimate-aggregation__col-qty {
+  text-align: right;
+}
+
+/* 表ヘッダは常に見える (position:sticky。指示5章)。表ヘッダの背景は
+   セクション見出しよりさらに薄い青灰色にする (指示8章/9章)。 */
+.estimate-aggregation__table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: #475569;
+  font-weight: 600;
+  padding: 0.25rem 0.3rem;
+  white-space: nowrap;
+  text-align: left;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.estimate-aggregation__table td {
+  padding: 0.25rem 0.3rem;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: top;
+}
+
+.estimate-aggregation__empty-cell {
+  color: #9ca3af;
+  text-align: center;
+  padding: 0.6rem 0.3rem;
+}
+
+.estimate-aggregation__content-text {
+  display: block;
+  color: #1f2937;
+  font-weight: 500;
+}
+
+.estimate-aggregation__badge {
+  display: inline-block;
+  font-size: 0.75rem; /* 全体フォント拡大 指示1章: 補助バッジのため控えめに引き上げ */
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-radius: 3px;
+  padding: 0 0.3rem;
+  margin-bottom: 0.1rem;
+  white-space: nowrap;
+}
+
+/* 単価注記は表のスクロール領域の外(常に見える位置)に置く (指示5章)。金額表示
+   そのものは上部(.estimate-aggregation__grand-total)へ統合したため、ここには
+   もう金額を置かない (積算対象連動の金額表示・図面一覧絞り込み 指示2章)。 */
+.estimate-aggregation__fixed-bottom {
+  flex-shrink: 0;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 0.3rem;
+  margin-top: 0.2rem;
+}
+
+.estimate-aggregation__footnote {
+  font-size: 0.78rem; /* 全体フォント拡大 指示1章: 補助注記のため控えめに引き上げ */
+  color: #9ca3af;
+  margin: 0.3rem 0 0;
+}

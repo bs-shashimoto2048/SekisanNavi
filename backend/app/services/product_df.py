@@ -76,6 +76,17 @@ class PanelAreaFromDf:
 
 
 @dataclass
+class PageScale:
+    """ページ単位のSCALE_X/SCALE_Y・PNG原寸 (Phase 1.12: detected_df.csvの
+    座標補正に使う)。`load_page_scales()`参照。"""
+
+    scale_x: float
+    scale_y: float
+    frame_mini_x: float
+    frame_mini_y: float
+
+
+@dataclass
 class ProductDfResult:
     panels_by_page: dict[int, list[PanelAreaFromDf]] = field(default_factory=dict)
     # ページごとの図面種別 (ZUMEI)。括弧の連番部分を除いたグループ名
@@ -265,5 +276,63 @@ def load_product_df(product_dir: Path, product_no: str) -> ProductDfResult:
         msg = f"product_df.csvの読み込みに失敗しました: {e}"
         result.warnings.append(msg)
         logger.warning(msg)
+
+    return result
+
+
+def load_page_scales(product_dir: Path) -> dict[int, PageScale]:
+    """PAGEごとのSCALE_X/SCALE_Y/FRAME_MINI_X/FRAME_MINI_Yを取得する
+    (Phase 1.12指示書3章/4章: detected_df.csvの座標補正に使う)。
+
+    実データ(A1GV2421/product_df.csv、全32行)で確認した結果、同一PAGE内では
+    SCALE_X/SCALE_Y/FRAME_MINI_X/FRAME_MINI_Yが常に全行で一致していた
+    (ファイル全体で「同一PAGE内に複数の異なる(SCALE_X,SCALE_Y)組が存在する」
+    ケースは0件)。そのため、同一PAGEの最初に出現した行の値を採用する
+    (指示書4章: 「一意に決められない場合は追加キーが必要かを報告する」の
+    条件に該当しなかったため、追加のキーは導入していない)。
+
+    `load_product_df()`とは独立した軽量な専用関数とする。盤領域(KITEN_X等)の
+    パースに失敗する行があっても、SCALE/FRAME_MINI自体が正常な限りこちらは
+    影響を受けない (detected_df.csvの座標補正は盤領域Overlayの成否に依存しない)。
+    ファイルが存在しない/読み込めない場合は空のdictを返す (呼び出し側で
+    detected_df.csv自体も読めないケースとして扱われる)。
+    """
+    path = product_dir / _FILENAME_SUFFIX
+    result: dict[int, PageScale] = {}
+
+    if not path.is_file():
+        return result
+
+    try:
+        with path.open(encoding=_ENCODING, newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    page_no = _parse_int_via_float(row, "PAGE")
+                except _SkipRow:
+                    continue
+                if page_no in result:
+                    continue  # 同一PAGEの2件目以降は無視 (実データで全行一致を確認済み)
+                try:
+                    scale_x = _parse_float(row, "SCALE_X")
+                    scale_y = _parse_float(row, "SCALE_Y")
+                    frame_mini_x = _parse_float(row, "FRAME_MINI_X")
+                    frame_mini_y = _parse_float(row, "FRAME_MINI_Y")
+                except _SkipRow:
+                    continue
+                # ゼロ除算・不正値の回避 (指示書20章相当)。
+                if scale_x == 0 or scale_y == 0 or frame_mini_x <= 0 or frame_mini_y <= 0:
+                    logger.warning(
+                        "product_df.csv page scale invalid (page=%d): SCALE_X=%r SCALE_Y=%r "
+                        "FRAME_MINI_X=%r FRAME_MINI_Y=%r",
+                        page_no, scale_x, scale_y, frame_mini_x, frame_mini_y,
+                    )
+                    continue
+                result[page_no] = PageScale(
+                    scale_x=scale_x, scale_y=scale_y,
+                    frame_mini_x=frame_mini_x, frame_mini_y=frame_mini_y,
+                )
+    except OSError as e:
+        logger.warning("product_df.csvの読み込みに失敗しました (load_page_scales): %s", e)
 
     return result

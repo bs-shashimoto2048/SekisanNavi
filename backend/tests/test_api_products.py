@@ -3,6 +3,8 @@
 実共有フォルダには依存せず、tmp_path 配下に製番ディレクトリを模したダミー構造を
 用意し、管理者パスワードで一時的にデータ参照ルートを差し替えてテストする。
 """
+import pytest
+
 from app import config
 
 
@@ -212,3 +214,189 @@ def test_list_product_drawings_without_product_df_returns_empty_panels(client, m
     page = res.json()[0]
     assert page["panels"] == []
     assert page["drawing_type"] is None
+
+
+# --- detected_df.csv 検出BBoxプレビュー (Phase 1.12) ---
+
+_PRODUCT_DF_HEADER = (
+    "BAN_MENNO,BAN_NO,PAGE,ZUMEI,BAN_MEISYOU,BAN_TYPE,BAN_H1,BAN_H2,BAN_W,BAN_D,"
+    "KITEN_X,KITEN_Y,DETECT_AREA_X,DETECT_AREA_Y,FRAME_ORG_X,FRAME_ORG_Y,"
+    "FRAME_MINI_X,FRAME_MINI_Y,SCALE_X,SCALE_Y"
+)
+_DETECTED_DF_HEADER = (
+    "PAGE,YOLO_INDEX,SCORE,DEVICE,LEFT_TOP_X,LEFT_TOP_Y,RIGHT_TOP_X,RIGHT_TOP_Y,"
+    "LEFT_BOTTOM_X,LEFT_BOTTOM_Y,RIGHT_BOTTOM_X,RIGHT_BOTTOM_Y,CENTER_X,CENTER_Y"
+)
+# 実データ (A1GV2421 page16) のSCALE/FRAME_MINIそのもの。
+_PAGE16_PRODUCT_DF_ROW = (
+    "1,1.0,16,外形図,盤A,正面図,2300.0,2300.0,900.0,2200.0,"
+    "4650.0,2250.0,900.0,2300.0,15990.0,11430.0,2077.0,1485.0,"
+    "7.698603755416466,7.696969696969697"
+)
+# 実データ (A1GV2421 page16, 1行目=roof_fan) そのもの。
+_PAGE16_DETECTED_ROW = (
+    "16,0,0.970870316028595,roof_fan,9519,9699,10023,9699,9519,9444,10023,9444,9771,9571"
+)
+
+
+def _write_cp932_csv(path, header: str, rows: list[str]):
+    content = "\n".join([header, *rows]) + "\n"
+    path.write_bytes(content.encode("cp932"))
+
+
+def test_read_detected_preview_real_data_row(client, monkeypatch, tmp_path):
+    """指示書25章: ページ単位でdetected_df.csvの検出結果を取得できる。
+    実データ(A1GV2421 page16, roof_fan)そのものを使い、Pillow合成で目視確認済みの
+    正規化座標と一致することを確認する。"""
+    product = tmp_path / "A1TEST01"
+    product.mkdir()
+    _write_cp932_csv(product / "product_df.csv", _PRODUCT_DF_HEADER, [_PAGE16_PRODUCT_DF_ROW])
+    _write_cp932_csv(product / "detected_df.csv", _DETECTED_DF_HEADER, [_PAGE16_DETECTED_ROW])
+    _configure_root(client, monkeypatch, tmp_path)
+
+    res = client.get("/api/products/A1TEST01/drawings/16/detected-preview")
+    assert res.status_code == 200
+    items = res.json()
+    assert len(items) == 1
+    item = items[0]
+    assert item["class_name"] == "roof_fan"
+    assert item["confidence"] == pytest.approx(0.970870316028595)
+    assert item["source"] == "detected_csv"
+    rect = item["normalized_rect"]
+    assert rect["x"] == pytest.approx(0.5953, abs=1e-3)
+    assert rect["y"] == pytest.approx(0.1514, abs=1e-3)
+
+
+def test_read_detected_preview_returns_all_rows_for_the_page(client, monkeypatch, tmp_path):
+    """指示書10章: 同一PAGEに複数Detectionがある場合、全件返す。"""
+    product = tmp_path / "A1TEST01"
+    product.mkdir()
+    _write_cp932_csv(product / "product_df.csv", _PRODUCT_DF_HEADER, [_PAGE16_PRODUCT_DF_ROW])
+    rows = [
+        f"16,{i},0.9,device_{i},{100 + i * 10},9699,{140 + i * 10},9699,"
+        f"{100 + i * 10},9444,{140 + i * 10},9444,120,9571"
+        for i in range(4)
+    ]
+    _write_cp932_csv(product / "detected_df.csv", _DETECTED_DF_HEADER, rows)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    res = client.get("/api/products/A1TEST01/drawings/16/detected-preview")
+    assert res.status_code == 200
+    assert len(res.json()) == 4
+
+
+def test_read_detected_preview_page_not_in_csv_returns_empty_not_error(client, monkeypatch, tmp_path):
+    """指示書26章: 検出データが無いページはエラーではなく空配列。"""
+    product = tmp_path / "A1TEST01"
+    product.mkdir()
+    _write_cp932_csv(product / "product_df.csv", _PRODUCT_DF_HEADER, [_PAGE16_PRODUCT_DF_ROW])
+    _write_cp932_csv(product / "detected_df.csv", _DETECTED_DF_HEADER, [_PAGE16_DETECTED_ROW])
+    _configure_root(client, monkeypatch, tmp_path)
+
+    res = client.get("/api/products/A1TEST01/drawings/999/detected-preview")
+    assert res.status_code == 200
+    assert res.json() == []
+
+
+def test_read_detected_preview_missing_detected_df_returns_empty_not_error(client, monkeypatch, tmp_path):
+    """指示書27章: detected_df.csv自体が製番フォルダに無くても図面Viewerは使用可能
+    (エラーにせず空配列を返す)。"""
+    product = tmp_path / "A1TEST01"
+    product.mkdir()
+    _write_cp932_csv(product / "product_df.csv", _PRODUCT_DF_HEADER, [_PAGE16_PRODUCT_DF_ROW])
+    _configure_root(client, monkeypatch, tmp_path)
+
+    res = client.get("/api/products/A1TEST01/drawings/16/detected-preview")
+    assert res.status_code == 200
+    assert res.json() == []
+
+
+def test_read_detected_preview_missing_product_returns_404(client, monkeypatch, tmp_path):
+    _configure_root(client, monkeypatch, tmp_path)
+    res = client.get("/api/products/A1MISSING/drawings/16/detected-preview")
+    assert res.status_code == 404
+
+
+def test_read_detected_preview_rejects_path_traversal(client, monkeypatch, tmp_path):
+    """指示書25章: Frontendへ任意ファイルパスを渡させない (product_noのpath traversal対策)。"""
+    _configure_root(client, monkeypatch, tmp_path)
+    res = client.get("/api/products/..%2F..%2Fetc/drawings/16/detected-preview")
+    assert res.status_code in (400, 404)
+
+
+# --- estcode_df.csv 盤情報 (Phase 1.14) ---
+
+_ESTCODE_DF_HEADER = (
+    "MODEL,BAN_MENNO,BAN_NO,BAN_MEISYOU,BAN_H,BAN_W,BAN_D,BAN_CONNECT,PANEL,TRANS,"
+    "IN_PANEL,SHIELD,DOOR_FRONT,DOOR_BACK,DOOR_STACK,DOOR_SIDE,DOOR_SMALL,FAN_ROOF,"
+    "FAN_DOOR,MAIN_LINE,WIRE_MESH,STACK_PLATE,DRAWER_DEVICE,VCT_STAND,BUS_DUCT,"
+    "PASSAGE,INPUT_CU_COEFF,SORT_ORDER"
+)
+# 実データ (A1GV2421/estcode_df.csv) そのもの。
+_ESTCODE_ROW_5 = (
+    "IS2,5,5.0,No.2-1低圧動力盤,2300,1700,2200,箱･左右(L),1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.0,1"
+)
+_ESTCODE_ROW_1 = (
+    "IS2,1,1.0,高圧受電盤,2300,900,2200,箱･左右(R),0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.0,5"
+)
+
+
+def test_read_estimate_panels_real_data_row(client, monkeypatch, tmp_path):
+    """指示書25章/29章: 製番単位で盤情報を取得できる。実データ(A1GV2421,
+    BAN_MENNO=5)そのものを使い、期待される正規化結果と一致することを確認する。"""
+    product = tmp_path / "A1TEST01"
+    product.mkdir()
+    _write_cp932_csv(product / "estcode_df.csv", _ESTCODE_DF_HEADER, [_ESTCODE_ROW_5])
+    _configure_root(client, monkeypatch, tmp_path)
+
+    res = client.get("/api/products/A1TEST01/estimate-panels")
+    assert res.status_code == 200
+    items = res.json()
+    assert len(items) == 1
+    item = items[0]
+    assert item["model"] == "IS2"
+    assert item["ban_menno"] == 5
+    assert item["ban_no"] == 5
+    assert item["ban_meisyou"] == "No.2-1低圧動力盤"
+    assert item["ban_h"] == pytest.approx(2300)
+    assert item["ban_w"] == pytest.approx(1700)
+    assert item["ban_d"] == pytest.approx(2200)
+    assert item["ban_connect"] == "箱･左右(L)"
+    assert item["sort_order"] == 1
+
+
+def test_read_estimate_panels_returns_all_panels_for_the_product_not_page_scoped(client, monkeypatch, tmp_path):
+    """指示書1章: estcode_df.csvはPAGE列を持たない製番単位のデータのため、
+    ページに関係なく製番配下の全盤を返す。"""
+    product = tmp_path / "A1TEST01"
+    product.mkdir()
+    _write_cp932_csv(product / "estcode_df.csv", _ESTCODE_DF_HEADER, [_ESTCODE_ROW_5, _ESTCODE_ROW_1])
+    _configure_root(client, monkeypatch, tmp_path)
+
+    res = client.get("/api/products/A1TEST01/estimate-panels")
+    assert res.status_code == 200
+    assert len(res.json()) == 2
+
+
+def test_read_estimate_panels_missing_file_returns_empty_not_error(client, monkeypatch, tmp_path):
+    """指示書14章相当: estcode_df.csv自体が無くてもエラーにせず空配列。"""
+    product = tmp_path / "A1TEST01"
+    product.mkdir()
+    _configure_root(client, monkeypatch, tmp_path)
+
+    res = client.get("/api/products/A1TEST01/estimate-panels")
+    assert res.status_code == 200
+    assert res.json() == []
+
+
+def test_read_estimate_panels_missing_product_returns_404(client, monkeypatch, tmp_path):
+    _configure_root(client, monkeypatch, tmp_path)
+    res = client.get("/api/products/A1MISSING/estimate-panels")
+    assert res.status_code == 404
+
+
+def test_read_estimate_panels_rejects_path_traversal(client, monkeypatch, tmp_path):
+    """指示書25章: Frontendへ任意ファイルパスを渡させない (product_noのpath traversal対策)。"""
+    _configure_root(client, monkeypatch, tmp_path)
+    res = client.get("/api/products/..%2F..%2Fetc/estimate-panels")
+    assert res.status_code in (400, 404)

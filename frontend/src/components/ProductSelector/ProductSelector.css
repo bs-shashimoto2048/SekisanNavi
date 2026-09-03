@@ -40,7 +40,7 @@
 }
 
 .product-selector__current {
-  font-size: 0.78rem;
+  font-size: 0.88rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ */
   color: #6b7280;
   margin: 0 0 0.6rem;
 }
@@ -53,20 +53,20 @@
 
 .product-selector__form input {
   flex: 1;
-  padding: 0.4rem 0.5rem;
+  padding: 0.45rem 0.55rem;
   border: 1px solid #d1d5db;
   border-radius: 4px;
-  font-size: 0.85rem;
+  font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
 }
 
 .product-selector__form button {
-  padding: 0.4rem 0.9rem;
+  padding: 0.45rem 1rem;
   border: 1px solid #2563eb;
   background: #2563eb;
   color: #fff;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
 }
 
 .product-selector__form button:disabled {
@@ -76,13 +76,13 @@
 
 .product-selector__error {
   color: #b91c1c;
-  font-size: 0.8rem;
+  font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
   margin: 0 0 0.4rem;
 }
 
 .product-selector__status {
   color: #9ca3af;
-  font-size: 0.75rem;
+  font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.75rem→引き上げ */
   margin: 0 0 0.4rem;
 }
 
@@ -103,7 +103,7 @@
   background: #fff;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: 0.92rem; /* 全体フォント拡大 指示1章: 旧0.82rem→引き上げ */
   text-align: left;
 }
 
@@ -114,12 +114,12 @@
 
 .product-selector__empty {
   color: #9ca3af;
-  font-size: 0.78rem;
+  font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ */
   padding: 0.3rem 0;
 }
 
 .product-selector__truncated {
   color: #b45309;
-  font-size: 0.78rem; /* Phase 1.10 フォント見直し: 約10.9px */
+  font-size: 0.82rem; /* 全体フォント拡大 指示1章: 補助注記のため控えめに引き上げ */
   margin: 0.4rem 0 0;
 }

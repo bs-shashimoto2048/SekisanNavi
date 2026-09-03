@@ -6,7 +6,7 @@
 """
 import pytest
 
-from app.services.product_df import load_product_df
+from app.services.product_df import load_page_scales, load_product_df
 
 _HEADER = (
     "BAN_MENNO,BAN_NO,PAGE,ZUMEI,BAN_MEISYOU,BAN_TYPE,BAN_H1,BAN_H2,BAN_W,BAN_D,"
@@ -197,3 +197,47 @@ def test_load_product_df_still_classifies_drawing_type_when_panel_row_invalid(pr
     result = load_product_df(product_dir, "A1TEST01")
     assert result.drawing_type_by_page[1] == "外形図"
     assert result.panels_by_page.get(1, []) == []
+
+
+# --- load_page_scales (Phase 1.12指示書3章/4章: detected_df.csvの座標補正用) ---
+
+
+def test_load_page_scales_missing_file_returns_empty_dict(product_dir):
+    assert load_page_scales(product_dir) == {}
+
+
+def test_load_page_scales_returns_scale_per_page(product_dir):
+    _write_csv(product_dir / "product_df.csv", [
+        "1,1.0,16,外形図,盤A,正面図,2300.0,2300.0,900.0,2200.0,"
+        "4650.0,2250.0,900.0,2300.0,15990.0,11430.0,2077.0,1485.0,"
+        "7.698603755416466,7.696969696969697",
+    ])
+    scales = load_page_scales(product_dir)
+    assert list(scales.keys()) == [16]
+    scale = scales[16]
+    assert scale.scale_x == pytest.approx(7.698603755416466)
+    assert scale.scale_y == pytest.approx(7.696969696969697)
+    assert scale.frame_mini_x == pytest.approx(2077.0)
+    assert scale.frame_mini_y == pytest.approx(1485.0)
+
+
+def test_load_page_scales_uses_first_row_when_all_rows_of_a_page_agree(product_dir):
+    """指示書4章: 同一PAGE内でSCALE_X/SCALE_Yが全行一致するケース (実データで確認済み。
+    A1GV2421/product_df.csv全32行で不一致は0件) では、先頭行の値をそのまま採用してよい。"""
+    _write_csv(product_dir / "product_df.csv", [
+        "1,1.0,16,外形図,盤A,背面図,2300.0,2300.0,900.0,2200.0,"
+        "4650.0,2250.0,900.0,2300.0,15990.0,11430.0,2077.0,1485.0,7.5,7.5",
+        "2,2.0,16,外形図,盤B,正面図,2300.0,2300.0,900.0,2200.0,"
+        "5550.0,2250.0,900.0,2300.0,15990.0,11430.0,2077.0,1485.0,7.5,7.5",
+    ])
+    scales = load_page_scales(product_dir)
+    assert scales[16].scale_x == pytest.approx(7.5)
+
+
+def test_load_page_scales_skips_zero_scale(product_dir):
+    """指示書20章相当: SCALE_X/SCALE_Yが0のPAGEは除外する (ゼロ除算回避)。"""
+    _write_csv(product_dir / "product_df.csv", [
+        "1,1.0,16,外形図,盤A,正面図,2300.0,2300.0,900.0,2200.0,"
+        "4650.0,2250.0,900.0,2300.0,15990.0,11430.0,2077.0,1485.0,0.0,7.5",
+    ])
+    assert load_page_scales(product_dir) == {}

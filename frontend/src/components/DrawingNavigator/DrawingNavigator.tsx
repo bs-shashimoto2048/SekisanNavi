@@ -8,6 +8,13 @@ interface Props {
   onSelectPage: (pageNo: number) => void
   loading: boolean
   error: string | null
+  /** 積算集約(②)の対象選択に連動した図面絞り込み (積算対象連動の金額表示・
+   * 図面一覧絞り込み 指示4章〜6章)。`null`(または未指定)は絞り込みなし(総合計、
+   * 全図面表示)を表す。指定時は`page_no`がこの集合に含まれるページのみ表示する。
+   * `pages`自体(取得結果・loading/error状態)には触れず、表示するカードだけを
+   * 絞り込む(実データ取得が0件の状態と、絞り込みの結果0件になった状態を区別する
+   * ため。指示5章: 後者は不具合と誤認されない専用メッセージにする)。 */
+  visiblePageNos?: Set<number> | null
 }
 
 const UNCLASSIFIED_GROUP = 'その他'
@@ -113,8 +120,20 @@ function ThumbnailCard({ page, selected, onClick }: ThumbnailCardProps) {
   )
 }
 
-export function DrawingNavigator({ pages, selectedPageNo, onSelectPage, loading, error }: Props) {
-  const groups = groupByDrawingType(pages)
+export function DrawingNavigator({
+  pages,
+  selectedPageNo,
+  onSelectPage,
+  loading,
+  error,
+  visiblePageNos = null,
+}: Props) {
+  // 絞り込みは表示するカードのみに適用し、loading/error/「ページが見つかりません」
+  // の判定は絞り込み前のpages(実データ取得結果そのもの)で行う (指示5章/6章:
+  // 実データが0件の状態と、絞り込み結果が0件の状態を混同しない)。
+  const isFiltering = visiblePageNos != null
+  const visiblePages = isFiltering ? pages.filter((p) => visiblePageNos!.has(p.page_no)) : pages
+  const groups = groupByDrawingType(visiblePages)
 
   return (
     <nav className="drawing-navigator">
@@ -123,6 +142,9 @@ export function DrawingNavigator({ pages, selectedPageNo, onSelectPage, loading,
       {!loading && error && <p className="drawing-navigator__status drawing-navigator__status--error">{error}</p>}
       {!loading && !error && pages.length === 0 && (
         <p className="drawing-navigator__status">ページが見つかりません</p>
+      )}
+      {!loading && !error && pages.length > 0 && isFiltering && visiblePages.length === 0 && (
+        <p className="drawing-navigator__status">該当する図面はありません</p>
       )}
       {!loading &&
         !error &&

@@ -16,7 +16,7 @@ describe('index.css (Phase 1.10 UI改修指示16章/17章: UI全体のfont-famil
     expect(fontFamily.split(',')[0]).toContain('Yu Gothic UI')
   })
 
-  it('keeps the root font-size at 14px (高密度UIを維持する。19章)', () => {
-    expect(getComputedStyle(document.documentElement).fontSize).toBe('14px')
+  it('raises the root font-size to 15px (全体フォント拡大・BBox編集追従回帰修正 指示1章: remベースの全CSSを一括で底上げする土台)', () => {
+    expect(getComputedStyle(document.documentElement).fontSize).toBe('15px')
   })
 })

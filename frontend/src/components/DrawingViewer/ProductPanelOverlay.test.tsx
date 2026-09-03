@@ -79,8 +79,9 @@ describe('ProductPanelOverlay (Phase 1.9〜実画面未達修正: 盤ラベル�
     )
     const label = container.querySelector('.product-panel-overlay__label') as HTMLElement
     // jsdomのgetComputedStyleはrem→px解決を行わないため、ルートfont-size
-    // (index.css: 14px) を掛けて概算pxへ変換して比較する。
-    const ROOT_FONT_SIZE_PX = 14
+    // (index.css: 15px。全体フォント拡大・BBox編集追従回帰修正 指示1章で14px→15pxへ
+    // 引き上げ) を掛けて概算pxへ変換して比較する。
+    const ROOT_FONT_SIZE_PX = 15
     expect(parseFloat(getComputedStyle(label).fontSize) * ROOT_FONT_SIZE_PX).toBeGreaterThanOrEqual(11)
   })
 
@@ -497,6 +498,84 @@ describe('ProductPanelOverlay (Phase 1.9〜実画面未達修正: 盤ラベル�
       const tooltip = container.querySelector('.product-panel-overlay__tooltip') as HTMLElement
       expect(tooltip.textContent).toContain('種別：側面図')
       expect(tooltip.textContent).not.toContain('種別：正面図')
+    })
+  })
+
+  describe('focusPanel (盤フォーカス・積算明細再設計 指示1章: 積算集約で個別盤を選択した際のViewer絞り込み)', () => {
+    it('renders only the panels matching focusPanel, hiding all others', () => {
+      const panels = [
+        makePanel({ ban_menno: 1, ban_no: 1, ban_meisyou: '高圧受電盤' }),
+        makePanel({ ban_menno: 2, ban_no: 1, ban_meisyou: '低圧電灯盤' }),
+      ]
+      render(
+        <ProductPanelOverlay
+          panels={panels}
+          selectedPanelKey={null}
+          onSelectPanel={() => {}}
+          focusPanel={{ banMenno: 1, banNo: 1 }}
+        />,
+      )
+      expect(screen.getByText('1/1')).toBeInTheDocument()
+      expect(screen.queryByText('2/1')).not.toBeInTheDocument()
+    })
+
+    it('renders all panels when focusPanel is null (総合計・製品全体)', () => {
+      const panels = [
+        makePanel({ ban_menno: 1, ban_no: 1 }),
+        makePanel({ ban_menno: 2, ban_no: 1 }),
+      ]
+      render(
+        <ProductPanelOverlay panels={panels} selectedPanelKey={null} onSelectPanel={() => {}} focusPanel={null} />,
+      )
+      expect(screen.getByText('1/1')).toBeInTheDocument()
+      expect(screen.getByText('2/1')).toBeInTheDocument()
+    })
+
+    it('keeps all matching views (矢視) of the focused physical panel visible', () => {
+      const panels = [
+        makePanel({ ban_menno: 1, ban_no: 1, ban_type: '正面図' }),
+        makePanel({ ban_menno: 1, ban_no: 1, ban_type: '背面図' }),
+        makePanel({ ban_menno: 2, ban_no: 1, ban_type: '正面図' }),
+      ]
+      const { container } = render(
+        <ProductPanelOverlay
+          panels={panels}
+          selectedPanelKey={null}
+          onSelectPanel={() => {}}
+          focusPanel={{ banMenno: 1, banNo: 1 }}
+        />,
+      )
+      expect(container.querySelectorAll('.product-panel-overlay__area')).toHaveLength(2)
+    })
+
+    it('does not shift panelKey indices when focusPanel changes, keeping selectedPanelKey matching stable', () => {
+      const panels = [
+        makePanel({ ban_menno: 1, ban_no: 1 }),
+        makePanel({ ban_menno: 2, ban_no: 1 }),
+      ]
+      const key1 = panelKey(panels[1], 1) // 絞り込み前のindexを使ったkey (盤2/1)
+      const { container, rerender } = render(
+        <ProductPanelOverlay
+          panels={panels}
+          selectedPanelKey={key1}
+          onSelectPanel={() => {}}
+          focusPanel={null}
+        />,
+      )
+      expect(container.querySelector('.product-panel-overlay__area--selected')).not.toBeNull()
+
+      // フォーカスを盤2/1自身へ絞り込んでも、同じkeyのままselected状態を維持できる。
+      rerender(
+        <ProductPanelOverlay
+          panels={panels}
+          selectedPanelKey={key1}
+          onSelectPanel={() => {}}
+          focusPanel={{ banMenno: 2, banNo: 1 }}
+        />,
+      )
+      const remaining = container.querySelectorAll('.product-panel-overlay__area')
+      expect(remaining).toHaveLength(1)
+      expect(remaining[0].className).toContain('--selected')
     })
   })
 })

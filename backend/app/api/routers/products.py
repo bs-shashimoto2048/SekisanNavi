@@ -11,6 +11,8 @@ from fastapi.responses import FileResponse
 from app.api.deps import get_db
 from app.repositories.system_settings import get_data_source_root
 from app.schemas.settings import (
+    DetectedPreviewItemOut,
+    EstimatePanelInfoOut,
     NormalizedRectOut,
     PanelPreviewOut,
     ProductDrawingOut,
@@ -29,7 +31,9 @@ from app.services.data_source import (
     resolve_product_dir,
     search_product_dirs,
 )
-from app.services.product_df import load_product_df
+from app.services.detected_df import load_detected_df
+from app.services.estcode_df import load_estcode_df
+from app.services.product_df import load_page_scales, load_product_df
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -155,3 +159,79 @@ def read_product_drawing_thumbnail(
     except DataSourceError as e:
         raise _error_to_http(e) from e
     return FileResponse(str(file_path), media_type="image/png")
+
+
+@router.get(
+    "/{product_no}/drawings/{page_no}/detected-preview",
+    response_model=list[DetectedPreviewItemOut],
+)
+def read_detected_preview(
+    product_no: str, page_no: int, conn: sqlite3.Connection = Depends(get_db)
+) -> list[DetectedPreviewItemOut]:
+    """`detected_df.csv` (YOLO検出結果、実行済み推論の出力) のうち、指定ページに
+    該当する検出結果のみを正規化して返す (Phase 1.12指示書25章)。
+
+    Frontendへは任意のファイルパスを渡させず、page_no (intパスパラメータ) のみで
+    引く。`detected_df.csv`自体が製番フォルダに存在しない、または該当ページの
+    検出結果が無い場合もエラーにはせず、空配列を返す (指示書26章/27章:
+    図面Viewer自体は使用可能なままにする)。
+    """
+    root = get_data_source_root(conn)
+    try:
+        resolution = resolve_product_dir(root, product_no)
+    except DataSourceError as e:
+        raise _error_to_http(e) from e
+
+    page_scales = load_page_scales(resolution.ccv_dir)
+    detected_result = load_detected_df(resolution.ccv_dir, resolution.product_no, page_scales)
+
+    return [
+        DetectedPreviewItemOut(
+            id=item.yolo_index,
+            page_no=item.page_no,
+            class_name=item.device,
+            confidence=item.score,
+            normalized_rect=NormalizedRectOut(
+                x=item.normalized_rect.x,
+                y=item.normalized_rect.y,
+                w=item.normalized_rect.w,
+                h=item.normalized_rect.h,
+            ),
+        )
+        for item in detected_result.items_by_page.get(page_no, [])
+    ]
+
+
+@router.get("/{product_no}/estimate-panels", response_model=list[EstimatePanelInfoOut])
+def read_estimate_panels(
+    product_no: str, conn: sqlite3.Connection = Depends(get_db)
+) -> list[EstimatePanelInfoOut]:
+    """`estcode_df.csv` (盤ごとの積算コード基本情報) を製番単位で全件返す
+    (Phase 1.14指示書25章)。PAGE列を持たないデータのため、ページ番号は
+    受け取らない。Frontend側で選択中盤のBAN_MENNO/BAN_NOと突き合わせて使う。
+
+    `estcode_df.csv`自体が製番フォルダに存在しない場合もエラーにはせず、
+    空配列を返す(指示書14章相当)。
+    """
+    root = get_data_source_root(conn)
+    try:
+        resolution = resolve_product_dir(root, product_no)
+    except DataSourceError as e:
+        raise _error_to_http(e) from e
+
+    result = load_estcode_df(resolution.ccv_dir, resolution.product_no)
+
+    return [
+        EstimatePanelInfoOut(
+            model=panel.model,
+            ban_menno=panel.ban_menno,
+            ban_no=panel.ban_no,
+            ban_meisyou=panel.ban_meisyou,
+            ban_h=panel.ban_h,
+            ban_w=panel.ban_w,
+            ban_d=panel.ban_d,
+            ban_connect=panel.ban_connect,
+            sort_order=panel.sort_order,
+        )
+        for panel in result.panels
+    ]

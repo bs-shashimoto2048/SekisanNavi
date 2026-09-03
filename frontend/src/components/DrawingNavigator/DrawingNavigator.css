@@ -8,14 +8,14 @@
 }
 
 .drawing-navigator__heading {
-  font-size: 0.82rem; /* Phase 1.10: 約12.3px → 追加修正 第4ラウンド15章〜18章で約7%縮小(約11.5px) */
+  font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.82rem→引き上げ */
   font-weight: 700;
   margin: 0 0 0.5rem;
   color: #374151;
 }
 
 .drawing-navigator__status {
-  font-size: 0.82rem; /* Phase 1.10 フォント見直し: 約11.5px */
+  font-size: 0.92rem; /* 全体フォント拡大 指示1章: 旧0.82rem→引き上げ */
   color: #9ca3af;
   padding: 0.5rem 0.1rem;
 }
@@ -25,15 +25,16 @@
 }
 
 .drawing-navigator__group-title {
-  font-size: 0.75rem; /* Phase 1.10: 約11.2px → 追加修正 第4ラウンドで約6%縮小 */
+  font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.75rem→引き上げ */
   color: #6b7280;
   margin: 0.75rem 0 0.25rem;
 }
 
 /* 図面種別見出しの短い説明文 (Phase 1.11 UI改修指示20章)。長い説明文にはせず、
-   小さく控えめな1行にとどめる。 */
+   小さく控えめな1行にとどめる。全体フォント拡大 指示1章: 補助情報のため
+   本文ほどは拡大しないが、旧0.68rem(視認困難)からは引き上げる。 */
 .drawing-navigator__group-description {
-  font-size: 0.68rem; /* 追加修正 第4ラウンドで0.72remから縮小(約5.6%) */
+  font-size: 0.75rem;
   color: #9ca3af;
   margin: -0.1rem 0 0.35rem;
 }
@@ -89,7 +90,7 @@
   align-items: center;
   justify-content: center;
   color: #9ca3af;
-  font-size: 0.78rem; /* Phase 1.10 フォント見直し: 約10.9px */
+  font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ */
   background: #1f2937;
   line-height: 1.4;
 }
@@ -131,10 +132,10 @@
    瞬時に識別できるサイズへ変更する。ルートfont-sizeは14px (index.css) のため、
    rem値は目安のpx値から逆算している。 */
 .drawing-navigator__thumb-label-line--page {
-  font-size: 0.9rem; /* 14px基準で約13.3px → 追加修正 第4ラウンドで約5%縮小(約12.6px) */
+  font-size: 1rem; /* 全体フォント拡大 指示1章: 旧0.9rem→引き上げ */
   font-weight: 700;
 }
 
 .drawing-navigator__thumb-label-line--ban {
-  font-size: 0.82rem; /* 14px基準で約12.3px → 追加修正 第4ラウンドで約7%縮小(約11.5px) */
+  font-size: 0.92rem; /* 全体フォント拡大 指示1章: 旧0.82rem→引き上げ */
 }

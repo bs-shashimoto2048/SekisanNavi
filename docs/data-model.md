@@ -308,6 +308,69 @@ Backend内部 (`app/services/product_df.py`) では、診断用にKITEN_X/Y・SC
 (Frontendは正規化座標+表示専用項目のみを使えばよいため。要件28: Frontendへ生データを
 渡さない)。
 
+### 8.5. DetectedPreviewItem (Phase 1.12で追加。DB永続化なしのAPIモデル)
+
+`detected_df.csv` (実行済みYOLO推論の出力) 由来の検出BBoxプレビュー。
+DrawingPageと同じくSQLiteへの永続化テーブルは持たず、
+`GET /api/products/{product_no}/drawings/{page_no}/detected-preview` が
+都度、`detected_df.csv` + `product_df.csv`のSCALE_X/SCALE_Yから組み立てて返す
+(`architecture.md`参照)。
+
+| 項目 | 説明 | 状態 |
+|---|---|---|
+| id | ページ内のYOLO_INDEXそのもの。**DBの`Detection.id`とは別体系**であり、混同しない | 確定 |
+| page_no | PAGE列 | 確定 (実データそのまま) |
+| class_name | DEVICE列 (例: roof_fan, panel, transformer) | 確定 (実データそのまま) |
+| confidence | SCORE列 (0.0〜1.0) | 確定 (実データそのまま) |
+| normalized_rect | 0.0〜1.0正規化座標。detected_df.csvの4隅座標をSCALE_X/SCALE_Yで
+  補正しY軸反転した後、`{page}.png`の実px原寸(product_df.csvのFRAME_MINI_X/Y)で
+  正規化して算出 (`docs/implementation-plan.md` 8.13章に実データでの検算・
+  Pillow合成による目視確認の記録あり) | 確定 (座標変換式は実データ検算により確定) |
+| source | 常に`"detected_csv"`固定。既存`Detection.source_type`('ai'/'manual')とは
+  別の体系であることを明示するための識別値 | 確定 |
+
+**既存`detections`テーブルとの関係 (要件15/16)**: このモデルはDBの`detections`
+テーブルとは完全に独立した別データ源であり、今回のPhaseではDBへのコピー・
+同期は行わない (読み取り専用の都度計算)。Phase 1.5由来のseedデータ(page16の
+ダミーAI Detection)と、実データのdetected_df.csvが同じページで概念上重複しうる
+既知の残課題があり、詳細は`implementation-plan.md` 8.13章に記載している。
+
+### 8.6. EstimatePanelInfo (Phase 1.14で追加。DB永続化なしのAPIモデル)
+
+`estcode_df.csv` (盤ごとの積算コード基本情報) 由来の盤情報。DrawingPage/
+DetectedPreviewItemと同じくSQLiteへの永続化テーブルは持たず、
+`GET /api/products/{product_no}/estimate-panels` が都度、`estcode_df.csv`から
+組み立てて返す。**PAGE列を持たない製番単位のデータ**であるため(1つの盤は複数
+ページ(矢視違い)に登場しうるが、estcode_df上の盤情報行は1つだけ)、他のAPI
+(drawings/detected-preview等)と異なりページ番号は受け取らず、製番配下の全盤を
+まとめて返す。
+
+| 項目 | 説明 | 状態 |
+|---|---|---|
+| model | MODEL列 (例: "IS2") | 確定 (実データそのまま) |
+| ban_menno | BAN_MENNO列。product_df.csvの同名列と値・意味とも完全に一致することを
+  実データ(A1GV2421)で確認済み (盤情報の紐付けキー) | 確定 |
+| ban_no | BAN_NO列。CSV上は"5.0"のようなfloat表記だが、product_df.py/
+  detected_df.pyと同じくfloat経由でintへ丸めて保持する | 確定 |
+| ban_meisyou | BAN_MEISYOU列 (盤名称) | 確定 (実データそのまま) |
+| ban_h / ban_w / ban_d | BAN_H/BAN_W/BAN_D列 (盤寸法、単位mm)。表示専用の数値
+  項目のため、欠損・非数値でも行全体はスキップせず個別に`null`として保持する | 確定 |
+| ban_connect | BAN_CONNECT列 (接続情報。例: "箱･左右(L)") | 確定 (実データそのまま) |
+| sort_order | SORT_ORDER列 (並び順) | 確定 (実データそのまま。欠損時は`null`) |
+
+Backend内部 (`app/services/estcode_df.py`) では、estcode_df.csvが持つ他の列
+(PANEL/TRANS/IN_PANEL/...INPUT_CU_COEFF等、盤の内訳フラグ・係数と見られる列)は
+今回未使用であり、API応答にも含めていない。将来の積算集約ロジック実装時に
+必要になれば追加検討する。
+
+**紐付けキーの一意性**: `A1GV2421/estcode_df.csv`(実データ全5行)で
+`ban_menno + ban_no`の組み合わせに重複は無いことを確認済み。同一製番内であれば
+盤ごとに1行のみ存在する構造であり、`sort_order`等の追加キーは不要と判断した。
+
+**既存表示との関係 (指示書13章)**: 実製番表示中の右ペイン上部(`PanelInfo`)は
+このモデルを正とし、product_df.csv由来の旧盤パラメータ表示(表示種別・H1/H2個別
+行等)とは二重に出さない。
+
 ## 9. 未確定・今後の検討事項まとめ
 
 - 積算コード体系そのもの (11xxx/18xxx/44xxx 等の桁の意味) は未確定。

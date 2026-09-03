@@ -30,6 +30,12 @@ interface Props {
   /** 引出線をhover中のDetection (Phase 1.11)。積算Master Itemに紐づくBBoxは
    * 通常時非表示のため、このidに一致する間だけ確認用に表示する (要件8)。 */
   hoveredDetectionId?: number | null
+  /** 積算明細(右ペイン③)の行をhover中のDetection (積算集約・積算明細UI再構成
+   * 指示18章〜21章)。`hoveredDetectionId`(引出線hover)とは発生源が異なる別状態
+   * として持つ (指示21章: 既存のBBoxや選択表示と混同しないよう別途持たせる)。
+   * 通常非表示のBBoxを一時表示する点は共通だが、視覚的な強調スタイル
+   * (半透明塗りつぶし+太めの枠)は`--detail-hover`修飾クラスで区別する。 */
+  detailHoveredDetectionId?: number | null
   onSelectDetection: (detectionId: number) => void
   /** 選択中BBoxのリサイズ/移動がmouseupで確定した時に呼ばれる
    * (Phase 1.7, 要件17/23。Phase 1.11でBBox内部drag=移動にも流用する)。 */
@@ -83,6 +89,7 @@ export function DetectionOverlay({
   selectedDetectionId,
   highlightedDetectionId,
   hoveredDetectionId = null,
+  detailHoveredDetectionId = null,
   onSelectDetection,
   onResizeDetection,
   previewBBox = null,
@@ -125,6 +132,23 @@ export function DetectionOverlay({
     onPreviewBBoxChange?.(detectionId, rect)
     if (!isControlled) setInternalPreview(rect ? { detectionId, rect } : null)
   }
+
+  // 全体フォント拡大・BBox編集追従回帰修正 指示2章で判明した根本原因の修正:
+  // 下のuseEffectは`window`へのmousemove/mouseup購読を1度だけ張る設計のため
+  // (依存配列`[]`、パフォーマンス上の意図的な選択)、そのクロージャは
+  // **マウント時点**の`onResizeDetection`を捕まえたまま更新されない
+  // (stale closure)。`onResizeDetection`自体はApp.tsx側で毎レンダー新しい関数
+  // (`handleResizeDetection`、`allDetections`等の最新stateを閉じ込めている)として
+  // 渡されるため、このコンポーネントが「データがまだ空/未確定なタイミング」で
+  // 最初にマウントされると、以後のBBox移動/リサイズ確定はずっとその「空だった
+  // 頃の」`handleResizeDetection`を呼び続けてしまい、`allDetections.find(...)`が
+  // 何も見つけられず`followTargetChangeIfNeeded`(所属追従・Toast)が一切発火しない
+  // ……という不具合が実際に起きていた。Undo/Redoの`Ctrl+Z`ショートカット
+  // (App.tsx側、常にrefパターンで最新化)と同じ「常に最新を指すref」パターンで解消する。
+  const onResizeDetectionRef = useRef(onResizeDetection)
+  useEffect(() => {
+    onResizeDetectionRef.current = onResizeDetection
+  })
 
   useEffect(() => {
     function pointerToNormalized(clientX: number, clientY: number): { x: number; y: number } | null {
@@ -170,7 +194,7 @@ export function DetectionOverlay({
         const current = previewBBoxRef.current
         updatePreviewRef.current(resizing.detectionId, null)
         if (current && current.detectionId === resizing.detectionId) {
-          onResizeDetection?.(resizing.detectionId, current.rect)
+          onResizeDetectionRef.current?.(resizing.detectionId, current.rect)
         }
         return
       }
@@ -182,7 +206,7 @@ export function DetectionOverlay({
         // 最小移動量未満 = クリックとみなし、移動として保存しない (指示書4章の
         // 「クリックと移動の誤認防止」。選択自体は通常のonClickが別途処理する)。
         if (moving.moved && current && current.detectionId === moving.detectionId) {
-          onResizeDetection?.(moving.detectionId, current.rect)
+          onResizeDetectionRef.current?.(moving.detectionId, current.rect)
         }
       }
     }
@@ -239,10 +263,14 @@ export function DetectionOverlay({
         const isManual = detection.source_type === 'manual'
         const isMasterLinked = detection.master_item_id != null
         const isHoveredViaLeader = detection.id === hoveredDetectionId
-        // Phase 1.11 指示書7章/8章/9章: 積算Master Itemに紐づくBBoxは、選択中(編集中)
-        // または引出線hover中のいずれかでなければ矩形を描画しない。AI Detectionは
-        // 従来通り常時表示のまま (要件29)。
-        if (isMasterLinked && !isSelected && !isHoveredViaLeader) return null
+        const isDetailHovered = detection.id === detailHoveredDetectionId
+        // Phase 1.11 指示書7章/8章/9章: 積算Master Itemに紐づくBBoxは、選択中(編集中)・
+        // 引出線hover中・積算明細hover中・一時強調中(`isHighlighted`。明細遷移後の
+        // BBox残留・Hover色・品名列修正 指示1章: 選択せずに一時フォーカスするフローを
+        // 追加したため、選択されていなくても強調表示中は描画する必要がある)の
+        // いずれかでなければ矩形を描画しない。AI Detectionは従来通り常時表示のまま
+        // (要件29)。
+        if (isMasterLinked && !isSelected && !isHoveredViaLeader && !isDetailHovered && !isHighlighted) return null
 
         const preview = effectivePreview?.detectionId === detection.id ? effectivePreview.rect : null
         const bboxX = preview ? preview.x : detection.bbox_x
@@ -265,7 +293,12 @@ export function DetectionOverlay({
                 (isSelected ? ' detection-overlay__bbox--selected' : '') +
                 (isHighlighted ? ' detection-overlay__bbox--flash' : '') +
                 (categoryColors ? ' detection-overlay__bbox--category' : '') +
-                (isSelected ? ' detection-overlay__bbox--move-cursor' : '')
+                (isSelected ? ' detection-overlay__bbox--move-cursor' : '') +
+                // 積算明細Hover強調は情報源(実データのsource_type)に応じた色にする
+                // (明細遷移後のBBox残留・Hover色・品名列修正 指示2章)。既存の
+                // AI=青(#3b82f6)/マニュアル=紫(#7c3aed)の配色(下記--manual等と同じ)を
+                // そのまま再利用し、新たな色体系は増やさない。
+                (isDetailHovered ? ` detection-overlay__bbox--detail-hover-${detection.source_type}` : '')
               }
               style={{
                 left: `${bboxX * 100}%`,

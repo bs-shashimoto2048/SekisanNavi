@@ -458,6 +458,93 @@ describe('DetectionOverlay: BBox内部dragによる移動 (Phase 1.11 UI改修�
   })
 })
 
+describe('DetectionOverlay: onResizeDetectionのstale closure回帰修正 (全体フォント拡大・BBox編集追従回帰修正 指示2章)', () => {
+  function setOverlayRect(width: number, height: number) {
+    const el = document.querySelector('.detection-overlay') as HTMLElement
+    Object.defineProperty(el, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, right: width, bottom: height, width, height }),
+      configurable: true,
+    })
+  }
+
+  // 実際の不具合の原因: mousemove/mouseupの購読は依存配列`[]`のuseEffectで
+  // マウント時に1度だけ張られるため、その時点の`onResizeDetection`をクロージャで
+  // 捕まえたまま以後更新されない。App.tsx側は毎レンダー新しい関数
+  // (`allDetections`等の最新stateを閉じたクロージャ)を渡すため、親の再レンダー後に
+  // 行った移動/リサイズ確定が「古い(≒データ未確定時点の)」コールバックを呼び続けて
+  // しまい、そのコールバック内で行うはずの所属追従・Toast表示が一切発火しない、
+  // という回帰が実際に起きていた。refを介して常に最新のコールバックを呼ぶことで
+  // 修正する (Undo/RedoのCtrl+Zショートカットと同じ手法)。
+  it('always invokes the LATEST onResizeDetection after a re-render, not the one captured at mount time', () => {
+    const staleCallback = vi.fn()
+    const freshCallback = vi.fn()
+    const detection = makeDetection({ id: 1, bbox_x: 0.2, bbox_y: 0.2, bbox_w: 0.2, bbox_h: 0.1 })
+    const { rerender } = render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={1}
+        highlightedDetectionId={null}
+        onSelectDetection={() => {}}
+        onResizeDetection={staleCallback}
+      />,
+    )
+    // Appが再レンダーし、新しいクロージャ(allDetections等の最新stateを閉じたclosure)を
+    // 渡すのと同じ状況を再現する。DetectionOverlay自身はアンマウントされない
+    // (=mount時のuseEffectは再実行されない)点が重要。
+    rerender(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={1}
+        highlightedDetectionId={null}
+        onSelectDetection={() => {}}
+        onResizeDetection={freshCallback}
+      />,
+    )
+    setOverlayRect(1000, 1000)
+
+    const bbox = screen.getByTitle(/roof_fan/)
+    fireEvent.mouseDown(bbox, { clientX: 300, clientY: 300 })
+    fireEvent.mouseMove(window, { clientX: 400, clientY: 350 })
+    fireEvent.mouseUp(window, { clientX: 400, clientY: 350 })
+
+    expect(staleCallback).not.toHaveBeenCalled()
+    expect(freshCallback).toHaveBeenCalledTimes(1)
+  })
+
+  it('also uses the latest callback for the corner-resize path (not just body move)', () => {
+    const staleCallback = vi.fn()
+    const freshCallback = vi.fn()
+    const detection = makeDetection({ id: 1, bbox_x: 0.2, bbox_y: 0.2, bbox_w: 0.2, bbox_h: 0.1 })
+    const { rerender } = render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={1}
+        highlightedDetectionId={null}
+        onSelectDetection={() => {}}
+        onResizeDetection={staleCallback}
+      />,
+    )
+    rerender(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={1}
+        highlightedDetectionId={null}
+        onSelectDetection={() => {}}
+        onResizeDetection={freshCallback}
+      />,
+    )
+    setOverlayRect(1000, 1000)
+
+    const handle = screen.getByRole('button', { name: 'BBoxサイズ変更 (bottom-right)' })
+    fireEvent.mouseDown(handle, { clientX: 400, clientY: 300 })
+    fireEvent.mouseMove(window, { clientX: 500, clientY: 400 })
+    fireEvent.mouseUp(window, { clientX: 500, clientY: 400 })
+
+    expect(staleCallback).not.toHaveBeenCalled()
+    expect(freshCallback).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('DetectionOverlay: 積算Master Item紐づきBBoxのカテゴリ色・通常非表示 (Phase 1.11指示書2章/7章/8章/9章/29章)', () => {
   it('does not render a master-linked (Manual) BBox by default (not selected, not hovered via leader)', () => {
     const detection = makeDetection({
@@ -557,5 +644,115 @@ describe('DetectionOverlay: 積算Master Item紐づきBBoxのカテゴリ色・�
     // 選択もhoverもしていないが、AI Detectionは従来通り常時表示される。
     expect(screen.getByTitle(/roof_fan/)).toBeInTheDocument()
     expect(screen.getByTitle(/roof_fan/).className).not.toContain('detection-overlay__bbox--category')
+  })
+})
+
+describe('DetectionOverlay: 積算明細hover強調 (積算集約・積算明細UI再構成 指示18章〜21章)', () => {
+  it('renders the master-linked BBox when it is the one hovered via 積算明細 (detailHoveredDetectionId)', () => {
+    const detection = makeDetection({
+      id: 1,
+      source_type: 'manual',
+      master_item_id: 10,
+      master_item_category: '箱・単独',
+      class_name: '11001',
+    })
+    render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={null}
+        highlightedDetectionId={null}
+        hoveredDetectionId={null}
+        detailHoveredDetectionId={1}
+        onSelectDetection={() => {}}
+      />,
+    )
+    const bbox = screen.getByTitle(/11001/)
+    expect(bbox).toBeInTheDocument()
+    // 情報源(manual)に応じた専用クラスであること (明細遷移後のBBox残留・Hover色・
+    // 品名列修正 指示2章: 単一色固定ではなく情報源別のclassにする)。
+    expect(bbox.className).toContain('detection-overlay__bbox--detail-hover-manual')
+    expect(bbox.className).not.toContain('detection-overlay__bbox--detail-hover-ai')
+  })
+
+  it('uses the AI color class (not manual) when the detail-hovered Detection is AI-sourced (指示2章: 情報源ごとに既存配色を再利用)', () => {
+    const detection = makeDetection({
+      id: 1,
+      source_type: 'ai',
+      master_item_id: 10,
+      master_item_category: '箱・単独',
+      class_name: '11001',
+    })
+    render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={null}
+        highlightedDetectionId={null}
+        hoveredDetectionId={null}
+        detailHoveredDetectionId={1}
+        onSelectDetection={() => {}}
+      />,
+    )
+    const bbox = screen.getByTitle(/11001/)
+    expect(bbox.className).toContain('detection-overlay__bbox--detail-hover-ai')
+    expect(bbox.className).not.toContain('detection-overlay__bbox--detail-hover-manual')
+  })
+
+  it('does not render a master-linked BBox when detailHoveredDetectionId refers to a different id', () => {
+    const detection = makeDetection({ id: 1, source_type: 'manual', master_item_id: 10, class_name: '11001' })
+    render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={null}
+        highlightedDetectionId={null}
+        hoveredDetectionId={null}
+        detailHoveredDetectionId={999}
+        onSelectDetection={() => {}}
+      />,
+    )
+    expect(screen.queryByTitle(/11001/)).not.toBeInTheDocument()
+  })
+
+  it('uses a visually distinct class from the leader-hover/selected states (指示21章: 既存の強調と混同しない)', () => {
+    const detection = makeDetection({ id: 1, source_type: 'manual', master_item_id: 10, class_name: '11001' })
+    render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={null}
+        highlightedDetectionId={null}
+        hoveredDetectionId={1}
+        detailHoveredDetectionId={1}
+        onSelectDetection={() => {}}
+      />,
+    )
+    const bbox = screen.getByTitle(/11001/)
+    expect(bbox.className).toContain('detection-overlay__bbox--detail-hover-manual')
+    expect(bbox.className).not.toContain('detection-overlay__bbox--selected')
+  })
+
+  it('clears the detail-hover highlight once detailHoveredDetectionId goes back to null', () => {
+    const detection = makeDetection({ id: 1, source_type: 'manual', master_item_id: 10, class_name: '11001' })
+    const { rerender } = render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={null}
+        highlightedDetectionId={null}
+        hoveredDetectionId={null}
+        detailHoveredDetectionId={1}
+        onSelectDetection={() => {}}
+      />,
+    )
+    expect(screen.getByTitle(/11001/)).toBeInTheDocument()
+
+    rerender(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={null}
+        highlightedDetectionId={null}
+        hoveredDetectionId={null}
+        detailHoveredDetectionId={null}
+        onSelectDetection={() => {}}
+      />,
+    )
+    expect(screen.queryByTitle(/11001/)).not.toBeInTheDocument()
   })
 })
