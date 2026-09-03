@@ -1,0 +1,273 @@
+/* 右ペイン③「積算明細」。見出し・タブ・表ヘッダ・凡例を固定し、データ行のみを
+   内部スクロールする (盤フォーカス・積算明細再設計 指示5章)。親(App.tsx側の
+   ラッパーdiv)から高さを直接指定される想定のため、自分自身は100%を使い切る。 */
+.estimate-detail {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem;
+}
+
+.estimate-detail__fixed-top {
+  flex-shrink: 0;
+}
+
+/* 3領域(盤情報・積算集約・積算明細)の見出しを統一する (指示9章)。
+   薄いコバルトブルー背景で「主要ブロックの先頭」であることを一目で示す。 */
+.estimate-detail__heading {
+  font-size: 0.98rem; /* 全体フォント拡大 指示1章 */
+  font-weight: 700;
+  color: #1e3a8a;
+  background: #eff6ff;
+  margin: 0 0 0.4rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+}
+
+.estimate-detail__source-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.4rem;
+}
+
+.estimate-detail__source-tab {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.75rem→引き上げ */
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* 非アクティブなタブにだけHover用の配色を適用し、アクティブなタブは
+   Hoverしても`--active`自身の配色が優先されるようにする (詳細度の罠対策)。 */
+.estimate-detail__source-tab:not(.estimate-detail__source-tab--active):hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+/* activeタブはコバルトブルー (指示8章)。 */
+.estimate-detail__source-tab--active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  font-weight: 700;
+}
+
+.estimate-detail__source-tab--active:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+/* データ行だけをスクロールさせる領域 (指示5章)。横方向も、8列を無理に縮小する
+   くらいなら限定的に許可する (指示5章「表部分のみ限定的に横スクロール」)。
+   積算明細強化・Undo/Redo・要確認警告・編集追従 指示1章: 編集順列の日時/通し番号
+   切替をCSS container queryで行うため、このスクロール領域自体をコンテナにする。 */
+.estimate-detail__table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  container-type: inline-size;
+  container-name: estimate-detail-table;
+}
+
+.estimate-detail__table {
+  width: 100%;
+  /* 全体フォント拡大 指示1章: フォント拡大に合わせて8列の可読な最小幅も
+     620px→700pxへ引き上げる (文字が窮屈に折り返さないようにするため。
+     右ペインが狭い時は従来通り横スクロールする)。 */
+  min-width: 700px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.88rem; /* 旧0.78rem→引き上げ (表データも本文相当まで拡大) */
+}
+
+.estimate-detail__col-panel {
+  width: 9%;
+}
+
+.estimate-detail__col-name {
+  width: 13%;
+}
+
+.estimate-detail__col-code {
+  width: 12%;
+}
+
+.estimate-detail__col-model {
+  width: 17%;
+}
+
+.estimate-detail__col-rating {
+  width: 17%;
+}
+
+.estimate-detail__col-page {
+  width: 10%;
+}
+
+.estimate-detail__col-status {
+  width: 8%;
+  text-align: center;
+}
+
+.estimate-detail__col-edit-order {
+  width: 14%;
+  white-space: nowrap;
+}
+
+/* ヘッダ内のソートボタン。既存のth見た目(sticky背景等)はth自身が持つため、
+   ボタン自体は透明・枠なしのまま、クリック領域をヘッダ全体に広げる (指示3章)。 */
+.estimate-detail__sort-button {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.estimate-detail__sort-button:hover {
+  color: #1d4ed8;
+}
+
+.estimate-detail__sort-indicator {
+  font-size: 0.78rem; /* 全体フォント拡大 指示1章: 旧0.7rem→引き上げ */
+  color: #2563eb;
+}
+
+/* 編集順列: 表示幅に余裕がある場合は日時、狭い場合は通し編集順へ切り替える
+   (指示1章)。既定(コンテナ幅が十分でない場合)は通し番号を表示する。
+   全体フォント拡大 指示1章: 表フォント拡大に合わせ、閾値も680px→760pxへ調整。 */
+.estimate-detail__edit-order-full {
+  display: none;
+}
+.estimate-detail__edit-order-short {
+  display: inline;
+}
+@container estimate-detail-table (min-width: 760px) {
+  .estimate-detail__edit-order-full {
+    display: inline;
+  }
+  .estimate-detail__edit-order-short {
+    display: none;
+  }
+}
+
+/* 表ヘッダは常に見える (position:sticky。指示5章)。表ヘッダの背景は
+   セクション見出しよりさらに薄い青灰色にする (指示8章/9章)。 */
+.estimate-detail__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: #475569;
+  font-weight: 600;
+  padding: 0.3rem;
+  white-space: nowrap;
+  text-align: left;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.estimate-detail__table td {
+  padding: 0.35rem 0.3rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: top;
+  overflow-wrap: break-word;
+}
+
+.estimate-detail__empty {
+  color: #9ca3af;
+  text-align: center;
+  padding: 0.6rem 0.3rem;
+}
+
+/* 行状態の表示優先順位 (積算明細強化・Undo/Redo・要確認警告・編集追従 指示4章/5章):
+   編集直後 > Hover > 現在ページ > 通常。
+   「現在ページ」はJS側で排他的に付けるクラス。Hover(既存の`:hover`疑似クラス、
+   詳細度0,2,0)は`--current-page`(詳細度0,1,0)より自然に優先される。 */
+.estimate-detail__row--current-page {
+  background: #dbeafe;
+}
+
+/* 行全体をHover対象にする。ごく薄い青背景で「今どの行を見ているか」を
+   分かりやすくする (指示8章、BBox強調自体はViewer側が受け持つ)。 */
+.estimate-detail__row:hover {
+  background: #eff6ff;
+}
+
+/* 「編集直後」はHoverよりさらに優先させる必要があるため、クラスを二重に書いて
+   詳細度を`:hover`(0,2,0)と同値まで引き上げ、かつこのルール自体を`:hover`より
+   後方に定義することで、詳細度が同値の場合のソースコード順(後勝ち)により
+   常にこちらが勝つようにしている (DrawingViewer.cssの`--category`/`--detail-hover`
+   と同じ考え方。`!important`は使わない)。 */
+.estimate-detail__row--edit-follow.estimate-detail__row--edit-follow {
+  background: #fef3c7;
+  box-shadow: inset 0 0 0 2px #f59e0b;
+}
+
+/* 状態記号 (指示10章): 色だけで意味を伝えないよう、記号そのものを大きめにして
+   単体で判別しやすくする。色は補助的にのみ使う。 */
+.estimate-detail__status {
+  display: inline-block;
+  font-size: 1.05rem; /* 全体フォント拡大 指示1章 */
+  font-weight: 700;
+  line-height: 1;
+}
+
+.estimate-detail__status--reviewed {
+  color: #15803d;
+}
+
+.estimate-detail__status--needs_review,
+.estimate-detail__status--pending {
+  color: #b45309;
+}
+
+.estimate-detail__status--excluded {
+  color: #b91c1c;
+}
+
+/* 図面セルはクリックでViewer遷移。リンクだと分かる下線+青字+Hover変化にする
+   (指示11章)。行のHoverの背景とは独立して機能する。 */
+.estimate-detail__page-link {
+  font: inherit;
+  font-size: 0.88rem; /* 全体フォント拡大 指示1章: 表本文と揃える */
+  color: #1d4ed8;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.estimate-detail__page-link:hover {
+  color: #1e40af;
+  text-decoration-thickness: 2px;
+}
+
+/* 現在Viewerに表示中の図面であることの目印。太字にするだけで過度に派手にはしない。 */
+.estimate-detail__page-link--current {
+  font-weight: 700;
+}
+
+/* 状態記号の凡例。スクロール領域の外に置き、常に見えるようにする (指示10章)。 */
+.estimate-detail__legend {
+  flex-shrink: 0;
+  margin: 0.4rem 0 0;
+  padding-top: 0.35rem;
+  border-top: 1px solid #e5e7eb;
+  font-size: 0.8rem; /* 全体フォント拡大 指示1章: 補助情報のため本文ほどは拡大しない */
+  color: #6b7280;
+}

@@ -11,7 +11,7 @@
 
 .project-header__title {
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: 1.15rem; /* 全体フォント拡大 指示1章: 旧1.05rem→引き上げ */
   white-space: nowrap;
 }
 
@@ -19,12 +19,12 @@
   display: flex;
   align-items: center;
   gap: 1rem;
-  font-size: 0.88rem; /* Phase 1.10 フォント見直し: 約12.3px (旧0.85rem≈11.9px) */
+  font-size: 0.98rem; /* 全体フォント拡大 指示1章: 旧0.88rem→引き上げ */
   flex-wrap: wrap;
 }
 
 .project-header__loading {
-  font-size: 0.88rem;
+  font-size: 0.98rem;
   color: #d1d5db;
 }
 
@@ -57,13 +57,13 @@
 }
 
 .project-header__actions button {
-  padding: 0.3rem 0.7rem;
+  padding: 0.35rem 0.8rem;
   border: 1px solid #4b5563;
   background: #374151;
   color: #f9fafb;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.85rem; /* Phase 1.10 フォント見直し: 約11.9px (旧0.78rem≈10.9px) */
+  font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
   white-space: nowrap;
 }
 

@@ -6,9 +6,11 @@ import type {
   DataSourceSetting,
   DataSourceTestResult,
   Detection,
+  DetectedPreviewItem,
   DrawingPage,
   EstimateItem,
   EstimateMasterItem,
+  EstimatePanelInfo,
   ManualDetectionCreateInput,
   Panel,
   PanelArea,
@@ -174,6 +176,20 @@ export function fetchProductDrawings(productNo: string): Promise<ProductDrawing[
 
 export function productDrawingFileUrl(productNo: string, pageNo: number): string {
   return `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/drawings/${pageNo}/file`
+}
+
+/** detected_df.csv (YOLO検出結果) 由来の検出BBoxプレビュー (Phase 1.12指示書25章)。
+ * 該当ページの検出結果が無い場合(detected_df.csv自体が無い場合含む)は
+ * エラーではなく空配列が返る (Backend側で保証済み)。 */
+export function fetchDetectedPreview(productNo: string, pageNo: number): Promise<DetectedPreviewItem[]> {
+  return getJson(`/api/products/${encodeURIComponent(productNo)}/drawings/${pageNo}/detected-preview`)
+}
+
+/** estcode_df.csv (盤ごとの積算コード基本情報) 由来の盤情報 (Phase 1.14指示書25章)。
+ * PAGE列を持たない製番単位のデータのため、pageNoは受け取らない。製番配下の全盤を
+ * まとめて返す (Frontend側で選択中盤のban_menno/ban_noと突き合わせる)。 */
+export function fetchEstimatePanels(productNo: string): Promise<EstimatePanelInfo[]> {
+  return getJson(`/api/products/${encodeURIComponent(productNo)}/estimate-panels`)
 }
 
 // --- Phase 1.8: 製番検索・左ペインPNGサムネイル ---

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import type { Detection, PanelPreview } from '../../types/domain'
+import type { DetectedPreviewItem, Detection, EstimateMasterItem, PanelPreview } from '../../types/domain'
 import type { NormalizedRect } from '../../utils/bbox'
 import { DrawingCanvas } from './DrawingCanvas'
+import { DetectedPreviewOverlay } from './DetectedPreviewOverlay'
 import { DetectionOverlay } from './DetectionOverlay'
 import type { PreviewBBox } from './DetectionOverlay'
 import { LeaderLineOverlay } from './LeaderLineOverlay'
@@ -30,11 +31,19 @@ interface Props {
   selectedPanelKey: string | null
   /** 盤領域クリック時に呼ばれる (Phase 1.9, 要件5)。 */
   onSelectPanel: (key: string, panel: PanelPreview) => void
+  /** 積算コードMaster全件のid引きMap (次work指示1章)。積算コード(引出線)の
+   * Hover Tooltipで定格(rating)を表示するために使う。Detection自体には
+   * コード/型式/分類のみJOIN済みで、定格は含まれないため、ここから引く。 */
+  masterItemById?: Map<number, EstimateMasterItem>
   /** 積算コードMasterで行が選択されている間はtrue (Phase 1.10 指示書4章/5章/7章)。
    * `bboxAddMode`(=ダミーDB側の対応ページがある場合のみ有効)とは異なり、
    * `selectedMasterItemId != null`のみで決まる。この間は盤領域のTooltip抑止・
    * 操作無効化を行う (盤の位置確認自体は妨げない)。 */
   masterItemSelected?: boolean
+  /** detected_df.csv (YOLO検出結果) 由来の検出BBoxプレビュー (Phase 1.12)。
+   * 選択中ページに対応する結果のみを親(App.tsx)が絞り込んで渡す想定
+   * (指示書18章: ページ切替時に別ページのBBoxを残さない)。表示専用。 */
+  detectedPreview?: DetectedPreviewItem[]
   detections: Detection[]
   selectedDetectionId: number | null
   highlightedDetectionId: number | null
@@ -52,6 +61,16 @@ interface Props {
   onDeleteSelectedDetection: () => void
   /** 空白領域クリックでBBox選択を解除する (Phase 1.7, 要件26)。 */
   onDeselectDetection: () => void
+  /** 積算明細(右ペイン③)の行hover中のDetection id (積算集約・積算明細UI再構成
+   * 指示18章〜21章)。App.tsx側で一元管理する状態をそのまま受け取る (このコンポーネント
+   * 自身は現在ページの`detections`しか描画しないため、別ページの明細をhoverしても
+   * 該当するDetectionが見つからず、自然に何も強調されない)。 */
+  detailHoveredDetectionId?: number | null
+  /** 積算集約(②)で個別盤が選択されている間、その盤以外の盤BBoxを非表示にする
+   * (盤フォーカス・積算明細再設計 指示1章)。`ProductPanelOverlay`へそのまま渡す。
+   * 積算コード側(リード線・BBox)のフィルタは、App.tsx側で`detections`propに
+   * 絞り込み済みの配列を渡すことで実現しているため、ここでは盤BBoxのみを扱う。 */
+  focusPanel?: { banMenno: number; banNo: number } | null
 }
 
 // フォールバック表示サイズ。実画像ロード完了後は実サイズ(naturalWidth/Height)へ切り替わる。
@@ -65,7 +84,9 @@ export function DrawingViewer({
   panels,
   selectedPanelKey,
   onSelectPanel,
+  masterItemById,
   masterItemSelected = false,
+  detectedPreview = [],
   detections,
   selectedDetectionId,
   highlightedDetectionId,
@@ -76,6 +97,8 @@ export function DrawingViewer({
   onMoveDetectionLabel,
   onDeleteSelectedDetection,
   onDeselectDetection,
+  detailHoveredDetectionId = null,
+  focusPanel = null,
 }: Props) {
   const selectedDetection = detections.find((d) => d.id === selectedDetectionId) ?? null
   const hasPage = productNo != null && pageNo != null && pageImageUrl != null
@@ -124,7 +147,9 @@ export function DrawingViewer({
               selectedPanelKey={selectedPanelKey}
               onSelectPanel={onSelectPanel}
               masterItemSelected={masterItemSelected}
+              focusPanel={focusPanel}
             />
+            <DetectedPreviewOverlay items={detectedPreview} masterItemSelected={masterItemSelected} />
             <LeaderLineOverlay
               detections={detections}
               selectedDetectionId={selectedDetectionId}
@@ -133,12 +158,14 @@ export function DrawingViewer({
               onSelectDetection={onSelectDetection}
               onMoveLabel={onMoveDetectionLabel}
               previewBBox={previewBBox}
+              masterItemById={masterItemById}
             />
             <DetectionOverlay
               detections={detections}
               selectedDetectionId={selectedDetectionId}
               highlightedDetectionId={highlightedDetectionId}
               hoveredDetectionId={hoveredDetectionId}
+              detailHoveredDetectionId={detailHoveredDetectionId}
               onSelectDetection={onSelectDetection}
               onResizeDetection={onResizeDetection}
               previewBBox={previewBBox}

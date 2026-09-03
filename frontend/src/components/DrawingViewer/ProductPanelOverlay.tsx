@@ -14,6 +14,13 @@ interface Props {
    * Viewerドラッグを常にBBox作成として扱えるようにする。赤枠・ラベルの表示は
    * 維持し、盤の位置確認自体は妨げない (6章)。 */
   masterItemSelected?: boolean
+  /** 積算集約(②)で個別盤が選択されている間、その盤以外の盤BBoxを非表示にする
+   * (盤フォーカス・積算明細再設計 指示1章)。null/undefinedの場合は全盤を表示する
+   * (総合計・製品全体選択時)。`panels`配列そのものを絞り込むのではなく、
+   * このpropで「描画するかどうか」だけを制御することで、`panelKey(panel, i)`の
+   * indexが常に元の(絞り込み前の)配列基準のまま安定し、フォーカス切替の前後で
+   * `selectedPanelKey`の対応関係が崩れないようにしている。 */
+  focusPanel?: { banMenno: number; banNo: number } | null
 }
 
 interface HoverState {
@@ -78,6 +85,7 @@ export function ProductPanelOverlay({
   selectedPanelKey,
   onSelectPanel,
   masterItemSelected = false,
+  focusPanel = null,
 }: Props) {
   const [hover, setHover] = useState<HoverState | null>(null)
 
@@ -107,6 +115,12 @@ export function ProductPanelOverlay({
     <div className="product-panel-overlay">
       {panels.map((panel, i) => {
         const key = panelKey(panel, i)
+        // 盤フォーカス中は対象外の盤を描画しない (指示1章)。keyの計算(上記)は
+        // 絞り込み前のindexで行った"後"にこの判定を置くことで、フォーカスの
+        // 有無に関わらずkeyの値自体は変わらないようにしている。
+        if (focusPanel != null && (panel.ban_menno !== focusPanel.banMenno || panel.ban_no !== focusPanel.banNo)) {
+          return null
+        }
         const isSelected = key === selectedPanelKey
         const isDimmed = selectedPanelKey != null && !isSelected
         // 実際にポインタが載っている領域自体は`:hover`疑似クラス(CSS)で強調されるため、

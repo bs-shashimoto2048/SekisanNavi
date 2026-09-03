@@ -56,7 +56,12 @@ def seed(conn: sqlite3.Connection) -> None:
         INSERT INTO project_info (seiri_no, seiban, panel_name, analysis_status)
         VALUES (?, ?, ?, ?)
         """,
-        (DEMO_PRODUCT_NO, "GV2421", "高圧受電盤（中部電力ミライズ様）", "needs_review"),
+        # seiban(製番)にはDEMO_PRODUCT_NO(="A1GV2421") を入れる。この値はアプリ全体で
+        # 一貫して「製番」として扱われている(URL query ?product=、UNC参照フォルダ名、
+        # ProductSelector等)。旧実装ではseiri_no/seibanへの値の割当てが入れ替わっており、
+        # ProjectHeaderの表示が「整理番号: A1GV2421 / 製番: GV2421」という実態と矛盾した
+        # 表示になっていた(ユーザー報告により修正)。
+        ("GV2421", DEMO_PRODUCT_NO, "高圧受電盤（中部電力ミライズ様）", "needs_review"),
     )
 
     (file_id,) = conn.execute(

@@ -18,7 +18,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { DrawingViewer } from './DrawingViewer'
-import type { Detection, PanelPreview } from '../../types/domain'
+import type { DetectedPreviewItem, Detection, PanelPreview } from '../../types/domain'
 
 // DrawingCanvasは(mode="png"でも)モジュール読み込み時にpdfjs-distへ依存しており、
 // jsdomにはpdfjsが要求するDOMMatrix等が無いため、DrawingCanvas.test.tsxと同じく
@@ -85,6 +85,7 @@ function makePanel(overrides: Partial<PanelPreview> = {}): PanelPreview {
 async function renderViewer(props: {
   panels?: PanelPreview[]
   detections?: Detection[]
+  detectedPreview?: DetectedPreviewItem[]
   selectedPanelKey?: string | null
   selectedDetectionId?: number | null
   onSelectPanel?: (key: string, panel: PanelPreview) => void
@@ -99,6 +100,7 @@ async function renderViewer(props: {
       panels={props.panels ?? []}
       selectedPanelKey={props.selectedPanelKey ?? null}
       onSelectPanel={onSelectPanel}
+      detectedPreview={props.detectedPreview ?? []}
       detections={props.detections ?? []}
       selectedDetectionId={props.selectedDetectionId ?? null}
       highlightedDetectionId={null}
@@ -176,26 +178,67 @@ describe('DrawingViewer (実画面未達 修正指示: Overlayレイヤーのpoi
   })
 })
 
-describe('DrawingViewer フォントサイズ微調整 (追加修正 第4ラウンド15章〜18章)', () => {
-  const ROOT_FONT_SIZE_PX = 14 // index.cssの:root font-size
+describe('DrawingViewer フォントサイズ (全体フォント拡大・BBox編集追従回帰修正 指示1章: 旧「第4ラウンド」の縮小方針から一転し、全体を引き上げる)', () => {
+  const ROOT_FONT_SIZE_PX = 15 // index.cssの:root font-size (指示1章で14px→15pxへ引き上げ)
 
-  it('the heading font-size is a bit smaller than the previous 0.9rem, without going back to an unreadably tiny size', async () => {
+  it('the heading font-size is clearly larger than the old 0.85rem(≒11.9px), landing in a comfortably readable range', async () => {
     await renderViewer({})
     const heading = document.querySelector('.drawing-viewer__heading') as HTMLElement
     const px = parseFloat(getComputedStyle(heading).fontSize) * ROOT_FONT_SIZE_PX
-    expect(px).toBeLessThan(0.9 * ROOT_FONT_SIZE_PX) // 旧値(12.6px)より小さい
-    expect(px).toBeGreaterThanOrEqual(11) // 以前の極小表示には戻さない
+    expect(px).toBeGreaterThan(11.9) // 旧値(0.85rem×14px≒11.9px)より明確に大きい
+    expect(px).toBeLessThanOrEqual(18) // 見出しとして過大にはしない
   })
 
-  it('the toolbar button/zoom-label font-size is a bit smaller than before, without going back to an unreadably tiny size', async () => {
+  it('the toolbar button/zoom-label font-size is clearly larger than before, without becoming oversized', async () => {
     await renderViewer({})
     const button = document.querySelector('.drawing-canvas__toolbar button') as HTMLElement
     const zoomLabel = document.querySelector('.drawing-canvas__zoom-label') as HTMLElement
     const buttonPx = parseFloat(getComputedStyle(button).fontSize) * ROOT_FONT_SIZE_PX
     const zoomPx = parseFloat(getComputedStyle(zoomLabel).fontSize) * ROOT_FONT_SIZE_PX
-    expect(buttonPx).toBeLessThan(0.85 * ROOT_FONT_SIZE_PX) // 旧値(11.9px)より小さい
-    expect(zoomPx).toBeLessThan(0.82 * ROOT_FONT_SIZE_PX) // 旧値(11.48px)より小さい
-    expect(buttonPx).toBeGreaterThanOrEqual(10)
-    expect(zoomPx).toBeGreaterThanOrEqual(10)
+    expect(buttonPx).toBeGreaterThan(11.2) // 旧値(0.8rem×14px=11.2px)より大きい
+    expect(zoomPx).toBeGreaterThan(10.9) // 旧値(0.78rem×14px≒10.9px)より大きい
+    expect(buttonPx).toBeLessThanOrEqual(16) // ボタン高さだけ過剰にならない範囲に収める
+    expect(zoomPx).toBeLessThanOrEqual(16)
+  })
+})
+
+describe('DrawingViewer: detected_df.csv由来の検出BBoxプレビューのLayer順序 (Phase 1.12指示書12章)', () => {
+  function makeDetectedPreviewItem(overrides: Partial<DetectedPreviewItem> = {}): DetectedPreviewItem {
+    return {
+      id: 0,
+      page_no: 16,
+      class_name: 'roof_fan',
+      confidence: 0.97,
+      normalized_rect: { x: 0.6, y: 0.15, w: 0.03, h: 0.02 },
+      source: 'detected_csv',
+      ...overrides,
+    }
+  }
+
+  it('renders the detected-preview overlay, positioned between product_df盤領域(10) and 引出線/Manual BBox(15/20)', async () => {
+    await renderViewer({ detectedPreview: [makeDetectedPreviewItem()] })
+    const panelOverlay = document.querySelector('.product-panel-overlay') as HTMLElement
+    const detectedOverlay = document.querySelector('.detected-preview-overlay') as HTMLElement
+    const detectionOverlay = document.querySelector('.detection-overlay') as HTMLElement
+    const panelZ = Number(getComputedStyle(panelOverlay).zIndex)
+    const detectedZ = Number(getComputedStyle(detectedOverlay).zIndex)
+    const detectionZ = Number(getComputedStyle(detectionOverlay).zIndex)
+    expect(detectedZ).toBeGreaterThan(panelZ)
+    expect(detectionZ).toBeGreaterThan(detectedZ)
+  })
+
+  it('shows the detected-preview BBox on top of the real (non-stubbed) DrawingCanvas/Overlay tree', async () => {
+    await renderViewer({ detectedPreview: [makeDetectedPreviewItem({ class_name: 'roof_fan', confidence: 0.97 })] })
+    expect(screen.getByText('roof_fan')).toBeInTheDocument()
+  })
+
+  it('does not block clicks on the product_df panel area underneath it (指示書12章: 表示専用でpointer-eventsを奪わない)', async () => {
+    const panel = makePanel({ ban_menno: 5, ban_no: 5 })
+    const { onSelectPanel } = await renderViewer({
+      panels: [panel],
+      detectedPreview: [makeDetectedPreviewItem({ normalized_rect: { x: 0.1, y: 0.1, w: 0.1, h: 0.1 } })],
+    })
+    fireEvent.click(screen.getByText('5/5'))
+    expect(onSelectPanel).toHaveBeenCalled()
   })
 })

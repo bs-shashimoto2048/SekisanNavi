@@ -200,3 +200,33 @@ export interface ProductSearchResult {
   matches: string[]
   truncated: boolean
 }
+
+/** estcode_df.csv (盤ごとの積算コード基本情報) 由来の盤情報 (Phase 1.14)。
+ * PAGE列を持たない製番単位のデータのため、`ban_menno`/`ban_no`で選択中盤
+ * (product_df由来のPanelPreview) と突き合わせて使う。CSVの列名(MODEL/BAN_H等)を
+ * そのままFrontendの型名として使っているが、日本語ラベルへの変換は表示層
+ * (`PanelInfo.tsx`のJSX) でのみ行い、この型自体には持たせない。 */
+export interface EstimatePanelInfo {
+  model: string | null
+  ban_menno: number
+  ban_no: number
+  ban_meisyou: string | null
+  ban_h: number | null
+  ban_w: number | null
+  ban_d: number | null
+  ban_connect: string | null
+  sort_order: number | null
+}
+
+/** detected_df.csv (YOLO検出結果) 由来の検出BBoxプレビュー (Phase 1.12)。
+ * DBの`Detection`とは別データ源であり、`id`はDBのDetection.idとは異なる体系
+ * (ページ内のYOLO_INDEXそのもの) であることに注意 (混同して同一視しない)。
+ * 表示専用の読み取りデータであり、リサイズ・削除・Master紐付けの対象にはならない。 */
+export interface DetectedPreviewItem {
+  id: number
+  page_no: number
+  class_name: string
+  confidence: number
+  normalized_rect: { x: number; y: number; w: number; h: number }
+  source: string
+}

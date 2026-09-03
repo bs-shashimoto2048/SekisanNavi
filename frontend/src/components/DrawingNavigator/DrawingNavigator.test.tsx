@@ -282,9 +282,10 @@ describe('DrawingNavigator (Phase 1.8: PNGサムネイル表示)', () => {
       '.drawing-navigator__thumb-label-line--ban',
     ) as HTMLElement
     // jsdomのgetComputedStyleは実ブラウザと異なりrem→px解決を行わず、指定値
-    // (例: "0.95rem") をそのまま文字列で返す。ルートfont-size (index.css: 14px)を
+    // (例: "0.95rem") をそのまま文字列で返す。ルートfont-size (index.css: 15px。
+    // 全体フォント拡大・BBox編集追従回帰修正 指示1章で14px→15pxへ引き上げ) を
     // 掛けて概算pxへ変換して比較する。
-    const ROOT_FONT_SIZE_PX = 14
+    const ROOT_FONT_SIZE_PX = 15
     const pagePx = parseFloat(getComputedStyle(pageLine).fontSize) * ROOT_FONT_SIZE_PX
     const banPx = parseFloat(getComputedStyle(banLine).fontSize) * ROOT_FONT_SIZE_PX
     expect(pagePx).toBeGreaterThanOrEqual(12)
@@ -391,5 +392,80 @@ describe('DrawingNavigator (Phase 1.8: PNGサムネイル表示)', () => {
       />,
     )
     expect(screen.getByText('製番が見つかりません')).toBeInTheDocument()
+  })
+
+  describe('visiblePageNosによる積算対象連動の絞り込み (積算対象連動の金額表示・図面一覧絞り込み 指示4章〜6章)', () => {
+    it('shows all pages when visiblePageNos is not provided (default: no filtering, 総合計)', () => {
+      const pages = [makePage({ page_no: 16 }), makePage({ page_no: 18 })]
+      render(
+        <DrawingNavigator pages={pages} selectedPageNo={null} onSelectPage={() => {}} loading={false} error={null} />,
+      )
+      expect(screen.getByRole('img', { name: 'P16' })).toBeInTheDocument()
+      expect(screen.getByRole('img', { name: 'P18' })).toBeInTheDocument()
+    })
+
+    it('shows all pages when visiblePageNos is explicitly null (総合計へ戻した場合、絞り込み残留なし、指示10章)', () => {
+      const pages = [makePage({ page_no: 16 }), makePage({ page_no: 18 })]
+      render(
+        <DrawingNavigator
+          pages={pages}
+          selectedPageNo={null}
+          onSelectPage={() => {}}
+          loading={false}
+          error={null}
+          visiblePageNos={null}
+        />,
+      )
+      expect(screen.getByRole('img', { name: 'P16' })).toBeInTheDocument()
+      expect(screen.getByRole('img', { name: 'P18' })).toBeInTheDocument()
+    })
+
+    it('shows only the pages included in visiblePageNos, hiding the rest', () => {
+      const pages = [makePage({ page_no: 16 }), makePage({ page_no: 18 }), makePage({ page_no: 29 })]
+      render(
+        <DrawingNavigator
+          pages={pages}
+          selectedPageNo={null}
+          onSelectPage={() => {}}
+          loading={false}
+          error={null}
+          visiblePageNos={new Set([16, 29])}
+        />,
+      )
+      expect(screen.getByRole('img', { name: 'P16' })).toBeInTheDocument()
+      expect(screen.getByRole('img', { name: 'P29' })).toBeInTheDocument()
+      expect(screen.queryByRole('img', { name: 'P18' })).not.toBeInTheDocument()
+    })
+
+    it('shows a dedicated "該当する図面はありません" message (not "ページが見つかりません") when filtering results in zero pages, so it is not mistaken for a bug (指示5章)', () => {
+      const pages = [makePage({ page_no: 16 }), makePage({ page_no: 18 })]
+      render(
+        <DrawingNavigator
+          pages={pages}
+          selectedPageNo={null}
+          onSelectPage={() => {}}
+          loading={false}
+          error={null}
+          visiblePageNos={new Set()}
+        />,
+      )
+      expect(screen.getByText('該当する図面はありません')).toBeInTheDocument()
+      expect(screen.queryByText('ページが見つかりません')).not.toBeInTheDocument()
+    })
+
+    it('still shows "ページが見つかりません" (not the filter-empty message) when the underlying page list itself is genuinely empty', () => {
+      render(
+        <DrawingNavigator
+          pages={[]}
+          selectedPageNo={null}
+          onSelectPage={() => {}}
+          loading={false}
+          error={null}
+          visiblePageNos={new Set([16])}
+        />,
+      )
+      expect(screen.getByText('ページが見つかりません')).toBeInTheDocument()
+      expect(screen.queryByText('該当する図面はありません')).not.toBeInTheDocument()
+    })
   })
 })

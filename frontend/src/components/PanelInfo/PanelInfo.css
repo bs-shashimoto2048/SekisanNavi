@@ -1,0 +1,174 @@
+/* 盤情報1行化・3領域リサイズ拡張・Redo時引出線回帰修正 指示5章: 右ペイン3領域
+   (盤情報・積算集約・積算明細)すべてを高さ制御可能にするため、この領域も
+   EstimateAggregation/EstimateDetailと同じ「高さ100%を使い切り、見出しを固定して
+   一覧部分だけ内部スクロールする」構造へ揃える。高さ自体はApp.tsx側の
+   ラッパーdivがinline styleで指定する(旧`max-height:35%`の固定比率をやめ、
+   ユーザーがsplitterで調整できるようにする)。 */
+.panel-info {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 0.4rem 0.5rem;
+}
+
+/* 3領域(盤情報・積算集約・積算明細)の見出しを統一する (盤フォーカス・積算明細
+   再設計 指示9章)。薄いコバルトブルー背景で「主要ブロックの先頭」であることを
+   一目で示す。フォントサイズ・weight・上下paddingは他2領域の見出しと揃える。
+   指示4章: 領域を縮めても見出しは常に見える (flex-shrink:0)。 */
+.panel-info__heading {
+  flex-shrink: 0;
+  font-size: 0.98rem; /* 全体フォント拡大 指示1章: 旧0.88rem→引き上げ */
+  font-weight: 700;
+  color: #1e3a8a;
+  background: #eff6ff;
+  margin: 0 0 0.3rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+}
+
+.panel-info__empty {
+  font-size: 0.92rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
+  color: #9ca3af;
+  margin: 0;
+}
+
+/* カード一覧だけをスクロールさせる領域 (指示4章: 見出し固定・一覧のみスクロール)。 */
+.panel-info__list-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* 盤カード一覧 (次work指示3章/4章)。ul自体の既定装飾(マーカー・padding)を消し、
+   カード間はgapで揃える。指示2章: カード間の余白を詰める(旧0.3rem→0.25rem)。 */
+.panel-info__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 盤ごとのコンパクトなカード (次work指示4章。指示1章/2章で原則1行表示・縦余白縮小)。
+   button要素にして、クリックによるViewerとの選択連動を自然な操作対象として
+   提示する (指示書6章: クリック対象の分かりやすさ)。paddingは1カードあたり
+   約30〜36px(目安)に収まる程度まで詰めつつ、クリック対象としての高さは
+   確保する (指示2章)。 */
+.panel-info__card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-left: 3px solid transparent; /* 選択中アクセント分の幅を常に確保し、
+                                          選択/非選択切替時にカードの横幅が
+                                          ガタつかないようにする。 */
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
+}
+
+.panel-info__card:hover {
+  border-color: #93c5fd;
+  background: #f8fafc;
+}
+
+/* 現在選択中の盤の識別 (指示書6章)。左アクセント+背景色の薄い塗り。
+   過度に派手な演出(点滅・太い縁取り等)はしない。 */
+.panel-info__card--selected {
+  border-left-color: #2563eb;
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.panel-info__card--selected:hover {
+  background: rgba(37, 99, 235, 0.1);
+}
+
+/* 指示1章: 面/盤番号・盤名称・型式・寸法・接続情報を原則1行にまとめる。
+   `flex-wrap: wrap`だけで折り返し制御を行い、幅が足りない時だけ
+   優先度の低い項目(記述順が後の項目=接続情報→寸法の順)から自然に2行目へ
+   送られる(JSでの幅測定やメディアクエリは使わない)。 */
+.panel-info__card-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  row-gap: 0.15rem;
+}
+
+.panel-info__badge {
+  flex: 0 0 auto;
+  font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ */
+  font-weight: 700;
+  color: #4b5563;
+  background: #f3f4f6;
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  white-space: nowrap;
+}
+
+/* 盤名称は最も目立たせたい情報 (指示書5章)。長い名称でも文字が途中で切れたり
+   横スクロールが必要になったりしないよう、折り返しを許可する
+   (指示書1章/8章の「文字が途中で切れない」方針を、この一覧でも踏襲する)。 */
+.panel-info__name {
+  font-size: 1rem; /* 全体フォント拡大 指示1章: 旧0.92rem→引き上げ */
+  font-weight: 600;
+  color: #1f2937;
+  overflow-wrap: break-word;
+}
+
+/* 型式・寸法・接続情報 (指示書5章: 主情報より1段控えめに)。ラベル無しで
+   フィールドを並べ、フィールド間は中点で区切る (指示書5章: 単純なラベル:値の
+   縦並びにしない)。指示1章でbadge/name含む1行にまとめたため、区切り記号は
+   badge以外のすべての項目間(name→型式→寸法→接続情報)へ一律に適用する。 */
+.panel-info__meta {
+  font-size: 0.88rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
+  font-weight: 500; /* 極端に細いweightは避ける (指示書2章) */
+  color: #4b5563;
+  white-space: nowrap;
+}
+
+.panel-info__card-row > span:not(:first-child)::before {
+  content: '・';
+  margin: 0 0.4rem;
+  color: #d1d5db;
+}
+
+.panel-info__meta--muted {
+  color: #9ca3af;
+  white-space: normal;
+}
+
+/* --- 旧来のダミーDB由来Panel表示 (現在ページにproduct_df盤が1件も無い場合の
+   フォールバック) --- */
+.panel-info__title {
+  font-size: 0.98rem; /* 全体フォント拡大 指示1章: 旧0.88rem→引き上げ */
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.panel-info__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
+}
+
+.panel-info__table th {
+  text-align: left;
+  color: #6b7280;
+  font-weight: 500;
+  padding: 0.15rem 0.35rem;
+  white-space: nowrap;
+}
+
+.panel-info__table td {
+  padding: 0.15rem 0.35rem;
+}
+
+.panel-info__source {
+  color: #9ca3af;
+  text-align: right;
+}

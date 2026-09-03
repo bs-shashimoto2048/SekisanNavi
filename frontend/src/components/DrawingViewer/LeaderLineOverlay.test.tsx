@@ -2,10 +2,10 @@
 // 一括importする、既存のOverlayコンポーネント群と同じ構成)。単体テストでCSSカスケードを
 // 検証するテストのためだけに、ここで明示的にimportする。
 import '../DrawingViewer/DrawingViewer.css'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { LeaderLineOverlay } from './LeaderLineOverlay'
-import type { Detection } from '../../types/domain'
+import type { Detection, EstimateMasterItem } from '../../types/domain'
 import { getLatestMockResizeObserver } from '../../testUtils/mockResizeObserver'
 
 function makeDetection(overrides: Partial<Detection> = {}): Detection {
@@ -27,6 +27,25 @@ function makeDetection(overrides: Partial<Detection> = {}): Detection {
     master_item_category: '箱・単独',
     master_item_model: 'OS2-816',
     master_item_code: '11001',
+    ...overrides,
+  }
+}
+
+function makeMasterItem(overrides: Partial<EstimateMasterItem> = {}): EstimateMasterItem {
+  return {
+    id: 10,
+    code: '11001',
+    category: '箱・単独',
+    model: 'OS2-816',
+    rating: '2.3*0.8*1.6',
+    note: null,
+    total_price_a: 315300,
+    box_parts_price: 61600,
+    painting_price: 89100,
+    setup_a: 216,
+    sheet_metal_price: 1096,
+    assembly_price: 351,
+    inspection_price: 15,
     ...overrides,
   }
 }
@@ -670,7 +689,56 @@ describe('LeaderLineOverlay (Phase 1.11 UI改修指示5章〜16章)', () => {
       expect(anchorPoint.y).toBeCloseTo(0.1)
     })
 
-    it('the label position is NEVER affected by previewBBox — only the anchor/line tracks it (要件16: ラベル位置は固定)', () => {
+    it('the label follows the BBox in real time during drag, shifted by exactly the anchor displacement (全体フォント拡大・BBox編集追従回帰修正 指示3章: 旧要件16「ラベル位置は固定」から仕様変更し、BBoxとの相対配置を維持したまま追従する)', () => {
+      const detection = makeDetection({
+        bbox_x: 0.2,
+        bbox_y: 0.3,
+        bbox_w: 0.1,
+        bbox_h: 0.1, // persisted anchor = (0.3, 0.3)
+        leader_label_x: 0.45,
+        leader_label_y: 0.05,
+      })
+      const { container, rerender } = render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={1}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+          previewBBox={null}
+        />,
+      )
+      const labelBefore = container.querySelector('.leader-line-overlay__label') as HTMLElement
+      expect(labelBefore.style.left).toBe('45%')
+      expect(labelBefore.style.top).toBe('5%')
+
+      // ドラッグ中(未確定)。previewBBoxの右上角(アンカー)は(0.8, 0.6)へ移動する
+      // = persisted anchor(0.3, 0.3)からの移動量は(+0.5, +0.3)。
+      rerender(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={1}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+          previewBBox={{ detectionId: 1, rect: { x: 0.7, y: 0.6, w: 0.1, h: 0.1 } }}
+        />,
+      )
+      const labelAfter = container.querySelector('.leader-line-overlay__label') as HTMLElement
+      // ラベルも同じ移動量ぶんだけリアルタイムに追従する: (0.45+0.5, 0.05+0.3) = (0.95, 0.35)。
+      expect(labelAfter.style.left).toBe('95%')
+      expect(labelAfter.style.top).toBe('35%')
+
+      // アンカー(引出線)側も確実にpreviewBBoxへ追従している (既存仕様、変更なし)。
+      const points = parsePathPoints(getVisiblePathD(container))
+      const anchorPoint = points[points.length - 1]
+      expect(anchorPoint.x).toBeCloseTo(0.8) // 0.7+0.1
+      expect(anchorPoint.y).toBeCloseTo(0.6)
+    })
+
+    it('the label returns to (and stays at) the persisted position once the drag ends (previewBBox becomes null again)', () => {
       const detection = makeDetection({
         bbox_x: 0.2,
         bbox_y: 0.3,
@@ -687,13 +755,9 @@ describe('LeaderLineOverlay (Phase 1.11 UI改修指示5章〜16章)', () => {
           onHoverDetection={() => {}}
           onSelectDetection={() => {}}
           onMoveLabel={() => {}}
-          previewBBox={null}
+          previewBBox={{ detectionId: 1, rect: { x: 0.7, y: 0.6, w: 0.1, h: 0.1 } }}
         />,
       )
-      const labelBefore = container.querySelector('.leader-line-overlay__label') as HTMLElement
-      const beforeLeft = labelBefore.style.left
-      const beforeTop = labelBefore.style.top
-
       rerender(
         <LeaderLineOverlay
           detections={[detection]}
@@ -702,18 +766,12 @@ describe('LeaderLineOverlay (Phase 1.11 UI改修指示5章〜16章)', () => {
           onHoverDetection={() => {}}
           onSelectDetection={() => {}}
           onMoveLabel={() => {}}
-          previewBBox={{ detectionId: 1, rect: { x: 0.7, y: 0.6, w: 0.1, h: 0.1 } }}
+          previewBBox={null}
         />,
       )
-      const labelAfter = container.querySelector('.leader-line-overlay__label') as HTMLElement
-      expect(labelAfter.style.left).toBe(beforeLeft)
-      expect(labelAfter.style.top).toBe(beforeTop)
-
-      // 一方、アンカー(引出線)側は確実にpreviewBBoxへ追従している。
-      const points = parsePathPoints(getVisiblePathD(container))
-      const anchorPoint = points[points.length - 1]
-      expect(anchorPoint.x).toBeCloseTo(0.8) // 0.7+0.1
-      expect(anchorPoint.y).toBeCloseTo(0.6)
+      const label = container.querySelector('.leader-line-overlay__label') as HTMLElement
+      expect(label.style.left).toBe('45%')
+      expect(label.style.top).toBe('5%')
     })
 
     it('ignores previewBBox for a different detectionId (複数BBox編集中に他のanchorを動かさない)', () => {
@@ -972,6 +1030,175 @@ describe('LeaderLineOverlay (Phase 1.11 UI改修指示5章〜16章)', () => {
       const len = Math.abs(points[0].x - points[1].x)
       expect(Number.isFinite(len)).toBe(true)
       expect(len).toBeGreaterThan(0)
+    })
+  })
+
+  describe('積算コードHover Tooltip (次work指示1章: コード/分類/型式/定格を最低限表示)', () => {
+    it('shows no tooltip before hovering', () => {
+      const detection = makeDetection()
+      render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+
+    it('shows コード/分類/型式/定格 on hovering the label, with the real rating looked up via masterItemById', () => {
+      const detection = makeDetection({
+        master_item_id: 10,
+        master_item_code: '11001',
+        master_item_category: '箱・単独',
+        master_item_model: 'OS2-816',
+      })
+      const masterItemById = new Map([[10, makeMasterItem({ id: 10, rating: '2.3*0.8*1.6' })]])
+      render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+          masterItemById={masterItemById}
+        />,
+      )
+      fireEvent.mouseEnter(screen.getByText('11001 OS2-816'), { clientX: 100, clientY: 100 })
+
+      const tooltip = screen.getByRole('tooltip')
+      expect(tooltip.textContent).toContain('コード')
+      expect(tooltip.textContent).toContain('11001')
+      expect(tooltip.textContent).toContain('分類')
+      expect(tooltip.textContent).toContain('箱・単独')
+      expect(tooltip.textContent).toContain('型式')
+      expect(tooltip.textContent).toContain('OS2-816')
+      expect(tooltip.textContent).toContain('定格')
+      expect(tooltip.textContent).toContain('2.3*0.8*1.6')
+      // 実データに存在しない「品名」ラベルを捏造して表示しないこと (次work指示: category≠品名)。
+      expect(tooltip.textContent).not.toContain('品名')
+    })
+
+    it('shows "-" for rating when master_item_id has no corresponding entry in masterItemById (default empty map)', () => {
+      const detection = makeDetection({ master_item_id: 10 })
+      render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      fireEvent.mouseEnter(screen.getByText('11001 OS2-816'), { clientX: 100, clientY: 100 })
+      const rows = screen.getAllByText('-')
+      expect(rows.length).toBeGreaterThan(0)
+    })
+
+    it('shows "-" for category when master_item_category is null, without fabricating a name (捏造しない方針)', () => {
+      const detection = makeDetection({ master_item_category: null })
+      render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      fireEvent.mouseEnter(screen.getByText('11001 OS2-816'), { clientX: 100, clientY: 100 })
+      const tooltip = screen.getByRole('tooltip')
+      expect(within(tooltip).getByText('分類')).toBeInTheDocument()
+      expect(tooltip.textContent).toContain('-')
+    })
+
+    it('shows the item-like value verbatim when model holds a descriptive name rather than a model number (実データ例: コード18311→model="換気扇")', () => {
+      const detection = makeDetection({
+        master_item_id: 20,
+        master_item_code: '18311',
+        master_item_category: '附属品加算価格',
+        master_item_model: '換気扇',
+      })
+      const masterItemById = new Map([
+        [20, makeMasterItem({ id: 20, code: '18311', category: '附属品加算価格', model: '換気扇', rating: '上部取付' })],
+      ])
+      render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+          masterItemById={masterItemById}
+        />,
+      )
+      fireEvent.mouseEnter(screen.getByText('18311 換気扇'), { clientX: 100, clientY: 100 })
+      const tooltip = screen.getByRole('tooltip')
+      // model列の値("換気扇")はそのまま表示するだけで、「品名」等への言い換えはしない。
+      expect(tooltip.textContent).toContain('換気扇')
+      expect(tooltip.textContent).toContain('上部取付')
+    })
+
+    it('also shows the tooltip when hovering the leader line itself (hit-area path), not only the label text', () => {
+      const detection = makeDetection()
+      const { container } = render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      const hitPath = Array.from(container.querySelectorAll('svg path')).find(
+        (p) => !p.getAttribute('marker-end') && !p.closest('marker'),
+      ) as SVGPathElement
+      fireEvent.mouseEnter(hitPath, { clientX: 100, clientY: 100 })
+      expect(screen.getByRole('tooltip')).toBeInTheDocument()
+    })
+
+    it('hides the tooltip when the mouse leaves the label', () => {
+      const detection = makeDetection()
+      render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      const label = screen.getByText('11001 OS2-816')
+      fireEvent.mouseEnter(label, { clientX: 100, clientY: 100 })
+      expect(screen.getByRole('tooltip')).toBeInTheDocument()
+
+      fireEvent.mouseLeave(label)
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+
+    it('is pointer-events:none so it never blocks clicks/hover of the drawing underneath (図面を隠しすぎない/操作を妨げない)', () => {
+      const detection = makeDetection()
+      render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      fireEvent.mouseEnter(screen.getByText('11001 OS2-816'), { clientX: 100, clientY: 100 })
+      expect(getComputedStyle(screen.getByRole('tooltip')).pointerEvents).toBe('none')
     })
   })
 })

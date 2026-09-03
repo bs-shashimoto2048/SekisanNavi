@@ -217,6 +217,15 @@ PanelProperties/EstimateTree/EstimateMasterPicker) は要件15の構成を維持
     のいずれかの場合のみ。色は固定の青/紫系ではなく、`master_item_category`から
     `masterCategoryPresentation.ts`経由で解決したカテゴリ色を使う (要件2。
     CSSカスタムプロパティ`--cat-bbox-border`/`--cat-bbox-fill`として注入)。
+- **`DetectedPreviewOverlay` (Phase 1.12、新規)**: `detected_df.csv`
+  (実行済みYOLO推論の出力) 由来の検出BBoxを、選択中ページに該当する分だけ
+  全件プレビュー表示する。表示専用(読み取り専用)で、クリック選択・リサイズ・
+  削除・Master Item紐づけのいずれの対象にもしない。見た目は既存AI Detection
+  表示(青系実線)と統合しつつ、コンテナはpointer-events:noneのため下の
+  盤領域(`ProductPanelOverlay`)のクリックを妨げない。ページ切替時は一旦空へ
+  リセットしてから該当ページの結果を再取得するため、別ページのBBoxが残らない。
+  座標補正の詳細(SCALE_X/SCALE_Y、Y軸原点、PNG原寸への対応)は
+  `docs/data-model.md` 8.5章・`docs/implementation-plan.md` 8.13章を参照。
 - `ProductPanelOverlay` (Phase 1.8、Phase 1.9でクリック選択対応): product_df由来の
   盤領域を中央Viewerへ赤色半透明・全件描画する (先頭1件へ削減しない)。
   DetectionOverlayと同じ0.0〜1.0正規化座標系を共有する。実データ
@@ -488,20 +497,72 @@ PanelProperties/EstimateTree/EstimateMasterPicker) は要件15の構成を維持
   再指定する設計を踏襲しており、透明な親OverlayがViewer全体のクリックを
   奪ってしまう不具合 (`implementation-plan.md` 8.7章) を再発させない。
 
-## 5. PanelProperties (右上: 盤パラメータ)
+## 5. PanelInfo (右上: 盤情報。Phase 1.14でestcode_df.csv実データ参照へ変更)
 
-- **Phase 1.9**: 中央Viewerでproduct_df盤領域が選択されている間は、その内容
-  (`selectedProductPanel`) を優先して表示する。表示項目はPAGE/面番号(BAN_MENNO)/
-  盤番号(BAN_NO)/盤名称(BAN_MEISYOU)/表示種別(BAN_TYPE)/H1/H2/W/D。
-  H1/H2/W/Dには単位「mm」を付与するが、元の数値そのものは変更しない
-  (表示上の整形のみ)。座標計算用の内部項目 (KITEN_X等) はこの表示には含めない。
-  値がnull/undefined/NaN/空文字の場合は「-」で表示し、`null`/`undefined`/`NaN`
-  という文字列をそのまま出さない (`PanelProperties.tsx::formatValue`)。
-- 盤が選択されていない場合は「盤が選択されていません」を表示する。
-- 上記のいずれも無い場合 (旧来の挙動。回帰確認用に維持): 選択中Detectionに紐づく盤
-  (`panel_id`) の情報を表示する。属性は `panel.attributes[]` をAPIから受け取った
-  まま描画するのみで、W/D/H/BAN_NO等の項目名をコンポーネントへハードコードしていない
-  (要件12)。各属性行に取得元 (`design_data` / `ai` / `manual`) を表示する。
+**[2026-09 Phase 1.14]** 旧`PanelProperties`コンポーネントを廃止し、`PanelInfo`
+コンポーネントへ置き換えた。表示元データを、product_df.csvの盤領域そのもの
+(PAGE/面番号/盤番号/盤名称/表示種別/H1/H2/W/D) から、`estcode_df.csv`(盤ごとの
+積算コード基本情報) の実データへ変更した。
+
+- **表示優先順位**: 中央Viewerでproduct_df盤領域が選択されている間
+  (`selectedProductPanel`)、対応する`estcode_df.csv`行(`ban_menno`/`ban_no`で
+  突き合わせたもの。`App.tsx`の`selectedEstimatePanel`)を優先して表示する。
+  実製番表示中はこちらを正とし、product_df由来の旧表示(表示種別・H1/H2個別行等)
+  とは二重に出さない。
+- **6行構成の基本表示 (省スペース化)**:
+  ```text
+  型式       IS2
+  面番号     5 / 盤番号 5
+  盤名称     No.2-1低圧動力盤
+  盤寸法     H 2300 : W 1700 : D 2200 mm
+  接続情報   箱・左右(L)
+  並び順     1
+  ```
+  盤高・盤幅・盤奥行(BAN_H/BAN_W/BAN_D)は個別行にせず「H x : W x : D x mm」の
+  1行にまとめる。単位はUnicode互換文字の「㎜」ではなく「mm」を使う。面番号
+  (BAN_MENNO)・盤番号(BAN_NO)も1行にまとめ、右ペイン下部(積算集約)の高さ確保を
+  優先する。盤名称が長い場合は右ペイン幅を超えず自然に折り返す。`label`列と
+  `value`列はCSS Grid (`<dl>`の`dt`/`dd`交互配置) で揃えている。
+- **欠損値**: null/undefined/NaN/空文字はそのまま出さず「-」で統一する
+  (`PanelInfo.tsx::formatValue`)。盤寸法の一部だけ欠けている場合も
+  `H 2300 : W - : D 2200 mm`のように項目単位で表示する。CSVのfloat表記
+  (`2300.0`等) はJSの数値→文字列変換で自動的に整数表記(`2300`)になるため、
+  個別の丸め処理は行っていない。
+- **盤は選択されているがestcode_df.csvに対応行が無い場合**: 「該当する積算盤情報が
+  ありません」と表示する (アプリ全体をエラーにしない)。
+- **盤が選択されていない場合**: 「盤が選択されていません」を表示する
+  (Phase 1.9以降の仕様通り、ページ切替時に`selectedPanel`が解除されるため、
+  右ペイン上部も自動的にこの表示へ戻る)。
+- **後方互換のフォールバック (回帰確認用に維持)**: `selectedProductPanel`が無く、
+  選択中Detectionに紐づく旧来のダミーDB盤(`panel_id`)がある場合のみ、従来通り
+  `panel.attributes[]`をそのまま描画する属性テーブル表示にフォールバックする
+  (要件12、W/D/H/BAN_NO等の項目名をコンポーネントへハードコードしない)。
+- **紐付けキー**: `product_df.csv`の`BAN_MENNO`と`estcode_df.csv`の`BAN_MENNO`は
+  実データで値・意味とも完全に一致することを確認済み (`ban_menno`+`ban_no`の
+  組み合わせが同一製番内で一意)。詳細は`docs/implementation-plan.md`
+  「Phase 1.14」章、データ構造は`docs/data-model.md`参照。
+
+## 5.5. EstimateAggregation (右ペイン下部: 積算集約。Phase 1.14で新設)
+
+`PanelInfo`の下に「積算集約」セクションを新設した。今回は表示領域と基本構造のみを
+用意し、AI検出(detected_df.csv)・社内データ(estcode_df.csv)・Manual追加を統合した
+本番の集約ロジックは実装していない。初期状態は固定値で以下を表示する:
+
+```text
+積算集約
+
+確定 0   要確認 0   不足 0   未割当 0
+
+集約ロジックは未実装です
+```
+
+将来ロジックが実装された際にそのまま差し替えられるよう、
+`{summary, estimateResults[], evidences[], unassigned[]}`という形のデータ構造を
+コンポーネント側の型として用意しているが、DB/APIの先回り実装はしていない。
+旧来のPhase 1由来 seed積算結果(`EstimateTree`、次項)は削除せず、この
+`EstimateAggregation`セクションのすぐ下にそのまま残る。実製番表示では
+`EstimateAggregation`を優先する(DOM上で先に表示する)方針とし、旧`EstimateTree`を
+新しい正式結果であるかのように見せないようにしている。
 
 ## 6. EstimateTree (右下: 積算結果)
 

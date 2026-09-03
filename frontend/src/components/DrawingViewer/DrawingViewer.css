@@ -11,7 +11,7 @@
 }
 
 .drawing-viewer__heading {
-  font-size: 0.85rem; /* 追加修正 第4ラウンド15章〜18章: 0.9rem(約12.6px)から約6%縮小(約11.9px)。図面表示面積を少し増やす */
+  font-size: 0.98rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
   font-weight: 700;
   color: #374151;
   margin: 0 0 0.5rem;
@@ -31,7 +31,7 @@
 
 .drawing-viewer__empty {
   color: #9ca3af;
-  font-size: 0.88rem;
+  font-size: 0.98rem; /* 全体フォント拡大 指示1章 */
   margin-top: 2rem;
 }
 
@@ -74,7 +74,7 @@
   position: absolute;
   top: -1.1rem;
   left: 0;
-  font-size: 0.78rem;
+  font-size: 0.88rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ */
   color: #b45309;
   background: #fff;
   padding: 0 0.25rem;
@@ -174,7 +174,7 @@
   /* 実画面未達 修正指示3章/24章: 中央Viewerの盤ラベルも極小表示にしない。
      ルートfont-sizeは14px (index.css) のため、0.68rem(≈9.5px)から引き上げた。
      追加修正 第4ラウンド15章〜18章でさらに約7%縮小(0.86rem→0.8rem)。 */
-  font-size: 0.8rem; /* 約11.2px */
+  font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
   font-weight: 700;
   padding: 0.15rem 0.35rem;
   white-space: nowrap;
@@ -198,15 +198,97 @@
   pointer-events: none;
   background: rgba(17, 24, 39, 0.92);
   color: #fff;
-  font-size: 0.9rem; /* Phase 1.10 フォント見直し: 約12.6px (旧0.82rem≈11.5px) */
-  line-height: 1.5;
-  padding: 0.45rem 0.65rem;
+  font-size: 0.92rem; /* 次work指示2章: 中央プレビューHover表示の可読性向上のため
+                          Phase 1.10の0.9rem(≒12.6px)からさらに一段引き上げ */
+  font-weight: 500; /* 極端に細いweightは避ける (指示書2章) */
+  line-height: 1.6;
+  padding: 0.5rem 0.7rem;
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   white-space: nowrap;
 }
 
 .product-panel-overlay__tooltip-line {
+  white-space: nowrap;
+}
+
+/* detected_df.csv (YOLO検出結果) 由来の検出BBoxプレビュー (Phase 1.12指示書12章、
+   Phase 1.13で表示優先度・視認性を整理)。盤領域(10)より上、引出線(15)・Manual BBox
+   本体(20)より下に置く (指示書14章: 積算作業に入ったManual/LeaderをAI BBoxより
+   優先表示する)。「AIが何を検出したかを確認する情報」であり、積算コード確定後の
+   表示(Manual BBox/Leader Line)とは役割を分ける (指示書1章)。
+   コンテナ自体はクリックを奪わない。hover Tooltipのため個々のBBox側で
+   pointer-events:autoを再指定する (他Overlayと同じ設計方針。指示書15章)。 */
+.detected-preview-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 12;
+}
+
+/* 通常時: 塗りつぶしなし・細い(1px)青系実線の枠のみとし、図面そのものを
+   確認しやすくする (指示書2章/3章)。積算コードへ紐付いていないAI検出結果のため、
+   Masterカテゴリ色ではなく統一したAI表示色(青)を使う (指示書4章)。
+   pointer-events:autoでhoverを受け取れるようにする (指示書8章/15章)。 */
+.detected-preview-overlay__bbox {
+  position: absolute;
+  pointer-events: auto;
+  border: 1px solid #3b82f6;
+  background: transparent;
+  cursor: default; /* クリックしても編集状態には入らない (指示書12章) */
+}
+
+/* hover時のみ: 枠をやや太く+ごく薄い青塗りにし、詳細を確認しやすくする (指示書8章)。 */
+.detected-preview-overlay__bbox:hover {
+  border-width: 2px;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+/* Master Item選択中(Manual BBox追加モード)はAI BBox自体をpointer-events:noneにし、
+   Viewer上のドラッグが常にManual BBox作成として扱われるようにする
+   (指示書16章。ProductPanelOverlayの`--noninteractive`と同じ考え方)。 */
+.detected-preview-overlay__bbox--noninteractive {
+  pointer-events: none;
+}
+
+/* 通常ラベルはDEVICE名のみ (confidenceは常時表示しない。指示書5章/6章)。
+   背景は無し、または、ごく薄い半透明とし図面を強く隠さない (指示書7章)。
+   文字色はAI BBoxと同系色にして、Manual BBox/引出線とひと目で区別できるようにする。
+   ラベル自体はpointer-events:noneとし、hoverの成立は親のBBox本体に一本化する。 */
+.detected-preview-overlay__label {
+  position: absolute;
+  top: -1.05rem;
+  left: -1px;
+  font-size: 0.8rem; /* 全体フォント拡大 指示1章: 旧0.72rem→引き上げ */
+  background: rgba(255, 255, 255, 0.65);
+  color: #1d4ed8;
+  padding: 0 0.2rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.detected-preview-overlay__label--hovered {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+/* hover詳細Tooltip (指示書8章/9章)。ProductPanelOverlayの`__tooltip`と同じ
+   position:fixed + viewport端クランプの実装・見た目を踏襲する。 */
+.detected-preview-overlay__tooltip {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  background: rgba(17, 24, 39, 0.92);
+  color: #fff;
+  font-size: 0.92rem; /* 次work指示2章: 可読性向上のため旧0.85remから引き上げ */
+  font-weight: 500; /* 極端に細いweightは避ける (指示書2章) */
+  line-height: 1.6;
+  padding: 0.5rem 0.7rem;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+}
+
+.detected-preview-overlay__tooltip-line {
   white-space: nowrap;
 }
 
@@ -250,7 +332,8 @@
   background: transparent;
   box-shadow: none;
   color: var(--cat-leader-text);
-  font-size: 1rem; /* 旧0.82rem(≒11.48px)→新1rem(14px)。約22%拡大 (追加修正3章) */
+  font-size: 1rem; /* ルートfont-size(15px)に連動。JS側のLABEL_FONT_SIZE_PX
+    (LeaderLineOverlay.tsx、水平線の長さ計算に使う実測用フォント指定)と必ず一致させる。 */
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -270,6 +353,49 @@
   text-decoration: underline;
   text-decoration-color: var(--cat-leader-color);
   text-decoration-thickness: 2px;
+}
+
+/* 積算コードHover Tooltip (次work指示1章)。ProductPanelOverlay/
+   DetectedPreviewOverlayと同じposition:fixed + viewport端クランプの実装だが、
+   コード/分類/型式/定格の4行をラベル:値で揃えて表示するため、他2つの1行テキスト
+   の羅列ではなくgridレイアウトにする (指示書2章: ラベルと値の区別が分かるように)。
+   文字は折り返し可(white-space:normal)とし、text-overflow:ellipsisによる
+   途中切れは使わない (指示書1章: 文字が途中で切れないこと)。 */
+.leader-line-overlay__tooltip {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  background: rgba(17, 24, 39, 0.94);
+  color: #fff;
+  padding: 0.55rem 0.7rem;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  max-width: 300px;
+}
+
+.leader-line-overlay__tooltip-row {
+  display: grid;
+  grid-template-columns: 3.4em 1fr;
+  column-gap: 0.5rem;
+  font-size: 0.92rem; /* 次work指示2章: 可読性のため既存Tooltip(0.85〜0.9rem)より一段大きく */
+  line-height: 1.6;
+  white-space: normal;
+  overflow-wrap: break-word; /* 型式等、区切り文字の無い長い文字列でも途中切れず折り返す */
+}
+
+.leader-line-overlay__tooltip-row + .leader-line-overlay__tooltip-row {
+  margin-top: 0.1rem;
+}
+
+.leader-line-overlay__tooltip-label {
+  color: #9ca3af; /* ラベルは値より控えめな色にして、ラベル/値の区別を付ける (指示書2章) */
+  font-weight: 500; /* 極端に細いweightは避ける (指示書2章) */
+  white-space: nowrap;
+}
+
+.leader-line-overlay__tooltip-value {
+  color: #fff;
+  font-weight: 600;
 }
 
 .detection-overlay {
@@ -351,6 +477,28 @@
   filter: brightness(0.95);
 }
 
+/* 積算明細(右ペイン③)の行hover中の強調 (積算集約・積算明細UI再構成 指示18章〜21章、
+   明細遷移後のBBox残留・Hover色・品名列修正 指示2章で情報源別の色へ変更)。
+   既存の選択中(--selected)・カテゴリ色(--category)表示と混同しないよう、
+   半透明の濃い塗りつぶし+太めの枠という別系統の見た目にする。`--category`より
+   後に定義することで、カテゴリ色を上書きして常にこの強調が視認できるようにする
+   (指示書21章: 図面内容が完全に読めなくなるほど不透明にはしない)。
+   色は新たに増やさず、このファイル内で既に使っているAI/マニュアルの配色を
+   そのまま再利用する (下記`--manual`・`.detected-preview-overlay__bbox`の
+   青#3b82f6と同じ)。実データのDetection.source_typeは'ai'|'manual'の2値のみのため、
+   実際に描画されるのはこの2クラスだけである。 */
+.detection-overlay__bbox--detail-hover-ai {
+  border-color: #3b82f6;
+  border-width: 3px;
+  background: rgba(59, 130, 246, 0.3);
+}
+
+.detection-overlay__bbox--detail-hover-manual {
+  border-color: #7c3aed;
+  border-width: 3px;
+  background: rgba(124, 58, 237, 0.3);
+}
+
 /* 編集中のBBox内部をドラッグすると移動できることを示す (Phase 1.11 指示書4章)。 */
 .detection-overlay__bbox--move-cursor {
   cursor: move;
@@ -365,7 +513,7 @@
   position: absolute;
   top: -1.05rem;
   left: -2px;
-  font-size: 0.75rem; /* Phase 1.10 フォント見直し: 約10.5px (旧0.6rem≈8.4px) */
+  font-size: 0.8rem; /* 全体フォント拡大 指示1章: 旧0.75rem→引き上げ */
   background: #1f2937;
   color: #fff;
   padding: 0 0.25rem;

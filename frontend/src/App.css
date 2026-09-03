@@ -12,7 +12,7 @@
   background: #fee2e2;
   color: #991b1b;
   padding: 0.4rem 1rem;
-  font-size: 0.85rem; /* Phase 1.10 フォント見直し (旧0.8rem≈11.2px→約11.9px) */
+  font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -20,18 +20,92 @@
 }
 
 .app-layout__error button {
-  padding: 0.15rem 0.6rem;
+  padding: 0.2rem 0.7rem;
   border: 1px solid #991b1b;
   background: #fff;
   color: #991b1b;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.82rem; /* Phase 1.10 フォント見直し (旧0.75rem≈10.5px→約11.5px) */
+  font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.82rem→引き上げ */
   white-space: nowrap;
 }
 
 .app-layout__error button:hover {
   background: #fef2f2;
+}
+
+/* 積算明細強化・Undo/Redo・要確認警告・編集追従 指示7章: 要確認(BBox所属判定で
+   複数盤と同値交差した項目)の全体警告。既存のエラーバナー(赤系)とは区別し、
+   EstimateAggregation.cssの`--warn`系と同じ配色(琥珀色)にする。クリック可能な
+   ことが分かるよう<button>にし、ホバーで少し濃くする。 */
+.app-layout__tie-warning {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: rgba(180, 83, 9, 0.12);
+  color: #92400e;
+  border: none;
+  border-bottom: 1px solid rgba(180, 83, 9, 0.3);
+  padding: 0.45rem 1rem;
+  font-size: 0.95rem; /* 全体フォント拡大 指示1章 */
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.app-layout__tie-warning:hover {
+  background: rgba(180, 83, 9, 0.2);
+}
+
+/* 指示6章: Undo/Redoツールバー。目立たせすぎず、ヘッダ直下に小さく配置する。 */
+.app-layout__edit-toolbar {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.3rem 1rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.app-layout__edit-toolbar button {
+  font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ */
+  padding: 0.2rem 0.7rem;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.app-layout__edit-toolbar button:hover:not(:disabled) {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.app-layout__edit-toolbar button:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+  background: #f9fafb;
+}
+
+/* 指示9章: 所属変更の一時通知。右下に浮かせる控えめなトースト。 */
+.app-layout__target-change-toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 20;
+  background: #1e3a8a;
+  color: #fff;
+  padding: 0.55rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  max-width: 320px;
+}
+
+.app-layout__target-change-toast strong {
+  display: block;
+  margin-bottom: 0.2rem;
 }
 
 /* Header直下の残り全体。MainArea(左ペイン+Viewer+Master)とRightPaneを
@@ -75,4 +149,40 @@
   flex-direction: column;
   min-height: 0;
   border-left: 1px solid #e5e7eb;
+}
+
+/* 盤情報1行化・3領域リサイズ拡張・Redo時引出線回帰修正 指示3章/5章:
+   盤情報の高さもJS側(`panelInfoHeight`, ドラッグで可変)で指定する。中の
+   `PanelInfo`自身がheader固定+内部スクロールを持つため、ここでは高さを
+   伝えるだけでよい (EstimateAggregation/EstimateDetailと同じ設計)。 */
+.app-workspace__panel-info-wrap {
+  flex-shrink: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 盤情報の下で、積算集約と積算明細が残り全部を分け合う領域
+   (盤フォーカス・積算明細再設計 指示6章)。 */
+.app-workspace__right-lower {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 積算集約: 高さは`estimateAggregationHeight`(px, ドラッグで可変)をJS側で
+   指定する。中の`EstimateAggregation`自身がheader固定+内部スクロールを持つため、
+   ここでは高さを伝えるだけで良い。 */
+.app-workspace__estimate-aggregation-wrap {
+  flex-shrink: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 積算明細: 残り全部を使う。最低高さはJS側の`ESTIMATE_DETAIL_HEIGHT_MIN`と
+   揃えたinline styleで指定する (指示6章の最低高さ制約)。 */
+.app-workspace__estimate-detail-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }

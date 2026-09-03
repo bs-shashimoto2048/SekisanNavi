@@ -29,13 +29,13 @@
 }
 
 .drawing-canvas__toolbar button {
-  min-width: 2rem;
-  padding: 0.15rem 0.5rem;
+  min-width: 2.1rem;
+  padding: 0.2rem 0.55rem;
   border: 1px solid #d1d5db;
   background: #fff;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.8rem; /* 追加修正 第4ラウンド15章〜18章: 0.85remから約6%縮小 */
+  font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
 }
 
 .drawing-canvas__toolbar button:hover {
@@ -44,14 +44,14 @@
 }
 
 .drawing-canvas__zoom-label {
-  font-size: 0.78rem; /* Phase 1.10 フォント見直し: 約11.5px → 追加修正 第4ラウンドでさらに縮小 */
+  font-size: 0.88rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ */
   color: #6b7280;
   min-width: 3rem;
   text-align: center;
 }
 
 .drawing-canvas__mode-badge {
-  font-size: 0.76rem; /* Phase 1.10 フォント見直し: 約11.2px → 追加修正 第4ラウンドでさらに縮小 */
+  font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.76rem→引き上げ */
   color: #7c3aed;
   background: #ede9fe;
   padding: 0.15rem 0.5rem;
@@ -60,7 +60,7 @@
 }
 
 .drawing-canvas__selection-badge {
-  font-size: 0.76rem; /* Phase 1.10 フォント見直し: 約11.2px → 追加修正 第4ラウンドでさらに縮小 */
+  font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.76rem→引き上げ */
   color: #991b1b;
   white-space: nowrap;
 }
@@ -68,13 +68,13 @@
 /* ツールバー右端に配置する (Phase 1.7, 要件10)。 */
 .drawing-canvas__delete-button {
   margin-left: auto;
-  padding: 0.15rem 0.6rem;
+  padding: 0.2rem 0.65rem;
   border: 1px solid #dc2626;
   background: #fff;
   color: #dc2626;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
 }
 
 .drawing-canvas__delete-button:hover:not(:disabled) {
@@ -127,7 +127,7 @@
   left: 1rem;
   right: 1rem;
   color: #6b7280;
-  font-size: 0.85rem;
+  font-size: 0.95rem; /* 全体フォント拡大 指示1章 */
 }
 
 .drawing-canvas__status--error {

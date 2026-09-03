@@ -23,7 +23,7 @@
 }
 
 .master-picker__heading {
-  font-size: 0.88rem; /* Phase 1.10 フォント見直し: 約12.3px */
+  font-size: 0.98rem; /* 全体フォント拡大 指示1章: 旧0.88rem→引き上げ */
   font-weight: 700;
   color: #374151;
   margin: 0;
@@ -33,20 +33,20 @@
 .master-picker__search {
   flex: 1;
   max-width: 320px;
-  padding: 0.25rem 0.5rem;
+  padding: 0.3rem 0.55rem;
   border: 1px solid #d1d5db;
   border-radius: 4px;
-  font-size: 0.85rem;
+  font-size: 0.92rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
 }
 
 .master-picker__loading {
-  font-size: 0.8rem;
+  font-size: 0.88rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
   color: #9ca3af;
 }
 
 .master-picker__count {
   margin-left: auto;
-  font-size: 0.8rem;
+  font-size: 0.88rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
   color: #6b7280;
   white-space: nowrap;
 }
@@ -75,7 +75,7 @@
   color: var(--cat-tab-fg);
   border-radius: 4px 4px 0 0;
   cursor: pointer;
-  font-size: 0.85rem; /* Phase 1.10 フォント見直し: 約11.9px (旧0.75rem≈10.5px) */
+  font-size: 0.92rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
   white-space: nowrap;
 }
 
@@ -108,7 +108,10 @@
 .master-picker__table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.82rem; /* Phase 1.10 フォント見直し: 約11.5px (表header/body共通) */
+  /* 全体フォント拡大 指示1章: 旧0.82rem→引き上げ。列数が多く`white-space:nowrap`
+     のため、`.master-picker__table-wrap`の既存の横スクロール許容(overflow:auto)で
+     はみ出しを吸収する (表を無理に圧縮しない)。 */
+  font-size: 0.9rem;
 }
 
 .master-picker__table th,
