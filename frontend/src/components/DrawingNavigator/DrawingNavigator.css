@@ -1,7 +1,10 @@
 .drawing-navigator {
   height: 100%;
   overflow-y: auto;
-  border-right: 1px solid #e5e7eb;
+  /* UI視覚階層改善 指示8章/22章: 図面一覧|Viewerの大領域境界(Level1)。
+     サムネイルカード自体の内部border(2px, #e5e7eb)より一段明確なトーンにする
+     (index.cssの--border-regionを再利用。色を増やさず、幅も1pxのまま)。 */
+  border-right: 1px solid var(--border-region);
   background: #fafafa;
   padding: 0.5rem;
   box-sizing: border-box;

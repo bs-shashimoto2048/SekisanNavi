@@ -10,6 +10,7 @@ Phase 1.7 (実積算Master全面参照・BBox削除/リサイズ編集) / Phase 
 (製番検索・左ペインPNGサムネイル化・product_df盤領域Overlay)** が完了した段階。
 詳細は `docs/` を参照:
 
+- [`docs/product-vision.md`](docs/product-vision.md) — Product Vision (なぜ作るのか・将来の自動化への段階的な方向性)
 - [`docs/architecture.md`](docs/architecture.md) — アーキテクチャ
 - [`docs/data-model.md`](docs/data-model.md) — データモデル
 - [`docs/ui-spec.md`](docs/ui-spec.md) — UI仕様

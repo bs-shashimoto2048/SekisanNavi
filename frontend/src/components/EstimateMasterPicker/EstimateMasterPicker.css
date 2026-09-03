@@ -6,13 +6,21 @@
      中央ViewerとMasterの境界のResize Handleでユーザーが変更できる)。
      このCSSのheightは、heightをまだ指定していない場合(単体テスト等)の既定値。 */
   height: 260px;
-  border-top: 1px solid #e5e7eb;
+  /* UI視覚階層改善 指示8章/21章: Viewer|積算コードMasterの大領域境界(Level1)。
+     積算コードMasterがViewerの続きに見えないよう、表内部の罫線より
+     一段明確なトーンにする(幅は1pxのまま)。見出し自体の高さは変更しない。 */
+  border-top: 1px solid var(--border-region);
   padding: 0.5rem 0.75rem;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   min-width: 0;
   min-height: 0;
+  /* UI視覚階層改善 追加修正第2ラウンド 11章: 選択中タブに与えるz-index(下記
+     .master-picker__tab--active)を、このMaster picker内部だけに閉じ込める。
+     position/z-indexの値そのものを変えずに新しいスタッキングコンテキストを
+     作れる`isolation`を使い、Viewer側の他Overlay系z-indexへ一切影響しないようにする。 */
+  isolation: isolate;
 }
 
 .master-picker__toolbar {
@@ -51,11 +59,18 @@
   white-space: nowrap;
 }
 
+/* UI視覚階層改善 追加修正第2ラウンド 3章/4章/10章: 選択中タブがMaster表と
+   一体に見えるようにするため、タブ行と表(.master-picker__table-wrap、
+   border-topを持つ)の間の隙間をなくす(旧0.4rem→0)。未選択タブは表の上端
+   borderへぴったり接するだけ(重ならない)なので境界線がそのまま見え、
+   選択中タブだけが`top`オフセットでこの境界へ重なり、線を覆い隠す
+   (`.master-picker__tab--active`側の実装を参照)。marginを増やす変更ではなく
+   詰める変更のため、指示21章の制約(padding/margin/高さを増やさない)に反しない。 */
 .master-picker__tabs {
   display: flex;
   gap: 0.25rem;
   overflow-x: auto;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0;
   flex-shrink: 0;
 }
 
@@ -83,16 +98,34 @@
   filter: brightness(0.97);
 }
 
-/* 選択中タブ (指示書13章): 背景を白くしつつ系統色の境界線・文字色は維持し、
-   上辺(border-top)をより濃い色にしてhoverや他タブと明確に区別する。
-   font-weightで強調するのは「選択中」等の限定的な対象のみとする (21章)。 */
+/* 選択中タブ (指示書13章、UI視覚階層改善 追加修正第2〜4ラウンドで段階的に再設計)。
+ *
+ * 第1ラウンド「白背景+下端マーカー」→ 白いタブ→白いMaster表と続き判別しづらい。
+ * 第2ラウンド「tabBgより一段濃い淡色」→ 表との接続は改善したが、選択状態としての
+ *   コントラストがまだ弱かった。
+ * 第4ラウンド(今回)で最終形へ: `tabActiveBg`をカテゴリ色相を保ったまま白文字と
+ *   十分なコントラスト(概ねWCAG AA 4.5:1以上)が取れる濃さまで暗くし、
+ *   「濃色背景+白文字」の明確な反転表現にした(指示1章/2章/7章/8章)。
+ *   - background: `--cat-tab-active-bg`(濃色)
+ *   - color: `--cat-tab-active-fg`(#fff固定)
+ *   - border-top/left/right はカテゴリ色(--cat-tab-border、baseの
+ *     `.master-picker__tab`から継承。左右上とも同じ変数のため再宣言は不要)
+ *   - border-bottomはbaseの`border-bottom: none`をそのまま使う(このルールで
+ *     上書きをしない)ことで「下borderが無い」を維持
+ *   - `top:2px`+`z-index:1`(`.master-picker__tabs`のmargin-bottom:0と合わせ)で
+ *     Master表の上端border(`.master-picker__table-wrap`のborder-top)へ
+ *     選択中タブの下端がわずかに重なり、「タブと表が繋がって見える」効果を
+ *     維持する(第2ラウンド指示3章/4章/10章/11章から変更なし)。z-indexは
+ *     `.master-picker`のisolation:isolateでこの内部だけに閉じている。
+ * タブ高さ・padding・font-sizeは一切変更していない (指示16章)。
+ */
 .master-picker__tab--active {
-  background: #fff;
+  background: var(--cat-tab-active-bg);
+  color: var(--cat-tab-active-fg, #fff);
   font-weight: 700;
-  border-bottom: 1px solid #fff;
-  border-top-width: 3px;
   position: relative;
-  top: 1px;
+  top: 2px;
+  z-index: 1;
 }
 
 .master-picker__tab--active:hover {
@@ -102,7 +135,8 @@
 .master-picker__table-wrap {
   overflow: auto;
   flex: 1;
-  border-top: 1px solid #d1d5db;
+  /* UI視覚階層改善 指示13章: 表外周(Level3)をセル内部の罫線より明確にする。 */
+  border-top: 1px solid var(--border-table-outer);
 }
 
 .master-picker__table {
@@ -122,11 +156,23 @@
   white-space: nowrap;
 }
 
+/* UI視覚階層改善 追加修正第3/第4ラウンド: 選択中カテゴリのpresentation
+   (`<thead>`へ注入された--cat-tab-active-bg/--cat-tab-active-fg/--cat-tab-border、
+   EstimateMasterPicker.tsx参照)をtable headerへ反映し、「active tab→header→
+   data」の視覚的な連続性を作る。第3ラウンドでは淡色(--cat-tab-bg)を使っていたが、
+   第4ラウンド指示3章/9章「active tabとheaderを同じ濃色帯として認識させる」に
+   合わせ、active tabと同じ`--cat-tab-active-bg`(濃色)/`--cat-tab-active-fg`
+   (白文字)を採用した。activeCategoryがまだ無い場合(vars未注入)はフォールバック値
+   (旧来の#f9fafb等)を使う。データ行(tbody)はheadと別スコープのためこの変数を
+   継承せず、指示11章どおり白背景のまま保たれる。 */
 .master-picker__table th {
   position: sticky;
   top: 0;
-  background: #f9fafb;
-  color: #4b5563;
+  background: var(--cat-tab-active-bg, #f9fafb);
+  color: var(--cat-tab-active-fg, #4b5563);
+  /* 指示3章: ヘッダ下borderもactive tabと同系統の濃色(tabBorder)にする。
+     未選択時(vars未注入)は指示13章までのLevel3トークンへフォールバックする。 */
+  border-bottom-color: var(--cat-tab-border, var(--border-table-outer));
 }
 
 .master-picker__cell--numeric {
@@ -142,12 +188,22 @@
   background: #f3f4f6;
 }
 
+/* UI視覚階層改善 追加修正指示 7章〜11章: 「編集対象として選択中」を、
+   カテゴリ色(タブ由来。行のセル自体には使っていない)とは別軸のコバルトブルーで
+   表現する。旧配色(#fef3c7/#fde68a、amber)は.estimate-detail__row--edit-follow
+   (編集直後)や要確認バナーと同じ意味色を使い回してしまっており、「選択中」の
+   意味が別の状態と混同されていたため、指示9章の推奨どおり左3pxアクセント+
+   ごく薄いコバルト背景+font-weight強調へ置き換える。表全体を濃色化しない
+   (指示10章)。selected+hoverはselected単体よりわずかに濃い程度にとどめ、
+   「selected > hover > normal」の優先順位を保つ(指示11章)。 */
 .master-picker__row--selected {
-  background: #fef3c7;
+  background: rgba(37, 99, 235, 0.1);
+  box-shadow: inset 3px 0 0 0 #2563eb;
+  font-weight: 600;
 }
 
 .master-picker__row--selected:hover {
-  background: #fde68a;
+  background: rgba(37, 99, 235, 0.16);
 }
 
 .master-picker__empty {

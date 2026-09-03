@@ -35,10 +35,26 @@ function makeLineItem(overrides: Partial<EstimateLineItem> = {}): EstimateLineIt
   }
 }
 
+// 「総合計」専用行(Sekisan Navi 追加修正指示: 積算集約の数量集約)。対象を横断して
+// 既に集約済みのデータという想定のため、`targetId`は常にnull。単体テストでは
+// 実際の集約アルゴリズム(estimateAggregationReal.test.ts側で別途検証)を通さず、
+// 「このデータが来たらこう描画する」というコンポーネント自身の責務だけを検証する。
+function makeTotalLineItem(overrides: Partial<EstimateLineItem> = {}): EstimateLineItem {
+  const { id, targetId: _targetId, ...rest } = makeLineItem(overrides)
+  void _targetId
+  return { ...rest, id: `total:${id}`, targetId: null }
+}
+
 describe('EstimateAggregation (積算集約・積算明細UI再構成: セレクト方式+表形式)', () => {
   it('shows the empty message when there is nothing to aggregate', () => {
     render(
-      <EstimateAggregation targets={[makeTarget()]} lineItems={[]} selectedTargetId={null} onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[]}
+        totalLineItems={[]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
     )
     expect(screen.getByText('現在の製番に付加されている積算コードがありません')).toBeInTheDocument()
   })
@@ -46,7 +62,13 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
   it('has a target select with 総合計 + 製品全体, using target.id (not the label text) as the option value', () => {
     const targets = [makeTarget(), makePanelTarget()]
     render(
-      <EstimateAggregation targets={targets} lineItems={[makeLineItem()]} selectedTargetId={null} onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={targets}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[makeTotalLineItem()]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
     )
     const select = screen.getByRole('combobox') as HTMLSelectElement
     const options = within(select).getAllByRole('option') as HTMLOptionElement[]
@@ -59,7 +81,13 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
   it('shows 面番号/盤番号/盤名称 together in the panel option label, not just the panel name (指示3章)', () => {
     const targets = [makeTarget(), makePanelTarget({ banMenno: 3, banNo: 3, name: 'No.1低圧動力盤', id: 'panel:3:3' })]
     render(
-      <EstimateAggregation targets={targets} lineItems={[makeLineItem()]} selectedTargetId={null} onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={targets}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[makeTotalLineItem()]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
     )
     expect(screen.getByText('面番号 3 / 盤番号 3 : No.1低圧動力盤')).toBeInTheDocument()
   })
@@ -68,7 +96,13 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
     const onSelectTarget = vi.fn()
     const targets = [makeTarget(), makePanelTarget()]
     render(
-      <EstimateAggregation targets={targets} lineItems={[makeLineItem()]} selectedTargetId={null} onSelectTarget={onSelectTarget} />,
+      <EstimateAggregation
+        targets={targets}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[makeTotalLineItem()]}
+        selectedTargetId={null}
+        onSelectTarget={onSelectTarget}
+      />,
     )
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'panel:1:1' } })
     expect(onSelectTarget).toHaveBeenCalledWith('panel:1:1')
@@ -78,7 +112,13 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
     const onSelectTarget = vi.fn()
     const targets = [makeTarget(), makePanelTarget()]
     render(
-      <EstimateAggregation targets={targets} lineItems={[makeLineItem()]} selectedTargetId="panel:1:1" onSelectTarget={onSelectTarget} />,
+      <EstimateAggregation
+        targets={targets}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[]}
+        selectedTargetId="panel:1:1"
+        onSelectTarget={onSelectTarget}
+      />,
     )
     fireEvent.change(screen.getByRole('combobox'), { target: { value: '' } })
     expect(onSelectTarget).toHaveBeenCalledWith(null)
@@ -87,7 +127,13 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
   it('shows code/content/unit price/quantity/amount as independent table columns, not the old formula-style display (指示6章/7章)', () => {
     const item = makeLineItem({ unitPrice: 241400, quantity: 1, amount: 241400, code: '11576', content: 'IS2-922' })
     render(
-      <EstimateAggregation targets={[makeTarget()]} lineItems={[item]} selectedTargetId={null} onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[item]}
+        totalLineItems={[makeTotalLineItem(item)]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
     )
     const table = screen.getByRole('table')
     const row = within(table).getByText('11576').closest('tr') as HTMLElement
@@ -103,7 +149,13 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
   it('renders a negative unit price / amount without breaking the layout', () => {
     const item = makeLineItem({ code: '18330', content: '側面扉（無）', unitPrice: -9700, amount: -9700 })
     render(
-      <EstimateAggregation targets={[makeTarget()]} lineItems={[item]} selectedTargetId={null} onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[item]}
+        totalLineItems={[makeTotalLineItem(item)]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
     )
     const table = screen.getByRole('table')
     expect(within(table).getAllByText('-9,700円').length).toBeGreaterThanOrEqual(2) // 単価列・金額列(・小計)
@@ -112,7 +164,13 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
   it('renders quantity > 1 with the correct multiplied amount', () => {
     const item = makeLineItem({ quantity: 2, unitPrice: 50000, amount: 100000 })
     render(
-      <EstimateAggregation targets={[makeTarget()]} lineItems={[item]} selectedTargetId={null} onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[item]}
+        totalLineItems={[makeTotalLineItem(item)]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
     )
     const table = screen.getByRole('table')
     const row = within(table).getByText('18311').closest('tr') as HTMLElement
@@ -122,7 +180,13 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
 
   it('labels the unit price column as provisional ("単価(暫定)"), not a confirmed official price (指示10章)', () => {
     render(
-      <EstimateAggregation targets={[makeTarget()]} lineItems={[makeLineItem()]} selectedTargetId={null} onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[makeTotalLineItem()]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
     )
     expect(screen.getByText('単価(暫定)')).toBeInTheDocument()
     expect(screen.getByText(/総合価格A/)).toBeInTheDocument()
@@ -135,7 +199,13 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
       makeLineItem({ id: 'b', targetId: 'panel:1:1', code: '11576', amount: 241400 }),
     ]
     render(
-      <EstimateAggregation targets={targets} lineItems={items} selectedTargetId="panel:1:1" onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={targets}
+        lineItems={items}
+        totalLineItems={[]}
+        selectedTargetId="panel:1:1"
+        onSelectTarget={() => {}}
+      />,
     )
     expect(screen.queryByText('18311')).not.toBeInTheDocument()
     expect(screen.getByText('11576')).toBeInTheDocument()
@@ -150,47 +220,91 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
     const targets = [makeTarget()]
     const items = [makeLineItem({ id: 'a', targetId: 'product', amount: 23100 })]
     render(
-      <EstimateAggregation targets={targets} lineItems={items} selectedTargetId="product" onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={targets}
+        lineItems={items}
+        totalLineItems={[]}
+        selectedTargetId="product"
+        onSelectTarget={() => {}}
+      />,
     )
     expect(screen.getByText(/製品全体 小計/)).toBeInTheDocument()
     expect(screen.getAllByText('23,100円').length).toBeGreaterThan(0)
   })
 
-  it('shows all items across all targets with a target badge when 総合計 (null) is selected', () => {
+  it('shows all items across all targets, sourced from totalLineItems (not a simple concat of per-target lineItems), when 総合計 (null) is selected (Sekisan Navi 追加修正指示: 積算集約の数量集約)', () => {
     const targets = [makeTarget(), makePanelTarget()]
-    const items = [
-      makeLineItem({ id: 'a', targetId: 'product', code: '18311', amount: 23100 }),
-      makeLineItem({ id: 'b', targetId: 'panel:1:1', code: '11576', amount: 241400 }),
+    // lineItems(対象別)は「積算コードN件」の内訳件数表示にのみ使われる別集計のため、
+    // 空でないダミー値を与えておく(このテストの主眼はtotalLineItemsの描画確認)。
+    const perTargetForCount = [
+      makeLineItem({ id: 'a-per-target', targetId: 'product', code: '18311' }),
+      makeLineItem({ id: 'b-per-target', targetId: 'panel:1:1', code: '11576' }),
+    ]
+    const totals = [
+      makeTotalLineItem({ id: 'a', code: '18311', amount: 23100 }),
+      makeTotalLineItem({ id: 'b', code: '11576', amount: 241400 }),
     ]
     render(
-      <EstimateAggregation targets={targets} lineItems={items} selectedTargetId={null} onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={targets}
+        lineItems={perTargetForCount}
+        totalLineItems={totals}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
     )
     const table = screen.getByRole('table')
     expect(within(table).getByText('18311')).toBeInTheDocument()
     expect(within(table).getByText('11576')).toBeInTheDocument()
-    expect(within(table).getByText('製品全体')).toBeInTheDocument() // 対象バッジ
-    expect(within(table).getByText('高圧受電盤')).toBeInTheDocument() // 対象バッジ
     expect(screen.getByText(/製番合計/)).toBeInTheDocument()
   })
 
-  it('shows 製番合計 as the sum of ALL items when 総合計 (null) is selected (積算対象連動の金額表示・図面一覧絞り込み 指示3章: 総合計=全対象の合計)', () => {
+  it('does not show a per-row target badge for 総合計 rows, since a totalLineItems row can represent multiple targets merged together (指示14章: 単一Detectionへのpersistent selectionのような誤解を招く表示にしない)', () => {
     const targets = [makeTarget(), makePanelTarget()]
-    const items = [
-      makeLineItem({ id: 'a', targetId: 'product', amount: 23100 }),
-      makeLineItem({ id: 'b', targetId: 'panel:1:1', amount: 241400 }),
+    const totals = [makeTotalLineItem({ id: 'a', code: '18311', amount: 23100 })]
+    render(
+      <EstimateAggregation
+        targets={targets}
+        lineItems={[makeLineItem({ code: '18311' })]}
+        totalLineItems={totals}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    expect(document.querySelector('.estimate-aggregation__badge--target')).toBeNull()
+  })
+
+  it('shows 製番合計 as the sum of totalLineItems amounts when 総合計 (null) is selected (積算対象連動の金額表示・図面一覧絞り込み 指示3章: 総合計=全対象の合計)', () => {
+    const targets = [makeTarget(), makePanelTarget()]
+    const perTargetForCount = [makeLineItem({ id: 'a-per-target', targetId: 'product' })]
+    const totals = [
+      makeTotalLineItem({ id: 'a', amount: 23100 }),
+      makeTotalLineItem({ id: 'b', amount: 241400 }),
     ]
     render(
-      <EstimateAggregation targets={targets} lineItems={items} selectedTargetId={null} onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={targets}
+        lineItems={perTargetForCount}
+        totalLineItems={totals}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
     )
     expect(screen.getByText(/製番合計/)).toBeInTheDocument()
-    expect(screen.getByText('264,500円')).toBeInTheDocument() // 23100+241400、総合計は全体合計のまま
+    expect(screen.getByText('264,500円')).toBeInTheDocument() // 23100+241400
   })
 
   it('does not render a duplicate subtotal element anywhere (指示2章: 上下で別々に再計算・二重表示しない、金額表示は1箇所のみ)', () => {
     const targets = [makeTarget(), makePanelTarget()]
     const items = [makeLineItem({ id: 'a', targetId: 'panel:1:1', amount: 241400 })]
     render(
-      <EstimateAggregation targets={targets} lineItems={items} selectedTargetId="panel:1:1" onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={targets}
+        lineItems={items}
+        totalLineItems={[]}
+        selectedTargetId="panel:1:1"
+        onSelectTarget={() => {}}
+      />,
     )
     // 旧`.estimate-aggregation__subtotal`(表下部の対象別小計)は削除済みで、
     // 金額表示は`.estimate-aggregation__grand-total`(上部)の1箇所のみになる。
@@ -203,7 +317,13 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
     const targets = [makeTarget(), tieTarget]
     const item = makeLineItem({ targetId: '__tie__' })
     render(
-      <EstimateAggregation targets={targets} lineItems={[item]} selectedTargetId="__tie__" onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={targets}
+        lineItems={[item]}
+        totalLineItems={[]}
+        selectedTargetId="__tie__"
+        onSelectTarget={() => {}}
+      />,
     )
     expect(screen.getByText(/機械的に一意の盤へ決定/)).toBeInTheDocument()
   })
@@ -211,7 +331,13 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
   it('shows "未設定" for unit price and "-" for amount when the master item has no total_price_a, without fabricating a value', () => {
     const item = makeLineItem({ unitPrice: null, amount: null })
     render(
-      <EstimateAggregation targets={[makeTarget()]} lineItems={[item]} selectedTargetId={null} onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[item]}
+        totalLineItems={[makeTotalLineItem(item)]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
     )
     const table = screen.getByRole('table')
     expect(within(table).getByText('未設定')).toBeInTheDocument()
@@ -220,7 +346,13 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
 
   it('keeps the table header sticky so it stays visible while the body scrolls (盤フォーカス・積算明細再設計 指示5章)', () => {
     render(
-      <EstimateAggregation targets={[makeTarget()]} lineItems={[makeLineItem()]} selectedTargetId={null} onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[makeTotalLineItem()]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
     )
     const th = screen.getAllByRole('columnheader')[0]
     expect(getComputedStyle(th).position).toBe('sticky')
@@ -228,7 +360,13 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
 
   it('places the amount summary outside the scrolling table area so it stays visible (指示5章/積算対象連動の金額表示・図面一覧絞り込み指示2章: 金額表示を上部へ統合しても固定表示は維持)', () => {
     render(
-      <EstimateAggregation targets={[makeTarget()]} lineItems={[makeLineItem()]} selectedTargetId={null} onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[makeTotalLineItem()]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
     )
     const scrollArea = document.querySelector('.estimate-aggregation__table-scroll')
     const grandTotal = document.querySelector('.estimate-aggregation__grand-total')
@@ -239,13 +377,79 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
   it('highlights the target select when Viewer is focused on a specific target (individual panel), not when 総合計 is selected', () => {
     const targets = [makeTarget(), makePanelTarget()]
     const { rerender } = render(
-      <EstimateAggregation targets={targets} lineItems={[makeLineItem()]} selectedTargetId={null} onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={targets}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[makeTotalLineItem()]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
     )
     expect(screen.getByRole('combobox').className).not.toContain('--focused')
 
     rerender(
-      <EstimateAggregation targets={targets} lineItems={[makeLineItem()]} selectedTargetId="panel:1:1" onSelectTarget={() => {}} />,
+      <EstimateAggregation
+        targets={targets}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[makeTotalLineItem()]}
+        selectedTargetId="panel:1:1"
+        onSelectTarget={() => {}}
+      />,
     )
     expect(screen.getByRole('combobox').className).toContain('--focused')
+  })
+})
+
+describe('EstimateAggregation: 総合計での対象横断な数量集約 (Sekisan Navi 追加修正指示: 積算集約の数量集約)', () => {
+  it('renders one row per totalLineItems entry (already pre-merged), with the given quantity/amount, when 総合計 is selected', () => {
+    const targets = [makeTarget(), makePanelTarget()]
+    // 実際の対象横断集約(masterItemId+source単位でquantity/amountを合算する処理)は
+    // estimateAggregationReal.test.ts側で検証する。ここではコンポーネントが
+    // totalLineItemsをそのまま(対象で絞り込まずに)描画することだけを確認する。
+    const merged = makeTotalLineItem({ code: '18311', quantity: 5, unitPrice: 23100, amount: 115500 })
+    render(
+      <EstimateAggregation
+        targets={targets}
+        lineItems={[makeLineItem({ code: '18311' })]}
+        totalLineItems={[merged]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    const table = screen.getByRole('table')
+    // 18311が複数行に分かれず、1行だけであること。
+    expect(within(table).getAllByText('18311')).toHaveLength(1)
+    const row = within(table).getByText('18311').closest('tr') as HTMLElement
+    expect(within(row).getByText('5')).toBeInTheDocument() // 数量
+    expect(within(row).getByText('115,500円')).toBeInTheDocument() // 金額 = 単価×数量
+  })
+
+  it('re-aggregates to the correct quantity when the target changes from 総合計 to an individual panel (指示: 対象変更時に正しい数量へ再集約)', () => {
+    const targets = [makeTarget(), makePanelTarget()]
+    const totalMerged = makeTotalLineItem({ code: '18311', quantity: 5, unitPrice: 23100, amount: 115500 })
+    const perPanel = makeLineItem({ id: 'panel:1:1:10:manual', targetId: 'panel:1:1', code: '18311', quantity: 2, unitPrice: 23100, amount: 46200 })
+    const { rerender } = render(
+      <EstimateAggregation
+        targets={targets}
+        lineItems={[perPanel]}
+        totalLineItems={[totalMerged]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    expect(within(screen.getByRole('table')).getByText('5')).toBeInTheDocument()
+
+    rerender(
+      <EstimateAggregation
+        targets={targets}
+        lineItems={[perPanel]}
+        totalLineItems={[totalMerged]}
+        selectedTargetId="panel:1:1"
+        onSelectTarget={() => {}}
+      />,
+    )
+    // 個別盤選択時は対象別lineItems(この盤だけの正しい数量2)を使う。
+    expect(within(screen.getByRole('table')).getByText('2')).toBeInTheDocument()
+    expect(within(screen.getByRole('table')).getByText('46,200円')).toBeInTheDocument()
   })
 })

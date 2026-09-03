@@ -8,9 +8,13 @@
   height: 100vh;
 }
 
+/* UI視覚階層改善 第5ラウンド 指示9章/18章: 共通Status token(index.css)を
+   参照する。旧#991b1b(red-800)はEstimateDetailの×記号(#b91c1c, red-700)と
+   別系統だったため、--status-errorへ統一した(値は変わるが同系統の赤で
+   視覚差はごく僅か)。 */
 .app-layout__error {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--status-error-soft-bg);
+  color: var(--status-error);
   padding: 0.4rem 1rem;
   font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
   display: flex;
@@ -21,9 +25,9 @@
 
 .app-layout__error button {
   padding: 0.2rem 0.7rem;
-  border: 1px solid #991b1b;
+  border: 1px solid var(--status-error);
   background: #fff;
-  color: #991b1b;
+  color: var(--status-error);
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.82rem→引き上げ */
@@ -37,13 +41,16 @@
 /* 積算明細強化・Undo/Redo・要確認警告・編集追従 指示7章: 要確認(BBox所属判定で
    複数盤と同値交差した項目)の全体警告。既存のエラーバナー(赤系)とは区別し、
    EstimateAggregation.cssの`--warn`系と同じ配色(琥珀色)にする。クリック可能な
-   ことが分かるよう<button>にし、ホバーで少し濃くする。 */
+   ことが分かるよう<button>にし、ホバーで少し濃くする。
+   UI視覚階層改善 第5ラウンド 指示9章/11章: Warning系の共通token(index.css)を
+   参照する。「確認待ち」(Header, 濃色+白文字)とは強度を変えた「淡色+濃色文字」
+   の表現のまま、値そのものは変更していない。 */
 .app-layout__tie-warning {
   display: block;
   width: 100%;
   text-align: left;
-  background: rgba(180, 83, 9, 0.12);
-  color: #92400e;
+  background: var(--status-warning-soft-bg);
+  color: var(--status-warning-text);
   border: none;
   border-bottom: 1px solid rgba(180, 83, 9, 0.3);
   padding: 0.45rem 1rem;
@@ -148,7 +155,10 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-left: 1px solid #e5e7eb;
+  /* UI視覚階層改善 指示8章/23章: Viewer|右ペインの大領域境界(Level1)。
+     画面上で特に大きな役割境界のため、表内部の罫線とは明確に違って見える
+     トーンにする。幅は1pxのまま(太い枠は使わない、指示8章)。 */
+  border-left: 1px solid var(--border-region);
 }
 
 /* 盤情報1行化・3領域リサイズ拡張・Redo時引出線回帰修正 指示3章/5章:

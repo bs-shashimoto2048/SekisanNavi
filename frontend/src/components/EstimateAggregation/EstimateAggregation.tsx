@@ -11,7 +11,12 @@ const ALL_OPTION_VALUE = ''
 
 interface Props {
   targets: EstimateTarget[]
+  /** 対象別に数量集約した行(個別盤/製品全体/要確認を選んでいる間、対象idで
+   * 絞り込んで使う)。 */
   lineItems: EstimateLineItem[]
+  /** 「総合計」専用に、対象を横断してmasterItemId+情報源単位で再集約した行
+   * (Sekisan Navi 追加修正指示: 積算集約の数量集約 6章)。`targetId`は常にnull。 */
+  totalLineItems: EstimateLineItem[]
   /** 現在選択中の対象。nullは「総合計」(フィルタなし、全対象合算)を表す。
    * 積算明細(③)・Viewer盤フォーカスと共有する状態のため、App.tsxで一元管理し、
    * ここへcontrolledで渡す。 */
@@ -102,20 +107,25 @@ function headerAmountLabel(selectedTargetId: string | null, target: EstimateTarg
  * `position:sticky`を使い、上部金額は`<table>`の外(スクロール領域の外)に置くことで
  * 確実に常時見えるようにしている。
  */
-export function EstimateAggregation({ targets, lineItems, selectedTargetId, onSelectTarget }: Props) {
+export function EstimateAggregation({ targets, lineItems, totalLineItems, selectedTargetId, onSelectTarget }: Props) {
   const totalCodeCount = lineItems.reduce((sum, item) => sum + item.detectionIds.length, 0)
 
-  const showTargetBadge = selectedTargetId == null
   const targetNameById = useMemo(() => {
     const map = new Map<string, string>()
     for (const t of targets) map.set(t.id, t.name)
     return map
   }, [targets])
 
+  // Sekisan Navi 追加修正指示(積算集約の数量集約) 6章: 「総合計」選択時
+  // (selectedTargetId===null)は対象別`lineItems`を単純結合するのではなく、
+  // 対象を横断して既にmasterItemId+情報源単位で集約済みの`totalLineItems`を使う。
+  // これにより、同一積算コードが複数の盤にまたがっていても総合計では1行にまとまる。
+  // 個別盤/製品全体/要確認を選択している間は、従来どおり対象別`lineItems`を
+  // 対象idで絞り込む(この時点で既に対象内で数量集約済みのため、絞り込むだけでよい)。
   const visibleItems = useMemo(
     () =>
-      selectedTargetId == null ? lineItems : lineItems.filter((item) => item.targetId === selectedTargetId),
-    [lineItems, selectedTargetId],
+      selectedTargetId == null ? totalLineItems : lineItems.filter((item) => item.targetId === selectedTargetId),
+    [lineItems, totalLineItems, selectedTargetId],
   )
   // 上部金額表示 (旧: 「製番合計」固定 + 表下部の「対象別小計」の2箇所) を
   // この1つの計算へ統合した (指示2章/3章)。総合計選択時はvisibleItems===lineItems
@@ -206,9 +216,17 @@ export function EstimateAggregation({ targets, lineItems, selectedTargetId, onSe
                   <tr key={item.id}>
                     <td className="estimate-aggregation__col-code">{item.code}</td>
                     <td className="estimate-aggregation__col-content">
-                      {showTargetBadge && (
+                      {/* 対象バッジは「この行がどの対象に属するか」を示すためのもの。
+                          個別盤/製品全体/要確認を選択中の行は対象idを持つが、対象自体が
+                          表示上部で既に分かっているため出さない(従来どおり)。「総合計」
+                          は対象を横断して集約した行(item.targetId===null)のため、
+                          単一の対象を代表できずバッジ自体を出さない(Sekisan Navi
+                          追加修正指示: 積算集約の数量集約 14章「単一Detectionへ
+                          persistent selectionするような挙動にはしない」の趣旨に沿い、
+                          誤解を招くバッジ表示はしない)。 */}
+                      {item.targetId != null && targetNameById.has(item.targetId) && (
                         <span className="estimate-aggregation__badge estimate-aggregation__badge--target">
-                          {targetNameById.get(item.targetId) ?? '-'}
+                          {targetNameById.get(item.targetId)}
                         </span>
                       )}
                       <span className="estimate-aggregation__content-text">{item.content}</span>

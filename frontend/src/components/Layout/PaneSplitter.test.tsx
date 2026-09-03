@@ -58,6 +58,44 @@ describe('PaneSplitter', () => {
   })
 })
 
+describe('PaneSplitter: 視覚階層改善 (grip・hover/drag状態・既存a11y仕様の維持)', () => {
+  it('renders a grip element for the visual handle, without changing the accessible name/role', () => {
+    render(<PaneSplitter onDrag={() => {}} ariaLabel="テスト境界" />)
+    const handle = screen.getByRole('separator', { name: 'テスト境界' })
+    // gripは装飾のみ(aria-hidden)であり、role/aria-labelはハンドル自身が持つ
+    // 既存仕様のまま変わらないことを確認する。
+    const grip = handle.querySelector('.pane-splitter__grip')
+    expect(grip).not.toBeNull()
+    expect(grip?.getAttribute('aria-hidden')).toBe('true')
+    expect(handle.getAttribute('aria-label')).toBe('テスト境界')
+  })
+
+  it('does not carry the --dragging modifier class before any interaction', () => {
+    render(<PaneSplitter onDrag={() => {}} ariaLabel="テスト境界" />)
+    const handle = screen.getByRole('separator', { name: 'テスト境界' })
+    expect(handle.className).not.toContain('pane-splitter--dragging')
+  })
+
+  it('adds a --dragging modifier class while dragging, and removes it on mouseup', () => {
+    render(<PaneSplitter onDrag={() => {}} ariaLabel="テスト境界" />)
+    const handle = screen.getByRole('separator', { name: 'テスト境界' })
+
+    fireEvent.mouseDown(handle, { clientX: 100, button: 0 })
+    expect(handle.className).toContain('pane-splitter--dragging')
+
+    fireEvent.mouseUp(window, { clientX: 100 })
+    expect(handle.className).not.toContain('pane-splitter--dragging')
+  })
+
+  it('does not add the --dragging modifier class for a non-primary mouse button', () => {
+    render(<PaneSplitter onDrag={() => {}} ariaLabel="テスト境界" />)
+    const handle = screen.getByRole('separator', { name: 'テスト境界' })
+
+    fireEvent.mouseDown(handle, { clientX: 100, button: 2 })
+    expect(handle.className).not.toContain('pane-splitter--dragging')
+  })
+})
+
 describe('PaneSplitter with axis="y" (Phase 1.11 UI改修指示24章: Master領域の高さ変更)', () => {
   it('tracks vertical movement (clientY) instead of horizontal when axis="y"', () => {
     const onDrag = vi.fn()

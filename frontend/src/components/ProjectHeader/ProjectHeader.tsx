@@ -19,7 +19,12 @@ interface Props {
 export function ProjectHeader({ project, loading, onOpenProductViewer, onOpenSystemSettings }: Props) {
   return (
     <header className="project-header">
-      <div className="project-header__title">Sekisan Navi / 積算ナビ</div>
+      {/* UI視覚階層改善 指示6章: 表示名のみ「Sekisan Navi」へ変更する。
+          repository名・package名・directory名・Backend名称等の内部識別子は対象外。
+          UI視覚階層改善 追加修正(タイトルSaaS化): 整理番号・製番等のHeader業務情報
+          (`project-header__info`)とは別の専用class(`__brand`)にし、タイポグラフィ
+          だけでプロダクト名らしく見せる(画像/SVG/Canvasロゴは作らない)。 */}
+      <span className="project-header__brand">Sekisan Navi</span>
       {loading && <div className="project-header__loading">読込中...</div>}
       {project && (
         <div className="project-header__info">

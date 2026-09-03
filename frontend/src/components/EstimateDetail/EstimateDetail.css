@@ -14,15 +14,21 @@
 }
 
 /* 3領域(盤情報・積算集約・積算明細)の見出しを統一する (指示9章)。
-   薄いコバルトブルー背景で「主要ブロックの先頭」であることを一目で示す。 */
+   薄いコバルトブルー背景で「主要ブロックの先頭」であることを一目で示す。
+   UI視覚階層改善 指示10章/11章: 左アクセントバーを追加する。背景色は既存の
+   #eff6ffを維持する(#dbeafeは.estimate-detail__row--current-pageの意味色と
+   重複するため使わない。指示25章)。padding/font-sizeは変えず、高さは維持する
+   (border-bottomはbox-shadowで表現)。 */
 .estimate-detail__heading {
   font-size: 0.98rem; /* 全体フォント拡大 指示1章 */
   font-weight: 700;
   color: #1e3a8a;
   background: #eff6ff;
+  border-left: 3px solid var(--accent-section);
+  box-shadow: inset 0 -1px 0 0 #93c5fd;
   margin: 0 0 0.4rem;
   padding: 0.3rem 0.5rem;
-  border-radius: 4px;
+  border-radius: 0 4px 4px 0;
 }
 
 .estimate-detail__source-tabs {
@@ -73,6 +79,8 @@
   overflow: auto;
   container-type: inline-size;
   container-name: estimate-detail-table;
+  /* UI視覚階層改善 指示13章: 表外周(Level3)をセル内部の罫線より明確にする。 */
+  border-top: 1px solid var(--border-table-outer);
 }
 
 .estimate-detail__table {
@@ -176,7 +184,9 @@
   white-space: nowrap;
   text-align: left;
   background: #f1f5f9;
-  border-bottom: 1px solid #e2e8f0;
+  /* UI視覚階層改善 指示13章: table headerの下線をデータ行同士の罫線
+     (td側 #f1f5f9)より明確にする。幅は1pxのまま、色のみ強める。 */
+  border-bottom: 1px solid var(--border-table-outer);
 }
 
 .estimate-detail__table td {
@@ -225,17 +235,20 @@
   line-height: 1;
 }
 
+/* UI視覚階層改善 第5ラウンド 指示9章/18章: 共通Status token(index.css)を
+   参照する。値そのものはこのファイルが正としてきた既存の値のままで、
+   Header等の他箇所をこちらへ揃えた(トークン化しただけで見た目は変わらない)。 */
 .estimate-detail__status--reviewed {
-  color: #15803d;
+  color: var(--status-success);
 }
 
 .estimate-detail__status--needs_review,
 .estimate-detail__status--pending {
-  color: #b45309;
+  color: var(--status-warning-accent);
 }
 
 .estimate-detail__status--excluded {
-  color: #b91c1c;
+  color: var(--status-error);
 }
 
 /* 図面セルはクリックでViewer遷移。リンクだと分かる下線+青字+Hover変化にする
