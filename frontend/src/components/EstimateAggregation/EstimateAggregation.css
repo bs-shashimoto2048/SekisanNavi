@@ -194,6 +194,45 @@
   border-bottom: 1px solid var(--border-table-outer);
 }
 
+/* ソート可能なヘッダボタン (PR #2 追加修正指示: 積算集約テーブルにソート機能を追加
+   6章/18章/19章)。積算明細(.estimate-detail__sort-button)と同じ見た目・余白にし、
+   情報密度(ヘッダの高さ・padding)を変えない。ボタンは<th>のpadding領域を
+   width:100%で埋めるだけで、新たな余白は追加していない。 */
+.estimate-aggregation__sort-button {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.estimate-aggregation__sort-button:hover {
+  color: #1d4ed8;
+}
+
+.estimate-aggregation__sort-indicator {
+  font-size: 0.78rem;
+  color: #2563eb;
+}
+
+/* 単価・数量・金額はデータ行が右寄せ(下記col-price/col-qty/col-amountの
+   text-align:right)のため、ソートボタン内の見出しラベルも右寄せにして列内の
+   整列を保つ(積算明細にはない右寄せ列のための追加対応。フォント・余白は
+   変えていない)。 */
+.estimate-aggregation__table th.estimate-aggregation__col-price .estimate-aggregation__sort-button,
+.estimate-aggregation__table th.estimate-aggregation__col-qty .estimate-aggregation__sort-button,
+.estimate-aggregation__table th.estimate-aggregation__col-amount .estimate-aggregation__sort-button {
+  justify-content: flex-end;
+  text-align: right;
+}
+
 .estimate-aggregation__table td {
   padding: 0.25rem 0.3rem;
   border-bottom: 1px solid #f3f4f6;

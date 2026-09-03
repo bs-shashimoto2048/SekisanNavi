@@ -1,7 +1,8 @@
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { EstimateAggregation } from './EstimateAggregation'
-import type { EstimateLineItem, EstimateTarget } from '../../types/estimateAggregation'
+import { EstimateDetail } from '../EstimateDetail/EstimateDetail'
+import type { EstimateDetailItem, EstimateLineItem, EstimateTarget } from '../../types/estimateAggregation'
 
 function makeTarget(overrides: Partial<EstimateTarget> = {}): EstimateTarget {
   return { id: 'product', type: 'product', name: '製品全体', banMenno: null, banNo: null, ...overrides }
@@ -451,5 +452,355 @@ describe('EstimateAggregation: 総合計での対象横断な数量集約 (Sekis
     // 個別盤選択時は対象別lineItems(この盤だけの正しい数量2)を使う。
     expect(within(screen.getByRole('table')).getByText('2')).toBeInTheDocument()
     expect(within(screen.getByRole('table')).getByText('46,200円')).toBeInTheDocument()
+  })
+})
+
+// Sekisan Navi PR #2 追加修正指示: 積算集約テーブルにソート機能を追加。
+describe('EstimateAggregation: ソート機能 (PR #2 追加修正指示: 積算集約テーブルにソート機能を追加)', () => {
+  function codeColumnValues(table: HTMLElement = screen.getByRole('table')): string[] {
+    return within(table)
+      .getAllByRole('row')
+      .slice(1) // ヘッダ行を除く
+      .map((row) => row.querySelector('.estimate-aggregation__col-code')?.textContent ?? '')
+  }
+
+  // 積算明細と同時に描画するテスト(<table>が複数存在する)では、
+  // 対象の積算集約テーブル要素を明示的に渡してscopeする。
+  function sortButton(label: string, table: HTMLElement = screen.getByRole('table')): HTMLElement {
+    return within(table).getByRole('button', { name: `${label}でソート` })
+  }
+
+  it('defaults to code-ascending order with "コード ▲" shown as the initial sort indicator (3章/8章)', () => {
+    const items = [
+      makeTotalLineItem({ id: 'a', code: '18001' }),
+      makeTotalLineItem({ id: 'b', code: '11001' }),
+      makeTotalLineItem({ id: 'c', code: '11526' }),
+    ]
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={items}
+        totalLineItems={items}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    expect(codeColumnValues()).toEqual(['11001', '11526', '18001'])
+    const codeHeaderButton = sortButton('コード')
+    expect(codeHeaderButton.textContent).toContain('▲')
+    // 他の列には現在ソート中でないことを示すため、インジケータを出さない。
+    expect(sortButton('内容').textContent).not.toMatch(/[▲▼]/)
+  })
+
+  it('sorts the code column numerically, not lexicographically (4章: "2" < "10" < "100")', () => {
+    const items = [
+      makeTotalLineItem({ id: 'a', code: '100' }),
+      makeTotalLineItem({ id: 'b', code: '2' }),
+      makeTotalLineItem({ id: 'c', code: '10' }),
+    ]
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={items}
+        totalLineItems={items}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    expect(codeColumnValues()).toEqual(['2', '10', '100'])
+
+    fireEvent.click(sortButton('コード'))
+    expect(sortButton('コード').textContent).toContain('▼')
+    expect(codeColumnValues()).toEqual(['100', '10', '2'])
+  })
+
+  it('toggles a column between ascending (1st click) and descending (2nd click), matching 積算明細 behavior (6章)', () => {
+    const items = [
+      makeTotalLineItem({ id: 'a', code: '11001', quantity: 1 }),
+      makeTotalLineItem({ id: 'b', code: '11002', quantity: 3 }),
+      makeTotalLineItem({ id: 'c', code: '11003', quantity: 2 }),
+    ]
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={items}
+        totalLineItems={items}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    fireEvent.click(sortButton('数量'))
+    expect(sortButton('数量').textContent).toContain('▲')
+    expect(codeColumnValues()).toEqual(['11001', '11003', '11002']) // qty 1,2,3
+
+    fireEvent.click(sortButton('数量'))
+    expect(sortButton('数量').textContent).toContain('▼')
+    expect(codeColumnValues()).toEqual(['11002', '11003', '11001']) // qty 3,2,1
+  })
+
+  it('sorts 内容 using Japanese natural comparison (5章/16章)', () => {
+    const items = [
+      makeTotalLineItem({ id: 'a', code: '1', content: 'アイテム10' }),
+      makeTotalLineItem({ id: 'b', code: '2', content: 'アイテム2' }),
+      makeTotalLineItem({ id: 'c', code: '3', content: 'アイテム1' }),
+    ]
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={items}
+        totalLineItems={items}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    fireEvent.click(sortButton('内容'))
+    // naturalCollator(numeric:true)により、文字列としての桁比較ではなく数値として
+    // 「1」<「2」<「10」の順になる。
+    expect(codeColumnValues()).toEqual(['3', '2', '1'])
+  })
+
+  it('sorts 単価(暫定) numerically, handling negative values (5章/23章)', () => {
+    const items = [
+      makeTotalLineItem({ id: 'a', code: '1', unitPrice: 23100 }),
+      makeTotalLineItem({ id: 'b', code: '2', unitPrice: -9700 }),
+      makeTotalLineItem({ id: 'c', code: '3', unitPrice: 8000 }),
+    ]
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={items}
+        totalLineItems={items}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    fireEvent.click(sortButton('単価(暫定)'))
+    expect(codeColumnValues()).toEqual(['2', '3', '1']) // -9700, 8000, 23100
+
+    fireEvent.click(sortButton('単価(暫定)'))
+    expect(codeColumnValues()).toEqual(['1', '3', '2']) // 23100, 8000, -9700
+  })
+
+  it('sorts 金額 numerically ascending/descending, with negative amounts correctly ordered (22章/23章)', () => {
+    const items = [
+      makeTotalLineItem({ id: 'a', code: '18311', amount: 659400 }),
+      makeTotalLineItem({ id: 'b', code: '18330', amount: -9700 }),
+      makeTotalLineItem({ id: 'c', code: '11576', amount: 23100 }),
+      makeTotalLineItem({ id: 'd', code: '99999', amount: 8000 }),
+    ]
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={items}
+        totalLineItems={items}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    fireEvent.click(sortButton('金額'))
+    expect(codeColumnValues()).toEqual(['18330', '99999', '11576', '18311']) // -9700,8000,23100,659400
+
+    fireEvent.click(sortButton('金額'))
+    expect(codeColumnValues()).toEqual(['18311', '11576', '99999', '18330']) // 659400,23100,8000,-9700
+  })
+
+  it('sorts null/missing unit price values to the end regardless of ascending or descending direction (17章)', () => {
+    const items = [
+      makeTotalLineItem({ id: 'a', code: '1', unitPrice: 100 }),
+      makeTotalLineItem({ id: 'b', code: '2', unitPrice: null, amount: null }),
+      makeTotalLineItem({ id: 'c', code: '3', unitPrice: 50 }),
+    ]
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={items}
+        totalLineItems={items}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    fireEvent.click(sortButton('単価(暫定)'))
+    expect(codeColumnValues()).toEqual(['3', '1', '2']) // 50, 100, (null最後)
+
+    fireEvent.click(sortButton('単価(暫定)'))
+    expect(codeColumnValues()).toEqual(['1', '3', '2']) // 100, 50, (降順でもnullは最後)
+  })
+
+  it('keeps ties in a stable, code-ascending order when the primary sort value is equal (15章)', () => {
+    const items = [
+      makeTotalLineItem({ id: 'a', code: '18002', quantity: 1 }),
+      makeTotalLineItem({ id: 'b', code: '18001', quantity: 1 }),
+      makeTotalLineItem({ id: 'c', code: '18003', quantity: 1 }),
+    ]
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={items}
+        totalLineItems={items}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    fireEvent.click(sortButton('数量')) // 全件quantity=1で同値のため、tie-breakのコード昇順のみが効く
+    expect(codeColumnValues()).toEqual(['18001', '18002', '18003'])
+  })
+
+  it('preserves the user-selected sort when switching targets (総合計→個別盤), instead of resetting to the code-ascending default (9章)', () => {
+    const targets = [makeTarget(), makePanelTarget()]
+    const totals = [
+      makeTotalLineItem({ id: 'a', code: '18311', amount: 659400 }),
+      makeTotalLineItem({ id: 'b', code: '18330', amount: -9700 }),
+      makeTotalLineItem({ id: 'c', code: '11576', amount: 23100 }),
+    ]
+    const perPanel = [
+      makeLineItem({ id: 'x', targetId: 'panel:1:1', code: '18311', amount: 659400 }),
+      makeLineItem({ id: 'y', targetId: 'panel:1:1', code: '18330', amount: -9700 }),
+      makeLineItem({ id: 'z', targetId: 'panel:1:1', code: '11576', amount: 23100 }),
+    ]
+    const { rerender } = render(
+      <EstimateAggregation
+        targets={targets}
+        lineItems={perPanel}
+        totalLineItems={totals}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    fireEvent.click(sortButton('金額'))
+    fireEvent.click(sortButton('金額')) // 降順にする
+    expect(codeColumnValues()).toEqual(['18311', '11576', '18330']) // 659400,23100,-9700
+
+    rerender(
+      <EstimateAggregation
+        targets={targets}
+        lineItems={perPanel}
+        totalLineItems={totals}
+        selectedTargetId="panel:1:1"
+        onSelectTarget={() => {}}
+      />,
+    )
+    // 対象切替後もユーザーが選んだ「金額 降順」が維持される(コード昇順へ戻らない)。
+    expect(sortButton('金額').textContent).toContain('▼')
+    expect(codeColumnValues()).toEqual(['18311', '11576', '18330'])
+  })
+
+  it('preserves the user-selected sort across a data update (e.g. BBox edit / Undo / Redo), not just a target switch (10章)', () => {
+    const items = [
+      makeTotalLineItem({ id: 'a', code: '18311', amount: 659400 }),
+      makeTotalLineItem({ id: 'b', code: '18330', amount: -9700 }),
+      makeTotalLineItem({ id: 'c', code: '11576', amount: 23100 }),
+    ]
+    const { rerender } = render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={items}
+        totalLineItems={items}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    fireEvent.click(sortButton('金額'))
+    expect(codeColumnValues()).toEqual(['18330', '11576', '18311']) // asc: -9700,23100,659400
+
+    // データ更新(新しい配列参照、値も変わる)をシミュレートする。ソートしたのは
+    // 「金額」列であり、ユーザーの選択自体はコンポーネント内部stateのため、
+    // propsが更新されても消えない。
+    const updated = [
+      makeTotalLineItem({ id: 'a', code: '18311', amount: 700000 }),
+      makeTotalLineItem({ id: 'b', code: '18330', amount: -5000 }),
+      makeTotalLineItem({ id: 'c', code: '11576', amount: 10000 }),
+    ]
+    rerender(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={updated}
+        totalLineItems={updated}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    expect(sortButton('金額').textContent).toContain('▲')
+    expect(codeColumnValues()).toEqual(['18330', '11576', '18311']) // asc: -5000,10000,700000
+  })
+
+  it('does not change quantity, amount, or grand total after sorting — sorting only affects display order (12章/24章)', () => {
+    const items = [
+      makeTotalLineItem({ id: 'a', code: '18311', quantity: 4, amount: 92400 }),
+      makeTotalLineItem({ id: 'b', code: '11581', quantity: 2, amount: 659400 }),
+      makeTotalLineItem({ id: 'c', code: '18330', quantity: 1, amount: -9700 }),
+    ]
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={items}
+        totalLineItems={items}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    const grandTotalBefore = document.querySelector('.estimate-aggregation__grand-total')?.textContent
+    fireEvent.click(sortButton('金額'))
+    fireEvent.click(sortButton('コード'))
+    fireEvent.click(sortButton('数量'))
+    const grandTotalAfter = document.querySelector('.estimate-aggregation__grand-total')?.textContent
+    expect(grandTotalAfter).toBe(grandTotalBefore) // 92400+659400-9700=742,100円で不変
+    const table = screen.getByRole('table')
+    const row18311 = within(table).getByText('18311').closest('tr') as HTMLElement
+    expect(within(row18311).getByText('4')).toBeInTheDocument()
+    expect(within(row18311).getByText('92,400円')).toBeInTheDocument()
+  })
+
+  it('has an independent sort state from 積算明細(EstimateDetail): sorting the aggregation table does not affect EstimateDetail\'s own sort/indicator (14章)', () => {
+    const targets = [makeTarget()]
+    const totals = [
+      makeTotalLineItem({ id: 'a', code: '18311', amount: 659400 }),
+      makeTotalLineItem({ id: 'b', code: '18330', amount: -9700 }),
+    ]
+    const detailItem: EstimateDetailItem = {
+      id: '1',
+      detectionId: 1,
+      drawingPageId: 1,
+      pageNo: 1,
+      targetId: 'product',
+      source: 'manual',
+      masterItemId: 10,
+      code: '18311',
+      itemName: '換気扇',
+      model: null,
+      rating: null,
+      status: 'reviewed',
+      editedAt: null,
+      editSequence: 0,
+    }
+    const { container } = render(
+      <>
+        <EstimateAggregation
+          targets={targets}
+          lineItems={totals}
+          totalLineItems={totals}
+          selectedTargetId={null}
+          onSelectTarget={() => {}}
+        />
+        <EstimateDetail
+          detailItems={[detailItem]}
+          targets={targets}
+          selectedTargetId={null}
+          currentPageNo={null}
+          onNavigateReference={() => {}}
+          onHoverDetail={() => {}}
+          sourceFilter="all"
+          onSourceFilterChange={() => {}}
+        />
+      </>,
+    )
+    const aggregationTable = container.querySelectorAll('table')[0] as HTMLElement
+
+    // 積算明細の初期ソートは「編集順の降順」(積算集約とは無関係の独立したstate)。
+    const detailEditOrderButton = screen.getByRole('button', { name: '編集順でソート' })
+    expect(detailEditOrderButton.textContent).toContain('▼')
+
+    // 積算集約側で「金額」列をソートしても、積算明細のソート状態には一切影響しない。
+    fireEvent.click(sortButton('金額', aggregationTable))
+    expect(screen.getByRole('button', { name: '編集順でソート' }).textContent).toContain('▼')
   })
 })
