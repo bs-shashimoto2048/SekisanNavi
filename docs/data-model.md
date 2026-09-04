@@ -7,34 +7,29 @@ PoC向けデータモデル定義。各項目のステータス(確定/暫定/�
 
 ## 1. 全体ER概要
 
+```mermaid
+erDiagram
+    DrawingFile ||--o{ DrawingPage : "has"
+    DrawingPage ||--o{ PanelArea : "盤範囲Overlay (Phase 1.5)"
+    Panel ||--o{ PanelAttribute : "has"
+    Panel ||--o{ PanelArea : "primary_drawing_page_id"
+    DrawingPage ||--o{ Detection : "has"
+    Panel |o--o{ Detection : "panel_id (nullable)"
+    EstimateMasterItem |o--o{ Detection : "master_item_id (nullable, Phase 1.6)"
+    EstimateItem ||--o{ EstimateReference : "has"
+    DrawingPage ||--o{ EstimateReference : "根拠図面"
+    Detection |o--o{ EstimateReference : "detection_id (nullable)"
+    Panel |o--o{ EstimateReference : "panel_id (nullable)"
+    estimate_confirmations ||--o{ estimate_confirmation_items : "has"
 ```
-DrawingFile 1 ── n DrawingPage
-                     │ 1
-                     │
-                     n
-Panel 1 ── n PanelAttribute
-  │ 1                    │ 1
-  │ n (primary_...)       │ n
-  │                       ▼
-  │                  PanelArea ── n DrawingPage (盤範囲Overlay。Phase 1.5で追加)
-  │
-DrawingPage 1 ── n Detection ── n Panel (nullable)
-                     │
-                     └── n Detection.master_item_id ──> EstimateMasterItem (nullable。Phase 1.6で追加。Manual BBoxの紐付け先)
 
-EstimateMasterItem  (積算コードの辞書。EstimateItemとは別テーブル)
-
-EstimateItem 1 ── n EstimateReference ── (DrawingPage, Detection?, Panel?)
-
-system_settings (key-value。Phase 1.5で追加。データ参照ルート等)
-
-decision_events (Issue #4 Phase A-1で追加。detection_idへのFKなし=歴史的参照。
-                  6.5章)
-
-estimate_confirmations 1 ── n estimate_confirmation_items
-  (Issue #4 Phase B-1で追加。confirmation_idはFKあり、detection_id等はFKなし。
-   6.6章)
-```
+**この図に含まれない独立テーブル**: `system_settings`(key-value、Phase 1.5、
+データ参照ルート等)、`decision_events`(Issue #4 Phase A-1、6.5章)。
+`decision_events.detection_id`は意図的に外部キー制約を持たない歴史的参照のため、
+上記ERには他テーブルとの関係線を引いていない(削除後もこのテーブル単体で
+解釈できる設計。`estimate_confirmation_items`の`detection_id`/`drawing_page_id`も
+同じ理由でFKなし。`estimate_confirmations`→`estimate_confirmation_items`の
+`confirmation_id`のみFKあり。いずれも6.5章/6.6章参照)。
 
 **実データ経路の注意**: 上記ERは主にPhase 0/1のダミーデータ向けテーブル構成を
 表す。実製番(例: A1GV2421)の積算集約・積算明細は`EstimateItem`/

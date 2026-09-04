@@ -6,6 +6,27 @@ Webシステムのプロトタイプ(PoC)。「AIによる完全自動積算シ�
 人の判断を安全に減らしていくための土台という位置付け(詳細は
 [Product Vision](docs/product-vision.md)参照)。
 
+## 画面
+
+![Sekisan Navi 画面全体(サンプルデータ表示時)](docs/assets/screenshot-main.png)
+
+上記は実際に動作しているSekisan Naviの画面キャプチャ。**製番・盤名称・図面・
+積算コードの価格はいずれも安全なサンプルデータ**(実在の企業名・製番・図面を含まない、
+撮影専用のデモ製番`DEMO0001`)であり、実業務データではない。撮影方法・データの
+安全性については[`docs/DOCUMENTATION_REPORT.md`](docs/DOCUMENTATION_REPORT.md)を参照。
+
+### 画面の見方
+
+| 領域 | 内容 |
+|---|---|
+| ヘッダー(最上部) | アプリ名・案件情報(整理番号/製番/盤名称)・解析状態・製番検索/システム設定 |
+| 図面一覧(左) | 製番配下のページをサムネイル表示。種類別にグループ化 |
+| 図面Viewer(中央) | 選択中ページの拡大表示。盤領域・AI検出結果・Manual BBox・引出線を重畳表示 |
+| 積算コードMaster(左下) | 品目検索・カテゴリタブ。行を選んでViewer上へドラッグするとBBoxとして配置される |
+| 盤情報(右上) | 選択中製番の盤ごとの寸法・型式一覧 |
+| 積算集約(右中) | 対象(総合計/製品全体/個別盤/要確認)ごとの数量・金額集計、積算確定ボタン |
+| 積算明細(右下) | 積算コードが紐づいたBBox1件ずつの根拠一覧(どの図面のどの箇所か) |
+
 ## 解決する課題
 
 - 図面・設計データ・AI検出結果が別々に存在し、積算に必要な情報を人手で
@@ -41,7 +62,7 @@ Sekisan Naviは、これらを画面上で完結させ、かつ将来の段階�
 実装状況の詳細な確定/暫定/未確定の区分は [`docs/implementation-plan.md`](docs/implementation-plan.md)
 を参照。
 
-## 基本的な画面構成・操作の流れ
+## 基本操作の流れ
 
 1. 画面上部のヘッダーで現在の案件情報を確認し、「製番を開く」から実製番を検索・選択する。
 2. 左ペイン「図面一覧」でページを選び、中央Viewerで図面・盤領域・検出結果を確認する。
@@ -52,6 +73,27 @@ Sekisan Naviは、これらを画面上で完結させ、かつ将来の段階�
 5. 内容を確認できたら「積算確定する」で、その時点の結果をsnapshotとして確定保存する。
 
 詳細な画面仕様は [`docs/ui-spec.md`](docs/ui-spec.md) を参照。
+
+## Documentation
+
+| Doc | 内容 |
+|---|---|
+| [`docs/product-vision.md`](docs/product-vision.md) | Product Vision — なぜ作るのか・将来の段階的自動化への方向性 |
+| [`docs/architecture.md`](docs/architecture.md) | アーキテクチャ(レイヤー構成・ディレクトリ構成・主要な設計判断、Mermaid図あり) |
+| [`docs/data-model.md`](docs/data-model.md) | データモデル(テーブル定義・状態一覧) |
+| [`docs/api-reference.md`](docs/api-reference.md) | APIリファレンス(現在存在するエンドポイント一覧) |
+| [`docs/ui-spec.md`](docs/ui-spec.md) | UI仕様 |
+| [`docs/tech-stack.md`](docs/tech-stack.md) | 技術スタック一覧(バージョン・用途) |
+| [`docs/configuration.md`](docs/configuration.md) | 設定・環境変数一覧 |
+| [`docs/coding-conventions.md`](docs/coding-conventions.md) | コーディング規約(命名・層構成・テスト方針) |
+| [`docs/known-limitations.md`](docs/known-limitations.md) | 既知の制約・未実装事項 |
+| [`docs/data-source.md`](docs/data-source.md) | 実データソース調査結果 |
+| [`docs/decision-data-gap-analysis.md`](docs/decision-data-gap-analysis.md) | 将来自動化に向けた判断・修正データの保存状況棚卸し |
+| [`docs/decision-event-design.md`](docs/decision-event-design.md) | 判断履歴(`decision_events`)の設計 |
+| [`docs/decision-snapshot-design.md`](docs/decision-snapshot-design.md) | 積算確定snapshotの設計 |
+| [`docs/implementation-plan.md`](docs/implementation-plan.md) | 実装計画・確定/暫定/未確定の分類・各Phaseの実施記録 |
+| [`docs/DOCUMENTATION_REPORT.md`](docs/DOCUMENTATION_REPORT.md) | ドキュメント整備状況のレポート(Issue #11) |
+| [`CLAUDE.md`](CLAUDE.md) | Claude Code向け開発ガイド |
 
 ## 技術構成
 
@@ -147,27 +189,6 @@ cd frontend && npm run build   # 型チェックを兼ねたビルド確認
 
 2026-09時点のmainで、Backend 175件・Frontend 602件(28ファイル)のテストが
 全件成功することを確認済み。
-
-## Documentation
-
-| Doc | 内容 |
-|---|---|
-| [`docs/product-vision.md`](docs/product-vision.md) | Product Vision — なぜ作るのか・将来の段階的自動化への方向性 |
-| [`docs/architecture.md`](docs/architecture.md) | アーキテクチャ(レイヤー構成・ディレクトリ構成・主要な設計判断) |
-| [`docs/data-model.md`](docs/data-model.md) | データモデル(テーブル定義・状態一覧) |
-| [`docs/api-reference.md`](docs/api-reference.md) | APIリファレンス(現在存在するエンドポイント一覧) |
-| [`docs/ui-spec.md`](docs/ui-spec.md) | UI仕様 |
-| [`docs/tech-stack.md`](docs/tech-stack.md) | 技術スタック一覧(バージョン・用途) |
-| [`docs/configuration.md`](docs/configuration.md) | 設定・環境変数一覧 |
-| [`docs/coding-conventions.md`](docs/coding-conventions.md) | コーディング規約(命名・層構成・テスト方針) |
-| [`docs/known-limitations.md`](docs/known-limitations.md) | 既知の制約・未実装事項 |
-| [`docs/data-source.md`](docs/data-source.md) | 実データソース調査結果 |
-| [`docs/decision-data-gap-analysis.md`](docs/decision-data-gap-analysis.md) | 将来自動化に向けた判断・修正データの保存状況棚卸し |
-| [`docs/decision-event-design.md`](docs/decision-event-design.md) | 判断履歴(`decision_events`)の設計 |
-| [`docs/decision-snapshot-design.md`](docs/decision-snapshot-design.md) | 積算確定snapshotの設計 |
-| [`docs/implementation-plan.md`](docs/implementation-plan.md) | 実装計画・確定/暫定/未確定の分類・各Phaseの実施記録 |
-| [`docs/DOCUMENTATION_REPORT.md`](docs/DOCUMENTATION_REPORT.md) | ドキュメント整備状況のレポート(Issue #11) |
-| [`CLAUDE.md`](CLAUDE.md) | Claude Code向け開発ガイド |
 
 ## 重要な前提・現在の制約
 
