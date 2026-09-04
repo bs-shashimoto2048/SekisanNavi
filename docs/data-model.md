@@ -251,6 +251,39 @@ OPA用ｱﾝｸﾞﾙ枠 / 金網 / 入力（主回路銅帯） / 銅帯。
 参照を「Detection未紐付け」として扱う (既存の `reason` 文言で表現するのみで、
 専用の警告表示は今回追加していない。**暫定**)。
 
+## 6.5. DecisionEvent (判断・修正データの最小event記録、Issue #4 Phase A-1で追加)
+
+`detections`テーブルへのcreate/delete/bbox move・resizeの事実だけを
+append-onlyで記録する専用テーブル。設計の詳細・理由付けは
+`docs/decision-event-design.md`を参照。current state(`detections`本体)とは
+完全に独立しており、既存の`detections`/`estimate_master_items`等への
+ALTERは行っていない。
+
+| 列 | 説明 | 状態 |
+|---|---|---|
+| id | PK | 確定 |
+| occurred_at | イベント発生日時(`detections`テーブル自体には`created_at`/`updated_at`が無いため、対応するcreateイベント・直近のbbox_editイベントのこの値が事実上のcreated_at/updated_at相当として機能する) | 確定 |
+| event_type | `create` / `delete` / `bbox_edit`(move/resizeは記録時に区別せず`bbox_edit`へ統合。前後のw/h比較で分析時に判別可能) | 確定(Phase Aの対象はこの3種のみ。積算コード変更・盤所属変更・要確認確定・状態変更・leader_label移動は対応するAPIが無い、またはPhase Aの対象外のため記録されない) |
+| detection_id | 対象のDetection id | **意図的に外部キー制約を持たない**(`PRAGMA foreign_keys=ON`環境で、delete記録時に自己参照によりFK違反が発生するのを避けるため。削除後は下記の非正規化コピー列だけで解釈する) |
+| drawing_page_id / source_type / master_item_id | いずれもイベント発生時点の値の非正規化コピー(Detectionが削除された後もこのイベント単体で解釈できるようにするため、現在の`detections`/`estimate_master_items`へは依存しない) | 確定 |
+| before_bbox_x/y/w/h | 変更前のBBox。createイベントではNULL(作成前は何も無い) | 確定 |
+| after_bbox_x/y/w/h | 変更後のBBox。deleteイベントではNULL(削除後は何も無い) | 確定 |
+
+**bbox自体が実際に変化しない更新は記録しない**: `PATCH /api/detections/{id}`
+はBBox本体と引出線ラベル位置(leader_label_x/y)を同一リクエストで更新できるが、
+leader_label_x/yのみを変更しbbox_x/y/w/hが更新前と同一値のまま送られてきた
+場合は、before==afterの無意味な`bbox_edit`イベントを記録しない。
+
+**Undo/Redoは特別扱いしない**: Frontend側(`editHistory.ts`)のUndo/Redoは
+既存のAPI(create/delete/PATCH)をもう一度呼ぶだけで実現されているため、
+通常の操作と全く同じイベントとしてそのまま記録される。ただし
+create/deleteのUndo/RedoはSQLiteの`AUTOINCREMENT`により新しい`detection_id`が
+払い出されるため、同じ物理的なBBoxのevent履歴が`detection_id`をまたいで
+分断される(bbox_editのUndo/Redoは同一`detection_id`のまま連続する)。
+
+**読み出しAPIは無い(Phase A-1時点)**: このテーブルを返すAPIエンドポイントは
+今回追加していない。Phase A-2で検討する。
+
 ## 7. system_settings (Phase 1.5で追加)
 
 管理者が変更可能なシステム共通設定を key-value で保持する。

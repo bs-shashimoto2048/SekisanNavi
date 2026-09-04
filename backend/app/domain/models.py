@@ -52,6 +52,22 @@ class DetectionSourceType(str, Enum):
     MANUAL = "manual"
 
 
+class DecisionEventType(str, Enum):
+    """判断・修正データ保存(Issue #4 Phase A)のevent種別。
+
+    move/resizeは記録時に区別せず 'bbox_edit' へ統合する
+    (docs/decision-event-design.md 4.1章: 既存Frontend/Undo実装が
+    move/resizeを区別する情報を持たないため。前後のw/h比較で分析時に
+    判別できる)。leader_label(引出線ラベル)の移動・積算コード変更・
+    盤所属変更・要確認確定・状態変更はPhase Aの対象外(対応するAPIが
+    現状存在しないか、Issue #4本文のPhase A対象一覧に含まれていないため)。
+    """
+
+    CREATE = "create"
+    DELETE = "delete"
+    BBOX_EDIT = "bbox_edit"
+
+
 class DrawingPageSourceType(str, Enum):
     """図面ページの取得元 (Phase 1.5)。"""
 
@@ -185,6 +201,39 @@ class Detection:
     # コピーであり将来のMaster Item側の変更に追従しないため、引出線表示は
     # 可能な限りこちらのライブJOIN結果を優先する (指示書12章/14章)。
     master_item_code: str | None = None
+
+
+@dataclass
+class DecisionEvent:
+    """判断・修正データの最小event記録 (Issue #4 Phase A-1)。
+
+    `detections`テーブルへのcreate/delete/bbox move・resizeの事実だけを
+    append-onlyで記録する。current state(`detections`本体)とは責務を分離し、
+    このモデル自体はどのAPIからも返さない(Phase A-1では読み出しAPIを
+    追加しない。docs/decision-event-design.md 10章のPhase A-2で検討する)。
+
+    `detection_id`は意図的に外部キーを持たない設計であるため、参照先の
+    Detectionが既に削除されていても、このモデル自体の情報
+    (drawing_page_id/source_type/master_item_id/before_bbox_*)だけで
+    解釈できるよう、イベント発生時点の値を非正規化コピーとして保持する
+    (`docs/decision-event-design.md` 6章参照)。
+    """
+
+    id: int
+    occurred_at: str
+    event_type: DecisionEventType
+    detection_id: int
+    drawing_page_id: int
+    source_type: DetectionSourceType
+    master_item_id: int | None
+    before_bbox_x: float | None
+    before_bbox_y: float | None
+    before_bbox_w: float | None
+    before_bbox_h: float | None
+    after_bbox_x: float | None
+    after_bbox_y: float | None
+    after_bbox_w: float | None
+    after_bbox_h: float | None
 
 
 @dataclass
