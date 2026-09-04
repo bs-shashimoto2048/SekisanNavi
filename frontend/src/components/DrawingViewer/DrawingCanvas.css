@@ -18,14 +18,42 @@
   pointer-events: none;
 }
 
+/* Viewer上部1行化 指示2章/4章: 旧2行構成(図面名の<h2>をDrawingViewer.tsx側で
+   別行に描画 + このtoolbar)を1行へ統合した。図面名(左)とZoom/Fit/BBox削除(右)を
+   space-betweenで分離するだけで、toolbar自体の高さ(padding/font-size)は変えていない
+   (指示8章/23章: 2行合計より明確に低くなるのは、行そのものを1つ減らした結果)。 */
 .drawing-canvas__toolbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.4rem;
   padding: 0.3rem 0.4rem;
   background: #f9fafb;
   border: 1px solid #d1d5db;
   border-bottom: none;
+}
+
+/* 図面名。旧`.drawing-viewer__heading`と同じ文字サイズ/weight/色を引き継ぐ
+   (指示5章: 視認性を維持する。指示18章: 右ペインsection headerのような青背景には
+   しない。Viewerは引き続き「静かな領域」のまま)。長い図面名だけ省略記号にし、
+   右側の操作系を押し出さない (指示5章/10章)。 */
+.drawing-canvas__title {
+  font-size: 0.98rem; /* 全体フォント拡大 指示1章の値をそのまま踏襲 */
+  font-weight: 700;
+  color: #374151;
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Zoom/Fit/BBox削除等の操作系(右側)。既存の並び順・個々のCSSは変更しない。 */
+.drawing-canvas__toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
 }
 
 .drawing-canvas__toolbar button {

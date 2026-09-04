@@ -154,6 +154,15 @@ Excelのような重い罫線にはせず、「セルは認識できるが罫線
   盤領域Overlayは中央DrawingViewer側にのみ表示する (次項参照)。
 - クリックで選択ページ (製番+ページ番号) を切り替え、DrawingViewerに反映する
   (要件25)。現在選択中のページは青枠で視覚的に選択状態にする (要件26)。
+- **「図面一覧」見出しのデザイン統一 (2026-09 追加修正: Viewer上部1行化 +
+  「図面一覧」見出しデザイン統一)**。`.drawing-navigator__heading`を、右ペイン
+  3領域(盤情報・積算集約・積算明細)の既存section headerデザイン(淡い青背景+
+  左コバルトアクセント+下borderのbox-shadow+同系統の文字色/weight)へ統一した。
+  新しい見出しデザインは作らず、既存のものをそのまま再利用している。
+  グループ見出し(外形図/基礎図/内部機器配置図。`.drawing-navigator__group-title`)
+  は従来どおりグレー・背景無しのまま変更しておらず、「図面一覧(Level1) >
+  外形図等(Level2)」という階層は維持される。padding/margin/font-sizeは既存の
+  情報密度改善方針を維持し、増やしていない。
 
 ## 4. DrawingViewer (中央) — Phase 1.5で実PDF表示化、Phase 1.8で実PNG表示化
 
@@ -167,6 +176,19 @@ Excelのような重い罫線にはせず、「セルは認識できるが罫線
   - ツールバー: 縮小(−) / 拡大(＋) / 現在のzoom% 表示 / Fit to View
     (PNGモードでも同じ操作性を維持。Fitは表示中PNGの縦横比を維持して現在の
     Viewer領域へ合わせる)。
+  - **Viewer header 1行化 (2026-09 追加修正: Viewer上部1行化 + 「図面一覧」見出し
+    デザイン統一)**。旧構成(1行目=図面名の`<h2>`、2行目=このツールバー)を廃止し、
+    図面名(左)とツールバー(右)を`display:flex; justify-content:space-between`の
+    1行へ統合した(`.drawing-canvas__toolbar`。図面名は`DrawingCanvas`へ`title`
+    propとして渡す)。ページ未選択時のみ、従来どおり「図面名」の1行プレースホルダを
+    `DrawingViewer.tsx`側で表示する。ツールバー自体の高さ(padding/font-size)は
+    変えておらず、行を1つ減らした分だけ`.drawing-viewer__stage`(≒Viewer描画領域)
+    の実効高さが直接増える(実ブラウザ実測で、同一viewport・同一ページにおいて
+    Viewer本体(`.drawing-canvas__viewport`)の高さが563px→593px相当に増加、
+    Fit倍率も37%→39%相当まで上がることを確認済み)。図面名はViewerが引き続き
+    「静かな領域」であることを維持するため、右ペインsection headerのような
+    青背景色にはしない(白/淡灰系のまま)。長い図面名は`flex-shrink`+
+    `text-overflow: ellipsis`で省略し、右側の操作系を押し出さない。
   - ズーム: ツールバーのボタンに加え、マウスホイールでも操作可能
     (カーソル位置を基準に拡大縮小)。
   - パン: 図面上をドラッグしてスクロール移動 (BBoxのクリックとは干渉しないよう、

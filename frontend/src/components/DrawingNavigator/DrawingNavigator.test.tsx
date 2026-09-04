@@ -469,3 +469,58 @@ describe('DrawingNavigator (Phase 1.8: PNGサムネイル表示)', () => {
     })
   })
 })
+
+describe('DrawingNavigator: 「図面一覧」見出しデザイン統一 (Sekisan Navi 追加UI修正指示)', () => {
+  // 注記: jsdom(cssstyle)は`border-left: 3px solid var(--accent-section)`のように
+  // shorthand内にvar(...)を含む宣言全体を解決できず(width/styleを含め初期値
+  // 'medium'/'none'のまま)、EstimateMasterPicker.test.tsx等の既存の注記と同じ
+  // 制約に当たる。ここでは確実に解決できるbackground-color(リテラル値)のみで
+  // 検証し、border-leftの実際の描画は実ブラウザ確認で行う。
+  it('gives the "図面一覧" heading the same section-header background as the right pane (盤情報/積算集約/積算明細): pale blue background (12章/13章)', () => {
+    render(
+      <DrawingNavigator pages={[]} selectedPageNo={null} onSelectPage={() => {}} loading={false} error={null} />,
+    )
+    const heading = screen.getByText('図面一覧')
+    const style = getComputedStyle(heading)
+    expect(style.backgroundColor).toBe('rgb(239, 246, 255)') // #eff6ff、右ペイン3見出しと同じ
+    expect(style.fontWeight).toBe('700')
+  })
+
+  it('keeps the group title (外形図/基礎図/内部機器配置図) visually distinct from — and lighter than — the new section-header design (16章/17章: Level1/Level2の階層を維持する)', () => {
+    const pages = [makePage({ page_no: 16, drawing_type: '外形図' })]
+    render(
+      <DrawingNavigator pages={pages} selectedPageNo={null} onSelectPage={() => {}} loading={false} error={null} />,
+    )
+    const groupTitle = screen.getByText('外形図')
+    const style = getComputedStyle(groupTitle)
+    // group titleには青背景を付けない(セクション見出しと同じ濃さにしない)。
+    expect(style.backgroundColor).not.toBe('rgb(239, 246, 255)')
+    expect(style.fontWeight).not.toBe('700')
+  })
+
+  it('does not reduce the number of rendered thumbnails after the heading style change (22章)', () => {
+    const pages = [makePage({ page_no: 16 }), makePage({ page_no: 18 }), makePage({ page_no: 21 })]
+    render(
+      <DrawingNavigator pages={pages} selectedPageNo={null} onSelectPage={() => {}} loading={false} error={null} />,
+    )
+    expect(screen.getAllByRole('img')).toHaveLength(3)
+  })
+
+  it('keeps thumbnail click behavior unaffected by the heading style change (22章)', () => {
+    const pages = [makePage({ page_no: 42 })]
+    const onSelectPage = vi.fn()
+    render(
+      <DrawingNavigator pages={pages} selectedPageNo={null} onSelectPage={onSelectPage} loading={false} error={null} />,
+    )
+    fireEvent.click(screen.getByRole('img', { name: 'P42' }))
+    expect(onSelectPage).toHaveBeenCalledWith(42)
+  })
+
+  it('does not increase the heading padding/margin beyond what right-pane section headers already use (23章: 情報密度を増やさない)', () => {
+    render(
+      <DrawingNavigator pages={[]} selectedPageNo={null} onSelectPage={() => {}} loading={false} error={null} />,
+    )
+    const heading = screen.getByText('図面一覧')
+    expect(getComputedStyle(heading).padding).toBe('0.3rem 0.5rem')
+  })
+})

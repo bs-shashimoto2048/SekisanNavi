@@ -125,7 +125,11 @@ export function DrawingViewer({
 
   return (
     <section className="drawing-viewer">
-      <h2 className="drawing-viewer__heading">{hasPage ? pageLabel : '図面名'}</h2>
+      {/* Viewer上部1行化 指示1章〜2章: ページ未選択時のみ、ここで「図面名」の
+          プレースホルダを表示する(旧来どおり1行のまま、変更なし)。ページ選択後は
+          この見出しを描画せず、図面名をDrawingCanvas側のtoolbarへ統合し、
+          Zoom/Fit/BBox削除と同じ1行に収める(2行→1行化の本体)。 */}
+      {!hasPage && <h2 className="drawing-viewer__heading">図面名</h2>}
       <div className="drawing-viewer__stage">
         {!hasPage && (
           <div className="drawing-viewer__empty">左の図面一覧からページを選択してください</div>
@@ -133,6 +137,7 @@ export function DrawingViewer({
         {hasPage && (
           <DrawingCanvas
             key={`${productNo}:${pageNo}`}
+            title={pageLabel}
             mode="png"
             fileUrl={pageImageUrl}
             fallbackSize={FALLBACK_SIZE}
