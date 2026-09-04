@@ -478,6 +478,57 @@ describe('EstimateMasterPicker: 使用品名の限定 (追加指示)', () => {
   })
 })
 
+describe('EstimateMasterPicker: 表セル境界の統一・ヘッダ左寄せ/数値セル右寄せ (Sekisan Navi 追加UI修正指示)', () => {
+  it('left-aligns every column header, including the numeric price/工数 columns (5章: 既存仕様のまま左寄せを維持)', async () => {
+    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    const headers = await screen.findAllByRole('columnheader')
+    expect(headers).toHaveLength(10)
+    for (const th of headers) {
+      expect(getComputedStyle(th).textAlign).toBe('left')
+    }
+  })
+
+  it('right-aligns numeric value cells (総合価格A/箱・部品価格/塗装価格/設A/板金/組立/検査), left-aligns code/model/rating (6章)', async () => {
+    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    const row = (await screen.findByText('11001')).closest('tr') as HTMLElement
+    const cells = within(row).getAllByRole('cell')
+    // コード, 型式, 定格, 総合価格A, 箱・部品価格, 塗装価格, 設A, 板金, 組立, 検査
+    expect(getComputedStyle(cells[0]).textAlign).not.toBe('right') // コード
+    expect(getComputedStyle(cells[1]).textAlign).not.toBe('right') // 型式
+    expect(getComputedStyle(cells[2]).textAlign).not.toBe('right') // 定格
+    for (const numericCell of cells.slice(3)) {
+      expect(getComputedStyle(numericCell).textAlign).toBe('right')
+    }
+  })
+
+  it('does not change header/cell padding (row/header height不変, 指示18章: 情報密度を変えない)', async () => {
+    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    await screen.findByText('11001')
+    const th = screen.getAllByRole('columnheader')[0]
+    const td = screen.getByRole('table').querySelector('td') as HTMLElement
+    expect(getComputedStyle(th).padding).toBe('0.3rem 0.5rem')
+    expect(getComputedStyle(td).padding).toBe('0.3rem 0.5rem')
+  })
+
+  it('leaves the selected-row cobalt accent unchanged after adding the cell grid (Master selected row style不変)', async () => {
+    render(<EstimateMasterPicker selectedItemId={2} onSelectItem={() => {}} />)
+    const selectedRow = (await screen.findByText('11002')).closest('tr') as HTMLElement
+    const style = getComputedStyle(selectedRow)
+    expect(style.boxShadow.toLowerCase()).toContain('#2563eb')
+    expect(style.fontWeight).toBe('600')
+  })
+
+  it('keeps the sticky header positioning unaffected by the new cell border (17章)', async () => {
+    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    const th = (await screen.findAllByRole('columnheader'))[0]
+    expect(getComputedStyle(th).position).toBe('sticky')
+  })
+
+  // 注記: jsdom(cssstyle)はborder-right(var(...)使用)の解決を確実には行わないため
+  // (本ファイル既存の397行目以降のコメント参照)、--border-cell/active header用の
+  // rgba(255,255,255,0.18)の実際の描画は実ブラウザ確認で行う。
+})
+
 describe('EstimateMasterPicker: 大量データ表示 (全件表示であることの確認)', () => {
   it('renders every row of a large category without truncating (no arbitrary page-size limit)', async () => {
     mockDataset = Array.from({ length: 230 }, (_, i) =>

@@ -154,6 +154,15 @@
   padding: 0.3rem 0.5rem;
   text-align: left;
   white-space: nowrap;
+  /* 表セル境界の統一 指示3章/4章/16章: 列数が多く効果が大きいため、
+     縦罫線を薄く追加する(横罫線#f3f4f6は変更しない)。 */
+  border-right: 1px solid var(--border-cell);
+}
+
+/* 表の最終列は横スクロール領域の右端と隣接するため、余計な縦線を出さない。 */
+.master-picker__table th:last-child,
+.master-picker__table td:last-child {
+  border-right: none;
 }
 
 /* UI視覚階層改善 追加修正第3/第4ラウンド: 選択中カテゴリのpresentation
@@ -173,9 +182,20 @@
   /* 指示3章: ヘッダ下borderもactive tabと同系統の濃色(tabBorder)にする。
      未選択時(vars未注入)は指示13章までのLevel3トークンへフォールバックする。 */
   border-bottom-color: var(--cat-tab-border, var(--border-table-outer));
+  /* 表セル境界の統一 指示12章: 選択カテゴリ色(濃色)+白文字の帯の上では、
+     グレー系のセル境界(--border-cell)がほぼ見えない/濃色面を分断して見える
+     ため、非常に薄い半透明白を使う。 */
+  border-right-color: rgba(255, 255, 255, 0.18);
 }
 
-.master-picker__cell--numeric {
+/* 表セル境界の統一・数値セルは右寄せ 指示6章: 既存の`.master-picker__table th,
+   .master-picker__table td { text-align: left; }`(class 1 + type 1 =
+   詳細度0,1,1)の方が、クラスのみの`.master-picker__cell--numeric`(0,1,0)より
+   詳細度が高く、実際には常にこちらのtext-align:leftが勝って数値セルが
+   左寄せのまま描画されてしまっていた(実ブラウザ確認で検出。意図(右寄せ)通りに
+   一度も描画されていなかった潜在バグ)。`td`を含めて詳細度を揃えることで
+   右寄せを正しく効かせる。 */
+.master-picker__table td.master-picker__cell--numeric {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }

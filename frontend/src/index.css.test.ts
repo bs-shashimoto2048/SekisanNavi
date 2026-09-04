@@ -73,3 +73,18 @@ describe('index.css: Status palette token (UI視覚階層改善 第5ラウンド
     expect(ratio).toBeGreaterThanOrEqual(4.5)
   })
 })
+
+describe('index.css: セル境界token (表セル境界の統一・ヘッダ左寄せ/数値セル右寄せ)', () => {
+  function token(name: string): string {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  }
+
+  it('defines --border-cell as a lighter tone than the region/table-outer borders (罫線階層: 大領域 > header境界 > セル境界)', () => {
+    expect(token('--border-cell')).toBe('#edf1f5')
+    // #edf1f5は#cbd5e1(--border-region/--border-table-outer)より明度が高い
+    // (=より薄い)ことを簡易確認する。
+    const cell = parseInt(token('--border-cell').replace('#', ''), 16)
+    const tableOuter = parseInt(token('--border-table-outer').replace('#', ''), 16)
+    expect(cell).toBeGreaterThan(tableOuter)
+  })
+})

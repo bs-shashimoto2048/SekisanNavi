@@ -36,6 +36,14 @@
   --border-table-outer: #cbd5e1;
   --accent-section: #1e3a8a;
 
+  /* 表セル境界の統一・ヘッダ左寄せ/数値セル右寄せ 指示3章/4章: 罫線階層に
+     「大領域境界 > 表header境界 > セル境界」を追加する。セル境界(縦罫線)は
+     既存の横罫線(#f3f4f6/#f1f5f9、各表CSS側で個別管理・今回変更しない)より
+     薄く、外周(--border-region)やheader下線(--border-table-outer)よりも
+     明確に弱いトーンにする。積算集約・積算明細・積算コードMasterの3表で
+     共通のtokenを使い、色数を増やさない(指示24章の方針を踏襲)。 */
+  --border-cell: #edf1f5;
+
   /* Sekisan Navi UI視覚階層改善 第5ラウンド 指示1章〜10章/17章/18章:
      Structure(構造)とは独立した「Status(業務状態)」の共通token。
      棚卸しの結果、同じ「成功/確定」を意味しながらHeader(#065f46)とEstimateDetail

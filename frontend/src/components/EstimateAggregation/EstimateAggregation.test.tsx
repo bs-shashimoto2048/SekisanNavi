@@ -804,3 +804,77 @@ describe('EstimateAggregation: ソート機能 (PR #2 追加修正指示: 積算
     expect(screen.getByRole('button', { name: '編集順でソート' }).textContent).toContain('▼')
   })
 })
+
+// Sekisan Navi 追加UI修正指示: 表セル境界の統一 + ヘッダ左寄せ / 数値セル右寄せ
+describe('EstimateAggregation: 表セル境界の統一・ヘッダ左寄せ/数値セル右寄せ', () => {
+  function renderTable() {
+    const items = [makeTotalLineItem({ code: '18311', unitPrice: 23100, quantity: 4, amount: 92400 })]
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={items}
+        totalLineItems={items}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+  }
+
+  it('left-aligns all 5 column headers, including the numeric ones (単価(暫定)/数量/金額) (5章/8章)', () => {
+    renderTable()
+    const headers = screen.getAllByRole('columnheader')
+    expect(headers).toHaveLength(5)
+    for (const th of headers) {
+      expect(getComputedStyle(th).textAlign).toBe('left')
+    }
+  })
+
+  it('specifically left-aligns the "金額" header while its value cell stays right-aligned (8章: 今回特に重要)', () => {
+    renderTable()
+    const amountHeader = screen.getByRole('columnheader', { name: /金額/ })
+    expect(getComputedStyle(amountHeader).textAlign).toBe('left')
+    const amountValueCell = within(screen.getByRole('table'))
+      .getAllByRole('cell')
+      .find((c) => c.className.includes('estimate-aggregation__col-amount'))!
+    expect(getComputedStyle(amountValueCell).textAlign).toBe('right')
+  })
+
+  it('right-aligns the numeric value cells (単価(暫定)/数量/金額), left-aligns text cells (コード/内容) (6章/7章)', () => {
+    renderTable()
+    const table = screen.getByRole('table')
+    const row = within(table).getByText('18311').closest('tr') as HTMLElement
+    const cellByClass = (cls: string) => row.querySelector(`.${cls}`) as HTMLElement
+    expect(getComputedStyle(cellByClass('estimate-aggregation__col-code')).textAlign).not.toBe('right')
+    expect(getComputedStyle(cellByClass('estimate-aggregation__col-content')).textAlign).toBe('left')
+    expect(getComputedStyle(cellByClass('estimate-aggregation__col-price')).textAlign).toBe('right')
+    expect(getComputedStyle(cellByClass('estimate-aggregation__col-qty')).textAlign).toBe('right')
+    expect(getComputedStyle(cellByClass('estimate-aggregation__col-amount')).textAlign).toBe('right')
+  })
+
+  it('keeps the sort indicator (▲/▼) visible next to the header label after the alignment change (9章)', () => {
+    renderTable()
+    const codeHeaderButton = screen.getByRole('button', { name: 'コードでソート' })
+    expect(codeHeaderButton.textContent).toContain('▲')
+    fireEvent.click(screen.getByRole('button', { name: '金額でソート' }))
+    expect(screen.getByRole('button', { name: '金額でソート' }).textContent).toContain('▲')
+  })
+
+  it('does not change header/cell padding (row/header height不変, 指示18章: 情報密度を変えない)', () => {
+    renderTable()
+    const th = screen.getAllByRole('columnheader')[0]
+    const td = screen.getByRole('table').querySelector('td') as HTMLElement
+    expect(getComputedStyle(th).padding).toBe('0.25rem 0.3rem')
+    expect(getComputedStyle(td).padding).toBe('0.25rem 0.3rem')
+  })
+
+  it('keeps the sticky header positioning unaffected by the new cell border (17章)', () => {
+    renderTable()
+    const th = screen.getAllByRole('columnheader')[0]
+    expect(getComputedStyle(th).position).toBe('sticky')
+  })
+
+  // 注記: jsdom(cssstyle)は`border-right`のようなshorthandに対する`var(...)`の
+  // 解決を確実には行わないため(EstimateMasterPicker.test.tsx同様の既知の制約)、
+  // --border-cellトークン自体の値はindex.css.test.ts側で検証し、実際の縦罫線描画は
+  // 実ブラウザ確認(スクリーンショット)で行う。
+})

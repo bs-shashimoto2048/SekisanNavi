@@ -192,6 +192,9 @@
   /* UI視覚階層改善 指示13章: table headerの下線をデータ行同士の罫線
      (td側 #f3f4f6)より明確にする。幅は1pxのまま、色のみ強める。 */
   border-bottom: 1px solid var(--border-table-outer);
+  /* 表セル境界の統一 指示3章/4章: 列の対応関係を追いやすくする縦罫線。
+     header下線(--border-table-outer)より弱いトーンにする。 */
+  border-right: 1px solid var(--border-cell);
 }
 
 /* ソート可能なヘッダボタン (PR #2 追加修正指示: 積算集約テーブルにソート機能を追加
@@ -222,21 +225,26 @@
   color: #2563eb;
 }
 
-/* 単価・数量・金額はデータ行が右寄せ(下記col-price/col-qty/col-amountの
-   text-align:right)のため、ソートボタン内の見出しラベルも右寄せにして列内の
-   整列を保つ(積算明細にはない右寄せ列のための追加対応。フォント・余白は
-   変えていない)。 */
-.estimate-aggregation__table th.estimate-aggregation__col-price .estimate-aggregation__sort-button,
-.estimate-aggregation__table th.estimate-aggregation__col-qty .estimate-aggregation__sort-button,
-.estimate-aggregation__table th.estimate-aggregation__col-amount .estimate-aggregation__sort-button {
-  justify-content: flex-end;
-  text-align: right;
-}
+/* 表セル境界の統一・ヘッダ左寄せ/数値セル右寄せ 指示5章/8章/10章: 単価・数量・
+   金額の値セルは右寄せのままだが、header文字(ソートボタンのラベル)は他の列と
+   同じ左寄せにする(旧: ソートボタンをjustify-content:flex-endで右寄せしていたが、
+   「金額」等のheaderだけ列端へ浮いて見えるため撤回した)。ボタン自体のデフォルト
+   (flex, justify-content指定なし=flex-start)がそのまま「数値列でもheader button
+   を右寄せしない」(指示10章)を満たす。 */
 
 .estimate-aggregation__table td {
   padding: 0.25rem 0.3rem;
   border-bottom: 1px solid #f3f4f6;
   vertical-align: top;
+  /* 表セル境界の統一 指示3章: 既存の横罫線(#f3f4f6)は変更せず、縦罫線のみ
+     新たに薄く追加する。 */
+  border-right: 1px solid var(--border-cell);
+}
+
+/* 表の最終列は右端(table-scrollの外周)と隣接するため、余計な縦線を出さない。 */
+.estimate-aggregation__table th:last-child,
+.estimate-aggregation__table td:last-child {
+  border-right: none;
 }
 
 .estimate-aggregation__empty-cell {

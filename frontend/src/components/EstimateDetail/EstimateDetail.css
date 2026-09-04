@@ -187,6 +187,10 @@
   /* UI視覚階層改善 指示13章: table headerの下線をデータ行同士の罫線
      (td側 #f1f5f9)より明確にする。幅は1pxのまま、色のみ強める。 */
   border-bottom: 1px solid var(--border-table-outer);
+  /* 表セル境界の統一 指示3章/4章/15章: 列の対応関係を追いやすくする縦罫線。
+     列数が多い表のため、header下線・td側の横罫線よりさらに軽く見えるよう、
+     tokenそのまま(#edf1f5)を使い、太さ・不透明度は上げない。 */
+  border-right: 1px solid var(--border-cell);
 }
 
 .estimate-detail__table td {
@@ -194,6 +198,13 @@
   border-bottom: 1px solid #f1f5f9;
   vertical-align: top;
   overflow-wrap: break-word;
+  border-right: 1px solid var(--border-cell);
+}
+
+/* 表の最終列は横スクロール領域の右端と隣接するため、余計な縦線を出さない。 */
+.estimate-detail__table th:last-child,
+.estimate-detail__table td:last-child {
+  border-right: none;
 }
 
 .estimate-detail__empty {
