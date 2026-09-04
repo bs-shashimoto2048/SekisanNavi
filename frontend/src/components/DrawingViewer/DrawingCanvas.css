@@ -56,19 +56,36 @@
   flex-shrink: 0;
 }
 
+/* Issue #9 追加修正(2回目): 旧来はborder+白背景のみで「文字や枠」に近く、
+   押せるUIとして弱かった。立体的すぎる旧来UI(グラデーション・厚いborder等)には
+   せず、軽いbox-shadowで「面」としての浮き上がりを出し、hover/active(押下感)の
+   状態差を追加する。padding/font-size/min-width(ボタンの外寸)は一切変更して
+   おらず、ツールバー自体の高さ(padding 0.3rem 0.4rem、上位.drawing-canvas__toolbar
+   側)にも影響しない。 */
 .drawing-canvas__toolbar button {
   min-width: 2.1rem;
   padding: 0.2rem 0.55rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid #c7ccd6;
   background: #fff;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .drawing-canvas__toolbar button:hover {
   border-color: #93c5fd;
   background: #eff6ff;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.22);
+}
+
+/* 押下時: box-shadowを内側(inset)へ切り替え、面がへこんで見えることで
+   「押した」感触を出す(過度な立体表現(3D風のborder-bevel等)は使わない)。 */
+.drawing-canvas__toolbar button:active {
+  background: #dbeafe;
+  border-color: #60a5fa;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.2);
 }
 
 .drawing-canvas__zoom-label {
@@ -103,16 +120,27 @@
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
+  box-shadow: 0 1px 2px rgba(220, 38, 38, 0.12);
+  transition: background-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .drawing-canvas__delete-button:hover:not(:disabled) {
   background: #fef2f2;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.25);
 }
 
+.drawing-canvas__delete-button:active:not(:disabled) {
+  background: #fee2e2;
+  box-shadow: inset 0 1px 2px rgba(185, 28, 28, 0.25);
+}
+
+/* disabled(選択中BBoxが無い間)は、押せない見た目をこれまでどおり維持する
+   (box-shadowを付けず、押せる他ボタンとの差を保つ)。 */
 .drawing-canvas__delete-button:disabled {
   color: #d1d5db;
   border-color: #e5e7eb;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .drawing-canvas__viewport {

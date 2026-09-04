@@ -10,13 +10,33 @@
    引き上げ、一段軽いコバルトにした(色相224°・彩度76%は維持、明度のみ
    48%→51%)。単純な#2563eb直採用(彩度83%)は「彩度を上げない」指示に反する
    ため避けた。border-bottomは1px線で面積への影響が小さいため据え置いている。 */
+/* Issue #9 追加修正(3回目): Header全体を単色の濃いコバルトで塗ると「青が強すぎる」
+   との指摘を受け、左(ブランド領域)は青を保ちつつ右へ行くほど白へ近づく水平
+   グラデーションへ変更した。stopの位置は実データ(A1GV2421)を実ブラウザで
+   実測して決めている: `.project-header__brand`は左端(0%)〜約12%、
+   `.project-header__info`(整理番号/製番/盤名称/解析状態)はその右、実測で
+   約13%〜61%の範囲に収まる。42%までを完全な単色コバルトに保つことで、
+   info側のほぼ全域(短い製番/長い製番いずれでも)が「まだ十分に濃い青」の
+   範囲に収まるようにし、そこから68%にかけて緩やかに明度を上げることで、
+   仮にinfoが多少右へ伸びても急に読みにくくなる「崖」を作らない
+   (グラデーションなので境界で急変しない)。`.project-header__actions`
+   (右端のボタン2つ)は実測で87%〜99%と、最も明るい(白に近い)領域に来るため、
+   ボタン自体を「地の色に依存しない自己完結した白背景チップ」へ作り替えて
+   対応した(後述`.project-header__actions button`)。 */
 .project-header {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 1.5rem;
   padding: 0.5rem 1rem;
-  background: #2455e2;
+  background: linear-gradient(
+    to right,
+    #2455e2 0%,
+    #2455e2 42%,
+    #6f8aec 68%,
+    #cbd7f6 88%,
+    #eef2fc 100%
+  );
   color: #fff;
   border-bottom: 1px solid #1e40af;
 }
@@ -44,16 +64,65 @@
    実画面ではA(現行white)/B(淡い青白色+旧shadow)/C(淡い青白色+新shadow+
    1.14rem)の3案を比較し、周囲情報との差が最も明確でありながら派手すぎない
    C案を採用した(指示29章)。 */
+/* Issue #9 追加修正: 過去ラウンドでcolor/shadow/letter-spacingを何度か
+   微調整したが(#eaf2ff・shadow強化等、上記コメント参照)、実画面では依然
+   周囲の業務情報(整理番号/製番等、color:#fffそのまま・font-weight未指定)と
+   ほぼ同じ見た目で、「プロダクト名」として一目で認識しづらいという指摘を
+   受けた。根本原因は、#eaf2ffが実質ほぼ白(rgb(234,242,255))で、業務情報の
+   純白(#fff)とほとんど区別が付かなかったこと。今回は色調そのものを変える
+   のではなく、**サイズ・太さ・字間の差をさらに広げる**方向で強調する
+   (色相を変えると解析状態バッジ等の意味色と衝突しかねないため)。
+   - font-size: 1.14rem→1.32rem(業務情報0.98remとの比率を約1.16倍→1.35倍へ)。
+   - font-weight: 700→800(900は依然使わない。太すぎる=安易な強調という
+     過去の判断を踏襲)。
+   - color: #eaf2ff→#ffffff(純白)。地の背景色(#2455e2)に対するコントラストを
+     最大化し、周囲の白文字とは明確なサイズ・太さの差で区別する。
+   - text-shadow: 影の不透明度をわずかに強め、文字の輪郭・立体感を増す
+     ことでロゴ的な存在感を補強する。
+   - letter-spacing: 0.02em→0.04em。
+   Header自体のpadding/line-height/heightは変更していない(指示の「レイアウト
+   寸法・ヘッダー高さは原則維持」に従う)。
+
+   **Issue #9 追加修正(2回目)**: 上記のサイズ・太さ・色のみの強調では、実画面で
+   依然「Sekisan Navi 整理番号: ... 製番: ...」が同じ1行の文字列群に見え、
+   タイトルが業務情報に埋もれるとの指摘を受けた。文字の強調だけでなく、
+   **タイトルをHeader内の独立した「ブランドブロック」として視覚的に分離する**
+   方針へ切り替える(過去ラウンドで避けていたpill/badge化を、今回は明示指示に
+   より解禁する)。
+   - background: 半透明の白(`rgba(255,255,255,0.16)`)。Header地(#2455e2)より
+     わずかに明るい面を作り、「タイトル専用の領域」であることを一目で示す。
+     別系統の色(白以外)は使わず、Headerの配色(コバルト+白)の範囲に留めている。
+   - padding: 左右0.85rem・上下0.3rem。ブロックとしての余白を持たせつつ、
+     Header自体のpadding(0.5rem 1rem)を変えずに済む範囲(後述のheaderHeight
+     実測で確認済み)に収めている。
+   - border-radius: 6px(角丸)。指示の「角丸または右境界など」のうち角丸を採用
+     (直線的な縦線区切りより、業務アプリでよく使う柔らかいチップ状の方が
+     Header全体のトーンに合うため)。
+   - margin-right: 業務情報群との間に、Header自身の`gap`(1.5rem)に加えて
+     明確な追加の余白を設け、視覚的な区切りをさらに強める。
+   - font-size: 1.32rem→1.42rem(指示の目安1.4〜1.5remの範囲)。
+   - text-shadow: 削除した。背景ブロック自体がコントラストを作るため、文字影を
+     重ねるとネオン的に見えて「業務アプリらしい落ち着いた強調」から外れると
+     判断した(指示の「過度な影は不要」に対応)。
+   - font-weight(800)・letter-spacing(0.04em)・color(#ffffff)は前回の値を維持。 */
 .project-header__brand {
+  display: inline-flex;
+  align-items: center;
   font-family: Inter, 'Segoe UI', 'Yu Gothic UI', 'Meiryo UI', sans-serif;
-  font-weight: 700;
-  font-size: 1.14rem;
-  color: #eaf2ff;
-  text-shadow:
-    0 1px 1px rgba(0, 0, 0, 0.22),
-    0 0 8px rgba(219, 234, 254, 0.2);
-  letter-spacing: 0.02em;
+  font-weight: 800;
+  font-size: 1.42rem;
+  color: #ffffff;
+  letter-spacing: 0.04em;
   white-space: nowrap;
+  background: rgba(255, 255, 255, 0.16);
+  padding: 0.3rem 0.85rem;
+  /* :root側のline-height(1.5, 本文向け)をそのまま使うと、大きくしたfont-sizeと
+     paddingの組合せでブロックの行送りが過大になり、Header高さが目に見えて
+     伸びてしまう。タイトルチップ単体はぶら下げる本文が無いため、line-heightを
+     詰めてHeader高さの増加を最小限に抑える(指示「ヘッダー高さは原則維持」)。 */
+  line-height: 1.2;
+  border-radius: 6px;
+  margin-right: 0.6rem;
 }
 
 .project-header__info {
@@ -119,18 +188,28 @@
 
 /* 指示4章: 背景をコバルトブルーへ変更したため、旧来の暗いグレー系ボタン
    (#374151地に#4b5563border)はHeaderと同化して見えなくなる。Headerより
-   少し濃い半透明の白背景+白系borderへ変更し、サイズ・paddingは変えない。 */
+   少し濃い半透明の白背景+白系borderへ変更し、サイズ・paddingは変えない。
+
+   Issue #9 追加修正(3回目): Header背景を右方向グラデーション(濃い青→白)へ
+   変更したことで、実測上このボタン群(87%〜99%)は最も明るい(白に近い)領域に
+   来るようになった。旧来の「半透明の白+白文字」は、地が濃い青である前提の
+   配色のため、白に近い地の上では文字・borderともにほぼ同化して見えなくなる。
+   そのため、**地の色に依存せず自己完結して読める配色**(不透明に近い白背景+
+   濃い青文字+青border)へ切り替えた。これによりHeaderのどの位置(濃い青〜
+   ほぼ白)にあっても一定の可読性を保つ。サイズ・paddingは変更していない。 */
 .project-header__actions button {
   padding: 0.35rem 0.8rem;
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
+  border: 1px solid #93a8ee;
+  background: rgba(255, 255, 255, 0.94);
+  color: #1d3fae;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
   white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.15);
 }
 
 .project-header__actions button:hover {
-  background: rgba(255, 255, 255, 0.26);
+  background: #ffffff;
+  border-color: #2455e2;
 }

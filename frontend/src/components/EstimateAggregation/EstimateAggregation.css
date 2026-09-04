@@ -52,10 +52,19 @@
   margin-bottom: 0.3rem;
 }
 
-/* 単価が暫定である旨(※単価は暫定)と揃え、Warning系のtokenを再利用する
-   (UI視覚階層改善 第5ラウンド 指示9章)。 */
+/* Issue #9: 「製番合計」の金額文字だけを赤系で強調する。旧来は単価暫定表示と
+   揃えてWarning系token(--status-warning-accent、茶色系#b45309)を再利用して
+   いたが、実画面で目立たないとの指摘を受け専用の赤へ変更した。
+   --status-error(#b91c1c、エラーバナー等で使用中)をそのまま使うと
+   「エラー表示」と誤認しうるため意図的に避け、より鮮やかな#dc2626
+   (Tailwind red-600相当)を採用する。エラー表示はbackground付きのbanner/alert
+   (role="alert"、`--status-error-soft-bg`背景)として出るのに対し、ここは
+   通常の「製番合計」ラベル直後に置かれるbold金額のみであり、文脈でも
+   エラーと混同しにくい。他の集約行(単価・数量・通常明細のamount列)の色は
+   一切変更していない(このセレクタは`.estimate-aggregation__grand-total`
+   直下のstrong要素のみに閉じている)。 */
 .estimate-aggregation__grand-total strong {
-  color: var(--status-warning-accent);
+  color: #dc2626;
   margin-left: 0.3rem;
 }
 

@@ -56,7 +56,49 @@ describe('ProjectHeader', () => {
     expect(getComputedStyle(brand).whiteSpace).toBe('nowrap')
   })
 
-  it('does not add any height-affecting style (padding/line-height/height) to the brand title (指示6章/12章/19章: Header高さを変えない)', () => {
+  it('makes the brand title clearly larger/bolder/whiter than the surrounding business-info text (Issue #9: 実画面でタイトルが目立たないとの指摘への対応)', () => {
+    render(
+      <ProjectHeader
+        project={project}
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+      />,
+    )
+    const brand = screen.getByText('Sekisan Navi')
+    const brandStyle = getComputedStyle(brand)
+    // 純白(#ffffff)・weight 800・letter-spacing強化(0.04em)。
+    expect(brandStyle.color).toBe('rgb(255, 255, 255)')
+    expect(brandStyle.fontWeight).toBe('800')
+
+    const info = screen.getByText(/整理番号: A1AB3211/)
+    const infoStyle = getComputedStyle(info)
+    // 業務情報側はbrandより明確に小さい/太くない(相対比較。px値は
+    // ブラウザ既定フォントサイズに依存するため、絶対px値ではなく大小関係で検証する)。
+    expect(parseFloat(brandStyle.fontSize)).toBeGreaterThan(parseFloat(infoStyle.fontSize))
+    expect(Number(brandStyle.fontWeight)).toBeGreaterThan(Number(infoStyle.fontWeight) || 400)
+  })
+
+  it('keeps the header bar itself (its own padding) unchanged even though the brand title now has its own block (Issue #9 追加修正: ブランドブロック化)', () => {
+    const { container } = render(
+      <ProjectHeader
+        project={project}
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+      />,
+    )
+    // jsdomはlayoutを持たないため、実際に描画されたHeaderの高さ(px)は
+    // ここでは検証できない(既知の制約)。ここでは「Header自身のCSSボックス
+    // モデル(padding)を変更していないこと」だけを、リテラル値の一致で確認する
+    // (var()を経由しないため、この比較はjsdomでも信頼できる)。実際に
+    // headerHeightが変化していないことは実ブラウザ(Playwright)で確認済み
+    // (Issue #9コメント参照)。
+    const header = container.querySelector('.project-header') as HTMLElement
+    expect(getComputedStyle(header).padding).toBe('0.5rem 1rem')
+  })
+
+  it('gives the brand title its own visually-separated "block" (background/padding/border-radius/margin), not just bare text (Issue #9 追加修正: タイトルをブランドブロックとして分離)', () => {
     render(
       <ProjectHeader
         project={project}
@@ -67,12 +109,14 @@ describe('ProjectHeader', () => {
     )
     const brand = screen.getByText('Sekisan Navi')
     const style = getComputedStyle(brand)
-    expect(style.padding).toBe('0')
-    expect(style.margin).toBe('0')
-    expect(style.height).toBe('auto')
+    expect(style.backgroundColor).toBe('rgba(255, 255, 255, 0.16)')
+    expect(style.borderRadius).toBe('6px')
+    expect(style.paddingLeft).not.toBe('0px')
+    expect(style.paddingTop).not.toBe('0px')
+    expect(style.marginRight).not.toBe('0px')
   })
 
-  it('uses a bright cobalt blue background instead of the old dark navy (UI視覚階層改善 追加修正指示 2章、最終微調整ラウンド指示6章で一段軽いコバルトへ)', () => {
+  it('uses a bright cobalt blue that fades to white toward the right, instead of the old flat dark navy (UI視覚階層改善 追加修正指示 2章、Issue #9追加修正3回目でグラデーション化)', () => {
     const { container } = render(
       <ProjectHeader
         project={project}
@@ -83,10 +127,33 @@ describe('ProjectHeader', () => {
     )
     const header = container.querySelector('.project-header') as HTMLElement
     const style = getComputedStyle(header)
-    // #2455e2 = rgb(36, 85, 226)。旧#1f2937(濃紺, rgb(31,41,55))ではないこと。
-    expect(style.backgroundColor).toBe('rgb(36, 85, 226)')
-    expect(style.backgroundColor).not.toBe('rgb(31, 41, 55)')
+    // Issue #9追加修正3回目: 単色背景(background-color)から、左は濃いコバルト
+    // #2455e2(=rgb(36, 85, 226))を保ちつつ右へ白(#eef2fc)へ近づく
+    // linear-gradientへ変更した。単色ではなくbackground-image(gradient)に
+    // なったことと、gradientの開始色に旧来のコバルトが含まれること、旧#1f2937
+    // (濃紺, rgb(31,41,55))ではないことを確認する。
+    expect(style.backgroundImage).toContain('linear-gradient')
+    expect(style.backgroundImage).toContain('rgb(36, 85, 226)')
+    expect(style.backgroundImage).not.toContain('rgb(31, 41, 55)')
     expect(style.color).toBe('rgb(255, 255, 255)')
+  })
+
+  it('gives the right-side action buttons a self-contained readable style, independent of the header background (Issue #9 追加修正3回目: グラデーション右端でも可読性を保つ)', () => {
+    render(
+      <ProjectHeader
+        project={project}
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+      />,
+    )
+    const openProductButton = screen.getByRole('button', { name: '製番を開く' })
+    const style = getComputedStyle(openProductButton)
+    // 旧来は半透明の白(地の濃い青が透けて見える前提)だったが、Header右端は
+    // グラデーションでほぼ白くなるため、地の色に依存しない不透明に近い白背景+
+    // 濃い青文字へ変更した(白地の上でも視認できる配色)。
+    expect(style.backgroundColor).toBe('rgba(255, 255, 255, 0.94)')
+    expect(style.color).toBe('rgb(29, 63, 174)')
   })
 
   it('renders project info and the Japanese label for analysis_status', () => {
