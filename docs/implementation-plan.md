@@ -1592,6 +1592,75 @@ Backend `pytest`: **175 passed**(既存167件 + 新規8件、回帰なし)。
   0件)へ戻した。`detections`(manual 15件)・`system_settings.data_source_root`
   はいずれも今回の確認によって変化していないことを確認済み。
 
+## 8.20. Issue #4 Phase B-3: 積算確定の最小UI (完了)
+
+Issue #4 `Preserve decision history for future estimation automation`の
+Phase B-3(積算確定操作の最小UI)を実装した。Phase B-1/B-2(schema/repository/
+API)は`8.18章`/`8.19章`を参照。
+
+- `frontend/src/components/EstimateAggregation/EstimateConfirmationAction.tsx`
+  (新規)+ 専用CSS。既存の`POST /api/products/{product_no}/
+  estimate-confirmations`(Phase B-2、無変更)を呼ぶだけの最小UIとし、
+  **snapshot内容の再計算・送信は一切行わない**(確定値の正本はBackend側で
+  組み立てる既存仕様を維持。Issue #4最新コメントの方針)。
+- `EstimateAggregation`(右ペイン②)の見出し直下、「対象」セレクトより上に
+  常時表示する(折りたたみ中・積算コード0件の空表示中は除く/含む、詳細は
+  `docs/ui-spec.md` 5.5章参照)。積算コード0件でもボタン自体は表示し
+  (0件確定をUI側で独自に禁止しない)、対象セレクトの選択状態とは無関係に
+  常に製番全体が対象であることをラベル・確認ダイアログの両方に明示する。
+- 誤操作防止として`window.confirm`による確認ダイアログを挟み、送信中は
+  ボタンを無効化して二重送信を防ぐ。成功時は確定ID/確定日時/item_count/
+  合計金額を表示し、失敗時は`role="alert"`のエラーメッセージを出して
+  成功扱いにしない。
+- API入出力の型(`EstimateTargetType`/`EstimateConfirmationItem`/
+  `EstimateConfirmation`)を`frontend/src/types/domain.ts`へ追加し、
+  `frontend/src/api/client.ts`に`createEstimateConfirmation()`
+  (+リクエストボディを送らない専用ヘルパー`postJsonNoBody`)を追加した。
+- `EstimateAggregation`には`productNo`(現在Viewerで開いている実製番)を
+  渡すオプショナルpropを追加しただけで、既存のprops・表示・対象セレクト・
+  ソート・積算明細・BBox所属判定・Undo/Redoのロジックは一切変更していない。
+  `App.tsx`側は`EstimateAggregation`への`productNo={activeProductNo}`
+  props追加のみ。
+- 確定履歴の一覧・詳細閲覧UIは今回作らない(読み出しAPI自体が無いため)。
+  Phase A-2読み出しAPIにも今回触れていない。
+
+### テスト
+
+`frontend/src/components/EstimateAggregation/EstimateConfirmationAction.test.tsx`
+(新規、8件): 製番未選択時は何も描画しないこと、ラベルに製番が明示されること、
+確認ダイアログをキャンセルするとAPIが呼ばれないこと、承認後に既存APIのみが
+呼ばれること(値の送信は伴わないこと)、送信中はボタンが無効化され二重送信が
+発生しないこと、成功時に確定ID/確定日時/item_count/合計金額が表示されること、
+0件確定でもitem_count=0が完了表示に現れること、失敗時にエラー表示になり
+成功扱いにならないことを検証した。
+
+Frontend: `npx vitest run`(フルスイート) — **596 passed**(既存588件 + 新規8件、
+回帰なし)。`tsc -b --noEmit`clean。`npm run lint`exit 0(新規ファイルへの
+warning無し、既存warningのみ残存)。`npm run build`成功。
+
+Backend: 変更なし。`pytest` 175件は無変更のため再実行のみで確認(既存確認済み)。
+
+### 実ブラウザ確認 (A1GV2421、実行後にデモDBを元へ戻し済み)
+
+実際に稼働中のFrontend(Vite dev server)・Backend(実共有フォルダを参照する
+デモDB)に対してPlaywrightで一連の操作を行い、以下を確認した。
+
+- ラベルが「製番 A1GV2421 の積算確定」と表示され、製番単位であることが
+  画面上で明確に分かる。
+- 確認ダイアログをキャンセルすると、結果表示が一切出ずAPIも呼ばれない
+  (`estimate_confirmations`が増えないことをDBでも確認)。
+- 確認ダイアログを承認すると、ボタンが一時的に「確定中...」表示になり、
+  その間の再クリックでは2回目のリクエストが発生しない。
+- 成功後、「確定しました(確定ID 3 / 2026-09-04 07:49:13 / 積算コード 15件
+  / 合計 1,930,200円)」が表示され、直下の「製番合計 1,930,200円」表示と
+  完全に一致することを確認した(スクリーンショットで目視確認済み)。
+- コンソールエラーなし。
+- 確認後、実行中に作成した`estimate_confirmations`/
+  `estimate_confirmation_items`の全行を削除し、デモDBを実行前の状態
+  (confirmation 0件)へ戻した。`detections`(manual 15件)・
+  `system_settings.data_source_root`はいずれも変化していないことを
+  確認済み。
+
 ## 9. Phase 2以降の候補 (未確定・本Phaseでは未着手)
 
 以下は次フェーズの候補であり、実施順序・要否は未確定:
@@ -2047,3 +2116,23 @@ Master Importer・APIの主要経路、Frontendの主要表示ロジック(グ�
   表示と一致することを確認した(8.19章参照)。確認後、作成したconfirmation
   行を削除してデモDBを実行前の状態へ戻し、`detections`(manual 15件)・
   `data_source_root`が今回の確認によって変化していないことを確認済み。
+
+## 26. テスト結果 (Issue #4 Phase B-3: 積算確定の最小UI実装時点)
+
+- Backend: 変更なし。`pytest` 175件は既存のまま(8.20章参照)。
+- Frontend: `npx vitest run`(フルスイート) — **596 passed**(既存588件 +
+  新規`EstimateConfirmationAction.test.tsx` 8件)。新規テストは製番未選択時に
+  何も描画しないこと、ラベルに製番が明示されること、確認ダイアログを
+  キャンセルするとAPIが呼ばれないこと、承認後に既存APIのみが呼ばれること、
+  送信中の二重送信防止、成功時の完了表示(確定ID/確定日時/item_count/
+  合計金額)、0件確定でもitem_countが表示されること、失敗時のエラー表示を
+  検証する。既存588件は全て無変更ロジックのまま通過 = 回帰なし。
+  `tsc -b --noEmit`clean、`npm run lint`exit 0(新規ファイルへのwarning無し)、
+  `npm run build`成功。
+- 実ブラウザでの確認: Playwrightで製番A1GV2421に対して「積算確定する」を
+  キャンセル/承認の両方で実行し、キャンセル時はAPIが呼ばれないこと、承認時は
+  送信中の二重送信防止・完了表示(確定ID 3 / 積算コード15件 / 合計
+  1,930,200円、直下の「製番合計」表示と完全一致)・コンソールエラー無しを
+  確認した(8.20章参照)。確認後、実行中に作成したconfirmation行(header
+  2件+明細30件)を削除し、デモDBを実行前の状態へ戻した。`detections`
+  (manual 15件)・`data_source_root`はいずれも変化していないことを確認済み。

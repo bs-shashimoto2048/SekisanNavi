@@ -8,6 +8,7 @@ import type {
   Detection,
   DetectedPreviewItem,
   DrawingPage,
+  EstimateConfirmation,
   EstimateItem,
   EstimateMasterItem,
   EstimatePanelInfo,
@@ -73,6 +74,17 @@ async function sendNoContent(path: string, method: 'DELETE'): Promise<void> {
   if (!res.ok) {
     throw new ApiError(res.status, await extractErrorMessage(res))
   }
+}
+
+// POST専用: リクエストボディを一切送らないエンドポイント用 (Issue #4 Phase B-2の
+// 積算確定APIのみが対象)。`sendJson`はbody引数を必ずJSON化するため、
+// 「そもそもボディを送らない」ことを明確にするための別関数として分ける。
+async function postJsonNoBody<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, { method: 'POST' })
+  if (!res.ok) {
+    throw new ApiError(res.status, await extractErrorMessage(res))
+  }
+  return (await res.json()) as T
 }
 
 export function fetchProjectInfo(): Promise<ProjectInfo> {
@@ -205,5 +217,16 @@ export function searchProducts(query: string, limit?: number): Promise<ProductSe
 // レスポンスに完全な形 (Vite devプロキシ経由でそのまま使えるパス) で含まれるため、
 // Frontend側で別途組み立てるヘルパーは持たない (ProductDrawing.thumbnail_urlを
 // そのまま使う)。
+
+// --- Issue #4 Phase B-2: 積算確定snapshot作成 ---
+
+/** 製番`productNo`の現在の積算結果を丸ごと確定snapshotとして保存する。
+ * リクエストボディは送らない (Backend側が現在状態から組み立てて保存する。
+ * Frontend側で計算済みの値を送信する方式は採用していない。
+ * `docs/decision-snapshot-design.md`参照)。読み出しAPIは無いため、
+ * 確定直後の内容確認はこの戻り値(header+全明細)のみで行う。 */
+export function createEstimateConfirmation(productNo: string): Promise<EstimateConfirmation> {
+  return postJsonNoBody(`/api/products/${encodeURIComponent(productNo)}/estimate-confirmations`)
+}
 
 export { ApiError }

@@ -278,5 +278,12 @@ snapshot行が持つ値をそのまま表示する設計とする(現在の`dete
    `estimate_master_items`(DB)×`product_df.csv`/`estcode_df.csv`
    (都度読み込み)から確定時点の値を組み立てる。0件確定(積算コードに
    紐づくDetectionが1件も無い製番の確定)はAPI層でも明示的に許可した。
-5. **今回はここまで(Phase B-1/B-2)。** Phase B-3(読み出しAPI・UI)は
-   別Issue/別作業として着手する。
+5. ~~Phase B-3: 積算確定の最小UI~~ **完了**。
+   `frontend/src/components/EstimateAggregation/EstimateConfirmationAction.tsx`
+   として実装した(詳細は`docs/implementation-plan.md` 8.20章、
+   `docs/ui-spec.md` 5.5章参照)。既存のPhase B-2 API(無変更)を呼ぶだけの
+   最小UIとし、snapshot内容の再計算・送信は行っていない。**読み出しAPIは
+   引き続き追加していない**ため、確定履歴の一覧・詳細閲覧UIはスコープ外の
+   まま。
+6. **今回はここまで(Phase B-1/B-2/B-3)。** 確定履歴の読み出しAPI・一覧UI
+   (仮称Phase B-4)は別Issue/別作業として着手する。

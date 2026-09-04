@@ -1344,6 +1344,7 @@ function App() {
                 onSelectTarget={setSelectedEstimateTargetId}
                 collapsed={estimateAggregationCollapsed}
                 onToggleCollapsed={() => setEstimateAggregationCollapsed((c) => !c)}
+                productNo={activeProductNo}
               />
             </div>
             {!estimateAggregationCollapsed && !estimateDetailCollapsed && (

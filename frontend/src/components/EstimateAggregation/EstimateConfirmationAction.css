@@ -1,0 +1,56 @@
+.estimate-confirmation-action {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0.4rem 0 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f9fafb;
+}
+
+.estimate-confirmation-action__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.estimate-confirmation-action__label {
+  font-size: 0.85rem;
+  color: #374151;
+  font-weight: 600;
+}
+
+.estimate-confirmation-action__button {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid #2563eb;
+  border-radius: 4px;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+}
+
+.estimate-confirmation-action__button:hover:not(:disabled) {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.estimate-confirmation-action__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.estimate-confirmation-action__result {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.estimate-confirmation-action__result--success {
+  color: var(--status-success);
+}
+
+.estimate-confirmation-action__result--error {
+  color: var(--status-error);
+}
