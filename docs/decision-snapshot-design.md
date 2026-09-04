@@ -268,6 +268,15 @@ snapshot行が持つ値をそのまま表示する設計とする(現在の`dete
    confirmation_idのFK制約が機能すること・detection_idにFK制約が無いため
    参照先Detection削除後もsnapshot行が残ること・Master再UPSERT後もsnapshot
    の値自体が変化しないことを検証した。
-4. **今回はここまで(Phase B-1)。** Phase B-2(確定操作のAPI設計・実装、
-   §10のa/b方式の決定を含む)・Phase B-3(読み出しAPI・UI)は別Issue/別作業
-   として着手する。
+4. ~~Phase B-2: 確定操作のAPI設計・実装~~ **完了**。
+   `POST /api/products/{product_no}/estimate-confirmations`として実装した
+   (詳細は`docs/implementation-plan.md` 8.19章参照)。§10のa/b方式は
+   **b(Backend側で現在状態から組み立てる)を採用**した。Frontendから
+   計算済みの値を受け取らず、`app/services/estimate_confirmation_builder.py`が
+   Frontend `estimateAggregationReal.ts::assignDetectionToPanel`と同じ
+   対象所属判定ロジックをBackend Python側へ移植し、`detections`(DB)×
+   `estimate_master_items`(DB)×`product_df.csv`/`estcode_df.csv`
+   (都度読み込み)から確定時点の値を組み立てる。0件確定(積算コードに
+   紐づくDetectionが1件も無い製番の確定)はAPI層でも明示的に許可した。
+5. **今回はここまで(Phase B-1/B-2)。** Phase B-3(読み出しAPI・UI)は
+   別Issue/別作業として着手する。

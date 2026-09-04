@@ -325,9 +325,17 @@ Detection単位(積算明細`detailItems`相当)の粒度で保存する。
 | status | 確定時点のDetection.status(○/△/×の元値) | 確定 |
 | bbox_x/y/w/h / page_no | 確定時点のBBox座標・ページ番号の非正規化コピー(図面参照はベストエフォート) | 確定 |
 
-**読み出しAPI・確定操作を呼び出すAPIは無い(Phase B-1時点)**。このテーブルを
-返す・作成するAPIエンドポイントは今回追加していない。Phase B-2/B-3で検討する
-(`docs/decision-snapshot-design.md` 10章/11章/13章)。
+**確定操作を呼び出すAPI(Phase B-2で追加)**: `POST /api/products/{product_no}/
+estimate-confirmations`。リクエストボディは受け取らず、Backend自身が
+その時点の`detections`×`estimate_master_items`×`product_df.csv`/
+`estcode_df.csv`から確定snapshotを組み立てて保存する
+(`app/services/estimate_confirmation_builder.py`。Frontendから計算済みの値を
+信頼して丸ごと受け取る方式は採用しなかった)。0件確定(積算コードに紐づく
+Detectionが1件も無い製番の確定)も許可する。
+
+**読み出しAPIは無い(Phase B-2時点)**。過去snapshotの一覧・詳細を返す
+APIエンドポイントは今回追加していない。Phase B-3で検討する
+(`docs/decision-snapshot-design.md` 11章/13章)。
 
 ## 7. system_settings (Phase 1.5で追加)
 

@@ -1512,6 +1512,86 @@ header+明細行の保存内容(対象所属・積算コード・BBox座標等�
 変更してもsnapshotの値自体は変化しないこと(Master再UPSERT後の再現性)。
 既存158件(Phase B-1着手前)と合わせて167件、全件成功を確認済み。
 
+## 8.19. Issue #4 Phase B-2: 積算確定snapshot作成APIの実装 (完了)
+
+Issue #4 `Preserve decision history for future estimation automation`の
+Phase B-2(確定操作のAPI設計・実装)を実装した。Phase B-1(schema/repository)は
+`8.18章`を参照。
+
+- `POST /api/products/{product_no}/estimate-confirmations`を追加
+  (`app/api/routers/products.py`)。リクエストボディは受け取らない。
+- **設計判断: Frontendから計算済みの値を信頼して丸ごと受け取る方式ではなく、
+  Backend側で現在状態から組み立てて保存する方式を採用した**(Issue #4最新
+  コメントの方針)。`app/services/estimate_confirmation_builder.py`(新規)が
+  以下を行う:
+  - `drawing_pages`テーブルから、対象`product_no`に紐づく行(`source_type=
+    'product_file'`)の`id -> source_page_no`を引く(対応する行が無い実製番は
+    明細0件になる。既存の他API(panels/detected-preview等)と同じ「対応データが
+    無ければ空」という規則に揃えた。エラーにはしない)。
+  - 各ページの`detections`(`master_item_id`が設定されている行のみ)を取得し、
+    Frontend `estimateAggregationReal.ts::assignDetectionToPanel`と**同じ
+    判定順**(交差面積の比較、複数盤で同値ならtie)のロジックをPython側へ
+    移植した`_assign_detection_to_panel()`で対象(製品全体/個別盤/要確認)を
+    判定する。盤領域は`load_product_df()`(既存の`app/services/product_df.py`)、
+    盤名称は`load_estcode_df()`(既存の`app/services/estcode_df.py`)をその場で
+    読み込んで使う(いずれも他の製番スコープAPIと同じ、都度読み込み・
+    DB非永続化の既存サービス)。
+  - 積算コード表示情報(`code`/`category`/`model`/`rating`)・単価
+    (`estimate_master_items.total_price_a`)を`get_master_item()`で取得し、
+    非正規化コピーとして各明細行へ設定する。
+  - 組み立てた`EstimateConfirmationItemInput`一覧を
+    `save_confirmation()`(Phase B-1、無変更)へそのまま渡して保存する。
+- **0件確定を業務APIとして明示的に許可した**: 積算コードに紐づく
+  Detectionが1件も無い製番でも、明細0件のconfirmationとして保存できる
+  (「対象データが無いこと」自体もその時点の事実として記録する価値があり、
+  Phase B-1のrepository層も既に許容する設計のため、API層で追加の禁止
+  ルールを設けなかった)。
+- **同時実行/transaction境界**: 新しいtransaction管理コードは追加していない。
+  既存の`get_db`依存関係が提供する「1リクエスト=1トランザクション」に
+  組み立て(読み取りのみ)から保存(INSERT)までをそのまま乗せている。
+- レスポンススキーマ`EstimateConfirmationOut`/`EstimateConfirmationItemOut`
+  (`app/schemas/estimate_confirmations.py`、新規)は、保存直後のheader+全明細を
+  そのまま返す(読み出しAPIは今回も追加していないため、確定直後の内容確認は
+  このレスポンスで行う)。
+- 現行の積算集約ロジック(Frontend)・BBox所属判定・`decision_events`・
+  Undo/Redoはすべて無変更。既存の`GET/POST/PATCH/DELETE /api/detections`等の
+  挙動・レスポンス形も変更していない。
+
+### テスト
+
+`backend/tests/test_estimate_confirmation_api.py`(新規、8件)で以下を確認した:
+Manual BBoxが盤領域と交差する場合に個別盤対象として保存されること(盤名称の
+非正規化コピー含む)、product_df.csvが無い場合は全て製品全体対象になること、
+積算コードに紐づいていないseed済みAI Detectionは対象外になること、対応する
+DrawingPage行が無い実製番でも明細0件のconfirmationとして保存できること、
+存在しない製番は404になること、再確定(2回目のPOST)が別confirmationとして
+追加されること(append-only)、確定後にMaster価格を変更してもsnapshotの値
+自体は変化しないこと、保存後に何らかの理由でリクエストが異常終了した場合に
+header/items双方がロールバックされ一切残らないこと。
+
+Backend `pytest`: **175 passed**(既存167件 + 新規8件、回帰なし)。
+
+### 実データ確認 (A1GV2421、実行後にデモDBを元へ戻し済み)
+
+実際に稼働中のBackendサーバー(`data_source_root`が実共有フォルダを指す
+デモDB)に対して`POST /api/products/A1GV2421/estimate-confirmations`を1回
+実行し、以下を確認した。
+
+- `item_count=15`: 事前に`GET /api/detections?drawing_page_id=...`を全11
+  ダミーページ分呼んで数えた「`master_item_id`が設定されているDetection数
+  (=15件、面16に11件・面29に4件)」と一致。
+- 対象別内訳(`panel:1:1`〜`panel:5:5`にそれぞれ2〜7件、要確認・製品全体は
+  0件)、各明細行のコード(11002/11576/11577/11580/11581/18012/18203/
+  18302/18304/18311等)・盤名称・単価・金額。
+- **`amount`の合計が1,930,200円となり、この製番のFrontend側実画面(積算集約
+  「製番合計」表示)と完全に一致することを確認した**(Backend側で独自に
+  移植した対象所属判定ロジックが、Frontendの実データ集約結果と一致することの
+  直接的な裏付け)。
+- 確認後、`estimate_confirmations`/`estimate_confirmation_items`の作成した
+  行(header 1件+明細15件)を削除し、デモDBを実行前の状態(confirmation
+  0件)へ戻した。`detections`(manual 15件)・`system_settings.data_source_root`
+  はいずれも今回の確認によって変化していないことを確認済み。
+
 ## 9. Phase 2以降の候補 (未確定・本Phaseでは未着手)
 
 以下は次フェーズの候補であり、実施順序・要否は未確定:
@@ -1950,3 +2030,20 @@ Master Importer・APIの主要経路、Frontendの主要表示ロジック(グ�
   追加に限定され、既存のAPIエンドポイントの入出力仕様は一切変更していない
   (確定操作を呼び出す新しいAPIエンドポイント自体を追加していない)ため、
   Frontend側の実ブラウザ回帰確認は実施していない。
+
+## 25. テスト結果 (Issue #4 Phase B-2: 積算確定snapshot作成APIの実装時点)
+
+- Backend: `pytest` — **175 passed**(既存167件 + 新規
+  `test_estimate_confirmation_api.py` 8件)。新規テストはPhase B-1完了時点の
+  §24と合わせて8.19章に記載。既存167件は全て無変更ロジックのまま通過 =
+  回帰なし。
+- Frontend: 変更なし(今回もBackendのみの実装)。既存の
+  `GET/POST/PATCH/DELETE /api/detections`・`GET /api/products/...`等の
+  レスポンス形・呼び出し方は一切変更していないため、Frontend側の動作に
+  影響する変更は無い。
+- 実データ確認: 実際に稼働中のBackendサーバー(実共有フォルダを参照する
+  デモDB、製番A1GV2421)に対して確定APIを1回実行し、`item_count=15`・
+  対象別内訳・合計金額(1,930,200円)がFrontend実画面の積算集約「製番合計」
+  表示と一致することを確認した(8.19章参照)。確認後、作成したconfirmation
+  行を削除してデモDBを実行前の状態へ戻し、`detections`(manual 15件)・
+  `data_source_root`が今回の確認によって変化していないことを確認済み。
