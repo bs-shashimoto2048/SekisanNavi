@@ -1296,6 +1296,114 @@ describe('App: 右ペイン3領域(盤情報・積算集約・積算明細)の�
   })
 })
 
+describe('App: 右ペイン3領域の折りたたみ (Issue #6: Improve estimation target visibility and collapsible right pane sections)', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+  afterEach(() => {
+    window.localStorage.clear()
+  })
+
+  async function renderApp() {
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
+  }
+
+  it('starts with all 3 sections expanded (指示: 初期表示は3項目ともOPEN)', async () => {
+    await renderApp()
+    expect(screen.getByRole('button', { name: /盤情報/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: /積算集約/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: /積算明細/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('separator', { name: '盤情報の高さを変更' })).toBeInTheDocument()
+    expect(screen.getByRole('separator', { name: '積算集約の高さを変更' })).toBeInTheDocument()
+  })
+
+  it('collapsing 盤情報 shrinks its wrap to auto height, hides its own splitter, and leaves 積算集約/積算明細 heights untouched', async () => {
+    await renderApp()
+    const panelInfoWrap = document.querySelector('.app-workspace__panel-info-wrap') as HTMLElement
+    const aggregationWrap = document.querySelector('.app-workspace__estimate-aggregation-wrap') as HTMLElement
+
+    fireEvent.click(screen.getByRole('button', { name: /盤情報/ }))
+
+    expect(panelInfoWrap.style.height).toBe('auto')
+    expect(screen.queryByRole('separator', { name: '盤情報の高さを変更' })).not.toBeInTheDocument()
+    // 積算集約↔積算明細のsplitterはそのまま残る(盤情報の折りたたみとは無関係)。
+    expect(screen.getByRole('separator', { name: '積算集約の高さを変更' })).toBeInTheDocument()
+    expect(aggregationWrap.style.height).toBe('260px') // 変化なし
+  })
+
+  it('re-expanding 盤情報 restores its previously dragged/stored height, not a reset default', async () => {
+    window.localStorage.setItem('sekisan-navi:panel-info-height', '250')
+    await renderApp()
+    const panelInfoWrap = document.querySelector('.app-workspace__panel-info-wrap') as HTMLElement
+    const toggle = screen.getByRole('button', { name: /盤情報/ })
+
+    fireEvent.click(toggle) // collapse
+    expect(panelInfoWrap.style.height).toBe('auto')
+    fireEvent.click(toggle) // expand
+    expect(panelInfoWrap.style.height).toBe('250px')
+  })
+
+  it('collapsing 積算集約 hides the 積算集約↔積算明細 splitter and lets 積算明細 keep flex:1 (space naturally flows to it)', async () => {
+    await renderApp()
+    const aggregationWrap = document.querySelector('.app-workspace__estimate-aggregation-wrap') as HTMLElement
+    const detailWrap = document.querySelector('.app-workspace__estimate-detail-wrap') as HTMLElement
+
+    fireEvent.click(screen.getByRole('button', { name: /積算集約/ }))
+
+    expect(aggregationWrap.style.height).toBe('auto')
+    expect(screen.queryByRole('separator', { name: '積算集約の高さを変更' })).not.toBeInTheDocument()
+    expect(detailWrap.style.flex).toBe('1 1 auto')
+  })
+
+  it('collapsing 積算明細 lets 積算集約 take over flex:1 (absorbs the freed space) and shrinks 積算明細 to its heading', async () => {
+    await renderApp()
+    const aggregationWrap = document.querySelector('.app-workspace__estimate-aggregation-wrap') as HTMLElement
+    const detailWrap = document.querySelector('.app-workspace__estimate-detail-wrap') as HTMLElement
+
+    fireEvent.click(screen.getByRole('button', { name: /積算明細/ }))
+
+    expect(detailWrap.style.flex).toBe('0 0 auto')
+    expect(aggregationWrap.style.flex).toBe('1 1 auto')
+    // 積算集約自体は折りたたまれていないため、通常どおり表示され続ける。
+    expect(screen.getByRole('button', { name: /積算明細/ })).toHaveAttribute('aria-expanded', 'false')
+    // このとき積算集約↔積算明細splitterは、ドラッグしても見た目に反映されない
+    // 状態になるため非表示にする。
+    expect(screen.queryByRole('separator', { name: '積算集約の高さを変更' })).not.toBeInTheDocument()
+  })
+
+  it('does not affect selectedEstimateTargetId / drawing list filtering when a section is collapsed (指示: 他セクションのロジックに影響しない)', async () => {
+    await renderApp()
+    const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+    expect(select.value).toBe('') // 総合計のまま
+
+    // 対象を個別盤へ切り替えてから、盤情報を折りたたむ。
+    fireEvent.change(select, { target: { value: 'panel:1:1' } })
+    await waitFor(() => expect(select.value).toBe('panel:1:1'))
+
+    fireEvent.click(screen.getByRole('button', { name: /盤情報/ }))
+    // 積算対象の選択状態は折りたたみと無関係に維持される。
+    expect((document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement).value).toBe(
+      'panel:1:1',
+    )
+  })
+
+  it('does not affect Undo/Redo button state when sections are collapsed', async () => {
+    await renderApp()
+    const undoButton = screen.getByRole('button', { name: /元に戻す/ })
+    const redoButton = screen.getByRole('button', { name: /やり直す/ })
+    expect(undoButton).toBeDisabled()
+    expect(redoButton).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: /盤情報/ }))
+    fireEvent.click(screen.getByRole('button', { name: /積算集約/ }))
+    fireEvent.click(screen.getByRole('button', { name: /積算明細/ }))
+
+    expect(undoButton).toBeDisabled()
+    expect(redoButton).toBeDisabled()
+  })
+})
+
 describe('App: 盤選択 → 右ペイン連動 (Phase 1.9)', () => {
   async function navigateToOutlinePage() {
     const thumbnail = await screen.findByRole('img', { name: 'P16' })

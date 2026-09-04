@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DetectionStatus } from '../../types/domain'
 import type { EstimateDetailItem, EstimateSource, EstimateTarget } from '../../types/estimateAggregation'
+import { CollapsibleSectionHeading } from '../Layout/CollapsibleSectionHeading'
 import './EstimateDetail.css'
 
 /** 積算明細の情報源フィルタ。「全て」と、実データでは常に0件になる「設計情報」
@@ -139,6 +140,12 @@ interface Props {
   /** 編集直後、一時的に強調・自動スクロールする対象のDetection id (指示5章/13章)。
    * nullの間は何もしない。強調の解除(タイマー)はApp.tsx側が行う。 */
   editFollowDetectionId?: number | null
+  /** Issue #6: 見出しクリックでの開閉状態。App.tsxが保持するcontrolled state
+   * (盤情報↔積算集約↔積算明細の高さ配分をApp.tsx側のwrapper divで切り替える
+   * 必要があるため)。ソート状態・情報源タブ・編集追従等、他のロジックには
+   * 一切接続しない独立したUI状態。 */
+  collapsed?: boolean
+  onToggleCollapsed?: () => void
 }
 
 /**
@@ -184,6 +191,8 @@ export function EstimateDetail({
   sourceFilter,
   onSourceFilterChange,
   editFollowDetectionId = null,
+  collapsed = false,
+  onToggleCollapsed = () => {},
 }: Props) {
   // ソート列/方向は「ユーザーが選んだ表示上の好み」であり、データ(App.tsx側の状態)
   // とは無関係のため、このコンポーネント自身のuseStateとして持つ (指示14章: 編集
@@ -247,27 +256,38 @@ export function EstimateDetail({
   return (
     <section className="estimate-detail">
       <div className="estimate-detail__fixed-top">
-        <h2 className="estimate-detail__heading">積算明細</h2>
+        <CollapsibleSectionHeading
+          title="積算明細"
+          collapsed={collapsed}
+          onToggle={onToggleCollapsed}
+          headingClassName="estimate-detail__heading"
+        />
 
-        <div className="estimate-detail__source-tabs" role="tablist" aria-label="情報源">
-          {SOURCE_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              role="tab"
-              aria-selected={sourceFilter === tab.value}
-              className={
-                'estimate-detail__source-tab' +
-                (sourceFilter === tab.value ? ' estimate-detail__source-tab--active' : '')
-              }
-              onClick={() => onSourceFilterChange(tab.value)}
-            >
-              {tab.label} {counts[tab.value]}
-            </button>
-          ))}
-        </div>
+        {/* Issue #6: 折りたたみ時は見出しだけを残し、本文(情報源タブ・表・凡例)は
+            すべて非表示にする。情報源タブの選択状態(sourceFilter)・ソート状態
+            自体はそれぞれApp.tsx/このコンポーネント内で保持されたまま変化しない。 */}
+        {!collapsed && (
+          <div className="estimate-detail__source-tabs" role="tablist" aria-label="情報源">
+            {SOURCE_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={sourceFilter === tab.value}
+                className={
+                  'estimate-detail__source-tab' +
+                  (sourceFilter === tab.value ? ' estimate-detail__source-tab--active' : '')
+                }
+                onClick={() => onSourceFilterChange(tab.value)}
+              >
+                {tab.label} {counts[tab.value]}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
+      {!collapsed && (
       <div className="estimate-detail__table-scroll" ref={tableScrollRef}>
         <table className="estimate-detail__table">
           <thead>
@@ -364,8 +384,9 @@ export function EstimateDetail({
           </tbody>
         </table>
       </div>
+      )}
 
-      <p className="estimate-detail__legend">○ 確定　△ 要確認　× 不備</p>
+      {!collapsed && <p className="estimate-detail__legend">○ 確定　△ 要確認　× 不備</p>}
     </section>
   )
 }

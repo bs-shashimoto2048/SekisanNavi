@@ -425,3 +425,75 @@ describe('EstimateDetail: 表セル境界の統一・ヘッダ左寄せ/数値�
   // --border-cellトークンの値自体はindex.css.test.ts側で検証し、実際の縦罫線描画は
   // 実ブラウザ確認で行う(EstimateMasterPicker.test.tsx既存の注記と同じ制約)。
 })
+
+describe('EstimateDetail: 折りたたみ (Issue #6: Improve estimation target visibility and collapsible right pane sections)', () => {
+  it('defaults to expanded (collapsed prop omitted) and shows the source tabs/table', () => {
+    renderDetail({ detailItems: [makeDetailItem()] })
+    expect(screen.getByRole('table')).toBeInTheDocument()
+    expect(screen.getByRole('tablist', { name: '情報源' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /積算明細/ })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('hides the body (source tabs/table/legend) but keeps the heading when collapsed=true, without touching sourceFilter/sort logic', () => {
+    const onSourceFilterChange = vi.fn()
+    renderDetail({
+      detailItems: [makeDetailItem()],
+      collapsed: true,
+      onToggleCollapsed: () => {},
+      onSourceFilterChange,
+    })
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tablist', { name: '情報源' })).not.toBeInTheDocument()
+    expect(screen.getByText('積算明細')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /積算明細/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(onSourceFilterChange).not.toHaveBeenCalled()
+  })
+
+  it('calls onToggleCollapsed when the heading is clicked, independent of source tab/sort column buttons', () => {
+    const onToggleCollapsed = vi.fn()
+    renderDetail({ detailItems: [makeDetailItem()], collapsed: false, onToggleCollapsed })
+    fireEvent.click(screen.getByRole('button', { name: /積算明細/ }))
+    expect(onToggleCollapsed).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '編集順でソート' })).toBeInTheDocument()
+  })
+
+  it('keeps sort state and source filter intact across collapse/expand', () => {
+    const { rerender } = renderDetail({
+      detailItems: [makeDetailItem({ id: '1', code: '11001' })],
+      collapsed: false,
+      onToggleCollapsed: () => {},
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'コードでソート' }))
+    expect(screen.getByRole('button', { name: 'コードでソート' }).textContent).toContain('▲')
+
+    rerender(
+      <EstimateDetail
+        detailItems={[makeDetailItem({ id: '1', code: '11001' })]}
+        targets={DEFAULT_TARGETS}
+        selectedTargetId={null}
+        currentPageNo={null}
+        onNavigateReference={() => {}}
+        onHoverDetail={() => {}}
+        sourceFilter="all"
+        onSourceFilterChange={() => {}}
+        collapsed={true}
+        onToggleCollapsed={() => {}}
+      />,
+    )
+    rerender(
+      <EstimateDetail
+        detailItems={[makeDetailItem({ id: '1', code: '11001' })]}
+        targets={DEFAULT_TARGETS}
+        selectedTargetId={null}
+        currentPageNo={null}
+        onNavigateReference={() => {}}
+        onHoverDetail={() => {}}
+        sourceFilter="all"
+        onSourceFilterChange={() => {}}
+        collapsed={false}
+        onToggleCollapsed={() => {}}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'コードでソート' }).textContent).toContain('▲')
+  })
+})

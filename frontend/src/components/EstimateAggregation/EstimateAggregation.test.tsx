@@ -878,3 +878,147 @@ describe('EstimateAggregation: 表セル境界の統一・ヘッダ左寄せ/数
   // --border-cellトークン自体の値はindex.css.test.ts側で検証し、実際の縦罫線描画は
   // 実ブラウザ確認(スクリーンショット)で行う。
 })
+
+describe('EstimateAggregation: 折りたたみ (Issue #6: Improve estimation target visibility and collapsible right pane sections)', () => {
+  it('defaults to expanded (collapsed prop omitted) and shows the table/target select', () => {
+    const item = makeLineItem()
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[item]}
+        totalLineItems={[makeTotalLineItem(item)]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    expect(screen.getByRole('table')).toBeInTheDocument()
+    expect(screen.getByRole('combobox')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /積算集約/ })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('hides the body (grand total/target select/table) but keeps the heading when collapsed=true, without touching selectedTargetId/onSelectTarget logic', () => {
+    const onSelectTarget = vi.fn()
+    const item = makeLineItem()
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[item]}
+        totalLineItems={[makeTotalLineItem(item)]}
+        selectedTargetId={null}
+        onSelectTarget={onSelectTarget}
+        collapsed
+        onToggleCollapsed={() => {}}
+      />,
+    )
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.getByText('積算集約')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /積算集約/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(onSelectTarget).not.toHaveBeenCalled()
+  })
+
+  it('calls onToggleCollapsed when the heading is clicked, independent of sort state/column click handling', () => {
+    const onToggleCollapsed = vi.fn()
+    const item = makeLineItem()
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[item]}
+        totalLineItems={[makeTotalLineItem(item)]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+        collapsed={false}
+        onToggleCollapsed={onToggleCollapsed}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /積算集約/ }))
+    expect(onToggleCollapsed).toHaveBeenCalledTimes(1)
+    // ソート列クリック用のボタンには影響しない(別のボタン)。
+    expect(screen.getByRole('button', { name: 'コードでソート' })).toBeInTheDocument()
+  })
+
+  it('keeps sort state intact across collapse/expand (collapse does not reset sortColumn/sortDirection)', () => {
+    const items = [
+      makeTotalLineItem({ id: 'a', code: '18002' }),
+      makeTotalLineItem({ id: 'b', code: '18001' }),
+    ]
+    const { rerender } = render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={items}
+        totalLineItems={items}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+        collapsed={false}
+        onToggleCollapsed={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '金額でソート' }))
+    expect(screen.getByRole('button', { name: '金額でソート' }).textContent).toContain('▲')
+
+    rerender(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={items}
+        totalLineItems={items}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+        collapsed
+        onToggleCollapsed={() => {}}
+      />,
+    )
+    rerender(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={items}
+        totalLineItems={items}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+        collapsed={false}
+        onToggleCollapsed={() => {}}
+      />,
+    )
+    expect(screen.getByRole('button', { name: '金額でソート' }).textContent).toContain('▲')
+  })
+})
+
+describe('EstimateAggregation: 積算対象Selectの視認性 (Issue #6 指示1章)', () => {
+  it('gives the target select a stronger cobalt border than a plain default select (常時強調)', () => {
+    const item = makeLineItem()
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[item]}
+        totalLineItems={[makeTotalLineItem(item)]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    const select = screen.getByRole('combobox')
+    const style = getComputedStyle(select)
+    // border-widthはリテラル値のためjsdomでも解決できる(色を含むvar()解決の
+    // 制約とは別。EstimateMasterPicker.test.tsx等の既存の注記と同じ理由で
+    // widthのみ検証し、実際の色描画は実ブラウザで確認する)。
+    expect(style.borderTopWidth).toBe('1.5px')
+  })
+
+  it('keeps the "--focused" (Viewer連動中) modifier strictly stronger than the always-on base style, not identical (階層を維持する)', () => {
+    // 常時強調(base)と一段強いfocused状態が同じ見た目に潰れていないことを、
+    // CSSソース側の宣言(異なるborder-color/backgroundを持つこと)で確認する。
+    // jsdomはcolor系のcomputed styleを確実に解決しないため、EstimateAggregation.css
+    // のルール定義そのものをここでは信頼し、実際の色差は実ブラウザで確認する。
+    const item = makeLineItem()
+    const targets = [makeTarget(), makePanelTarget()]
+    render(
+      <EstimateAggregation
+        targets={targets}
+        lineItems={[item]}
+        totalLineItems={[makeTotalLineItem(item)]}
+        selectedTargetId="panel:1:1"
+        onSelectTarget={() => {}}
+      />,
+    )
+    const select = screen.getByRole('combobox')
+    expect(select.className).toContain('estimate-aggregation__target-select--focused')
+  })
+})

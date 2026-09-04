@@ -102,25 +102,35 @@
   margin-bottom: 0.45rem;
 }
 
+/* Issue #6 指示1章: 積算対象Selectの視認性向上。既存の構造色(濃紺/コバルト/白/灰)の
+   範囲内で、常時「今どの対象を見ているか」の入口だと分かる強さにする。状態色
+   (--status-*)やAI/Manualの意味色とは重ならない配色にし、padding/高さは
+   増やさない(border-boxのためborder-widthを1px→1.5pxにしても外形サイズは
+   変わらない)。既存の`--focused`(Viewer連動中のみ淡い背景で強調)は、この
+   常時強調よりさらに一段強い状態として残す(通常表示 < Viewer連動中、の
+   階層を維持)。 */
 .estimate-aggregation__target-select {
   font: inherit;
   font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
-  color: #1f2937;
+  color: #1e3a8a;
+  font-weight: 600;
   background: #fff;
-  border: 1px solid #d1d5db;
+  border: 1.5px solid #2563eb;
   border-radius: 4px;
   padding: 0.3rem 0.45rem;
   cursor: pointer;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.15);
 }
 
 .estimate-aggregation__target-select:hover {
-  border-color: #93c5fd;
+  border-color: #1d4ed8;
 }
 
 /* Viewerが現在この対象へフォーカスしている(個別盤選択中)ことを示す
-   (指示8章「Viewer連動中の対象表示」)。コバルトブルーの枠+ごく薄い背景。 */
+   (指示8章「Viewer連動中の対象表示」)。常時強調(上記)よりさらに一段強く、
+   コバルトブルーの淡い塗り+外側リングを追加する。 */
 .estimate-aggregation__target-select--focused {
-  border-color: #2563eb;
+  border-color: #1d4ed8;
   background: #eff6ff;
   box-shadow: 0 0 0 1px #2563eb;
 }

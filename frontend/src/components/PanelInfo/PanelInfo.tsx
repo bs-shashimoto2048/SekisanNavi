@@ -1,5 +1,6 @@
 import type { AttributeSource, EstimatePanelInfo, Panel, PanelPreview } from '../../types/domain'
 import { banGroupKey, panelKey } from '../../utils/panel'
+import { CollapsibleSectionHeading } from '../Layout/CollapsibleSectionHeading'
 import './PanelInfo.css'
 
 // 取得元の表示ラベル (要件12。旧PanelProperties.tsxから移設)。W/D/H等の項目名は
@@ -27,6 +28,12 @@ interface Props {
    * クリックした際の現在の動作」= Viewerクリックと同じ`onSelectPanel`をそのまま
    * 再利用する。新しい選択ロジックは作らない)。 */
   onSelectPanel: (key: string, panel: PanelPreview) => void
+  /** Issue #6: 見出しクリックでの開閉状態。controlled(App.tsxが保持)にする理由は
+   * 折りたたみ時に親側の高さ/flex配分(隣接領域への還元)を切り替える必要があり、
+   * その判断がこのコンポーネント単体では完結しないため。積算対象・図面一覧
+   * 連動・Undo/Redo等、他のロジックには一切接続しない独立したUI状態。 */
+  collapsed?: boolean
+  onToggleCollapsed?: () => void
 }
 
 // null/undefined/NaN/空文字はそのまま出さず"-"に統一する (指示書8章)。
@@ -123,19 +130,34 @@ function buildPanelCards(
  *      後方互換のため従来の属性テーブル表示にフォールバックする。
  *   3. どちらも無ければ「このページには盤情報がありません」。
  */
-export function PanelInfo({ panel, panels, estimatePanels, selectedPanel, onSelectPanel }: Props) {
+export function PanelInfo({
+  panel,
+  panels,
+  estimatePanels,
+  selectedPanel,
+  onSelectPanel,
+  collapsed = false,
+  onToggleCollapsed = () => {},
+}: Props) {
   const cards = buildPanelCards(panels, estimatePanels, selectedPanel)
   const heading = cards.length > 0 ? `盤情報　${cards.length}件` : '盤情報'
 
   return (
     <section className="panel-info">
-      <h2 className="panel-info__heading">{heading}</h2>
+      <CollapsibleSectionHeading
+        title={heading}
+        collapsed={collapsed}
+        onToggle={onToggleCollapsed}
+        headingClassName="panel-info__heading"
+      />
 
-      {cards.length === 0 && !panel && (
+      {/* Issue #6: 折りたたみ時は見出しだけを残し、本文(カード一覧・従来の属性
+          テーブル・空状態メッセージ)はすべて非表示にする。 */}
+      {!collapsed && cards.length === 0 && !panel && (
         <p className="panel-info__empty">このページには盤情報がありません</p>
       )}
 
-      {cards.length > 0 && (
+      {!collapsed && cards.length > 0 && (
         <div className="panel-info__list-scroll">
           <ul className="panel-info__list">
             {cards.map((card) => (
@@ -185,7 +207,7 @@ export function PanelInfo({ panel, panels, estimatePanels, selectedPanel, onSele
         </div>
       )}
 
-      {cards.length === 0 && panel && (
+      {!collapsed && cards.length === 0 && panel && (
         <>
           <div className="panel-info__title">
             {panel.panel_no} / {panel.name}

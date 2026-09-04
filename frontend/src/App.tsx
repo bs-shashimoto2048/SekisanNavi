@@ -300,6 +300,15 @@ function App() {
     'height',
   )
 
+  // Issue #6: 右ペイン3領域(盤情報/積算集約/積算明細)をそれぞれ独立して
+  // 折りたたみ可能にする。デフォルトはすべて展開(false)。積算対象選択・
+  // 図面一覧連動・Viewer連動・Undo/Redo等、他のロジックには一切接続しない
+  // 独立したUI状態のため、localStorageへは永続化しない(リロードのたびに
+  // 「初期表示は3項目ともOPEN」を素直に満たす)。
+  const [panelInfoCollapsed, setPanelInfoCollapsed] = useState(false)
+  const [estimateAggregationCollapsed, setEstimateAggregationCollapsed] = useState(false)
+  const [estimateDetailCollapsed, setEstimateDetailCollapsed] = useState(false)
+
   // 初期データ読込 (案件情報 / ダミー図面一覧 / 全ページ分のDetection)。
   // `fetchDetections()`を引数無しで呼ぶとDB全件が返る (Backend側の既存の
   // 任意フィルタ仕様をそのまま利用。積算集約・積算明細UI再構成)。
@@ -1287,40 +1296,70 @@ function App() {
               盤情報↔積算集約の間にもsplitterを追加し、複数盤表示時に盤情報が
               大きな高さを占有する問題を、ユーザー自身が調整できるようにする
               (右ペイン全体を押し広げるのではなく、3領域間で高さを分け合う)。 */}
-          <div className="app-workspace__panel-info-wrap" style={{ height: panelInfoHeight }}>
+          {/* Issue #6: 折りたたみ中のセクションは`height:'auto'`(内容=見出しのみに
+              自然に縮む)にし、隣接領域(下記right-lower、ひいてはその中の
+              積算集約/積算明細)へ高さを還元する。折りたたみ中は対応するsplitterも
+              非表示にする(ドラッグしても見た目に反映されない「不自然な」操作を
+              避けるため。指示: 折りたたみ中の高さ計算・ドラッグ挙動が不自然に
+              ならないようにする)。 */}
+          <div
+            className="app-workspace__panel-info-wrap"
+            style={{ height: panelInfoCollapsed ? 'auto' : panelInfoHeight }}
+          >
             <PanelInfo
               panel={panel}
               panels={activeProductPage?.panels ?? []}
               estimatePanels={estimatePanels}
               selectedPanel={selectedPanel}
               onSelectPanel={handleSelectPanel}
+              collapsed={panelInfoCollapsed}
+              onToggleCollapsed={() => setPanelInfoCollapsed((c) => !c)}
             />
           </div>
-          <PaneSplitter
-            onDrag={(delta) => resizePanelInfoBy(delta)}
-            ariaLabel="盤情報の高さを変更"
-            axis="y"
-          />
+          {!panelInfoCollapsed && (
+            <PaneSplitter
+              onDrag={(delta) => resizePanelInfoBy(delta)}
+              ariaLabel="盤情報の高さを変更"
+              axis="y"
+            />
+          )}
           {/* 積算集約(②)と積算明細(③)で残り領域を分割する (盤フォーカス・積算明細
-              再構成 指示6章)。 */}
+              再構成 指示6章)。Issue #6: 積算明細が折りたたまれている間は、積算集約
+              側がflex:1で残り領域全体を引き継ぐ(旧来のドラッグ幅指定は一時的に
+              無視する。積算明細を再度開くと元の高さ指定へ戻る)。 */}
           <div className="app-workspace__right-lower">
-            <div className="app-workspace__estimate-aggregation-wrap" style={{ height: estimateAggregationHeight }}>
+            <div
+              className="app-workspace__estimate-aggregation-wrap"
+              style={
+                estimateDetailCollapsed
+                  ? { flex: '1 1 auto', minHeight: 0 }
+                  : { height: estimateAggregationCollapsed ? 'auto' : estimateAggregationHeight, flexShrink: 0 }
+              }
+            >
               <EstimateAggregation
                 targets={estimateAggregationData.targets}
                 lineItems={estimateAggregationData.lineItems}
                 totalLineItems={estimateAggregationData.totalLineItems}
                 selectedTargetId={selectedEstimateTargetId}
                 onSelectTarget={setSelectedEstimateTargetId}
+                collapsed={estimateAggregationCollapsed}
+                onToggleCollapsed={() => setEstimateAggregationCollapsed((c) => !c)}
               />
             </div>
-            <PaneSplitter
-              onDrag={(delta) => resizeEstimateAggregationBy(delta)}
-              ariaLabel="積算集約の高さを変更"
-              axis="y"
-            />
+            {!estimateAggregationCollapsed && !estimateDetailCollapsed && (
+              <PaneSplitter
+                onDrag={(delta) => resizeEstimateAggregationBy(delta)}
+                ariaLabel="積算集約の高さを変更"
+                axis="y"
+              />
+            )}
             <div
               className="app-workspace__estimate-detail-wrap"
-              style={{ minHeight: ESTIMATE_DETAIL_HEIGHT_MIN }}
+              style={
+                estimateDetailCollapsed
+                  ? { flex: '0 0 auto' }
+                  : { flex: '1 1 auto', minHeight: ESTIMATE_DETAIL_HEIGHT_MIN }
+              }
             >
               <EstimateDetail
                 detailItems={detailItemsWithEditMeta}
@@ -1332,6 +1371,8 @@ function App() {
                 sourceFilter={estimateDetailSourceFilter}
                 onSourceFilterChange={setEstimateDetailSourceFilter}
                 editFollowDetectionId={editFollowDetectionId}
+                collapsed={estimateDetailCollapsed}
+                onToggleCollapsed={() => setEstimateDetailCollapsed((c) => !c)}
               />
             </div>
           </div>
