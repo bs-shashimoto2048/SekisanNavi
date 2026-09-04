@@ -173,6 +173,20 @@ describe('DrawingCanvas', () => {
     fireEvent.click(deleteButton)
     expect(onDeleteSelectedDetection).toHaveBeenCalledTimes(1)
   })
+
+  it('gives the toolbar buttons a visible "raised" affordance (box-shadow) at rest, distinguishing them from plain text/border (Issue #9 追加修正2回目)', async () => {
+    await renderCanvas()
+    const zoomInButton = screen.getByRole('button', { name: '＋' })
+    const style = getComputedStyle(zoomInButton)
+    expect(style.boxShadow).not.toBe('none')
+  })
+
+  it('changes the disabled BBox削除 button back to no shadow, keeping it visually distinct from the enabled/clickable buttons', async () => {
+    await renderCanvas()
+    const deleteButton = screen.getByRole('button', { name: 'BBox削除' })
+    expect(deleteButton).toBeDisabled()
+    expect(getComputedStyle(deleteButton).boxShadow).toBe('none')
+  })
 })
 
 describe('DrawingCanvas: pngモード (Phase 1.8重要仕様訂正 — 実製番の中央Viewerはpngを使用)', () => {

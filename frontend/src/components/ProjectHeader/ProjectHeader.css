@@ -10,13 +10,33 @@
    引き上げ、一段軽いコバルトにした(色相224°・彩度76%は維持、明度のみ
    48%→51%)。単純な#2563eb直採用(彩度83%)は「彩度を上げない」指示に反する
    ため避けた。border-bottomは1px線で面積への影響が小さいため据え置いている。 */
+/* Issue #9 追加修正(3回目): Header全体を単色の濃いコバルトで塗ると「青が強すぎる」
+   との指摘を受け、左(ブランド領域)は青を保ちつつ右へ行くほど白へ近づく水平
+   グラデーションへ変更した。stopの位置は実データ(A1GV2421)を実ブラウザで
+   実測して決めている: `.project-header__brand`は左端(0%)〜約12%、
+   `.project-header__info`(整理番号/製番/盤名称/解析状態)はその右、実測で
+   約13%〜61%の範囲に収まる。42%までを完全な単色コバルトに保つことで、
+   info側のほぼ全域(短い製番/長い製番いずれでも)が「まだ十分に濃い青」の
+   範囲に収まるようにし、そこから68%にかけて緩やかに明度を上げることで、
+   仮にinfoが多少右へ伸びても急に読みにくくなる「崖」を作らない
+   (グラデーションなので境界で急変しない)。`.project-header__actions`
+   (右端のボタン2つ)は実測で87%〜99%と、最も明るい(白に近い)領域に来るため、
+   ボタン自体を「地の色に依存しない自己完結した白背景チップ」へ作り替えて
+   対応した(後述`.project-header__actions button`)。 */
 .project-header {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 1.5rem;
   padding: 0.5rem 1rem;
-  background: #2455e2;
+  background: linear-gradient(
+    to right,
+    #2455e2 0%,
+    #2455e2 42%,
+    #6f8aec 68%,
+    #cbd7f6 88%,
+    #eef2fc 100%
+  );
   color: #fff;
   border-bottom: 1px solid #1e40af;
 }
@@ -168,18 +188,28 @@
 
 /* 指示4章: 背景をコバルトブルーへ変更したため、旧来の暗いグレー系ボタン
    (#374151地に#4b5563border)はHeaderと同化して見えなくなる。Headerより
-   少し濃い半透明の白背景+白系borderへ変更し、サイズ・paddingは変えない。 */
+   少し濃い半透明の白背景+白系borderへ変更し、サイズ・paddingは変えない。
+
+   Issue #9 追加修正(3回目): Header背景を右方向グラデーション(濃い青→白)へ
+   変更したことで、実測上このボタン群(87%〜99%)は最も明るい(白に近い)領域に
+   来るようになった。旧来の「半透明の白+白文字」は、地が濃い青である前提の
+   配色のため、白に近い地の上では文字・borderともにほぼ同化して見えなくなる。
+   そのため、**地の色に依存せず自己完結して読める配色**(不透明に近い白背景+
+   濃い青文字+青border)へ切り替えた。これによりHeaderのどの位置(濃い青〜
+   ほぼ白)にあっても一定の可読性を保つ。サイズ・paddingは変更していない。 */
 .project-header__actions button {
   padding: 0.35rem 0.8rem;
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
+  border: 1px solid #93a8ee;
+  background: rgba(255, 255, 255, 0.94);
+  color: #1d3fae;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
   white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.15);
 }
 
 .project-header__actions button:hover {
-  background: rgba(255, 255, 255, 0.26);
+  background: #ffffff;
+  border-color: #2455e2;
 }

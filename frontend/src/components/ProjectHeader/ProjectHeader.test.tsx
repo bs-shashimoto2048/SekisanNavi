@@ -116,7 +116,7 @@ describe('ProjectHeader', () => {
     expect(style.marginRight).not.toBe('0px')
   })
 
-  it('uses a bright cobalt blue background instead of the old dark navy (UI視覚階層改善 追加修正指示 2章、最終微調整ラウンド指示6章で一段軽いコバルトへ)', () => {
+  it('uses a bright cobalt blue that fades to white toward the right, instead of the old flat dark navy (UI視覚階層改善 追加修正指示 2章、Issue #9追加修正3回目でグラデーション化)', () => {
     const { container } = render(
       <ProjectHeader
         project={project}
@@ -127,10 +127,33 @@ describe('ProjectHeader', () => {
     )
     const header = container.querySelector('.project-header') as HTMLElement
     const style = getComputedStyle(header)
-    // #2455e2 = rgb(36, 85, 226)。旧#1f2937(濃紺, rgb(31,41,55))ではないこと。
-    expect(style.backgroundColor).toBe('rgb(36, 85, 226)')
-    expect(style.backgroundColor).not.toBe('rgb(31, 41, 55)')
+    // Issue #9追加修正3回目: 単色背景(background-color)から、左は濃いコバルト
+    // #2455e2(=rgb(36, 85, 226))を保ちつつ右へ白(#eef2fc)へ近づく
+    // linear-gradientへ変更した。単色ではなくbackground-image(gradient)に
+    // なったことと、gradientの開始色に旧来のコバルトが含まれること、旧#1f2937
+    // (濃紺, rgb(31,41,55))ではないことを確認する。
+    expect(style.backgroundImage).toContain('linear-gradient')
+    expect(style.backgroundImage).toContain('rgb(36, 85, 226)')
+    expect(style.backgroundImage).not.toContain('rgb(31, 41, 55)')
     expect(style.color).toBe('rgb(255, 255, 255)')
+  })
+
+  it('gives the right-side action buttons a self-contained readable style, independent of the header background (Issue #9 追加修正3回目: グラデーション右端でも可読性を保つ)', () => {
+    render(
+      <ProjectHeader
+        project={project}
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+      />,
+    )
+    const openProductButton = screen.getByRole('button', { name: '製番を開く' })
+    const style = getComputedStyle(openProductButton)
+    // 旧来は半透明の白(地の濃い青が透けて見える前提)だったが、Header右端は
+    // グラデーションでほぼ白くなるため、地の色に依存しない不透明に近い白背景+
+    // 濃い青文字へ変更した(白地の上でも視認できる配色)。
+    expect(style.backgroundColor).toBe('rgba(255, 255, 255, 0.94)')
+    expect(style.color).toBe('rgb(29, 63, 174)')
   })
 
   it('renders project info and the Japanese label for analysis_status', () => {
