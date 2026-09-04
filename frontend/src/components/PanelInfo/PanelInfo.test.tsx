@@ -75,7 +75,7 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
     expect(screen.getByText('H 2300 : W 1700 : D 2200')).toBeInTheDocument()
     expect(screen.getByText('箱・左右(L)')).toBeInTheDocument()
     // 見出しに件数が出る (指示書4章の表示例「盤情報 5件」に相当)。
-    expect(document.querySelector('.panel-info__heading')?.textContent).toBe('盤情報　1件')
+    expect(document.querySelector('.panel-info__heading')?.textContent).toContain('盤情報　1件')
   })
 
   it('lists every distinct panel present on the current page, all at once (指示書3章: 複数盤をすべて確認できる)', () => {
@@ -98,7 +98,7 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
         onSelectPanel={() => {}}
       />,
     )
-    expect(document.querySelector('.panel-info__heading')?.textContent).toBe('盤情報　3件')
+    expect(document.querySelector('.panel-info__heading')?.textContent).toContain('盤情報　3件')
     expect(screen.getByText('高圧受電盤')).toBeInTheDocument()
     expect(screen.getByText('低圧動力盤')).toBeInTheDocument()
     expect(screen.getByText('制御盤')).toBeInTheDocument()
@@ -118,7 +118,7 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
         onSelectPanel={() => {}}
       />,
     )
-    expect(document.querySelector('.panel-info__heading')?.textContent).toBe('盤情報　1件')
+    expect(document.querySelector('.panel-info__heading')?.textContent).toContain('盤情報　1件')
     expect(screen.getAllByText('高圧受電盤')).toHaveLength(1)
   })
 
@@ -427,5 +427,75 @@ describe('PanelInfo: 1行表示レイアウト (盤情報1行化・3領域リサ
     // 100%を使い切るだけで、独自のmax-height/固定比率は持たない。
     expect(getComputedStyle(section).height).toBe('100%')
     expect(getComputedStyle(scrollArea).overflowY).toBe('auto')
+  })
+})
+
+describe('PanelInfo: 折りたたみ (Issue #6: Improve estimation target visibility and collapsible right pane sections)', () => {
+  it('defaults to expanded (collapsed prop omitted) and shows the card list', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel()]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    expect(screen.getByText('No.2-1低圧動力盤')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /盤情報/ })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('hides the body (card list) but keeps the heading when collapsed=true, without touching onSelectPanel/selectedPanel logic', () => {
+    const onSelectPanel = vi.fn()
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel()]}
+        selectedPanel={null}
+        onSelectPanel={onSelectPanel}
+        collapsed
+        onToggleCollapsed={() => {}}
+      />,
+    )
+    expect(screen.queryByText('No.2-1低圧動力盤')).not.toBeInTheDocument()
+    expect(document.querySelector('.panel-info__heading')?.textContent).toContain('盤情報　1件')
+    expect(screen.getByRole('button', { name: /盤情報/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(onSelectPanel).not.toHaveBeenCalled()
+  })
+
+  it('calls onToggleCollapsed when the heading is clicked, without the component managing its own collapse state', () => {
+    const onToggleCollapsed = vi.fn()
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel()]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+        collapsed={false}
+        onToggleCollapsed={onToggleCollapsed}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /盤情報/ }))
+    expect(onToggleCollapsed).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not add padding/margin to the heading toggle button itself (指示: 見出しの高さを変えない)', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel()]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+        collapsed={false}
+        onToggleCollapsed={() => {}}
+      />,
+    )
+    const toggle = screen.getByRole('button', { name: /盤情報/ })
+    const style = getComputedStyle(toggle)
+    expect(style.padding).toBe('0px')
+    expect(style.margin).toBe('0px')
   })
 })

@@ -1,0 +1,28 @@
+/* Issue #6: 折りたたみ可能な見出し共通style。既存の各見出し
+   (.panel-info__heading等)のfont-size/weight/color/背景/padding等は一切
+   ここで上書きしない。ボタン自体は完全に透明・枠なしで、クリック領域を
+   見出し全体へ広げるだけ(.estimate-detail__sort-button等の既存パターンと
+   同じ考え方)。 */
+.collapsible-section-heading__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.collapsible-section-heading__chevron {
+  font-size: 0.75em;
+  /* 見出し文字より小さく、かつ折りたたみ矢印だとひと目で分かる程度の
+     控えめな表示にする(新しい強い装飾を追加しない)。 */
+  flex-shrink: 0;
+  line-height: 1;
+}

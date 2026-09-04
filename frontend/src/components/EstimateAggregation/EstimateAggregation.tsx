@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { EstimateLineItem, EstimateTarget } from '../../types/estimateAggregation'
 import { formatTargetLabel } from '../../domain/estimateTargetLabel'
+import { CollapsibleSectionHeading } from '../Layout/CollapsibleSectionHeading'
 import './EstimateAggregation.css'
 
 /** 対象セレクトの「総合計」を表す値。実対象(製品全体/各盤/要確認)のidとは
@@ -111,6 +112,12 @@ interface Props {
    * ここへcontrolledで渡す。 */
   selectedTargetId: string | null
   onSelectTarget: (targetId: string | null) => void
+  /** Issue #6: 見出しクリックでの開閉状態。App.tsxが保持するcontrolled state
+   * (盤情報↔積算集約↔積算明細の高さ配分をApp.tsx側のwrapper divで切り替える
+   * 必要があるため)。積算対象選択・ソート状態・Undo/Redo等、他のロジックには
+   * 一切接続しない独立したUI状態。 */
+  collapsed?: boolean
+  onToggleCollapsed?: () => void
 }
 
 function formatCurrency(amount: number): string {
@@ -196,7 +203,15 @@ function headerAmountLabel(selectedTargetId: string | null, target: EstimateTarg
  * `position:sticky`を使い、上部金額は`<table>`の外(スクロール領域の外)に置くことで
  * 確実に常時見えるようにしている。
  */
-export function EstimateAggregation({ targets, lineItems, totalLineItems, selectedTargetId, onSelectTarget }: Props) {
+export function EstimateAggregation({
+  targets,
+  lineItems,
+  totalLineItems,
+  selectedTargetId,
+  onSelectTarget,
+  collapsed = false,
+  onToggleCollapsed = () => {},
+}: Props) {
   // ソート列/方向は「ユーザーが選んだ表示上の好み」であり、対象切替(総合計/製品全体/
   // 個別盤/要確認)やBBox編集によるデータ更新とは無関係のため、積算明細と同様に
   // このコンポーネント自身のuseStateとして持つ (9章/10章/11章: 対象切替・データ更新の
@@ -258,55 +273,65 @@ export function EstimateAggregation({ targets, lineItems, totalLineItems, select
   return (
     <section className="estimate-aggregation">
       <div className="estimate-aggregation__fixed-top">
-        <h2 className="estimate-aggregation__heading">積算集約</h2>
+        <CollapsibleSectionHeading
+          title="積算集約"
+          collapsed={collapsed}
+          onToggle={onToggleCollapsed}
+          headingClassName="estimate-aggregation__heading"
+        />
 
-        {totalCodeCount === 0 ? (
-          <p className="estimate-aggregation__empty">現在の製番に付加されている積算コードがありません</p>
-        ) : (
-          <>
-            <div className="estimate-aggregation__grand-total">
-              {headerLabel}
-              {headerUnknownCount > 0 && (
-                <span className="estimate-aggregation__warn"> (単価未設定 {headerUnknownCount}件を含まず)</span>
-              )}{' '}
-              <strong>{formatCurrency(headerAmount)}</strong>
-            </div>
-            <div className="estimate-aggregation__summary">
-              <span>
-                積算コード <strong>{totalCodeCount}</strong>件
-              </span>
-            </div>
+        {/* Issue #6: 折りたたみ時は見出しだけを残し、本文(製番合計・対象セレクト・
+            要確認警告・表)はすべて非表示にする。積算対象の選択状態(selectedTargetId)
+            自体はApp.tsx側で保持されたまま変化しない。 */}
+        {!collapsed && (
+          totalCodeCount === 0 ? (
+            <p className="estimate-aggregation__empty">現在の製番に付加されている積算コードがありません</p>
+          ) : (
+            <>
+              <div className="estimate-aggregation__grand-total">
+                {headerLabel}
+                {headerUnknownCount > 0 && (
+                  <span className="estimate-aggregation__warn"> (単価未設定 {headerUnknownCount}件を含まず)</span>
+                )}{' '}
+                <strong>{formatCurrency(headerAmount)}</strong>
+              </div>
+              <div className="estimate-aggregation__summary">
+                <span>
+                  積算コード <strong>{totalCodeCount}</strong>件
+                </span>
+              </div>
 
-            <label className="estimate-aggregation__target-select-label">
-              対象
-              <select
-                className={
-                  'estimate-aggregation__target-select' +
-                  (isViewerFocused ? ' estimate-aggregation__target-select--focused' : '')
-                }
-                value={selectedTargetId ?? ALL_OPTION_VALUE}
-                onChange={(e) => onSelectTarget(e.target.value === ALL_OPTION_VALUE ? null : e.target.value)}
-              >
-                <option value={ALL_OPTION_VALUE}>総合計</option>
-                {targets.map((target) => (
-                  <option key={target.id} value={target.id}>
-                    {targetOptionLabel(target)}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <label className="estimate-aggregation__target-select-label">
+                対象
+                <select
+                  className={
+                    'estimate-aggregation__target-select' +
+                    (isViewerFocused ? ' estimate-aggregation__target-select--focused' : '')
+                  }
+                  value={selectedTargetId ?? ALL_OPTION_VALUE}
+                  onChange={(e) => onSelectTarget(e.target.value === ALL_OPTION_VALUE ? null : e.target.value)}
+                >
+                  <option value={ALL_OPTION_VALUE}>総合計</option>
+                  {targets.map((target) => (
+                    <option key={target.id} value={target.id}>
+                      {targetOptionLabel(target)}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            {selectedTarget?.type === 'tie' && (
-              <p className="estimate-aggregation__warn estimate-aggregation__warn--block">
-                根拠BBoxが複数の盤と同じ交差面積で重なっており、機械的に一意の盤へ決定
-                できませんでした。実図面を確認し、手動で判断してください。
-              </p>
-            )}
-          </>
+              {selectedTarget?.type === 'tie' && (
+                <p className="estimate-aggregation__warn estimate-aggregation__warn--block">
+                  根拠BBoxが複数の盤と同じ交差面積で重なっており、機械的に一意の盤へ決定
+                  できませんでした。実図面を確認し、手動で判断してください。
+                </p>
+              )}
+            </>
+          )
         )}
       </div>
 
-      {totalCodeCount > 0 && (
+      {!collapsed && totalCodeCount > 0 && (
         <>
           <div className="estimate-aggregation__table-scroll">
             <table className="estimate-aggregation__table">
