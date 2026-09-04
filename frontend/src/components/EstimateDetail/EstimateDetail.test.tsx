@@ -390,3 +390,38 @@ describe('EstimateDetail (積算明細強化・Undo/Redo・要確認警告・編
     })
   })
 })
+
+// Sekisan Navi 追加UI修正指示: 表セル境界の統一 + ヘッダ左寄せ / 数値セル右寄せ
+describe('EstimateDetail: 表セル境界の統一・ヘッダ左寄せ/数値セル右寄せ', () => {
+  it('keeps every column header left-aligned (5章: 積算明細も数値列を含めheader文字は原則左寄せ、既存のまま変更なし)', () => {
+    renderDetail({ detailItems: [makeDetailItem()] })
+    const headers = screen.getAllByRole('columnheader')
+    expect(headers.length).toBeGreaterThan(0)
+    for (const th of headers) {
+      expect(getComputedStyle(th).textAlign).toBe('left')
+    }
+  })
+
+  it('does not change header/cell padding (row/header height不変, 指示18章: 情報密度を変えない)', () => {
+    renderDetail({ detailItems: [makeDetailItem()] })
+    const th = screen.getAllByRole('columnheader')[0]
+    const td = screen.getByRole('table').querySelector('td') as HTMLElement
+    expect(getComputedStyle(th).padding).toBe('0.3rem')
+    expect(getComputedStyle(td).padding).toBe('0.35rem 0.3rem')
+  })
+
+  it('keeps the sort indicator visible after the cell-border change (9章)', () => {
+    renderDetail({ detailItems: [makeDetailItem()] })
+    expect(screen.getByRole('button', { name: '編集順でソート' }).textContent).toContain('▼')
+  })
+
+  it('keeps the sticky header positioning unaffected by the new cell border (17章)', () => {
+    renderDetail({ detailItems: [makeDetailItem()] })
+    const th = screen.getAllByRole('columnheader')[0]
+    expect(getComputedStyle(th).position).toBe('sticky')
+  })
+
+  // 注記: jsdom(cssstyle)はborder-right(var(...)使用)の解決を確実には行わないため、
+  // --border-cellトークンの値自体はindex.css.test.ts側で検証し、実際の縦罫線描画は
+  // 実ブラウザ確認で行う(EstimateMasterPicker.test.tsx既存の注記と同じ制約)。
+})

@@ -1,29 +1,48 @@
+/* UI視覚階層改善 指示14章〜19章: 現在存在するすべてのresize境界
+   (図面一覧↔Viewer・Viewer↔右ペイン・Viewer↔Master・盤情報↔積算集約・
+   積算集約↔積算明細)が共通で使うSplitterの見た目。
+   最重要方針(指示15章): 「hit areaは広く、見た目は細くする」。
+   このdiv自体(hit area)は6pxのまま変更しない。実際に見える線は1px、
+   中央に小さいgrip(⋮ / ⋯)を添えるだけにとどめ、表示領域をSplitter自身が
+   大きく消費しないようにする。 */
 .pane-splitter {
   flex-shrink: 0;
   width: 6px;
   cursor: col-resize;
   position: relative;
   background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* 通常時は細い境界線程度に留め、hover時のみ強調する (要件9)。
-   実際のヒット領域(6px)より細い線を中央に描くことで、太いSplitterに見えないようにする。 */
-.pane-splitter::after {
+/* 縦境界(既定, axis="x")の線。通常時は1px、hover/drag時のみ2pxへわずかに太く
+   なる程度に留める(指示18章: 太い帯にはしない)。 */
+.pane-splitter:not(.pane-splitter--horizontal)::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
+  left: 2.5px;
+  width: 1px;
+  background: var(--border-region);
+  z-index: 0;
+}
+
+.pane-splitter:not(.pane-splitter--horizontal):hover::after {
   left: 2px;
   width: 2px;
-  background: #e5e7eb;
+  background: #2563eb;
 }
 
-.pane-splitter:hover::after {
-  background: #93c5fd;
+.pane-splitter:not(.pane-splitter--horizontal).pane-splitter--dragging::after {
+  left: 2px;
+  width: 2px;
+  background: #1d4ed8;
 }
 
-/* Phase 1.11 指示書24章: Master領域の高さ変更用の横方向Splitter。
-   縦方向Splitterと役割を入れ替えるだけで、当たり判定・hover強調の考え方は共通。 */
+/* 横境界(axis="y", Master高さ変更・盤情報↔積算集約・積算集約↔積算明細)の線。
+   縦境界と役割を入れ替えるだけで、当たり判定・hover強調の考え方は共通。 */
 .pane-splitter--horizontal {
   width: auto;
   height: 6px;
@@ -31,10 +50,46 @@
 }
 
 .pane-splitter--horizontal::after {
-  top: 2px;
-  bottom: auto;
+  content: '';
+  position: absolute;
+  top: 2.5px;
   left: 0;
   right: 0;
-  width: auto;
+  height: 1px;
+  background: var(--border-region);
+  z-index: 0;
+}
+
+.pane-splitter--horizontal:hover::after {
+  top: 2px;
   height: 2px;
+  background: #2563eb;
+}
+
+.pane-splitter--horizontal.pane-splitter--dragging::after {
+  top: 2px;
+  height: 2px;
+  background: #1d4ed8;
+}
+
+/* 指示16章: 中央の小さいgrip。装飾のみ(pointer-events:none)で、線(::after)より
+   前面(z-index:1)に描く。文字サイズは見出し等より明確に小さくし、
+   Splitterが太く見えないようにする。 */
+.pane-splitter__grip {
+  position: relative;
+  z-index: 1;
+  font-size: 0.7rem;
+  line-height: 1;
+  color: #94a3b8;
+  pointer-events: none;
+  user-select: none;
+}
+
+.pane-splitter:hover .pane-splitter__grip,
+.pane-splitter--dragging .pane-splitter__grip {
+  color: #2563eb;
+}
+
+.pane-splitter--dragging .pane-splitter__grip {
+  color: #1d4ed8;
 }

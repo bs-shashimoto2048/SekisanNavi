@@ -1355,6 +1355,68 @@ BAN_H=2300, BAN_W=1700, BAN_D=2200, BAN_CONNECT=箱･左右(L), SORT_ORDER=1
 盤未選択時・PAGE切替時の表示、右ペイン下部の積算集約領域(ロジック未実装)、
 既存BBox/Leader/AI表示への回帰なし(既存テスト無変更ロジックのまま通過)。
 
+## 8.16. UI視覚階層改善・積算集約の数量集約・Product Vision追加 (完了)
+
+Phase 1.14以降、`feat/ui-visual-hierarchy`ブランチ上で複数ラウンドにわたり実施した
+UI視覚階層改善・配色体系整理・積算集約の数量集約・Product Vision文書の追加を
+まとめて記録する(個別ラウンドの詳細な検討過程はここへ再録せず、最終的に確定した
+仕様のみを記す。指示書の分類に沿い「UI」「積算集約」「Docs」の3点に整理する)。
+
+### UI視覚階層・配色体系
+
+- 画面の境界表現を「Level1(大領域) > Level2(セクション) > Level3(表内部)」の
+  3段階に整理し、`index.css`へ`--border-region`等の共通tokenを新設した。
+- 全resize境界(図面一覧↔Viewer・Viewer↔右ペイン・Viewer↔Master・盤情報↔積算集約・
+  積算集約↔積算明細)を共通の`PaneSplitter`コンポーネントの見た目(通常時は細い線+
+  小さいgrip、hover/drag時のみコバルトブルーへ強調)へ統一した。
+- Header背景を濃紺(`#1f2937`)から明るいコバルトブルー(`#2455e2`)へ変更。
+  「Sekisan Navi」表示名は`Sekisan Navi / 積算ナビ`から`Sekisan Navi`のみへ変更し、
+  専用class(`.project-header__brand`)で業務情報と別スタイル(淡い青白色`#eaf2ff`・
+  Inter等のsans-serif・控えめなtext-shadow)にして、プロダクトタイトルとして
+  視認しやすくした。
+- 解析状態・要確認等の状態色を`index.css`の`--status-*`token群(success/warning/
+  error/neutral)へ統一し、「確認待ち」は濃色+白文字→最終的に淡色chip
+  (`#fef3c7`地+amber文字+amber border)へ整理した。「解析中」が使っていた青
+  (Structureのコバルトと衝突)はNeutral系へ差し替えた。
+- 積算コードMasterの13カテゴリ固有色(`masterCategoryPresentation.ts`)は維持しつつ、
+  選択中タブ+table headerを同一の濃色+白文字(WCAG AA相当のコントラストを
+  維持する範囲で調整)にし、「今どのカテゴリを見ているか」を一目で分かるようにした。
+  Master行選択(コバルトブルー、左3pxアクセント)とは意味・配色とも独立させている。
+- BBox/Leader(`--cat-bbox-*`/`--cat-leader-*`)・AI/Manualの情報源色は今回対象外とし、
+  一切変更していない。
+
+### 積算集約の数量集約 (`EstimateAggregation`)
+
+積算集約(右ペイン中段)は「数量・金額を確認する場所」、積算明細(右ペイン下段、
+`EstimateDetail`)は「1件ずつ根拠を追う場所」という役割分担を正式仕様とした。
+
+- 積算集約は同一の積算コード(`master_item_id`。表示コード文字列ではない)を
+  1行へ集約し、数量・金額を表示する。集約キーは対象によって異なる:
+  個別盤/製品全体/要確認は`対象ID:master_item_id:情報源`、総合計(対象フィルタ
+  なし)は対象を横断する`master_item_id:情報源`。情報源(AI/Manual)は現時点では
+  キーに含めたままで、跨いで統合してはいない。
+  詳細な仕様・実データ確認例は`ui-spec.md` 5.5章・5.6章を正とする。
+- 積算明細は引き続き「1 Detection / 1 Manual / 1 設計情報 = 1行」を維持し、
+  数量集約は一切行わない。
+- 実装は`frontend/src/domain/estimateAggregationReal.ts`
+  (`buildRealEstimateAggregation`が`lineItems`(対象別)と`totalLineItems`
+  (総合計専用、対象横断)の2種類を返す)・
+  `frontend/src/types/estimateAggregation.ts`
+  (`EstimateLineItem.targetId`は対象横断行では`null`)・
+  `frontend/src/components/EstimateAggregation/EstimateAggregation.tsx`
+  (総合計選択時は`totalLineItems`を、それ以外は`lineItems`を対象idで絞り込んで
+  表示)。Backend側の変更はない(集約はFrontend側の表示ロジックのみ)。
+
+### Product Vision文書の追加
+
+`docs/product-vision.md`を新設した。実装仕様・将来機能一覧・確定ロードマップ
+ではなく、「なぜSekisan Naviを作るのか」「現時点での積算業務デジタル化が、
+将来の段階的な積算自動化に向けた基盤としてどう位置付けられるか」という
+中長期的な開発思想を独立文書として残すためのもの。今後の設計判断で立ち返る
+ための Design Principles も含む。既存Docsとの役割分担(なぜ/どこへ向かうか
+= product-vision.md、構造 = architecture.md、データ = data-model.md、
+UI挙動 = ui-spec.md、実装履歴 = 本ファイル)は`product-vision.md`末尾に明記した。
+
 ## 9. Phase 2以降の候補 (未確定・本Phaseでは未着手)
 
 以下は次フェーズの候補であり、実施順序・要否は未確定:
@@ -1724,3 +1786,27 @@ Master Importer・APIの主要経路、Frontendの主要表示ロジック(グ�
   再起動後)へ直接curlし、A1GV2421の実estcode_df.csv全5盤が期待通り返ることを
   確認した。**実ブラウザでの実際の盤クリック操作・右ペイン表示の見た目そのものは
   これまでのラウンドと同様に本セッションの環境上ユーザー側での確認が必要である。**
+
+## 22. テスト結果 (8.16. UI視覚階層改善・積算集約の数量集約・Product Vision追加時点)
+
+- Frontend: `vitest run` — **525 passed** (27 files)。積算集約の対象横断集約
+  (`estimateAggregationReal.test.ts`: 同一master_item_idが複数盤にまたがる
+  場合のtotalLineItems集約・quantity/amount算出・マイナス価格・製品全体/
+  要確認内での集約・積算明細件数不変・金額整合等)、`EstimateAggregation.test.tsx`
+  (総合計/対象別表示の切替、対象横断集約行のバッジ非表示等)、UI視覚階層改善
+  (`PaneSplitter`のgrip/hover/drag状態、`ProjectHeader`のbrand class・状態色
+  mapping、`masterCategoryPresentation.ts`の13カテゴリactive色・コントラスト比
+  検証等)を含む。既存テストは全て無変更ロジックのまま通過 = 回帰なし
+  (BBox編集・Undo/Redo・盤選択・Master選択・引出線・AI/Manual表示等の既存挙動を含む)。
+- Frontend: `tsc -b tsconfig.app.json --noEmit` — クリーン
+- Frontend: `npm run lint` (oxlint) — エラー0件、警告13件(既存カテゴリのみ)
+- Frontend: `npm run build` (tsc -b && vite build) — 成功
+- Backend: `pytest` — **146 passed**。今回Backend側は変更していないため
+  (積算集約の数量集約はFrontend表示ロジックのみ)、回帰確認として実施。
+- 実データによる確認: A1GV2421/P16で、積算集約「総合計」表示時に積算コード
+  `18311`(単価23,100円)が5盤にまたがりながら1行(数量4・金額92,400円)に、
+  `11581`が1行(数量2・金額659,400円)に集約されること、積算明細では引き続き
+  `18311`が4行のまま(1 Detection = 1行)であること、製番合計(1,930,200円)が
+  集約前後で変化しないことを実ブラウザで確認した。BBox移動+Undo/Redo・
+  Master行選択/Esc・PaneSplitter(5本すべて)・タブ切替・検索の回帰確認も
+  実ブラウザで実施し、いずれも問題なし。

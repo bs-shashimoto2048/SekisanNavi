@@ -20,6 +20,67 @@
   font: 15px/1.5 'Yu Gothic UI', 'Meiryo UI', 'Meiryo', 'Segoe UI', system-ui,
     'Hiragino Sans', 'Yu Gothic', sans-serif;
   color-scheme: light;
+
+  /* Sekisan Navi UI視覚階層改善 指示7章〜13章/24章/25章: 画面の境界表現を
+     「Level1(大領域) > Level2(セクション) > Level3(表内部)」の3段階として整理する
+     ための共通トークン。色数を増やさない方針(指示24章)のため、既存で使っていた
+     グレー・コバルトブルー・濃紺の範囲内で、濃淡だけを使い分ける。
+     - --border-region: Level1。図面一覧|Viewer・Viewer|右ペイン・Viewer|Master等、
+       PaneSplitterおよびその両隣の領域の外周に使う。既存の#e5e7eb(表内部の罫線と
+       ほぼ同トーン)から一段階だけ濃くし、表内部の罫線より明確に区別できるようにする。
+     - --border-table-outer: Level3のうち「表の外周・table header下線」用。
+       Level1と同トーンを再利用する(色を増やさない。指示24章)。
+     - --accent-section: Level2(右ペイン3領域の見出し)の左アクセントバー・
+       強調色。既存の見出し文字色(#1e3a8a、濃紺)をそのまま再利用する。 */
+  --border-region: #cbd5e1;
+  --border-table-outer: #cbd5e1;
+  --accent-section: #1e3a8a;
+
+  /* 表セル境界の統一・ヘッダ左寄せ/数値セル右寄せ 指示3章/4章: 罫線階層に
+     「大領域境界 > 表header境界 > セル境界」を追加する。セル境界(縦罫線)は
+     既存の横罫線(#f3f4f6/#f1f5f9、各表CSS側で個別管理・今回変更しない)より
+     薄く、外周(--border-region)やheader下線(--border-table-outer)よりも
+     明確に弱いトーンにする。積算集約・積算明細・積算コードMasterの3表で
+     共通のtokenを使い、色数を増やさない(指示24章の方針を踏襲)。 */
+  --border-cell: #edf1f5;
+
+  /* Sekisan Navi UI視覚階層改善 第5ラウンド 指示1章〜10章/17章/18章:
+     Structure(構造)とは独立した「Status(業務状態)」の共通token。
+     棚卸しの結果、同じ「成功/確定」を意味しながらHeader(#065f46)とEstimateDetail
+     の○記号(#15803d)で異なる緑が、「解析中」にStructureのコバルトと衝突する青
+     (#1e40af)が、「不備」にも2種の赤(#991b1b/#b91c1c)が使われていた。
+     ここで役割ごとに1系統へ統一し、各箇所はこのtokenを参照するだけにする
+     (色そのものを増やさない。指示17章)。
+     - success: 確定・reviewed。既存の#15803d(EstimateDetailの○記号)を正とし、
+       Headerの確定バッジもこちらへ揃える。
+     - warning-chip-bg / warning-chip-border: Header上の状態badge(確認待ち)等、
+       淡色地+濃色文字で使う「Warning chip」。第5ラウンドでは濃色+白文字
+       (#b45309)を採用したが、実画面で「茶色い面」に見えるとの指摘を受け、
+       最終微調整ラウンドで淡色chip方式(背景#fef3c7、文字は--warning-textを
+       再利用、border#f59e0b)へ差し替えた。背景#fef3c7・border#f59e0bは
+       EstimateDetailの編集直後ハイライトと同じ既存amber値を再利用しており、
+       新規の色ではない(色を増やさない方針)。
+     - warning-soft-bg / warning-text / warning-accent: 既存の「要確認」系
+       (App.cssのtie-warning、EstimateAggregation.cssの--warn)がそのまま使って
+       いた値(amber、alpha違いのrgba(180,83,9,*)ファミリー)を token化しただけで、
+       値自体は変更していない。「確認待ち」(Header, chip)と「要確認」(業務警告,
+       soft)は同じamber系統だが強度を変える、という方針をそのまま反映。
+     - error: 不備(EstimateDetailの×記号, #b91c1c)を正とし、App.cssのエラー
+       バナー文字色(旧#991b1b)もこちらへ揃える。
+     - neutral / neutral-soft: 未解析・disabled等。「解析中」はStructureの
+       コバルトと同系色だったため、ここでneutral-softへ差し替える。 */
+  --status-success: #15803d;
+  --status-success-fg: #fff;
+  --status-warning-chip-bg: #fef3c7;
+  --status-warning-chip-border: #f59e0b;
+  --status-warning-soft-bg: rgba(180, 83, 9, 0.12);
+  --status-warning-text: #92400e;
+  --status-warning-accent: #b45309;
+  --status-error: #b91c1c;
+  --status-error-fg: #fff;
+  --status-error-soft-bg: #fee2e2;
+  --status-neutral: #4b5563;
+  --status-neutral-soft: #6b7280;
 }
 
 * {

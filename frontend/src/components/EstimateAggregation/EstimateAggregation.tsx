@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { EstimateLineItem, EstimateTarget } from '../../types/estimateAggregation'
 import { formatTargetLabel } from '../../domain/estimateTargetLabel'
 import './EstimateAggregation.css'
@@ -9,9 +9,103 @@ import './EstimateAggregation.css'
  * `domain/estimateAggregationReal.ts`側には実体を持たせない)。 */
 const ALL_OPTION_VALUE = ''
 
+// Sekisan Navi PR #2 追加修正指示(積算集約テーブルにソート機能を追加) 6章/13章:
+// 積算明細(EstimateDetail)の既存ソートUI/挙動(1回目クリック=昇順・2回目=降順、
+// ▲/▼表示)をそのまま踏襲する。ただしソート状態自体は積算明細と完全に独立させる
+// (14章)ため、型・stateともにこのコンポーネント内に閉じて持ち、積算明細側とは
+// 一切共有しない。
+type AggregationSortColumn = 'code' | 'content' | 'unitPrice' | 'quantity' | 'amount'
+type SortDirection = 'asc' | 'desc'
+
+const COLUMN_DEFS: { column: AggregationSortColumn; label: string; className: string }[] = [
+  { column: 'code', label: 'コード', className: 'estimate-aggregation__col-code' },
+  { column: 'content', label: '内容', className: 'estimate-aggregation__col-content' },
+  { column: 'unitPrice', label: '単価(暫定)', className: 'estimate-aggregation__col-price' },
+  { column: 'quantity', label: '数量', className: 'estimate-aggregation__col-qty' },
+  { column: 'amount', label: '金額', className: 'estimate-aggregation__col-amount' },
+]
+
+// 「内容」列は積算明細(EstimateDetail)の`naturalCollator`と同じ設定
+// (日本語ロケール・数字を数値として比較)を使う (4章/16章: 既存の日本語比較実装を
+// 再利用し、独自の比較方式を新設しない)。積算明細側のインスタンスは
+// モジュール非公開のため、同じ設定で新たにインスタンスを作る(ロジックの複製ではなく
+// 設定の再利用)。
+const naturalCollator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' })
+
+/** コードの数値安全な比較 (4章)。積算明細の`compareItems`内'code'caseと同じロジック
+ * (数値として解釈できる場合は数値比較、できない場合のみ文字列比較にfallbackする)。
+ * 例: "2" < "10" < "100" が文字列比較(lexicographic)だと崩れるため、数値比較を優先する。 */
+function compareCode(codeA: string, codeB: string): number {
+  const numA = Number(codeA)
+  const numB = Number(codeB)
+  if (!Number.isNaN(numA) && !Number.isNaN(numB)) return numA - numB
+  return codeA.localeCompare(codeB, 'ja')
+}
+
+/**
+ * 積算集約の行をソートする。表示専用の処理であり、
+ * `domain/estimateAggregationReal.ts`側の対象絞り込み→masterItemId:source集約→
+ * 数量・金額確定というロジックは一切変更しない(12章: ソートは常に集約確定後の
+ * 行配列に対して行う、集約そのものへは関与しない)。
+ *
+ * - 同値時は常にコード昇順にtie-breakする (15章: 再描画のたびに順序が
+ *   不定にならないようにするための安定順序)。tie-break自体はソート方向に関わらず
+ *   常に昇順にする(降順ソート中でも、同値グループの内部順序が毎回変わらないための
+ *   固定基準として使うだけで、tie-break自体を「降順」にする意味はないため)。
+ * - 単価・金額はnull(Master側に単価が無い等)を許容する列のため、
+ *   「昇順・降順どちらでも欠損値は常に末尾」(17章)を満たすよう、値ありグループと
+ *   値なしグループへ分けてから別々にソートし、最後に結合する
+ *   (単純に基準比較を反転するだけの実装だと降順時にnullが先頭に来てしまうため、
+ *   意図的にこの二段構成にしている)。
+ */
+function sortAggregationItems(
+  items: EstimateLineItem[],
+  column: AggregationSortColumn,
+  direction: SortDirection,
+): EstimateLineItem[] {
+  const sign = direction === 'asc' ? 1 : -1
+
+  function withTieBreak(
+    cmp: (a: EstimateLineItem, b: EstimateLineItem) => number,
+  ): (a: EstimateLineItem, b: EstimateLineItem) => number {
+    return (a, b) => {
+      const primary = cmp(a, b)
+      if (primary !== 0) return sign * primary
+      return compareCode(a.code, b.code)
+    }
+  }
+
+  if (column === 'unitPrice' || column === 'amount') {
+    const getValue = (item: EstimateLineItem): number | null => (column === 'unitPrice' ? item.unitPrice : item.amount)
+    const withValue = items.filter((item) => getValue(item) != null)
+    const withoutValue = items.filter((item) => getValue(item) == null)
+    withValue.sort(withTieBreak((a, b) => (getValue(a) as number) - (getValue(b) as number)))
+    // 欠損値同士は昇順/降順を問わず常にコード昇順 (17章: 末尾に固定するための
+    // 内部順序であり、ここでも降順方向を反映させる意味はない)。
+    withoutValue.sort((a, b) => compareCode(a.code, b.code))
+    return [...withValue, ...withoutValue]
+  }
+
+  const copy = [...items]
+  if (column === 'code') {
+    copy.sort((a, b) => sign * compareCode(a.code, b.code))
+  } else if (column === 'content') {
+    copy.sort(withTieBreak((a, b) => naturalCollator.compare(a.content, b.content)))
+  } else {
+    // quantity: 常に非nullのためnull分離は不要。
+    copy.sort(withTieBreak((a, b) => a.quantity - b.quantity))
+  }
+  return copy
+}
+
 interface Props {
   targets: EstimateTarget[]
+  /** 対象別に数量集約した行(個別盤/製品全体/要確認を選んでいる間、対象idで
+   * 絞り込んで使う)。 */
   lineItems: EstimateLineItem[]
+  /** 「総合計」専用に、対象を横断してmasterItemId+情報源単位で再集約した行
+   * (Sekisan Navi 追加修正指示: 積算集約の数量集約 6章)。`targetId`は常にnull。 */
+  totalLineItems: EstimateLineItem[]
   /** 現在選択中の対象。nullは「総合計」(フィルタなし、全対象合算)を表す。
    * 積算明細(③)・Viewer盤フォーカスと共有する状態のため、App.tsxで一元管理し、
    * ここへcontrolledで渡す。 */
@@ -102,20 +196,33 @@ function headerAmountLabel(selectedTargetId: string | null, target: EstimateTarg
  * `position:sticky`を使い、上部金額は`<table>`の外(スクロール領域の外)に置くことで
  * 確実に常時見えるようにしている。
  */
-export function EstimateAggregation({ targets, lineItems, selectedTargetId, onSelectTarget }: Props) {
+export function EstimateAggregation({ targets, lineItems, totalLineItems, selectedTargetId, onSelectTarget }: Props) {
+  // ソート列/方向は「ユーザーが選んだ表示上の好み」であり、対象切替(総合計/製品全体/
+  // 個別盤/要確認)やBBox編集によるデータ更新とは無関係のため、積算明細と同様に
+  // このコンポーネント自身のuseStateとして持つ (9章/10章/11章: 対象切替・データ更新の
+  // どちらでもリセットされない。親の再描画では値は保持される)。初期値はコード昇順
+  // (3章/8章)。
+  const [sortColumn, setSortColumn] = useState<AggregationSortColumn>('code')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+
   const totalCodeCount = lineItems.reduce((sum, item) => sum + item.detectionIds.length, 0)
 
-  const showTargetBadge = selectedTargetId == null
   const targetNameById = useMemo(() => {
     const map = new Map<string, string>()
     for (const t of targets) map.set(t.id, t.name)
     return map
   }, [targets])
 
+  // Sekisan Navi 追加修正指示(積算集約の数量集約) 6章: 「総合計」選択時
+  // (selectedTargetId===null)は対象別`lineItems`を単純結合するのではなく、
+  // 対象を横断して既にmasterItemId+情報源単位で集約済みの`totalLineItems`を使う。
+  // これにより、同一積算コードが複数の盤にまたがっていても総合計では1行にまとまる。
+  // 個別盤/製品全体/要確認を選択している間は、従来どおり対象別`lineItems`を
+  // 対象idで絞り込む(この時点で既に対象内で数量集約済みのため、絞り込むだけでよい)。
   const visibleItems = useMemo(
     () =>
-      selectedTargetId == null ? lineItems : lineItems.filter((item) => item.targetId === selectedTargetId),
-    [lineItems, selectedTargetId],
+      selectedTargetId == null ? totalLineItems : lineItems.filter((item) => item.targetId === selectedTargetId),
+    [lineItems, totalLineItems, selectedTargetId],
   )
   // 上部金額表示 (旧: 「製番合計」固定 + 表下部の「対象別小計」の2箇所) を
   // この1つの計算へ統合した (指示2章/3章)。総合計選択時はvisibleItems===lineItems
@@ -129,6 +236,24 @@ export function EstimateAggregation({ targets, lineItems, selectedTargetId, onSe
   // Viewerが現在この対象へフォーカスしている(=個別盤を選択中)ことをセレクト自体の
   // 見た目でも示す (指示8章「Viewer連動中の対象表示」)。
   const isViewerFocused = selectedTarget != null
+
+  // ソートは常にvisibleItems(対象絞り込み・数量集約が確定した後の行配列)に対して
+  // 行う (12章)。上部金額表示(headerAmount)はsumAmounts(visibleItems)のままで、
+  // 表示順を変えても合計自体は変わらない(24章: 並び替えは表示順のみに影響し、
+  // 数量・金額・製番合計には一切影響しない)。
+  const sortedItems = useMemo(
+    () => sortAggregationItems(visibleItems, sortColumn, sortDirection),
+    [visibleItems, sortColumn, sortDirection],
+  )
+
+  function handleHeaderClick(column: AggregationSortColumn) {
+    if (column === sortColumn) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
 
   return (
     <section className="estimate-aggregation">
@@ -187,28 +312,55 @@ export function EstimateAggregation({ targets, lineItems, selectedTargetId, onSe
             <table className="estimate-aggregation__table">
               <thead>
                 <tr>
-                  <th className="estimate-aggregation__col-code">コード</th>
-                  <th className="estimate-aggregation__col-content">内容</th>
-                  <th className="estimate-aggregation__col-price">単価(暫定)</th>
-                  <th className="estimate-aggregation__col-qty">数量</th>
-                  <th className="estimate-aggregation__col-amount">金額</th>
+                  {COLUMN_DEFS.map(({ column, label, className }) => {
+                    const isActive = sortColumn === column
+                    return (
+                      <th
+                        key={column}
+                        className={className}
+                        aria-sort={isActive ? (sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}
+                      >
+                        <button
+                          type="button"
+                          className="estimate-aggregation__sort-button"
+                          onClick={() => handleHeaderClick(column)}
+                          aria-label={`${label}でソート`}
+                        >
+                          {label}
+                          {isActive && (
+                            <span className="estimate-aggregation__sort-indicator">
+                              {sortDirection === 'asc' ? '▲' : '▼'}
+                            </span>
+                          )}
+                        </button>
+                      </th>
+                    )
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {visibleItems.length === 0 && (
+                {sortedItems.length === 0 && (
                   <tr>
                     <td className="estimate-aggregation__empty-cell" colSpan={5}>
                       明細がありません
                     </td>
                   </tr>
                 )}
-                {visibleItems.map((item) => (
+                {sortedItems.map((item) => (
                   <tr key={item.id}>
                     <td className="estimate-aggregation__col-code">{item.code}</td>
                     <td className="estimate-aggregation__col-content">
-                      {showTargetBadge && (
+                      {/* 対象バッジは「この行がどの対象に属するか」を示すためのもの。
+                          個別盤/製品全体/要確認を選択中の行は対象idを持つが、対象自体が
+                          表示上部で既に分かっているため出さない(従来どおり)。「総合計」
+                          は対象を横断して集約した行(item.targetId===null)のため、
+                          単一の対象を代表できずバッジ自体を出さない(Sekisan Navi
+                          追加修正指示: 積算集約の数量集約 14章「単一Detectionへ
+                          persistent selectionするような挙動にはしない」の趣旨に沿い、
+                          誤解を招くバッジ表示はしない)。 */}
+                      {item.targetId != null && targetNameById.has(item.targetId) && (
                         <span className="estimate-aggregation__badge estimate-aggregation__badge--target">
-                          {targetNameById.get(item.targetId) ?? '-'}
+                          {targetNameById.get(item.targetId)}
                         </span>
                       )}
                       <span className="estimate-aggregation__content-text">{item.content}</span>

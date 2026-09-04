@@ -67,8 +67,11 @@ src/
       DrawingCanvas.tsx     PDF.jsによる実PDF表示 + zoom/pan/fit (Phase 1.5)
       DetectionOverlay.tsx  Detection BBoxのオーバーレイ
       PanelOverlay.tsx      盤範囲(Panel Area)のオーバーレイ。Detectionと独立
-    PanelProperties/      盤パラメータ (属性は完全にAPI駆動、項目名をハードコードしない)
-    EstimateTree/         積算結果Tree
+    PanelInfo/             盤情報 (estcode_df.csv実データ、Phase 1.14でPanelPropertiesから置換)
+    EstimateAggregation/  積算集約 (数量・金額の確認。2026-09追加修正で対象別/総合計の
+                           数量集約に対応。詳細は`ui-spec.md` 5.5章)
+    EstimateDetail/        積算明細 (1 Detection = 1行の根拠追跡。旧EstimateTreeの後継、
+                           `ui-spec.md` 5.6章)
     EstimateMasterPicker/ 積算コードMaster検索
     SystemSettings/       管理者向けシステム設定 (データ参照ルート変更) (Phase 1.5)
     ProductViewer/        製番を指定した実データ参照 (Phase 1.5)

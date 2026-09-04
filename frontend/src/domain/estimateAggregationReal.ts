@@ -142,6 +142,20 @@ interface BuildParams {
  *     手動追加が混在する場合、由来の異なる行を1行へ無条件に合算すると出自が
  *     分からなくなるため、実データに基づく区別としてキーに残す。
  *
+ * Sekisan Navi 追加修正指示(積算集約の数量集約) 4章〜7章: 上記は「対象を選んだ
+ * 後にその対象内で集約する」ための行(`lineItems`)であり、個別盤/製品全体/要確認を
+ * 選択している間はこれを対象idで絞り込むだけで正しく数量集約された結果になる。
+ * しかし「総合計」(対象フィルタなし)は対象を横断して全明細を単純結合するだけの
+ * ビューのため、同じmasterItemIdが複数の盤にまたがって存在すると
+ * (例: 換気扇18311が面5/5・4/4・3/3・2/2・1/1の5枚すべてに1件ずつある場合)
+ * 対象別行がそのまま5行並んでしまい、積算集約の役割(数量と金額の確認)を
+ * 果たせていなかった。この問題を解消するため、`対象ID`を含まない
+ * `masterItemId:情報源`だけの集約キーで別途`totalLineItems`を組み立て、
+ * 「総合計」表示専用に使う(指示5章の集約処理順序を対象横断で適用したもの)。
+ * BBox所属判定(`assignDetectionToPanel`)自体は一切変更していないため、
+ * 二重計上は起きない(1 Detectionは必ずちょうど1つの対象へ割り当てられ、
+ * その1件分だけが`lineItems`・`totalLineItems`双方へ1回ずつ計上される)。
+ *
  * 積算明細(`detailItems`)は数量集約を一切行わず、Detection 1件 = 1行のまま返す
  * (積算集約・積算明細UI再構成 指示14章: 「どの図面のどの箇所に付けられた情報か」
  * を追跡できるようにするため)。
@@ -171,8 +185,40 @@ export function buildRealEstimateAggregation({
   }
 
   const lineItems = new Map<string, EstimateLineItem>()
+  const totalLineItems = new Map<string, EstimateLineItem>()
   const detailItems: EstimateDetailItem[] = []
   const tieDetectionIds: number[] = []
+
+  // 対象別(lineItems)・総合計(totalLineItems)どちらも同じ集約規則で1件分を
+  // 積み上げるための共通処理。amountは指示8章のとおり「各明細金額のsum」として
+  // 集約する(unitPrice×quantityの掛け算ではなく、1件ずつ加算する実装にすることで、
+  // 将来Detectionごとに単価が変わるロジックへ変更されても壊れにくくする)。
+  // マイナス単価もそのまま加算するだけで特殊扱いしない(指示9章)。
+  function accumulate(
+    map: Map<string, EstimateLineItem>,
+    key: string,
+    targetId: string | null,
+    detectionId: number,
+    unitPrice: number | null,
+    base: Pick<EstimateLineItem, 'source' | 'masterItemId' | 'code' | 'category' | 'content'>,
+  ) {
+    const existing = map.get(key)
+    if (existing) {
+      existing.quantity += 1
+      existing.detectionIds.push(detectionId)
+      existing.amount = existing.amount != null && unitPrice != null ? existing.amount + unitPrice : null
+      return
+    }
+    map.set(key, {
+      id: key,
+      targetId,
+      ...base,
+      quantity: 1,
+      unitPrice,
+      amount: unitPrice, // quantity=1の初回はunitPrice自身がsum (nullならnullのまま)
+      detectionIds: [detectionId],
+    })
+  }
 
   for (const { detection, pageNo } of detections) {
     if (detection.master_item_id == null) continue // 積算コードとして紐づいていない行は対象外
@@ -198,28 +244,16 @@ export function buildRealEstimateAggregation({
     const content = buildContent(model, rating, code)
     const unitPrice = master?.total_price_a ?? null
 
-    // --- 積算集約: 数量集約あり ---
+    // --- 積算集約(対象別): 対象ID込みのキーで数量集約 ---
+    const base = { source, masterItemId, code, category: detection.master_item_category, content }
     const key = `${targetId}:${masterItemId}:${source}`
-    const existing = lineItems.get(key)
-    if (existing) {
-      existing.quantity += 1
-      existing.detectionIds.push(detection.id)
-      existing.amount = existing.unitPrice != null ? existing.unitPrice * existing.quantity : null
-    } else {
-      lineItems.set(key, {
-        id: key,
-        targetId,
-        source,
-        masterItemId,
-        code,
-        category: detection.master_item_category,
-        content,
-        quantity: 1,
-        unitPrice,
-        amount: unitPrice, // quantity=1の初回はunitPriceそのもの (nullならnullのまま)
-        detectionIds: [detection.id],
-      })
-    }
+    accumulate(lineItems, key, targetId, detection.id, unitPrice, base)
+
+    // --- 積算集約(総合計用): 対象IDを含まないキーで対象横断集約 ---
+    // 「総合計」選択時はここ(totalLineItems)を使うことで、同一masterItemIdが
+    // 複数の盤にまたがっていても1行にまとまる(指示6章)。
+    const totalKey = `${masterItemId}:${source}`
+    accumulate(totalLineItems, totalKey, null, detection.id, unitPrice, base)
 
     // --- 積算明細: 数量集約なし。Detection 1件 = 1行 ---
     // 品名(itemName)は独立した品名DB列ではなく、積算コードMaster画面
@@ -262,5 +296,10 @@ export function buildRealEstimateAggregation({
     targets.push({ id: TIE_TARGET_ID, type: 'tie', name: TIE_TARGET_NAME, banMenno: null, banNo: null })
   }
 
-  return { targets, lineItems: Array.from(lineItems.values()), detailItems }
+  return {
+    targets,
+    lineItems: Array.from(lineItems.values()),
+    totalLineItems: Array.from(totalLineItems.values()),
+    detailItems,
+  }
 }

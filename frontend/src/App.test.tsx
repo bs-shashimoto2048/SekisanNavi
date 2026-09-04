@@ -21,12 +21,14 @@ import type {
 // selectedDetectionLabel/onDeleteSelectedDetection の伝播を検証できるようにする。
 vi.mock('./components/DrawingViewer/DrawingCanvas', () => ({
   DrawingCanvas: ({
+    title,
     children,
     bboxAddMode,
     selectedDetectionLabel,
     onDeleteSelectedDetection,
     onBackgroundClick,
   }: {
+    title?: string
     children?: ReactNode
     bboxAddMode?: boolean
     selectedDetectionLabel?: string | null
@@ -34,6 +36,10 @@ vi.mock('./components/DrawingViewer/DrawingCanvas', () => ({
     onBackgroundClick?: () => void
   }) => (
     <div data-testid="drawing-canvas-stub" data-bbox-add-mode={String(!!bboxAddMode)}>
+      {/* Viewer上部1行化 指示2章: 実DrawingCanvasでは図面名(title)がtoolbar内に
+          描画されるようになったため、このstubでも同様に描画し、Appからの
+          pageLabel伝播をこれまでどおりgetByText等で検証できるようにする。 */}
+      <span>{title}</span>
       <button type="button" disabled={selectedDetectionLabel == null} onClick={onDeleteSelectedDetection}>
         BBox削除
       </button>

@@ -1,17 +1,34 @@
 .drawing-navigator {
   height: 100%;
   overflow-y: auto;
-  border-right: 1px solid #e5e7eb;
+  /* UI視覚階層改善 指示8章/22章: 図面一覧|Viewerの大領域境界(Level1)。
+     サムネイルカード自体の内部border(2px, #e5e7eb)より一段明確なトーンにする
+     (index.cssの--border-regionを再利用。色を増やさず、幅も1pxのまま)。 */
+  border-right: 1px solid var(--border-region);
   background: #fafafa;
   padding: 0.5rem;
   box-sizing: border-box;
 }
 
+/* Viewer上部1行化 + 「図面一覧」見出しデザイン統一 指示12章〜15章:
+   右ペイン3領域(盤情報`.panel-info__heading`・積算集約`.estimate-aggregation__heading`・
+   積算明細`.estimate-detail__heading`)と同じセクション見出しデザイン(淡い青背景+
+   左コバルトアクセント+下borderのbox-shadow+同系統の文字色/weight)へ統一する
+   (指示13章: 新しい見出しデザインを作らず、既存のものをそのまま再利用する)。
+   共通class化(指示14章)は、既存3箇所が各コンポーネントCSS内に同じ値を個別に
+   持つ現在の設計を踏襲し、今回のためだけの大規模リファクタリング(共通CSSファイルの
+   新設等)はしない。margin-bottomは他3箇所の最小値(0.4rem)に合わせており、
+   旧来の0.5remから増やしてはいない(指示23章: margin増加は原則禁止)。 */
 .drawing-navigator__heading {
-  font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.82rem→引き上げ */
+  font-size: 0.98rem;
   font-weight: 700;
-  margin: 0 0 0.5rem;
-  color: #374151;
+  color: #1e3a8a;
+  background: #eff6ff;
+  border-left: 3px solid var(--accent-section);
+  box-shadow: inset 0 -1px 0 0 #93c5fd;
+  margin: 0 0 0.4rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0 4px 4px 0;
 }
 
 .drawing-navigator__status {

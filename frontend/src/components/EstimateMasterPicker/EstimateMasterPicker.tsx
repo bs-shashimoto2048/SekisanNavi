@@ -75,6 +75,19 @@ export function EstimateMasterPicker({ selectedItemId, onSelectItem, height }: P
 
   const categoryTabs = useMemo(() => extractCategoryTabs(allItems), [allItems])
 
+  // UI視覚階層改善 追加修正第3ラウンド 1章/2章/11章/12章: 選択中タブと同じ
+  // category presentation(`--cat-tab-bg`/`--cat-tab-fg`/`--cat-tab-border`)を
+  // table headerへも注入し、「active tab → header → data」の視覚階層をつなげる。
+  // 新しいpresentation値(tabHeaderBg等)は追加せず、既存のtab用の値をそのまま
+  // 再利用する(指示3章のheaderBg≒tabBg方針。tabBgは既にtabActiveBgより淡いため
+  // 「header <  active tab」の濃淡関係が自然に保たれる)。activeCategoryがまだ
+  // 無い場合(初回読み込み前)はスタイル自体を注入せず、CSS側の既定値
+  // (#f9fafb等)へ委ねる。
+  const activeHeaderStyle = useMemo(() => {
+    if (activeCategory == null) return undefined
+    return toCssVars(getCategoryPresentation(activeCategory).colors)
+  }, [activeCategory])
+
   // タブ切替・検索文字列変更時に、選択中の品名 + 検索語でMasterを再取得する。
   useEffect(() => {
     if (activeCategory == null) return
@@ -131,7 +144,7 @@ export function EstimateMasterPicker({ selectedItemId, onSelectItem, height }: P
 
       <div className="master-picker__table-wrap">
         <table className="master-picker__table">
-          <thead>
+          <thead style={activeHeaderStyle}>
             <tr>
               {COLUMNS.map((col) => (
                 <th key={col.key}>{col.label}</th>

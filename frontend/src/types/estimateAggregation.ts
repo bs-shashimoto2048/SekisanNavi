@@ -43,11 +43,20 @@ export interface EstimateTarget {
 export type EstimateSource = 'ai' | 'manual'
 
 /** 積算明細1行 = 「対象×情報源×積算コード(masterItemId)」の集約単位
- * (積算集約側の数量集約キー。詳細は`estimateAggregationReal.ts`のコメント参照)。 */
+ * (積算集約側の数量集約キー。詳細は`estimateAggregationReal.ts`のコメント参照)。
+ *
+ * Sekisan Navi 追加修正指示(積算集約の数量集約)により、対象別集約
+ * (`targetId`が実在する対象を指す。個別盤/製品全体/要確認の各対象を選んだ時に使う)
+ * に加えて、対象を横断して1つのmasterItemIdへさらに束ねた「総合計」専用の行
+ * (`targetId === null`)も同じ型で表現する。`targetId`がnullの行は複数の対象に
+ * またがる合算であり、単一の対象バッジを持たない。 */
 export interface EstimateLineItem {
-  /** `${targetId}:${masterItemId}:${source}` (集約キーそのもの)。 */
+  /** 対象別行: `${targetId}:${masterItemId}:${source}`。
+   * 総合計行(対象横断): `${masterItemId}:${source}` (targetIdを含まない)。 */
   id: string
-  targetId: string
+  /** 対象別行では実在する対象のid。総合計行(対象を横断して合算した行)では
+   * 単一の対象を代表できないためnull。 */
+  targetId: string | null
   source: EstimateSource
   /** 積算コードMaster(estimate_master_items)の行id。同一行への複数Detectionの
    * 参照をquantityとして束ねる際のキーの一部として使う。 */
@@ -122,6 +131,16 @@ export interface EstimateDetailItem {
 /** `EstimateAggregation`/`EstimateDetail`コンポーネントが受け取るデータ全体。 */
 export interface EstimateAggregationData {
   targets: EstimateTarget[]
+  /** 対象別に数量集約した行(`targetId`が実在する対象を指す)。個別盤/製品全体/
+   * 要確認のいずれかを選択している間、`EstimateAggregation`はこちらを対象idで
+   * 絞り込んで表示する。 */
   lineItems: EstimateLineItem[]
+  /** 「総合計」(対象フィルタなし)専用に、全対象を横断してmasterItemId+情報源単位で
+   * 再集約した行(`targetId`は常にnull)。Sekisan Navi 追加修正指示(積算集約の
+   * 数量集約)6章: 「総合計」でも同一積算コードを1行にまとめ、数量・金額を
+   * 対象横断で合算するために追加した。`lineItems`を対象で絞り込んだ結果を単純結合
+   * するのではなく、この専用行を使うことで、同じmasterItemIdが複数の盤に
+   * またがる場合でも1行にまとまる。 */
+  totalLineItems: EstimateLineItem[]
   detailItems: EstimateDetailItem[]
 }

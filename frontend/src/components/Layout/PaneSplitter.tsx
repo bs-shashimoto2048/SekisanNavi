@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './PaneSplitter.css'
 
 interface Props {
@@ -25,11 +25,21 @@ interface Props {
  *   mousedownがDrawingCanvas側のPan/Manual BBox作成ロジックへバブリングすることは
  *   構造上ない。念のためこのハンドル上のmousedownでは伝播を止め、他の要素の
  *   クリック判定に影響しないようにする (要件14)。
+ *
+ * UI視覚階層改善 指示14章〜19章: 図面一覧↔Viewer・Viewer↔右ペイン・Viewer↔Master・
+ * 盤情報↔積算集約・積算集約↔積算明細——現在存在するすべてのresize境界がこの
+ * 1つの共通コンポーネントを使っているため、見た目(通常時/hover時/drag時)を
+ * ここだけで統一する(指示19章「同じSplitterなのに場所によってバラバラにしない」)。
+ * hit area(このdiv自体の幅/高さ)は指示15章どおり広く保ったまま、実際に見える線・
+ * gripはCSS側で細く小さく描く。drag中かどうかはCSSの:hoverだけでは表現できない
+ * (ドラッグ中はポインタがハンドル外に出ることがあるため)ため、`isDragging`state
+ * を持ち、`pane-splitter--dragging`修飾classとしてJSX側から明示的に付与する。
  */
 export function PaneSplitter({ onDrag, ariaLabel, axis = 'x' }: Props) {
   const onDragRef = useRef(onDrag)
   onDragRef.current = onDrag
   const draggingRef = useRef<{ last: number } | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
   useEffect(() => {
     function handleMouseMove(e: MouseEvent) {
@@ -43,6 +53,7 @@ export function PaneSplitter({ onDrag, ariaLabel, axis = 'x' }: Props) {
     function handleMouseUp() {
       if (draggingRef.current) {
         draggingRef.current = null
+        setIsDragging(false)
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
       }
@@ -60,17 +71,30 @@ export function PaneSplitter({ onDrag, ariaLabel, axis = 'x' }: Props) {
     e.preventDefault()
     e.stopPropagation()
     draggingRef.current = { last: axis === 'y' ? e.clientY : e.clientX }
+    setIsDragging(true)
     document.body.style.cursor = axis === 'y' ? 'row-resize' : 'col-resize'
     document.body.style.userSelect = 'none'
   }
 
   return (
     <div
-      className={'pane-splitter' + (axis === 'y' ? ' pane-splitter--horizontal' : '')}
+      className={
+        'pane-splitter' +
+        (axis === 'y' ? ' pane-splitter--horizontal' : '') +
+        (isDragging ? ' pane-splitter--dragging' : '')
+      }
       role="separator"
       aria-orientation={axis === 'y' ? 'horizontal' : 'vertical'}
       aria-label={ariaLabel}
       onMouseDown={handleMouseDown}
-    />
+    >
+      {/* 指示16章: 中央に小さいgripを表示する(縦境界=⋮、横境界=⋯)。装飾のみで
+          操作対象そのものではないため、aria-hidden+pointer-events:noneにし、
+          スクリーンリーダーの読み上げやクリック判定に一切影響しないようにする
+          (指示36章: 既存のz-index/pointer-events設計に触れずに済ませる)。 */}
+      <span className="pane-splitter__grip" aria-hidden="true">
+        {axis === 'y' ? '⋯' : '⋮'}
+      </span>
+    </div>
   )
 }

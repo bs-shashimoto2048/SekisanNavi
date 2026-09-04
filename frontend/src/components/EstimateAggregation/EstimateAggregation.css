@@ -15,16 +15,24 @@
   flex-shrink: 0;
 }
 
-/* 3領域(盤情報・積算集約・積算明細)の見出しを統一する (指示9章)。
-   薄いコバルトブルー背景で「主要ブロックの先頭」であることを一目で示す。 */
+/* 3領域(盤情報・積算集約・積算明細)の見出しを統一する (指示9章/10章)。
+   薄いコバルトブルー背景で「主要ブロックの先頭」であることを一目で示す。
+   UI視覚階層改善 指示10章/11章: 左に2〜3px程度のアクセントバー(▌相当)を
+   追加する。背景色は既存の#eff6ffを維持する(#dbeafeは
+   .estimate-detail__row--current-pageの意味色と重複するため使わない。
+   指示25章: 構造色と意味色を混ぜない)。padding/font-size/line-heightは変更せず、
+   見出しの高さは維持する(指示11章)。border-bottomの強調はbox-shadow(inset)で
+   表現し、border追加によるレイアウト上の高さ変化を避ける。 */
 .estimate-aggregation__heading {
   font-size: 0.98rem; /* 全体フォント拡大 指示1章 */
   font-weight: 700;
   color: #1e3a8a;
   background: #eff6ff;
+  border-left: 3px solid var(--accent-section);
+  box-shadow: inset 0 -1px 0 0 #93c5fd;
   margin: 0 0 0.4rem;
   padding: 0.3rem 0.5rem;
-  border-radius: 4px;
+  border-radius: 0 4px 4px 0;
 }
 
 .estimate-aggregation__empty {
@@ -44,8 +52,10 @@
   margin-bottom: 0.3rem;
 }
 
+/* 単価が暫定である旨(※単価は暫定)と揃え、Warning系のtokenを再利用する
+   (UI視覚階層改善 第5ラウンド 指示9章)。 */
 .estimate-aggregation__grand-total strong {
-  color: #b45309;
+  color: var(--status-warning-accent);
   margin-left: 0.3rem;
 }
 
@@ -65,9 +75,10 @@
 
 /* 単価未設定等、金額の一部を合計に含められなかった旨の注記
    (推測で埋めず不足を報告する)。目立たせすぎず、かつ見落とされないよう
-   警告色にする。 */
+   警告色にする。UI視覚階層改善 第5ラウンド 指示9章: 共通Status token
+   (index.css)を参照する(値は変更していない)。 */
 .estimate-aggregation__warn {
-  color: #b45309;
+  color: var(--status-warning-accent);
   font-weight: 500;
 }
 
@@ -114,11 +125,14 @@
   box-shadow: 0 0 0 1px #2563eb;
 }
 
-/* 表データ行だけをスクロールさせる領域 (指示5章)。 */
+/* 表データ行だけをスクロールさせる領域 (指示5章)。
+   UI視覚階層改善 指示13章: 表外周(Level3)をセル内部の罫線(#f3f4f6)より
+   明確にする。1px枠のみで、大きな装飾(shadow等)は追加しない。 */
 .estimate-aggregation__table-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  border-top: 1px solid var(--border-table-outer);
 }
 
 .estimate-aggregation__table {
@@ -175,13 +189,62 @@
   white-space: nowrap;
   text-align: left;
   background: #f1f5f9;
-  border-bottom: 1px solid #e2e8f0;
+  /* UI視覚階層改善 指示13章: table headerの下線をデータ行同士の罫線
+     (td側 #f3f4f6)より明確にする。幅は1pxのまま、色のみ強める。 */
+  border-bottom: 1px solid var(--border-table-outer);
+  /* 表セル境界の統一 指示3章/4章: 列の対応関係を追いやすくする縦罫線。
+     header下線(--border-table-outer)より弱いトーンにする。 */
+  border-right: 1px solid var(--border-cell);
 }
+
+/* ソート可能なヘッダボタン (PR #2 追加修正指示: 積算集約テーブルにソート機能を追加
+   6章/18章/19章)。積算明細(.estimate-detail__sort-button)と同じ見た目・余白にし、
+   情報密度(ヘッダの高さ・padding)を変えない。ボタンは<th>のpadding領域を
+   width:100%で埋めるだけで、新たな余白は追加していない。 */
+.estimate-aggregation__sort-button {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.estimate-aggregation__sort-button:hover {
+  color: #1d4ed8;
+}
+
+.estimate-aggregation__sort-indicator {
+  font-size: 0.78rem;
+  color: #2563eb;
+}
+
+/* 表セル境界の統一・ヘッダ左寄せ/数値セル右寄せ 指示5章/8章/10章: 単価・数量・
+   金額の値セルは右寄せのままだが、header文字(ソートボタンのラベル)は他の列と
+   同じ左寄せにする(旧: ソートボタンをjustify-content:flex-endで右寄せしていたが、
+   「金額」等のheaderだけ列端へ浮いて見えるため撤回した)。ボタン自体のデフォルト
+   (flex, justify-content指定なし=flex-start)がそのまま「数値列でもheader button
+   を右寄せしない」(指示10章)を満たす。 */
 
 .estimate-aggregation__table td {
   padding: 0.25rem 0.3rem;
   border-bottom: 1px solid #f3f4f6;
   vertical-align: top;
+  /* 表セル境界の統一 指示3章: 既存の横罫線(#f3f4f6)は変更せず、縦罫線のみ
+     新たに薄く追加する。 */
+  border-right: 1px solid var(--border-cell);
+}
+
+/* 表の最終列は右端(table-scrollの外周)と隣接するため、余計な縦線を出さない。 */
+.estimate-aggregation__table th:last-child,
+.estimate-aggregation__table td:last-child {
+  border-right: none;
 }
 
 .estimate-aggregation__empty-cell {

@@ -15,7 +15,7 @@
 // 「クリックイベントの配線(onClick→state更新)が正しく繋がっていること」までしか
 // 保証できず、実ブラウザでの見た目上の重なりによるクリック奪い合いそのものは
 // 再現・証明できない。実ブラウザでの最終確認は別途必要。
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { DrawingViewer } from './DrawingViewer'
 import type { DetectedPreviewItem, Detection, PanelPreview } from '../../types/domain'
@@ -89,8 +89,10 @@ async function renderViewer(props: {
   selectedPanelKey?: string | null
   selectedDetectionId?: number | null
   onSelectPanel?: (key: string, panel: PanelPreview) => void
+  onDeleteSelectedDetection?: () => void
 }) {
   const onSelectPanel = props.onSelectPanel ?? vi.fn()
+  const onDeleteSelectedDetection = props.onDeleteSelectedDetection ?? vi.fn()
   const utils = render(
     <DrawingViewer
       productNo="A1GV2421"
@@ -109,7 +111,7 @@ async function renderViewer(props: {
       onCreateBBox={() => {}}
       onResizeDetection={() => {}}
       onMoveDetectionLabel={() => {}}
-      onDeleteSelectedDetection={() => {}}
+      onDeleteSelectedDetection={onDeleteSelectedDetection}
       onDeselectDetection={() => {}}
     />,
   )
@@ -124,7 +126,7 @@ async function renderViewer(props: {
   // これにより`.drawing-canvas__content`(and Overlay類)が実際にレンダリングされる
   // ところまで待機できる (DrawingCanvas.test.tsxと同じ待機パターン)。
   await screen.findByText('49%')
-  return { ...utils, viewport, onSelectPanel }
+  return { ...utils, viewport, onSelectPanel, onDeleteSelectedDetection }
 }
 
 describe('DrawingViewer (実画面未達 修正指示: Overlayレイヤーのpointer-events/z-index契約)', () => {
@@ -181,10 +183,14 @@ describe('DrawingViewer (実画面未達 修正指示: Overlayレイヤーのpoi
 describe('DrawingViewer フォントサイズ (全体フォント拡大・BBox編集追従回帰修正 指示1章: 旧「第4ラウンド」の縮小方針から一転し、全体を引き上げる)', () => {
   const ROOT_FONT_SIZE_PX = 15 // index.cssの:root font-size (指示1章で14px→15pxへ引き上げ)
 
-  it('the heading font-size is clearly larger than the old 0.85rem(≒11.9px), landing in a comfortably readable range', async () => {
+  it('the title (now inside the toolbar, since Viewer上部1行化) font-size is clearly larger than the old 0.85rem(≒11.9px), landing in a comfortably readable range', async () => {
+    // Viewer上部1行化 指示1章〜2章: ページ表示中は`.drawing-viewer__heading`
+    // (旧2行目時代の別行見出し)を描画せず、図面名は`.drawing-canvas__title`
+    // (toolbarと同じ1行)へ統合されている。
     await renderViewer({})
-    const heading = document.querySelector('.drawing-viewer__heading') as HTMLElement
-    const px = parseFloat(getComputedStyle(heading).fontSize) * ROOT_FONT_SIZE_PX
+    expect(document.querySelector('.drawing-viewer__heading')).toBeNull()
+    const title = document.querySelector('.drawing-canvas__title') as HTMLElement
+    const px = parseFloat(getComputedStyle(title).fontSize) * ROOT_FONT_SIZE_PX
     expect(px).toBeGreaterThan(11.9) // 旧値(0.85rem×14px≒11.9px)より明確に大きい
     expect(px).toBeLessThanOrEqual(18) // 見出しとして過大にはしない
   })
@@ -240,5 +246,91 @@ describe('DrawingViewer: detected_df.csv由来の検出BBoxプレビューのLay
     })
     fireEvent.click(screen.getByText('5/5'))
     expect(onSelectPanel).toHaveBeenCalled()
+  })
+})
+
+describe('DrawingViewer: Viewer上部1行化 (Sekisan Navi 追加UI修正指示)', () => {
+  it('renders the page title and the toolbar controls (Zoom/Fit/BBox削除) inside the same header element (24章: title/controlsが同一header内)', async () => {
+    await renderViewer({})
+    const toolbar = document.querySelector('.drawing-canvas__toolbar') as HTMLElement
+    expect(toolbar).not.toBeNull()
+    const title = toolbar.querySelector('.drawing-canvas__title') as HTMLElement
+    const controls = toolbar.querySelector('.drawing-canvas__toolbar-controls') as HTMLElement
+    expect(title).not.toBeNull()
+    expect(controls).not.toBeNull()
+    expect(title.textContent).toBe('外形図(P16)')
+    // Zoom/Fit/BBox削除がすべて同じcontrolsグループ(=同じtoolbar行)の中にあること。
+    expect(controls.querySelector('.drawing-canvas__zoom-label')).not.toBeNull()
+    expect(within(controls).getByTitle('Fit to View')).toBeInTheDocument()
+    expect(within(controls).getByRole('button', { name: 'BBox削除' })).toBeInTheDocument()
+  })
+
+  it('places the title before the controls group in DOM order (title左側/controls右側, 3章/4章)', async () => {
+    await renderViewer({})
+    const toolbar = document.querySelector('.drawing-canvas__toolbar') as HTMLElement
+    const children = Array.from(toolbar.children)
+    const titleIndex = children.findIndex((c) => c.className.includes('drawing-canvas__title'))
+    const controlsIndex = children.findIndex((c) => c.className.includes('drawing-canvas__toolbar-controls'))
+    expect(titleIndex).toBeGreaterThanOrEqual(0)
+    expect(controlsIndex).toBeGreaterThan(titleIndex)
+  })
+
+  it('lays out the toolbar as a single flex row with space-between (title left / controls right, 4章)', async () => {
+    await renderViewer({})
+    const toolbar = document.querySelector('.drawing-canvas__toolbar') as HTMLElement
+    const style = getComputedStyle(toolbar)
+    expect(style.display).toBe('flex')
+    expect(style.justifyContent).toBe('space-between')
+  })
+
+  it('no longer renders the old separate 2-row heading wrapper once a page is loaded (24章: 旧2段layout用wrapperが消えている)', async () => {
+    await renderViewer({})
+    expect(document.querySelector('.drawing-viewer__heading')).toBeNull()
+  })
+
+  it('still shows the "図面名" placeholder as a single line when no page is selected (図面未選択時の表示は変更しない)', () => {
+    render(
+      <DrawingViewer
+        productNo={null}
+        pageNo={null}
+        pageImageUrl={null}
+        pageLabel=""
+        panels={[]}
+        selectedPanelKey={null}
+        onSelectPanel={() => {}}
+        detections={[]}
+        selectedDetectionId={null}
+        highlightedDetectionId={null}
+        onSelectDetection={() => {}}
+        bboxAddMode={false}
+        onCreateBBox={() => {}}
+        onResizeDetection={() => {}}
+        onMoveDetectionLabel={() => {}}
+        onDeleteSelectedDetection={() => {}}
+        onDeselectDetection={() => {}}
+      />,
+    )
+    expect(screen.getByText('図面名')).toBeInTheDocument()
+    expect(document.querySelector('.drawing-canvas__toolbar')).toBeNull()
+  })
+
+  it('keeps Fit and BBox delete working after the layout change (24章: Fit操作維持・BBox delete維持)', async () => {
+    const onDeleteSelectedDetection = vi.fn()
+    await renderViewer({
+      detections: [makeDetection({ id: 1, status: 'reviewed' })],
+      selectedDetectionId: 1,
+      onDeleteSelectedDetection,
+    })
+    // Fit操作: 手動zoom後、Fitボタンでfit値へ戻る。
+    fireEvent.click(screen.getByTitle('拡大'))
+    await screen.findByText('61%') // 49% * 1.25 ≈ 61%
+    fireEvent.click(screen.getByTitle('Fit to View'))
+    await screen.findByText('49%')
+
+    // BBox削除: 選択中Detectionがある状態でクリックするとハンドラが呼ばれる。
+    const deleteButton = screen.getByRole('button', { name: 'BBox削除' })
+    expect(deleteButton).not.toBeDisabled()
+    fireEvent.click(deleteButton)
+    expect(onDeleteSelectedDetection).toHaveBeenCalledTimes(1)
   })
 })

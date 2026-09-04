@@ -29,6 +29,7 @@ vi.mock('../../pdf/pdfjs', () => ({
 async function renderCanvas(props: Partial<ComponentProps<typeof DrawingCanvas>> = {}) {
   const utils = render(
     <DrawingCanvas
+      title="外形図"
       fileUrl="dummy.pdf"
       fallbackSize={{ width: NATIVE_WIDTH, height: NATIVE_HEIGHT }}
       {...props}
@@ -158,6 +159,7 @@ describe('DrawingCanvas', () => {
 
     rerender(
       <DrawingCanvas
+        title="外形図"
         fileUrl="dummy.pdf"
         fallbackSize={{ width: NATIVE_WIDTH, height: NATIVE_HEIGHT }}
         onDeleteSelectedDetection={onDeleteSelectedDetection}
@@ -177,6 +179,7 @@ describe('DrawingCanvas: pngモード (Phase 1.8重要仕様訂正 — 実製番
   async function renderPngCanvas(props: Partial<ComponentProps<typeof DrawingCanvas>> = {}) {
     const utils = render(
       <DrawingCanvas
+        title="外形図"
         fileUrl="/api/products/A1TEST01/drawings/16/thumbnail"
         mode="png"
         fallbackSize={{ width: NATIVE_WIDTH, height: NATIVE_HEIGHT }}
@@ -218,6 +221,7 @@ describe('DrawingCanvas: pngモード (Phase 1.8重要仕様訂正 — 実製番
   it('shows an error message instead of crashing when the PNG fails to load', async () => {
     render(
       <DrawingCanvas
+        title="外形図"
         fileUrl="/api/products/A1TEST01/drawings/999/thumbnail"
         mode="png"
         fallbackSize={{ width: NATIVE_WIDTH, height: NATIVE_HEIGHT }}
@@ -249,6 +253,7 @@ describe('DrawingCanvas: Viewer自動Fit (実画面未達 追加修正指示18�
   async function renderPngCanvasForFit(props: Partial<ComponentProps<typeof DrawingCanvas>> = {}) {
     const utils = render(
       <DrawingCanvas
+        title="外形図"
         fileUrl="/api/products/A1TEST01/drawings/16/thumbnail"
         mode="png"
         fallbackSize={{ width: NATIVE_WIDTH, height: NATIVE_HEIGHT }}

@@ -25,6 +25,11 @@ interface NormalizedRect {
 }
 
 interface Props {
+  /** Viewer上部1行化 + 「図面一覧」見出しデザイン統一 指示1章〜11章: 旧2行構成
+   * (1行目=図面名の`<h2>`をDrawingViewer.tsx側で描画、2行目=このtoolbar) を廃止し、
+   * 図面名をこのtoolbarの左側へ統合する。Zoom/Fit/BBox削除のロジック・状態表現は
+   * 一切変更せず、配置のみをtoolbar内へ寄せる (指示7章)。 */
+  title: string
   /** 表示対象ファイルのURL。ページ切替のたびに変わる。 */
   fileUrl: string
   /** 表示方式。'pdf'=PDF.js描画 (既定)、'png'=画像をそのまま表示。
@@ -69,6 +74,7 @@ interface Props {
  * 同じドラッグ操作をPanではなくManual BBox作成として扱う (要件9/13)。
  */
 export function DrawingCanvas({
+  title,
   fileUrl,
   mode = 'pdf',
   fallbackSize,
@@ -461,33 +467,39 @@ export function DrawingCanvas({
         />
       )}
       <div className="drawing-canvas__toolbar">
-        <button type="button" onClick={zoomOut} title="縮小">
-          −
-        </button>
-        <span className="drawing-canvas__zoom-label">{Math.round(zoom * 100)}%</span>
-        <button type="button" onClick={zoomIn} title="拡大">
-          ＋
-        </button>
-        <button type="button" onClick={handleFitClick} title="Fit to View">
-          Fit
-        </button>
-        {bboxAddMode && (
-          <span className="drawing-canvas__mode-badge" title="積算コードMasterで選択中の行がManual BBoxの追加対象になります">
-            ✎ BBox追加モード
-          </span>
-        )}
-        {selectedDetectionLabel != null && (
-          <span className="drawing-canvas__selection-badge">BBox編集: {selectedDetectionLabel}</span>
-        )}
-        <button
-          type="button"
-          className="drawing-canvas__delete-button"
-          disabled={selectedDetectionLabel == null}
-          onClick={onDeleteSelectedDetection}
-          title="選択中のBBoxを削除します (Deleteキーでも削除できます)"
-        >
-          BBox削除
-        </button>
+        {/* Viewer上部1行化 指示2章〜5章: 図面名(左)。右側の操作系とは
+            justify-content:space-between(CSS側)で分離するだけで、機能は持たない
+            ただのラベル。 */}
+        <span className="drawing-canvas__title">{title}</span>
+        <div className="drawing-canvas__toolbar-controls">
+          <button type="button" onClick={zoomOut} title="縮小">
+            −
+          </button>
+          <span className="drawing-canvas__zoom-label">{Math.round(zoom * 100)}%</span>
+          <button type="button" onClick={zoomIn} title="拡大">
+            ＋
+          </button>
+          <button type="button" onClick={handleFitClick} title="Fit to View">
+            Fit
+          </button>
+          {bboxAddMode && (
+            <span className="drawing-canvas__mode-badge" title="積算コードMasterで選択中の行がManual BBoxの追加対象になります">
+              ✎ BBox追加モード
+            </span>
+          )}
+          {selectedDetectionLabel != null && (
+            <span className="drawing-canvas__selection-badge">BBox編集: {selectedDetectionLabel}</span>
+          )}
+          <button
+            type="button"
+            className="drawing-canvas__delete-button"
+            disabled={selectedDetectionLabel == null}
+            onClick={onDeleteSelectedDetection}
+            title="選択中のBBoxを削除します (Deleteキーでも削除できます)"
+          >
+            BBox削除
+          </button>
+        </div>
       </div>
       <div
         ref={viewportRef}

@@ -401,6 +401,173 @@ describe('buildRealEstimateAggregation (積算集約・積算明細UI再構成: 
   })
 })
 
+describe('buildRealEstimateAggregation: totalLineItems (Sekisan Navi 追加修正指示: 積算集約の数量集約)', () => {
+  it('merges the SAME masterItemId across THREE DIFFERENT panels into a single totalLineItems row with quantity=3 (指示2章/3章/17章の核心シナリオ)', () => {
+    const p1 = makePanel({ ban_menno: 1, ban_no: 1, normalized_rect: { x: 0, y: 0, w: 0.2, h: 0.2 } })
+    const p2 = makePanel({ ban_menno: 2, ban_no: 2, normalized_rect: { x: 0.3, y: 0, w: 0.2, h: 0.2 } })
+    const p3 = makePanel({ ban_menno: 3, ban_no: 3, normalized_rect: { x: 0.6, y: 0, w: 0.2, h: 0.2 } })
+    const d1 = makeDetection({ id: 1, bbox_x: 0.05, bbox_y: 0.05, bbox_w: 0.02, bbox_h: 0.02 })
+    const d2 = makeDetection({ id: 2, bbox_x: 0.35, bbox_y: 0.05, bbox_w: 0.02, bbox_h: 0.02 })
+    const d3 = makeDetection({ id: 3, bbox_x: 0.65, bbox_y: 0.05, bbox_w: 0.02, bbox_h: 0.02 })
+    const masterItemById = new Map([[10, makeMasterItem({ total_price_a: 23100 })]])
+    const result = buildRealEstimateAggregation({
+      detections: [{ detection: d1, pageNo: 16 }, { detection: d2, pageNo: 16 }, { detection: d3, pageNo: 16 }],
+      panelsByPageNo: panelsByPageNo([[16, [p1, p2, p3]]]),
+      estimatePanels: [],
+      masterItemById,
+    })
+    // 対象別(lineItems)は3つの異なる盤へ分かれたまま(各quantity=1)。
+    expect(result.lineItems).toHaveLength(3)
+    expect(result.lineItems.every((l) => l.quantity === 1)).toBe(true)
+    // 総合計用(totalLineItems)は対象を横断して1行にまとまる。
+    expect(result.totalLineItems).toHaveLength(1)
+    const total = result.totalLineItems[0]
+    expect(total.quantity).toBe(3)
+    expect(total.amount).toBe(23100 * 3)
+    expect(total.targetId).toBeNull()
+    expect(new Set(total.detectionIds)).toEqual(new Set([1, 2, 3]))
+  })
+
+  it('keeps different masterItemId as separate totalLineItems rows even across the same or different panels', () => {
+    const panel = makePanel()
+    const d1 = makeDetection({ id: 1, master_item_id: 10 })
+    const d2 = makeDetection({ id: 2, master_item_id: 11 })
+    const masterItemById = new Map([
+      [10, makeMasterItem({ id: 10 })],
+      [11, makeMasterItem({ id: 11, code: '18203', model: '加算' })],
+    ])
+    const result = buildRealEstimateAggregation({
+      detections: [{ detection: d1, pageNo: 16 }, { detection: d2, pageNo: 16 }],
+      panelsByPageNo: panelsByPageNo([[16, [panel]]]),
+      estimatePanels: [],
+      masterItemById,
+    })
+    expect(result.totalLineItems).toHaveLength(2)
+  })
+
+  it('does not merge two DIFFERENT masterItemId that happen to share the same displayed code (安全性: codeではなくmasterItemIdをキーにする)', () => {
+    const panel = makePanel()
+    const d1 = makeDetection({ id: 1, master_item_id: 10, master_item_code: '99999' })
+    const d2 = makeDetection({ id: 2, master_item_id: 99, master_item_code: '99999' })
+    const masterItemById = new Map([
+      [10, makeMasterItem({ id: 10, code: '99999' })],
+      [99, makeMasterItem({ id: 99, code: '99999', total_price_a: 1234 })],
+    ])
+    const result = buildRealEstimateAggregation({
+      detections: [{ detection: d1, pageNo: 16 }, { detection: d2, pageNo: 16 }],
+      panelsByPageNo: panelsByPageNo([[16, [panel]]]),
+      estimatePanels: [],
+      masterItemById,
+    })
+    expect(result.totalLineItems).toHaveLength(2)
+    expect(new Set(result.totalLineItems.map((l) => l.masterItemId))).toEqual(new Set([10, 99]))
+  })
+
+  it('sums negative unit prices across merged detections without special-casing them (指示9章)', () => {
+    const p1 = makePanel({ ban_menno: 1, ban_no: 1, normalized_rect: { x: 0, y: 0, w: 0.2, h: 0.2 } })
+    const p2 = makePanel({ ban_menno: 2, ban_no: 2, normalized_rect: { x: 0.3, y: 0, w: 0.2, h: 0.2 } })
+    const d1 = makeDetection({ id: 1, bbox_x: 0.05, bbox_y: 0.05, bbox_w: 0.02, bbox_h: 0.02 })
+    const d2 = makeDetection({ id: 2, bbox_x: 0.35, bbox_y: 0.05, bbox_w: 0.02, bbox_h: 0.02 })
+    const masterItemById = new Map([[10, makeMasterItem({ total_price_a: -9700 })]])
+    const result = buildRealEstimateAggregation({
+      detections: [{ detection: d1, pageNo: 16 }, { detection: d2, pageNo: 16 }],
+      panelsByPageNo: panelsByPageNo([[16, [p1, p2]]]),
+      estimatePanels: [],
+      masterItemById,
+    })
+    expect(result.totalLineItems[0].quantity).toBe(2)
+    expect(result.totalLineItems[0].amount).toBe(-19400)
+  })
+
+  it('aggregates correctly within 製品全体 alone (no panel overlap at all)', () => {
+    const panel = makePanel({ normalized_rect: { x: 0.8, y: 0.8, w: 0.1, h: 0.1 } }) // どのdetectionとも交差しない
+    const d1 = makeDetection({ id: 1, bbox_x: 0.05, bbox_y: 0.05, bbox_w: 0.02, bbox_h: 0.02 })
+    const d2 = makeDetection({ id: 2, bbox_x: 0.15, bbox_y: 0.05, bbox_w: 0.02, bbox_h: 0.02 })
+    const masterItemById = new Map([[10, makeMasterItem({ total_price_a: 1000 })]])
+    const result = buildRealEstimateAggregation({
+      detections: [{ detection: d1, pageNo: 16 }, { detection: d2, pageNo: 16 }],
+      panelsByPageNo: panelsByPageNo([[16, [panel]]]),
+      estimatePanels: [],
+      masterItemById,
+    })
+    expect(result.lineItems).toHaveLength(1)
+    expect(result.lineItems[0].targetId).toBe(PRODUCT_TARGET_ID)
+    expect(result.lineItems[0].quantity).toBe(2)
+    expect(result.totalLineItems).toHaveLength(1)
+    expect(result.totalLineItems[0].quantity).toBe(2)
+    expect(result.totalLineItems[0].amount).toBe(2000)
+  })
+
+  it('aggregates correctly within the tie target alone (要確認)', () => {
+    const left = makePanel({ ban_menno: 1, ban_no: 1, normalized_rect: { x: 0, y: 0, w: 0.25, h: 0.25 } })
+    const right = makePanel({ ban_menno: 2, ban_no: 1, normalized_rect: { x: 0.5, y: 0, w: 0.25, h: 0.25 } })
+    const d1 = makeDetection({ id: 1, bbox_x: 0.125, bbox_y: 0, bbox_w: 0.5, bbox_h: 0.25 })
+    const d2 = makeDetection({ id: 2, bbox_x: 0.125, bbox_y: 0, bbox_w: 0.5, bbox_h: 0.25 })
+    const masterItemById = new Map([[10, makeMasterItem({ total_price_a: 500 })]])
+    const result = buildRealEstimateAggregation({
+      detections: [{ detection: d1, pageNo: 16 }, { detection: d2, pageNo: 16 }],
+      panelsByPageNo: panelsByPageNo([[16, [left, right]]]),
+      estimatePanels: [],
+      masterItemById,
+    })
+    expect(result.lineItems).toHaveLength(1)
+    expect(result.lineItems[0].targetId).toBe(TIE_TARGET_ID)
+    expect(result.lineItems[0].quantity).toBe(2)
+    expect(result.totalLineItems[0].quantity).toBe(2)
+    expect(result.totalLineItems[0].amount).toBe(1000)
+  })
+
+  it('never reduces the detail item count, regardless of how many rows get merged in lineItems/totalLineItems (積算明細は1 Detection = 1行のまま、指示12章)', () => {
+    const p1 = makePanel({ ban_menno: 1, ban_no: 1, normalized_rect: { x: 0, y: 0, w: 0.2, h: 0.2 } })
+    const p2 = makePanel({ ban_menno: 2, ban_no: 2, normalized_rect: { x: 0.3, y: 0, w: 0.2, h: 0.2 } })
+    const p3 = makePanel({ ban_menno: 3, ban_no: 3, normalized_rect: { x: 0.6, y: 0, w: 0.2, h: 0.2 } })
+    const d1 = makeDetection({ id: 1, bbox_x: 0.05, bbox_y: 0.05, bbox_w: 0.02, bbox_h: 0.02 })
+    const d2 = makeDetection({ id: 2, bbox_x: 0.35, bbox_y: 0.05, bbox_w: 0.02, bbox_h: 0.02 })
+    const d3 = makeDetection({ id: 3, bbox_x: 0.65, bbox_y: 0.05, bbox_w: 0.02, bbox_h: 0.02 })
+    const masterItemById = new Map([[10, makeMasterItem()]])
+    const result = buildRealEstimateAggregation({
+      detections: [{ detection: d1, pageNo: 16 }, { detection: d2, pageNo: 16 }, { detection: d3, pageNo: 16 }],
+      panelsByPageNo: panelsByPageNo([[16, [p1, p2, p3]]]),
+      estimatePanels: [],
+      masterItemById,
+    })
+    // lineItems=3行、totalLineItems=1行 と粒度が異なっていても、積算明細は必ず3件。
+    expect(result.lineItems).toHaveLength(3)
+    expect(result.totalLineItems).toHaveLength(1)
+    expect(result.detailItems).toHaveLength(3)
+    expect(new Set(result.detailItems.map((d) => d.detectionId))).toEqual(new Set([1, 2, 3]))
+  })
+
+  it('does not double-count: the sum of totalLineItems amounts equals the sum of detailItems-derived amounts (製番合計の整合、指示18章)', () => {
+    const p1 = makePanel({ ban_menno: 1, ban_no: 1, normalized_rect: { x: 0, y: 0, w: 0.2, h: 0.2 } })
+    const p2 = makePanel({ ban_menno: 2, ban_no: 2, normalized_rect: { x: 0.3, y: 0, w: 0.2, h: 0.2 } })
+    const d1 = makeDetection({ id: 1, master_item_id: 10, bbox_x: 0.05, bbox_y: 0.05, bbox_w: 0.02, bbox_h: 0.02 })
+    const d2 = makeDetection({ id: 2, master_item_id: 10, bbox_x: 0.35, bbox_y: 0.05, bbox_w: 0.02, bbox_h: 0.02 })
+    const d3 = makeDetection({ id: 3, master_item_id: 11, bbox_x: 0.05, bbox_y: 0.15, bbox_w: 0.02, bbox_h: 0.02 })
+    const masterItemById = new Map([
+      [10, makeMasterItem({ id: 10, total_price_a: 23100 })],
+      [11, makeMasterItem({ id: 11, code: '18330', total_price_a: -9700 })],
+    ])
+    const result = buildRealEstimateAggregation({
+      detections: [{ detection: d1, pageNo: 16 }, { detection: d2, pageNo: 16 }, { detection: d3, pageNo: 16 }],
+      panelsByPageNo: panelsByPageNo([[16, [p1, p2]]]),
+      estimatePanels: [],
+      masterItemById,
+    })
+    const totalFromTotalLineItems = result.totalLineItems.reduce((sum, l) => sum + (l.amount ?? 0), 0)
+    // detailItemsは金額を持たないため、各行のmasterItemIdからunit priceを引いて独立に再計算する。
+    const totalFromDetailItems = result.detailItems.reduce((sum, d) => {
+      const unit = masterItemById.get(d.masterItemId)?.total_price_a ?? 0
+      return sum + unit
+    }, 0)
+    expect(totalFromTotalLineItems).toBe(totalFromDetailItems)
+    expect(totalFromTotalLineItems).toBe(23100 * 2 - 9700)
+    // 対象別lineItemsの合計とも一致する(同じ実データを異なる粒度で集約しているだけ)。
+    const totalFromLineItems = result.lineItems.reduce((sum, l) => sum + (l.amount ?? 0), 0)
+    expect(totalFromLineItems).toBe(totalFromTotalLineItems)
+  })
+})
+
 describe('resolveAssignmentTargetId (積算明細強化・Undo/Redo・要確認警告・編集追従 指示8章)', () => {
   it('resolves a "product" assignment to PRODUCT_TARGET_ID', () => {
     expect(resolveAssignmentTargetId({ kind: 'product' })).toBe(PRODUCT_TARGET_ID)

@@ -1308,6 +1308,7 @@ function App() {
               <EstimateAggregation
                 targets={estimateAggregationData.targets}
                 lineItems={estimateAggregationData.lineItems}
+                totalLineItems={estimateAggregationData.totalLineItems}
                 selectedTargetId={selectedEstimateTargetId}
                 onSelectTarget={setSelectedEstimateTargetId}
               />

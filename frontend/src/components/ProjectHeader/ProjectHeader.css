@@ -1,17 +1,58 @@
+/* UI視覚階層改善 追加修正指示 2章: 最上部Headerを濃紺(#1f2937)から明るめの
+   コバルトブルーへ変更する。#1d4ed8(採用)は既存のPaneSplitter drag時の色と
+   同じトーンで、指示22章の「Header/Master選択マーカーで同じコバルト系を
+   アプリ構造の共通アクセントとして使う」方針に沿う。#2563eb(hover色と同トーン)
+   も比較したが、この面積(Header全体)で使うと業務画面としてやや眩しく、
+   #1d4ed8の方が「明確にコバルトブルー」でありながら落ち着いて見えたため
+   こちらを採用した。
+   最終微調整ラウンド 指示6章/7章/18章: 画面全体に占める面積が大きいHeaderは、
+   彩度(S)は変えずlightnessだけ現在色(#1d4ed8)と#2563ebの中間程度(#2455e2)まで
+   引き上げ、一段軽いコバルトにした(色相224°・彩度76%は維持、明度のみ
+   48%→51%)。単純な#2563eb直採用(彩度83%)は「彩度を上げない」指示に反する
+   ため避けた。border-bottomは1px線で面積への影響が小さいため据え置いている。 */
 .project-header {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 1.5rem;
   padding: 0.5rem 1rem;
-  background: #1f2937;
-  color: #f9fafb;
-  border-bottom: 1px solid #374151;
+  background: #2455e2;
+  color: #fff;
+  border-bottom: 1px solid #1e40af;
 }
 
-.project-header__title {
+/* UI視覚階層改善 追加修正(タイトルSaaS化、さらに追加修正で視認性を強化): 「Sekisan
+   Navi」をHeader内の業務情報(整理番号/製番/盤名称/解析状態)とは別の専用classにし、
+   タイポグラフィだけでプロダクトタイトルらしく見せる。画像・SVG・Canvasロゴは
+   作らない(指示2章/27章)。pill/badge/card化もしない(指示13章)。Header高さに
+   影響する要素(padding/line-height/height)は一切変更していない。
+   - font-family: 英字部分だけInter等のSaaSアプリで見慣れたsans-serifを先頭に
+     追加し、無ければ既存の日本語UI stackへ自然にフォールバックする
+     (Webフォント新規配信はしない。ローカルに無ければ後続へフォールバックする
+     だけ、指示4章)。
+   - font-weight: 700を維持(通常のHeader情報より明確に強い。実画面で差が
+     弱いとは感じなかったため800までは上げていない。900は禁止、指示23章)。
+   - font-size: 1.1rem→1.14rem。周囲情報(0.98rem)との差をさらに広げるため、
+     Header高さに影響しない範囲(指示24章)でわずかに引き上げた。
+   - color: 純白(#fff)から#eaf2ffへ変更(指示20章/21章)。コバルトブルーの
+     Headerと相性の良いごく淡い青白色にし、周囲の白い業務情報(整理番号等)とは
+     わずかに色相を分けている。黄・緑・シアン等の別系統色は使っていない。
+   - text-shadow: 旧`0 1px 1px rgba(0,0,0,0.18), 0 0 6px rgba(255,255,255,0.08)`
+     から、指示22章の推奨値(ぼかし半径8px・alpha0.20、色をブランド色#dbeafe系に
+     変更)へわずかに強化した。ネオン発光にはしていない。
+   - letter-spacing: 0.02emを維持。
+   実画面ではA(現行white)/B(淡い青白色+旧shadow)/C(淡い青白色+新shadow+
+   1.14rem)の3案を比較し、周囲情報との差が最も明確でありながら派手すぎない
+   C案を採用した(指示29章)。 */
+.project-header__brand {
+  font-family: Inter, 'Segoe UI', 'Yu Gothic UI', 'Meiryo UI', sans-serif;
   font-weight: 700;
-  font-size: 1.15rem; /* 全体フォント拡大 指示1章: 旧1.05rem→引き上げ */
+  font-size: 1.14rem;
+  color: #eaf2ff;
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.22),
+    0 0 8px rgba(219, 234, 254, 0.2);
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
@@ -23,31 +64,51 @@
   flex-wrap: wrap;
 }
 
+/* 指示3章: 青背景上で薄すぎるグレーにしない。旧#d1d5db(濃紺背景では十分だった)は
+   明るいコバルト背景ではやや埋もれるため、半透明の白へ変更してコントラストを保つ。 */
 .project-header__loading {
   font-size: 0.98rem;
-  color: #d1d5db;
+  color: rgba(255, 255, 255, 0.85);
 }
 
+/* 指示5章: 解析状態は意味色であり、Header色(コバルト)へ統合しない。
+   どの状態色でも新しい明るいHeader背景上で埋もれないよう、共通で薄い白borderを
+   添えて輪郭を保つ(状態色そのものの意味・配色は変更しない)。
+   UI視覚階層改善 第5ラウンド〜最終微調整ラウンド 指示6章〜10章: 各状態は共通の
+   Status token(index.css参照)を参照する。「確認待ち」は旧#92400e単色→
+   一時的にamber-700濃色+白文字→最終的に淡色chip(--warning-chip-*、後述コメント
+   参照)という経緯で調整した。「解析中」は旧#1e40af(Structureのコバルトと
+   同系の青で衝突していた)をNeutralへ差し替えた。「確定」はEstimateDetailの
+   ○記号と同じ--status-successへ統一した(旧#065f46は別系統の緑だった)。 */
 .project-header__status {
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
-  background: #374151;
+  background: var(--status-neutral);
+  border: 1px solid rgba(255, 255, 255, 0.35);
 }
 
 .project-header__status--confirmed {
-  background: #065f46;
+  background: var(--status-success);
 }
 
+/* 「確認待ち」: 第5ラウンドでは濃色(amber-700)+白文字を採用したが、実画面で
+   「茶色い面」に見えるとの指摘を受け、最終微調整ラウンドで淡色chip方式へ
+   差し替えた。background#fef3c7 / color(--status-warning-text, #92400e) /
+   border#f59e0bの3案(#fef3c7系と、さらに淡いbackground#fffbeb系)を実Header上で
+   比較し、「淡い黄色系のWarning」として十分な存在感がありつつ薄すぎない
+   #fef3c7系を採用した。白borderの共通ルールをamber系のborderで上書きする。 */
 .project-header__status--needs_review {
-  background: #92400e;
+  background: var(--status-warning-chip-bg);
+  color: var(--status-warning-text);
+  border-color: var(--status-warning-chip-border);
 }
 
 .project-header__status--analyzing {
-  background: #1e40af;
+  background: var(--status-neutral-soft);
 }
 
 .project-header__status--not_analyzed {
-  background: #4b5563;
+  background: var(--status-neutral);
 }
 
 .project-header__actions {
@@ -56,11 +117,14 @@
   gap: 0.5rem;
 }
 
+/* 指示4章: 背景をコバルトブルーへ変更したため、旧来の暗いグレー系ボタン
+   (#374151地に#4b5563border)はHeaderと同化して見えなくなる。Headerより
+   少し濃い半透明の白背景+白系borderへ変更し、サイズ・paddingは変えない。 */
 .project-header__actions button {
   padding: 0.35rem 0.8rem;
-  border: 1px solid #4b5563;
-  background: #374151;
-  color: #f9fafb;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
@@ -68,5 +132,5 @@
 }
 
 .project-header__actions button:hover {
-  background: #4b5563;
+  background: rgba(255, 255, 255, 0.26);
 }
