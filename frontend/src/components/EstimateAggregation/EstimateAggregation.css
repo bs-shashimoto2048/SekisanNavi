@@ -102,24 +102,30 @@
   margin-bottom: 0.45rem;
 }
 
-/* Issue #6 指示1章: 積算対象Selectの視認性向上。既存の構造色(濃紺/コバルト/白/灰)の
-   範囲内で、常時「今どの対象を見ているか」の入口だと分かる強さにする。状態色
-   (--status-*)やAI/Manualの意味色とは重ならない配色にし、padding/高さは
-   増やさない(border-boxのためborder-widthを1px→1.5pxにしても外形サイズは
-   変わらない)。既存の`--focused`(Viewer連動中のみ淡い背景で強調)は、この
-   常時強調よりさらに一段強い状態として残す(通常表示 < Viewer連動中、の
-   階層を維持)。 */
+/* Issue #6 追加修正(色変更が実画面へ反映されていない件): 初回実装は
+   border-widthを1px→1.5pxにしたが、Chromiumが1x DPIで1.5pxを1pxへ丸めて
+   描画するため実際には旧来とほぼ同じ太さのまま(実ブラウザ実測で確認済み)、
+   かつ背景が白のままだったため、色相のみの違いが既存のコバルト系装飾
+   (見出し・splitter・sort indicator等)に紛れて「一目で重要操作だと分かる」
+   ほどの強調になっていなかった。CSS自体は正しく適用されていた(競合する
+   セレクタ・!important・select系グローバルルールは無い。実ブラウザの
+   getComputedStyle/matched CSS rulesで確認済み)ため、原因は視覚的な強さの
+   不足であり、適用漏れではない。
+   今回は「枠線の色だけ」から「淡い塗り+太めの枠+濃い文字」の組み合わせへ
+   変更し、通常状態でも一目で分かる強さにする。既存の構造色(濃紺/コバルト/
+   白/灰)の範囲内。状態色(--status-*)やAI/Manualの意味色とは重ならない。
+   padding/高さは増やさない(border-boxのためborder-widthを2pxにしても
+   外形サイズは変わらない)。 */
 .estimate-aggregation__target-select {
   font: inherit;
   font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
   color: #1e3a8a;
-  font-weight: 600;
-  background: #fff;
-  border: 1.5px solid #2563eb;
+  font-weight: 700;
+  background: #eff6ff;
+  border: 2px solid #2563eb;
   border-radius: 4px;
   padding: 0.3rem 0.45rem;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.15);
 }
 
 .estimate-aggregation__target-select:hover {
@@ -127,12 +133,16 @@
 }
 
 /* Viewerが現在この対象へフォーカスしている(個別盤選択中)ことを示す
-   (指示8章「Viewer連動中の対象表示」)。常時強調(上記)よりさらに一段強く、
-   コバルトブルーの淡い塗り+外側リングを追加する。 */
+   (指示8章「Viewer連動中の対象表示」)。常時強調(上記)よりもう一段強くする。
+   背景の塗り自体は同じ淡い青(#eff6ff)のまま「同系統の強調が続いている」
+   ことを示しつつ、枠を濃色化+外側リングを追加することで、通常状態と
+   ほぼ同じ見た目に潰れないようにする(通常=中強度、Viewer連動中=最強度)。 */
 .estimate-aggregation__target-select--focused {
   border-color: #1d4ed8;
   background: #eff6ff;
-  box-shadow: 0 0 0 1px #2563eb;
+  /* 通常状態にはリングが無いため、この外側リング(2px、通常状態の枠と同系色
+     だがより濃い#1d4ed8)自体が「通常よりもう一段強い」ことの明確な目印になる。 */
+  box-shadow: 0 0 0 2px #1d4ed8;
 }
 
 /* 表データ行だけをスクロールさせる領域 (指示5章)。
