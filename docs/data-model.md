@@ -27,7 +27,20 @@ EstimateMasterItem  (積算コードの辞書。EstimateItemとは別テーブ�
 EstimateItem 1 ── n EstimateReference ── (DrawingPage, Detection?, Panel?)
 
 system_settings (key-value。Phase 1.5で追加。データ参照ルート等)
+
+decision_events (Issue #4 Phase A-1で追加。detection_idへのFKなし=歴史的参照。
+                  6.5章)
+
+estimate_confirmations 1 ── n estimate_confirmation_items
+  (Issue #4 Phase B-1で追加。confirmation_idはFKあり、detection_id等はFKなし。
+   6.6章)
 ```
+
+**実データ経路の注意**: 上記ERは主にPhase 0/1のダミーデータ向けテーブル構成を
+表す。実製番(例: A1GV2421)の積算集約・積算明細は`EstimateItem`/
+`EstimateReference`を経由せず、Frontend側`estimateAggregationReal.ts`が
+`Detection`×`EstimateMasterItem`×外部CSV(`product_df.csv`/`estcode_df.csv`)から
+都度計算する(`decision-snapshot-design.md` 2章)。
 
 ## 2. Drawing (図面)
 

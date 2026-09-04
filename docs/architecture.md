@@ -1,7 +1,10 @@
 # architecture.md — Sekisan Navi アーキテクチャ
 
-PoC (Phase 0/1/1.5) 時点でのアーキテクチャ方針。ここに書かれた技術選定・構成も
-「変更されうる前提」で書いており、確定/暫定の区分は `implementation-plan.md` を参照。
+PoC時点でのアーキテクチャ方針(2026-09、Issue #4 Phase B / Issue #6 / Issue #9反映後の
+mainを反映)。ここに書かれた技術選定・構成も「変更されうる前提」で書いており、
+確定/暫定の区分は `implementation-plan.md` を参照。章立ては初版(Phase 0/1/1.5)
+からの追記形式のため、章番号と機能追加時期(Phaseやissue番号)は必ずしも
+一致しない。
 
 ## 1. 全体像
 
@@ -37,10 +40,18 @@ app/
     migrations/*.sql    スキーマ定義 (連番)
     seed.py             ダミーデータ投入
   repositories/       SQLiteの行 <-> domainモデル の変換 (SQLはここに閉じ込める)
+    decision_events.py         判断・修正データevent記録 (Issue #4 Phase A-1、16章)
+    estimate_confirmations.py  積算確定snapshotの保存 (Issue #4 Phase B-1、17章)
   services/           DB以外の外部境界を扱う層 (Phase 1.5で追加)
     data_source.py      データ参照ルート・製番ディレクトリの安全な解決
     admin_auth.py        管理者パスワード検証
+    product_df.py         product_df.csv(盤領域)の読み込み (Phase 1.8、14章)
+    estcode_df.py          estcode_df.csv(盤情報)の読み込み (Phase 1.14、18章)
+    detected_df.py          detected_df.csv(YOLO検出結果)の読み込み (Phase 1.12、18章)
+    estimate_confirmation_builder.py  積算確定snapshotを現在状態から組み立てる
+                                       (Issue #4 Phase B-2、17章)
   schemas/            APIの入出力契約 (Pydantic)。domainと形は似るが役割は別。
+    estimate_confirmations.py  積算確定snapshot作成APIのレスポンス型 (17章)
   api/routers/        FastAPIルーター。repositories/rule_engine/servicesを呼ぶだけ。
 tests/                pytest (domain単体テスト・APIテスト・データ参照サービスの単体テスト)
 ```
@@ -61,22 +72,41 @@ src/
   types/domain.ts       APIレスポンスに対応する型定義
   pdf/pdfjs.ts           PDF.jsのセットアップ (ワーカー設定を1箇所に集約)
   components/
-    ProjectHeader/       案件情報・解析状態ヘッダー + システム設定/製番を開くボタン
+    ProjectHeader/       案件情報・解析状態ヘッダー + システム設定/製番を開くボタン。
+                         「Sekisan Navi」ブランドブロック・右方向グラデーション背景
+                         (Issue #9、`ui-spec.md` 2章)
     DrawingNavigator/     図面一覧 (ページ単位・種類別グループ表示)
     DrawingViewer/        中央Viewer
-      DrawingCanvas.tsx     PDF.jsによる実PDF表示 + zoom/pan/fit (Phase 1.5)
+      DrawingCanvas.tsx     PDF.js('pdf')/PNG('png')表示 + zoom/pan/fit。ツールバー
+                             ボタンの質感(box-shadow/hover/active)はIssue #9で調整
       DetectionOverlay.tsx  Detection BBoxのオーバーレイ
       PanelOverlay.tsx      盤範囲(Panel Area)のオーバーレイ。Detectionと独立
-    PanelInfo/             盤情報 (estcode_df.csv実データ、Phase 1.14でPanelPropertiesから置換)
-    EstimateAggregation/  積算集約 (数量・金額の確認。2026-09追加修正で対象別/総合計の
-                           数量集約に対応。詳細は`ui-spec.md` 5.5章)
+      ProductPanelOverlay.tsx  product_df由来の盤領域Overlay (Phase 1.8、14章)
+      LeaderLineOverlay.tsx    引出線(Leader Line)表示 (Phase 1.11、15章)
+    PanelInfo/             盤情報 (estcode_df.csv実データ、Phase 1.14でPanelPropertiesから置換。
+                           Issue #6で折りたたみ対応)
+    EstimateAggregation/  積算集約 (数量・金額の確認。対象別/総合計の数量集約に対応。
+                           「製番合計」金額は赤系(#dc2626)で強調(Issue #9)。
+                           `EstimateConfirmationAction.tsx`(積算確定ボタン、
+                           Issue #4 Phase B-3、17章)を内包。Issue #6で折りたたみ対応。
+                           詳細は`ui-spec.md` 5.5章)
     EstimateDetail/        積算明細 (1 Detection = 1行の根拠追跡。旧EstimateTreeの後継、
-                           `ui-spec.md` 5.6章)
+                           `ui-spec.md` 5.6章。Issue #6で折りたたみ対応)
     EstimateMasterPicker/ 積算コードMaster検索
     SystemSettings/       管理者向けシステム設定 (データ参照ルート変更) (Phase 1.5)
-    ProductViewer/        製番を指定した実データ参照 (Phase 1.5)
-    Layout/PaneSplitter.tsx  左右ペイン境界のResize Handle (2026-08 UIレイアウト追加修正)
-  hooks/usePaneWidth.ts   ペイン幅の状態管理+localStorage永続化 (同上)
+    ProductSelector/       製番検索・切替 (Phase 1.5で`ProductViewer`として追加、
+                           Phase 1.8で製番検索UIへ役割変更・改名)
+    Layout/
+      PaneSplitter.tsx       左右/上下ペイン境界のResize Handle
+      CollapsibleSectionHeading.tsx  右ペイン3領域(盤情報/積算集約/積算明細)の
+                                     折りたたみ見出し (共通化。Issue #6)
+  domain/                Frontend側の純粋な業務ロジック (Backendを介さない計算)
+    estimateAggregationReal.ts  積算集約・積算明細を実データから組み立てる
+                                 (対象別/総合計の数量集約、BBox所属判定を含む)
+    editHistory.ts               Undo/Redo (create/delete/bboxの3種)
+    masterCategoryPresentation.ts 積算コードカテゴリごとの配色定義
+  hooks/usePaneWidth.ts   ペイン幅・高さの状態管理+localStorage永続化
+                         (`dimension: 'width'|'height'`で両対応)
   App.tsx                各コンポーネントの状態統合・データ取得・レイアウト構成
 ```
 
@@ -669,3 +699,107 @@ Resize Handle(40) → Tooltip(50) の順に明示し、JSX描画順(コンポー
 挙動はすべて共通のまま利用できる。`PaneSplitter`にも`axis: 'x' | 'y'`を追加し、
 横方向Resize Handle(既存)と縦方向Resize Handle(Master領域の高さ変更)を
 同じコンポーネントで実現している。
+
+## 16. decision_events — 判断・修正データの最小event記録 (Issue #4 Phase A-1)
+
+将来の見積り自動化に向けて、「通常の積算作業を行うだけで判断データが自然に
+蓄積される」(`docs/product-vision.md`)ことを目指し、`detections`テーブルへの
+create/delete/bbox move・resizeの事実だけをappend-onlyで記録する専用テーブル
+`decision_events`を追加した。
+
+```
+POST /api/detections          (Manual BBox作成)
+PATCH /api/detections/{id}    (BBox移動・リサイズ・引出線ラベル移動)
+DELETE /api/detections/{id}   (削除)
+        │
+        ▼
+backend/app/repositories/detections.py の各関数
+        │  (状態変更のINSERT/UPDATE/DELETEと同一の`conn`・同一トランザクション内で)
+        ▼
+backend/app/repositories/decision_events.py :: record_event()
+        │
+        ▼
+decision_events テーブル (event_type: create/delete/bbox_edit)
+```
+
+- **current state(`detections`)とは完全に独立**。既存テーブルへのALTERは無い。
+- **`detection_id`は意図的にFK制約を持たない**(削除イベント記録直後の本体DELETEが
+  FK違反にならないよう、歴史的参照として扱う。`drawing_page_id`/`source_type`/
+  `master_item_id`/`before_bbox_*`を非正規化コピーとして持つため、Detectionが
+  削除された後もこのテーブル単体で解釈できる)。
+- move/resizeは記録時に区別せず`bbox_edit`へ統合する(前後のw/h比較で分析時に
+  判別可能)。Undo/Redoは特別扱いせず、通常のAPI呼び出しと同じイベントとして
+  記録される。
+- **読み出しAPIは無い**(Phase A-2は現時点で不要と判断され未着手。Issue #4の
+  コメント履歴参照)。分析・閲覧が必要な場合は現状DBへ直接SQLを実行する。
+
+詳細設計・理由付けは`docs/decision-event-design.md`、schemaの正式な記述は
+`docs/data-model.md` 6.5章を参照。
+
+## 17. 積算確定snapshot (Issue #4 Phase B)
+
+Master Excel再インポートで過去の積算結果が事後的に変わってしまう問題
+(`docs/decision-data-gap-analysis.md` 7.2章)に対応するため、製番単位で
+「その時点の積算結果一式」を丸ごとコピー保存する仕組みを追加した。
+
+```
+[Frontend] EstimateAggregation内の EstimateConfirmationAction (積算確定ボタン)
+        │  window.confirmで確認 → 値の再計算はしない、既存APIを呼ぶだけ
+        ▼
+POST /api/products/{product_no}/estimate-confirmations   (リクエストボディ無し)
+        │
+        ▼
+[Backend] app/services/estimate_confirmation_builder.py :: build_confirmation_items()
+        │  この時点の detections × estimate_master_items × product_df.csv ×
+        │  estcode_df.csv から、Frontend estimateAggregationReal.ts と同じ
+        │  対象所属判定ロジック(Python移植)で明細を組み立てる
+        │  (Frontendから計算済みの値を信頼して受け取る方式は採用していない)
+        ▼
+app/repositories/estimate_confirmations.py :: save_confirmation()
+        │  header(estimate_confirmations)→明細(estimate_confirmation_items)の順で
+        │  同一トランザクションにINSERT
+        ▼
+estimate_confirmations / estimate_confirmation_items テーブル
+```
+
+- 保存粒度はDetection単位(積算明細`detailItems`相当)。対象別/総合計の集約結果
+  そのものは保存しない(読み出し時に同じロジックで再現する想定)。
+- `code`/`category`/`model`/`rating`/`unit_price`/`amount`/対象所属/BBox座標は
+  確定時点の値を非正規化コピーする。`estimate_master_items`の再UPSERTや外部CSVの
+  変更後も、保存済みの値自体は変化しない。
+- `confirmation_id`(明細→header)はFK制約あり(header行が必ず先に存在するため)。
+  `detection_id`/`drawing_page_id`はdecision_eventsと同じ理由でFK制約なし。
+- **再確定は上書きしない**(append-only。新しい`estimate_confirmations`行を
+  都度追加する)。0件確定(積算コードに紐づくDetectionが1件も無い製番の確定)も
+  許可する。
+- **読み出しAPI・確定履歴の一覧/詳細閲覧UIは無い**。`POST`のレスポンス
+  (`EstimateConfirmationOut`)でしか内容を確認できない。
+
+詳細設計は`docs/decision-snapshot-design.md`、API仕様は`docs/api-reference.md`、
+schemaは`docs/data-model.md` 6.6章を参照。
+
+## 18. Phase 1.12/1.14: detected_df(AI検出プレビュー)・estcode_df(盤情報)
+
+Phase 1.9以降に追加した、都度読み込み・DB非永続化の実データ参照サービスを
+簡潔に補足する(詳細schemaは`docs/data-model.md` 8.5章/8.6章)。
+
+- `app/services/detected_df.py`(Phase 1.12): `detected_df.csv`(実行済みYOLO推論の
+  出力)を読み込み、`GET /api/products/{no}/drawings/{page}/detected-preview`で
+  返す。DBの`detections`テーブルとは完全に独立した別データ源で、今回のPhaseでは
+  DBへのコピー・同期を行わない(表示のみの読み取り専用プレビュー、`id`は
+  DBのDetection.idとは異なるYOLO_INDEX体系)。
+- `app/services/estcode_df.py`(Phase 1.14): `estcode_df.csv`(盤ごとの積算コード
+  基本情報)を読み込み、`GET /api/products/{no}/estimate-panels`で返す。
+  `PAGE`列を持たない製番単位のデータで、右ペイン「盤情報」(`PanelInfo.tsx`)の
+  表示元として`product_df.csv`由来の旧盤パラメータ表示より優先される。
+
+## 19. 右ペイン3領域の折りたたみ・対象Select視認性 (Issue #6)
+
+盤情報・積算集約・積算明細の3領域それぞれの見出しをクリックすることで
+折りたたみ/展開できるようにした。実装は`CollapsibleSectionHeading`
+(共有コンポーネント、2章参照)を3箇所で再利用する形で行い、開閉状態は
+`App.tsx`がcontrolled stateとして保持する(セッション内のみ、永続化しない)。
+折りたたみ中の領域は隣接領域へ高さを還元する(`App.tsx`側のwrapper divで
+`flex`/`height`を条件分岐)。積算集約の「対象」Selectは、通常状態でも
+重要な操作であることが視認できるよう強調している(コバルト系の枠+淡い背景、
+Viewer連動中はさらに一段強い強調)。詳細は`docs/ui-spec.md` 1.6章を参照。
