@@ -79,7 +79,26 @@ describe('ProjectHeader', () => {
     expect(Number(brandStyle.fontWeight)).toBeGreaterThan(Number(infoStyle.fontWeight) || 400)
   })
 
-  it('does not add any height-affecting style (padding/line-height/height) to the brand title (指示6章/12章/19章: Header高さを変えない)', () => {
+  it('keeps the header bar itself (its own padding) unchanged even though the brand title now has its own block (Issue #9 追加修正: ブランドブロック化)', () => {
+    const { container } = render(
+      <ProjectHeader
+        project={project}
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+      />,
+    )
+    // jsdomはlayoutを持たないため、実際に描画されたHeaderの高さ(px)は
+    // ここでは検証できない(既知の制約)。ここでは「Header自身のCSSボックス
+    // モデル(padding)を変更していないこと」だけを、リテラル値の一致で確認する
+    // (var()を経由しないため、この比較はjsdomでも信頼できる)。実際に
+    // headerHeightが変化していないことは実ブラウザ(Playwright)で確認済み
+    // (Issue #9コメント参照)。
+    const header = container.querySelector('.project-header') as HTMLElement
+    expect(getComputedStyle(header).padding).toBe('0.5rem 1rem')
+  })
+
+  it('gives the brand title its own visually-separated "block" (background/padding/border-radius/margin), not just bare text (Issue #9 追加修正: タイトルをブランドブロックとして分離)', () => {
     render(
       <ProjectHeader
         project={project}
@@ -90,9 +109,11 @@ describe('ProjectHeader', () => {
     )
     const brand = screen.getByText('Sekisan Navi')
     const style = getComputedStyle(brand)
-    expect(style.padding).toBe('0')
-    expect(style.margin).toBe('0')
-    expect(style.height).toBe('auto')
+    expect(style.backgroundColor).toBe('rgba(255, 255, 255, 0.16)')
+    expect(style.borderRadius).toBe('6px')
+    expect(style.paddingLeft).not.toBe('0px')
+    expect(style.paddingTop).not.toBe('0px')
+    expect(style.marginRight).not.toBe('0px')
   })
 
   it('uses a bright cobalt blue background instead of the old dark navy (UI視覚階層改善 追加修正指示 2章、最終微調整ラウンド指示6章で一段軽いコバルトへ)', () => {

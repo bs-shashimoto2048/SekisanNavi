@@ -61,17 +61,48 @@
      ことでロゴ的な存在感を補強する。
    - letter-spacing: 0.02em→0.04em。
    Header自体のpadding/line-height/heightは変更していない(指示の「レイアウト
-   寸法・ヘッダー高さは原則維持」に従う)。 */
+   寸法・ヘッダー高さは原則維持」に従う)。
+
+   **Issue #9 追加修正(2回目)**: 上記のサイズ・太さ・色のみの強調では、実画面で
+   依然「Sekisan Navi 整理番号: ... 製番: ...」が同じ1行の文字列群に見え、
+   タイトルが業務情報に埋もれるとの指摘を受けた。文字の強調だけでなく、
+   **タイトルをHeader内の独立した「ブランドブロック」として視覚的に分離する**
+   方針へ切り替える(過去ラウンドで避けていたpill/badge化を、今回は明示指示に
+   より解禁する)。
+   - background: 半透明の白(`rgba(255,255,255,0.16)`)。Header地(#2455e2)より
+     わずかに明るい面を作り、「タイトル専用の領域」であることを一目で示す。
+     別系統の色(白以外)は使わず、Headerの配色(コバルト+白)の範囲に留めている。
+   - padding: 左右0.85rem・上下0.3rem。ブロックとしての余白を持たせつつ、
+     Header自体のpadding(0.5rem 1rem)を変えずに済む範囲(後述のheaderHeight
+     実測で確認済み)に収めている。
+   - border-radius: 6px(角丸)。指示の「角丸または右境界など」のうち角丸を採用
+     (直線的な縦線区切りより、業務アプリでよく使う柔らかいチップ状の方が
+     Header全体のトーンに合うため)。
+   - margin-right: 業務情報群との間に、Header自身の`gap`(1.5rem)に加えて
+     明確な追加の余白を設け、視覚的な区切りをさらに強める。
+   - font-size: 1.32rem→1.42rem(指示の目安1.4〜1.5remの範囲)。
+   - text-shadow: 削除した。背景ブロック自体がコントラストを作るため、文字影を
+     重ねるとネオン的に見えて「業務アプリらしい落ち着いた強調」から外れると
+     判断した(指示の「過度な影は不要」に対応)。
+   - font-weight(800)・letter-spacing(0.04em)・color(#ffffff)は前回の値を維持。 */
 .project-header__brand {
+  display: inline-flex;
+  align-items: center;
   font-family: Inter, 'Segoe UI', 'Yu Gothic UI', 'Meiryo UI', sans-serif;
   font-weight: 800;
-  font-size: 1.32rem;
+  font-size: 1.42rem;
   color: #ffffff;
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.3),
-    0 0 10px rgba(219, 234, 254, 0.25);
   letter-spacing: 0.04em;
   white-space: nowrap;
+  background: rgba(255, 255, 255, 0.16);
+  padding: 0.3rem 0.85rem;
+  /* :root側のline-height(1.5, 本文向け)をそのまま使うと、大きくしたfont-sizeと
+     paddingの組合せでブロックの行送りが過大になり、Header高さが目に見えて
+     伸びてしまう。タイトルチップ単体はぶら下げる本文が無いため、line-heightを
+     詰めてHeader高さの増加を最小限に抑える(指示「ヘッダー高さは原則維持」)。 */
+  line-height: 1.2;
+  border-radius: 6px;
+  margin-right: 0.6rem;
 }
 
 .project-header__info {

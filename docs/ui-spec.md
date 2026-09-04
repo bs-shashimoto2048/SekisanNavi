@@ -149,14 +149,23 @@ padding・高さは変更していない。
 - (Phase 1.5で追加) 右端に「製番を開く」「システム設定」ボタンを配置。
   それぞれ `ProductSelector` (Phase 1.8で`ProductViewer`から役割変更。9章参照) /
   `SystemSettings` のモーダルを開く。
-- **タイトル「Sekisan Navi」の強調 (Issue #9)**: 過去ラウンドで色調(#eaf2ff)・
-  weight(700)・shadow等を調整済みだったが、実画面では周囲の業務情報
-  (整理番号/製番等、通常のcolor:#fff)とほぼ同じ見た目で製品名として
-  認識しづらいとの指摘を受け、`font-size: 1.14rem→1.32rem`・
-  `font-weight: 700→800`・`color: #eaf2ff→#ffffff(純白)`・
-  `letter-spacing: 0.02em→0.04em`・text-shadowの強化を行った。色相は
-  変えていない(状態バッジ等の意味色と衝突させないため)。Header自体の
-  padding/line-height/heightは変更していない。
+- **タイトル「Sekisan Navi」の強調 (Issue #9)**: 1回目の修正では
+  `font-size: 1.14rem→1.32rem`・`font-weight: 700→800`・
+  `color: #eaf2ff→#ffffff(純白)`・`letter-spacing: 0.02em→0.04em`・
+  text-shadowの強化のみ(文字の強調のみ)を行ったが、実画面では依然
+  「Sekisan Navi 整理番号: ... 製番: ...」が同じ1行の文字列群に見え、
+  タイトルが業務情報に埋もれるとの指摘を受けた。
+  **2回目の追加修正でタイトルを独立した「ブランドブロック」として分離**した
+  (過去ラウンドで避けていたpill/badge化を、今回は明示指示により解禁):
+  `background: rgba(255,255,255,0.16)`(Header地#2455e2よりわずかに明るい半透明面)・
+  `padding: 0.3rem 0.85rem`・`border-radius: 6px`(角丸)・
+  `margin-right: 0.6rem`(業務情報群との明確な余白)・`font-size: 1.42rem`・
+  `line-height: 1.2`(:root既定の1.5だとHeader高さが伸びすぎるため専用に詰めた)。
+  text-shadowは背景ブロック自体がコントラストを作るため削除した(過度な影を
+  避け、業務アプリらしい落ち着いた強調にするため)。色相はコバルト+白の範囲
+  に留め、状態バッジ等の意味色とは衝突させていない。Header自体の
+  padding(0.5rem 1rem)は変更しておらず、実ブラウザでのheaderHeightは
+  49.875px→50.5px(差0.7px、実質維持)。
 
 ## 3. DrawingNavigator (左: 図面一覧) — Phase 1.8で実PNGサムネイル表示化
 
