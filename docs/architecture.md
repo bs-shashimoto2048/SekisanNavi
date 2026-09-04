@@ -8,22 +8,49 @@ mainを反映)。ここに書かれた技術選定・構成も「変更されう
 
 ## 1. 全体像
 
-```
-[Browser]
-   │ HTTP (fetch)
-   ▼
-[Frontend: React + TypeScript + Vite]  (localhost:5173)
-   │ REST API (JSON)
-   ▼
-[Backend: FastAPI + Pydantic]          (localhost:8000)
-   │
-   ▼
-[SQLite (backend/data/sekisan_navi.db)]
+```mermaid
+flowchart LR
+    Browser["Browser"]
+    Frontend["Frontend<br/>React + TypeScript + Vite<br/>(localhost:5173)"]
+    Backend["Backend<br/>FastAPI + Pydantic<br/>(localhost:8000)"]
+    SQLite[("SQLite<br/>backend/data/sekisan_navi.db")]
+    Share["社内共有フォルダ (read-only)<br/>PNG / PDF /<br/>product_df.csv / estcode_df.csv / detected_df.csv"]
+    MasterExcel["data/master/estimate_master_a.xlsx<br/>(積算コードMaster、起動時にインポート)"]
+
+    Browser -- "HTTP (fetch)" --> Frontend
+    Frontend -- "REST API (JSON)" --> Backend
+    Backend --> SQLite
+    Backend -- "都度読み込み" --> Share
+    Backend -- "起動時UPSERT" --> MasterExcel
 ```
 
 PoCではローカルPCまたは社内LAN上でFrontend/Backendを別プロセスとして起動し、
 ブラウザからアクセスする構成とする(要件3)。認証・リバースプロキシ・HTTPS化等の
-本番運用向け構成は今回のスコープ外。
+本番運用向け構成は今回のスコープ外。SQLiteは`detections`/`estimate_master_items`/
+`decision_events`/`estimate_confirmations`等の**現在状態・判断履歴・確定snapshot**を
+保持し(2章参照)、社内共有フォルダ上のCSV/PNG/PDFは常にread-onlyで都度読み込む
+(6章参照)。
+
+### 主要なデータフローの例: BBox作成から判断履歴記録まで
+
+```mermaid
+sequenceDiagram
+    participant U as ユーザー(Browser)
+    participant F as Frontend
+    participant B as Backend API
+    participant D as SQLite
+
+    U->>F: 積算コードMasterで品目選択 → Viewer上へBBoxをドラッグ配置
+    F->>B: POST /api/detections
+    B->>D: INSERT detections (source_type='manual')
+    B->>D: INSERT decision_events (event_type='create')
+    Note over B,D: 同一トランザクションでcommit(7章)
+    B-->>F: 201 Detection
+    F-->>U: 積算集約・積算明細へ反映(Frontend側で再計算)
+```
+
+上記はManual BBox作成の例。移動・リサイズ(`PATCH`)・削除(`DELETE`)も同様に
+「状態変更 + decision_events記録」を同一トランザクションで行う(16章)。
 
 ## 2. レイヤー構成 (Backend)
 
@@ -118,15 +145,18 @@ src/
 
 ## 4. AIとルールの分離 (要件7)
 
+```mermaid
+flowchart LR
+    Detection["Detection<br/>(AI検出 or 将来のYOLO推論結果)"]
+    RuleEngine["RuleEngine<br/>app/domain/rule_engine.py"]
+    EstimateItem["EstimateItem候補<br/>(最終確定はレビュー工程が行う)"]
+
+    Detection --> RuleEngine
+    RuleEngine --> EstimateItem
 ```
-Detection (AI検出 or 将来のYOLO推論結果)
-    │
-    ▼
-RuleEngine (app/domain/rule_engine.py)
-    │  class_name等から積算コード候補を導出する。ここに業務判断を集約。
-    ▼
-EstimateItem候補 (最終的な確定はレビュー工程が行う)
-```
+
+`RuleEngine`は`class_name`等から積算コード候補を導出する層で、業務判断をここに
+集約する。
 
 - YOLOのクラス名やbboxを直接画面の積算コードへ変換するコードは書かない。
 - `rule_engine.py` は純粋関数として実装し、単体テスト可能にする(`tests/test_rule_engine.py`)。
@@ -171,25 +201,27 @@ EstimateItem候補 (最終的な確定はレビュー工程が行う)
 
 ## 7. データ参照ルート・製番アクセスの安全な解決 (Phase 1.5, 要件8-17)
 
+```mermaid
+flowchart TD
+    Settings[("system_settings<br/>data_source_root")]
+    DS["app/services/data_source.py"]
+    API["API<br/>/api/products/*<br/>/api/drawing-pages/{id}/file"]
+
+    Settings -->|"初期値: config.DEFAULT_DATA_SOURCE_ROOT"| DS
+    DS -->|"validate_product_no / resolve_product_dir /<br/>list_page_numbers / resolve_page_file"| API
 ```
-[system_settings テーブル]  data_source_root (初期値: config.DEFAULT_DATA_SOURCE_ROOT)
-        │
-        ▼
-app/services/data_source.py
-  - validate_product_no()   製番文字列を正規表現で検証 (英数字4〜20文字)
-  - resolve_product_dir()   root + product_no からパスを解決し、
-                             解決後パスが必ずroot配下であることを確認 (パストラバーサル対策)
-  - (CCVサブディレクトリの探索。config.CCV_SUBDIR_CANDIDATES。5章参照)
-  - list_page_numbers()     "{page}.pdf" 形式のファイルのみpage番号として抽出
-  - resolve_page_file()     ページ番号からファイルパスを安全に組み立てる
-        │
-        ▼
-API (/api/products/*, /api/drawing-pages/{id}/file)
-  - Frontendは一切UNCパスを組み立てない。常にproduct_no/page_noという「意味のある識別子」
-    のみを送り、パス解決はBackendに閉じている (要件10, 17)。
-  - 例外は DataSourceError のサブクラスとしてキャッチし、内部のスタックトレースや
-    詳細を含まない日本語メッセージへ変換してから返す (要件15)。
-```
+
+- `validate_product_no()`: 製番文字列を正規表現で検証(英数字4〜20文字)。
+- `resolve_product_dir()`: root + product_noからパスを解決し、解決後パスが必ず
+  root配下であることを確認(パストラバーサル対策)。CCVサブディレクトリの探索も
+  ここで行う(`config.CCV_SUBDIR_CANDIDATES`、5章参照)。
+- `list_page_numbers()`: `{page}.pdf`形式のファイルのみpage番号として抽出。
+- `resolve_page_file()`: ページ番号からファイルパスを安全に組み立てる。
+
+Frontendは一切UNCパスを組み立てない。常に`product_no`/`page_no`という
+「意味のある識別子」のみを送り、パス解決はBackendに閉じている(要件10, 17)。
+例外は`DataSourceError`のサブクラスとしてキャッチし、内部のスタックトレースや
+詳細を含まない日本語メッセージへ変換してから返す(要件15)。
 
 CCVについて: 実データ調査の結果、「CCV」という名前のディレクトリ・ファイルは
 確認できなかった (`docs/data-source.md` 参照・未確認事項)。暫定的に
@@ -271,28 +303,31 @@ Fit計算用の関数は2026-09 追加修正で`fitToView`から`applyFit`へ改
 積算コードMasterのダミーデータ (`db/seed.py` に直書きしていた21件) を廃止し、
 正式なExcel資料 `data/master/estimate_master_a.xlsx` (Sheet2) を単一の参照元とする。
 
+```mermaid
+flowchart TD
+    Excel["data/master/estimate_master_a.xlsx (Sheet2, 912行)"]
+    Importer["app/db/master_importer.py :: import_master_excel()"]
+    Table[("estimate_master_items テーブル (SQLite)")]
+    API["GET /api/master-items"]
+
+    Excel -->|"openpyxlで読み込み<br/>(values_only=False、取り消し線も取得)"| Importer
+    Importer -->|"UPSERT(有効行のみ)"| Table
+    Table -->|"ALLOWED_CATEGORIES順にORDER BY"| API
 ```
-data/master/estimate_master_a.xlsx (Sheet2, 912行)
-        │  openpyxlで読み込み (Frontendは一切Excelを読まない、values_only=Falseで
-        │  セル書式=取り消し線も取得する)
-        ▼
-app/db/master_importer.py :: import_master_excel()
-  - 列0〜11を code/category/model/rating/total_price_a/box_parts_price/
-    painting_price/setup_a/sheet_metal_price/assembly_price/inspection_price/note
-    へ機械的にマッピング (Frontend側にExcelの列構成を一切露出しない、要件のDB化方針を維持)
-  - codeが空の行はスキップ (skipped_no_code)
-  - コード or 品名セルに取り消し線 (`cell.font.strike`) がある行を除外 (excluded_by_strike)
-  - `app/domain/master_categories.ALLOWED_CATEGORIES` (13品名) にない行を除外
-    (excluded_by_category。品名NULL・文章形式の特殊行もここで一律除外される)
-  - INSERT ... ON CONFLICT(code) DO UPDATE によるUPSERT (有効行のみ)
-  - 今回の条件で無効となった既存Master行の安全な削除同期 (下記参照)
-        │
-        ▼
-estimate_master_items テーブル (SQLite)
-        │
-        ▼
-GET /api/master-items (品名の並び順を`ALLOWED_CATEGORIES`順にORDER BY)
-```
+
+`import_master_excel()`が行う変換・除外処理:
+
+- 列0〜11を`code`/`category`/`model`/`rating`/`total_price_a`/`box_parts_price`/
+  `painting_price`/`setup_a`/`sheet_metal_price`/`assembly_price`/
+  `inspection_price`/`note`へ機械的にマッピング(Frontend側にExcelの列構成を
+  一切露出しない、要件のDB化方針を維持)。
+- `code`が空の行はスキップ(`skipped_no_code`)。
+- コード or 品名セルに取り消し線(`cell.font.strike`)がある行を除外
+  (`excluded_by_strike`)。
+- `app/domain/master_categories.ALLOWED_CATEGORIES`(13品名)にない行を除外
+  (`excluded_by_category`。品名NULL・文章形式の特殊行もここで一律除外される)。
+- `INSERT ... ON CONFLICT(code) DO UPDATE`によるUPSERT(有効行のみ)。
+- 今回の条件で無効となった既存Master行の安全な削除同期(下記参照)。
 
 **初期投入・再取込の方式**: `code` を一意キーとしたUPSERTを採用した (要件: 安全な
 一意キーを実データから判断すること)。実Excelの実データ調査で `code` に重複がない
@@ -430,21 +465,23 @@ openpyxlを `values_only=False` (セルオブジェクトを取得するモー�
 
 ### 製番検索 (要件2/3)
 
+```mermaid
+flowchart LR
+    Svc["app/services/data_source.py<br/>search_product_dirs(root, query, limit)"]
+    API["GET /api/products/search?q=...&limit=..."]
+    UI["Frontend: ProductSelector.tsx"]
+
+    Svc --> API --> UI
 ```
-app/services/data_source.py :: search_product_dirs(root, query, limit)
-  - queryは英数字1〜20文字のみ許可 (パストラバーサル対策の延長)
-  - root直下を1回走査し、大文字小文字を無視した前方一致でフィルタ
-  - 最大limit件のみ返す (超過分は打ち切り、truncatedフラグで通知)
-        │
-        ▼
-GET /api/products/search?q=...&limit=...  (要件3: ルート直下を無条件全件送信しない)
-        │
-        ▼
-Frontend: ProductSelector.tsx (デバウンス付き検索欄。250msデバウンス、
-  2文字未満では検索しない)。ユーザーが完全な製番を入力した場合は、
-  候補になくても「開く」ボタンから `GET /api/products/{product_no}` (既存の
-  resolve_product_dir経由) で直接存在確認できる (要件3)。
-```
+
+- `search_product_dirs()`: queryは英数字1〜20文字のみ許可(パストラバーサル対策の
+  延長)。root直下を1回走査し、大文字小文字を無視した前方一致でフィルタ。
+  最大limit件のみ返す(超過分は打ち切り、`truncated`フラグで通知)。
+- `GET /api/products/search`は要件3どおりルート直下を無条件全件送信しない。
+- `ProductSelector.tsx`はデバウンス付き検索欄(250msデバウンス、2文字未満では
+  検索しない)。ユーザーが完全な製番を入力した場合は、候補になくても「開く」
+  ボタンから`GET /api/products/{product_no}`(既存の`resolve_product_dir`経由)で
+  直接存在確認できる(要件3)。
 
 製番一覧をルート直下から全件取得してFrontendへ渡す実装は行っていない
 (`docs/data-source.md` によれば914件超のディレクトリが存在しうるため)。
@@ -454,55 +491,55 @@ Frontend: ProductSelector.tsx (デバウンス付き検索欄。250msデバウ�
 Phase 1.7で実装した「左右ペインリサイズ」の対象である `DrawingNavigator`
 (メイン画面左ペイン) を、Phase 1.8でダミーDB非依存の実データ表示へ変更した。
 
+```mermaid
+flowchart TD
+    App["App.tsx<br/>activeProductNo(既定値 'A1GV2421')"]
+    API["GET /api/products/{product_no}/drawings"]
+    Nav["DrawingNavigator(左ペイン)<br/>&lt;img src=thumbnail_url&gt;のみ縮小表示"]
+    Viewer["DrawingViewer(中央)<br/>DrawingCanvas mode='png'で拡大表示"]
+    App2["App.tsx: selectedProductPageNo更新<br/>(Phase 1.9: selectedPanelもnullへリセット)"]
+
+    App --> API
+    API --> Nav
+    API --> Viewer
+    Nav -- "サムネイルクリック" --> App2
 ```
-App.tsx: activeProductNo (既定値 'A1GV2421') の変更を検知
-        │
-        ▼
-GET /api/products/{product_no}/drawings
-  - list_page_numbers()で実在ページ番号を取得 (要件4のパストラバーサル対策を継承)
-  - load_product_df()でproduct_df.csvを解析し、ページごとにdrawing_type/
-    drawing_name/panels[]へ整形 (要件28: 生データをFrontendへ渡さない)
-  - 各ページの thumbnail_url (= {page}.png への参照) を1つだけ発行する
-        │
-        ├─ DrawingNavigator (左ペイン): <img src={thumbnail_url}>のみ縮小表示
-        │    - onError時は「画像なし / P{page_no}」のフォールバック表示 (要件7)
-        │    - 左上に「ページ番号 / BAN_MENNO / BAN_NO」(複数盤なら全件ラベル。要件10-12)
-        │    - 盤領域(赤色)Overlayは表示しない (実画面未反映調査・修正指示 7章)
-        │
-        └─ DrawingViewer (中央Viewer): 同一thumbnail_urlを`DrawingCanvas mode="png"`で
-             拡大作業表示 (実画面未反映調査・修正指示②章: PDFではなくPNGを使用。
-             理由は下記「中央Viewerの表示基準」参照)
-             - product_df由来の盤領域Overlay (ProductPanelOverlay) を赤色半透明・
-               全件描画 (要件19/20)。Phase 1.9でラベルをBAN_MENNO/BAN_NOのみに
-               簡素化し、クリックで選択できるようにした (下記「盤選択」参照)
-             - Detection/Manual BBox Overlayも同じ座標系に重畳
-        │ サムネイルクリック
-        ▼
-App.tsx: selectedProductPageNo を更新 (左右両方のViewerへ反映)。
-         Phase 1.9: 併せて selectedPanel も null へリセットする
-         (表示中ページと選択盤の不一致を防ぐ)
-```
+
+`GET /api/products/{product_no}/drawings`の処理:
+
+- `list_page_numbers()`で実在ページ番号を取得(要件4のパストラバーサル対策を継承)。
+- `load_product_df()`で`product_df.csv`を解析し、ページごとに`drawing_type`/
+  `drawing_name`/`panels[]`へ整形(要件28: 生データをFrontendへ渡さない)。
+- 各ページの`thumbnail_url`(=`{page}.png`への参照)を1つだけ発行する。
+
+`DrawingNavigator`(左ペイン)は`onError`時に「画像なし / P{page_no}」の
+フォールバック表示(要件7)、左上に「ページ番号 / BAN_MENNO / BAN_NO」
+(複数盤なら全件ラベル。要件10-12)を表示し、盤領域(赤色)Overlayは表示しない
+(実画面未反映調査・修正指示 7章)。
+
+`DrawingViewer`(中央Viewer)は同一`thumbnail_url`を使い(PDFではなくPNGを使う
+理由は下記「中央Viewerの表示基準」参照)、product_df由来の盤領域Overlay
+(`ProductPanelOverlay`)を赤色半透明・全件描画する(要件19/20)。Phase 1.9で
+ラベルをBAN_MENNO/BAN_NOのみに簡素化し、クリックで選択できるようにした
+(下記「盤選択」参照)。Detection/Manual BBox Overlayも同じ座標系に重畳する。
 
 **盤選択 `selectedPanel` (Phase 1.9)**: 中央Viewerの盤領域クリックによる選択状態を、
 Detection/BBoxの選択状態 (`selectedDetectionId`) とは独立に `App.tsx` が保持する。
 
-```
-ProductPanelOverlay内の盤領域(<button>)クリック
-        │ onSelectPanel(panelKey, panel)
-        ▼
-App.tsx: setSelectedPanel({ key, panel })
-        │
-        ├─ DrawingViewer → ProductPanelOverlay: selectedPanelKey を渡し、
-        │    一致する領域に選択中スタイル(太枠+濃い塗り)、
-        │    他の領域に非選択スタイル(opacity:0.55、非表示にはしない)を適用
-        │
-        └─ PanelProperties (右ペイン): selectedProductPanel としてそのまま渡し、
-             PAGE/BAN_MENNO/BAN_NO/BAN_MEISYOU/BAN_TYPE/H1/H2/W/Dを表示
-             (従来のダミーDetection紐づけpanel表示より優先。null安全)
+```mermaid
+flowchart TD
+    Click["ProductPanelOverlay内の盤領域(button)クリック"]
+    State["App.tsx: setSelectedPanel({ key, panel })"]
+    Overlay["DrawingViewer → ProductPanelOverlay<br/>選択中: 太枠+濃い塗り / 非選択: opacity 0.55"]
+    Info["PanelInfo(右ペイン)<br/>selectedProductPanelをそのまま表示"]
 
-selectedPanelを解除する経路: ページ切替 / 製番切替 / 根拠図面ジャンプ /
-Viewer空白クリック (Detection選択解除と同じ経路 `onDeselectDetection` を共用)
+    Click -->|onSelectPanel| State
+    State --> Overlay
+    State --> Info
 ```
+
+`selectedPanel`を解除する経路: ページ切替 / 製番切替 / 根拠図面ジャンプ /
+Viewer空白クリック(Detection選択解除と同じ経路`onDeselectDetection`を共用)。
 
 盤の識別キー (`utils/panel.ts::panelKey`) は `PAGE:BAN_MENNO:BAN_NO:BAN_TYPE:配列
 インデックス` の組み合わせで、生配列インデックス単体には依存しない。実データ
@@ -707,19 +744,16 @@ Resize Handle(40) → Tooltip(50) の順に明示し、JSX描画順(コンポー
 create/delete/bbox move・resizeの事実だけをappend-onlyで記録する専用テーブル
 `decision_events`を追加した。
 
-```
-POST /api/detections          (Manual BBox作成)
-PATCH /api/detections/{id}    (BBox移動・リサイズ・引出線ラベル移動)
-DELETE /api/detections/{id}   (削除)
-        │
-        ▼
-backend/app/repositories/detections.py の各関数
-        │  (状態変更のINSERT/UPDATE/DELETEと同一の`conn`・同一トランザクション内で)
-        ▼
-backend/app/repositories/decision_events.py :: record_event()
-        │
-        ▼
-decision_events テーブル (event_type: create/delete/bbox_edit)
+```mermaid
+flowchart TD
+    API["POST /api/detections (作成)<br/>PATCH /api/detections/{id} (移動・リサイズ・ラベル移動)<br/>DELETE /api/detections/{id} (削除)"]
+    Repo["backend/app/repositories/detections.py の各関数"]
+    Record["backend/app/repositories/decision_events.py<br/>record_event()"]
+    Table[("decision_events テーブル<br/>event_type: create / delete / bbox_edit")]
+
+    API --> Repo
+    Repo -->|"状態変更(INSERT/UPDATE/DELETE)と同一conn・同一トランザクション"| Record
+    Record --> Table
 ```
 
 - **current state(`detections`)とは完全に独立**。既存テーブルへのALTERは無い。
@@ -742,25 +776,21 @@ Master Excel再インポートで過去の積算結果が事後的に変わっ�
 (`docs/decision-data-gap-analysis.md` 7.2章)に対応するため、製番単位で
 「その時点の積算結果一式」を丸ごとコピー保存する仕組みを追加した。
 
+```mermaid
+flowchart TD
+    Btn["[Frontend] EstimateConfirmationAction(積算確定ボタン)<br/>window.confirmで確認 → 値の再計算はせず既存APIを呼ぶだけ"]
+    API["POST /api/products/{product_no}/estimate-confirmations<br/>(リクエストボディ無し)"]
+    Builder["[Backend] estimate_confirmation_builder.py<br/>build_confirmation_items()"]
+    Save["repositories/estimate_confirmations.py<br/>save_confirmation()"]
+    Table[("estimate_confirmations / estimate_confirmation_items")]
+
+    Btn --> API --> Builder
+    Builder -->|"detections × estimate_master_items ×<br/>product_df.csv × estcode_df.csvから<br/>Frontendと同じ対象所属判定ロジックで組み立て"| Save
+    Save -->|"header→明細の順で同一トランザクションにINSERT"| Table
 ```
-[Frontend] EstimateAggregation内の EstimateConfirmationAction (積算確定ボタン)
-        │  window.confirmで確認 → 値の再計算はしない、既存APIを呼ぶだけ
-        ▼
-POST /api/products/{product_no}/estimate-confirmations   (リクエストボディ無し)
-        │
-        ▼
-[Backend] app/services/estimate_confirmation_builder.py :: build_confirmation_items()
-        │  この時点の detections × estimate_master_items × product_df.csv ×
-        │  estcode_df.csv から、Frontend estimateAggregationReal.ts と同じ
-        │  対象所属判定ロジック(Python移植)で明細を組み立てる
-        │  (Frontendから計算済みの値を信頼して受け取る方式は採用していない)
-        ▼
-app/repositories/estimate_confirmations.py :: save_confirmation()
-        │  header(estimate_confirmations)→明細(estimate_confirmation_items)の順で
-        │  同一トランザクションにINSERT
-        ▼
-estimate_confirmations / estimate_confirmation_items テーブル
-```
+
+Frontendから計算済みの値を信頼して受け取る方式は採用していない(Backend自身が
+現在状態から組み立てて保存する)。
 
 - 保存粒度はDetection単位(積算明細`detailItems`相当)。対象別/総合計の集約結果
   そのものは保存しない(読み出し時に同じロジックで再現する想定)。
@@ -777,6 +807,37 @@ estimate_confirmations / estimate_confirmation_items テーブル
 
 詳細設計は`docs/decision-snapshot-design.md`、API仕様は`docs/api-reference.md`、
 schemaは`docs/data-model.md` 6.6章を参照。
+
+### current state / event history / confirmed snapshot の位置付け
+
+`detections`・`decision_events`・`estimate_confirmations`はいずれも似た情報
+(BBox・積算コード)を扱うが、責務が異なる3層として意図的に分離している。
+
+```mermaid
+flowchart LR
+    subgraph Current["current state (今この瞬間)"]
+        Detections[("detections<br/>estimate_master_items")]
+    end
+    subgraph History["event history (過程の記録)"]
+        Events[("decision_events<br/>append-only、読み出しAPI無し")]
+    end
+    subgraph Snapshot["confirmed snapshot (確定時点の凍結)"]
+        Confirmations[("estimate_confirmations<br/>estimate_confirmation_items")]
+    end
+
+    Detections -- "create/delete/bbox_editの都度記録" --> Events
+    Detections -- "積算確定操作の都度、値をコピー" --> Confirmations
+```
+
+- **current state(`detections`/`estimate_master_items`)**: 「今この瞬間の正しい
+  状態」を返す。Master再UPSERTやBBox編集で値は常に最新化される。
+- **event history(`decision_events`)**: 「何が起きたか」の過程をappend-onlyで
+  記録する。current stateとは独立(2章参照)。
+- **confirmed snapshot(`estimate_confirmations`)**: 「確定時点の値」を丸ごと
+  凍結保存する。Master再UPSERT後も変化しない(3章参照)。
+
+3層の間に結合キーは設けていない(責務分離を優先。`docs/decision-snapshot-design.md`
+6章)。
 
 ## 18. Phase 1.12/1.14: detected_df(AI検出プレビュー)・estcode_df(盤情報)
 
