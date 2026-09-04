@@ -230,3 +230,50 @@ export interface DetectedPreviewItem {
   normalized_rect: { x: number; y: number; w: number; h: number }
   source: string
 }
+
+// 積算確定snapshot (Issue #4 Phase B)。'product'/'panel'/'tie'は
+// `types/estimateAggregation.ts::EstimateTargetType`と同じ3値。
+export type EstimateTargetType = 'product' | 'panel' | 'tie'
+
+/** 積算確定snapshotの明細1行 (Detection単位。Phase B-2の
+ * `POST /api/products/{product_no}/estimate-confirmations`レスポンスの一部)。
+ * 確定時点の値をBackend側が非正規化コピーとして保存したものであり、以後
+ * `estimate_master_items`が更新されてもこの値自体は変化しない
+ * (`docs/decision-snapshot-design.md`参照)。 */
+export interface EstimateConfirmationItem {
+  id: number
+  detection_id: number | null
+  drawing_page_id: number | null
+  target_id: string
+  target_type: EstimateTargetType
+  ban_menno: number | null
+  ban_no: number | null
+  panel_name: string | null
+  master_item_id: number | null
+  code: string
+  category: string | null
+  model: string | null
+  rating: string | null
+  source_type: DetectionSourceType
+  quantity: number
+  unit_price: number | null
+  amount: number | null
+  status: DetectionStatus
+  bbox_x: number | null
+  bbox_y: number | null
+  bbox_w: number | null
+  bbox_h: number | null
+  page_no: number | null
+}
+
+/** 積算確定snapshotのheader (Issue #4 Phase B-2)。製番単位でその時点の
+ * 積算結果一式を丸ごと保存したもの。読み出しAPIは無い(Phase B-2時点)ため、
+ * `POST /api/products/{product_no}/estimate-confirmations`のレスポンスとして
+ * のみ得られる。 */
+export interface EstimateConfirmation {
+  id: number
+  product_no: string
+  confirmed_at: string
+  item_count: number
+  items: EstimateConfirmationItem[]
+}

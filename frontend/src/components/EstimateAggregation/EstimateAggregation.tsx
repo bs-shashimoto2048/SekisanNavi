@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { EstimateLineItem, EstimateTarget } from '../../types/estimateAggregation'
 import { formatTargetLabel } from '../../domain/estimateTargetLabel'
 import { CollapsibleSectionHeading } from '../Layout/CollapsibleSectionHeading'
+import { EstimateConfirmationAction } from './EstimateConfirmationAction'
 import './EstimateAggregation.css'
 
 /** 対象セレクトの「総合計」を表す値。実対象(製品全体/各盤/要確認)のidとは
@@ -118,6 +119,10 @@ interface Props {
    * 一切接続しない独立したUI状態。 */
   collapsed?: boolean
   onToggleCollapsed?: () => void
+  /** Issue #4 Phase B-3: 積算確定操作のボタンに使う、現在Viewerで開いている
+   * 実製番。積算確定は対象セレクトの選択状態とは無関係に常に製番全体が対象の
+   * ため、既存の`selectedTargetId`とは別に受け取る(意味を混同しない)。 */
+  productNo?: string | null
 }
 
 function formatCurrency(amount: number): string {
@@ -211,6 +216,7 @@ export function EstimateAggregation({
   onSelectTarget,
   collapsed = false,
   onToggleCollapsed = () => {},
+  productNo = null,
 }: Props) {
   // ソート列/方向は「ユーザーが選んだ表示上の好み」であり、対象切替(総合計/製品全体/
   // 個別盤/要確認)やBBox編集によるデータ更新とは無関係のため、積算明細と同様に
@@ -279,6 +285,11 @@ export function EstimateAggregation({
           onToggle={onToggleCollapsed}
           headingClassName="estimate-aggregation__heading"
         />
+
+        {/* Issue #4 Phase B-3: 積算確定ボタンは、積算コード0件の場合の空表示
+            (下記totalCodeCount===0分岐)とは無関係に常に表示する(0件確定を
+            UI側で独自に禁止しない方針のため。あえてtotalCodeCountの条件の外に置く)。 */}
+        {!collapsed && <EstimateConfirmationAction productNo={productNo} />}
 
         {/* Issue #6: 折りたたみ時は見出しだけを残し、本文(製番合計・対象セレクト・
             要確認警告・表)はすべて非表示にする。積算対象の選択状態(selectedTargetId)

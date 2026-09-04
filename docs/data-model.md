@@ -284,6 +284,59 @@ create/deleteのUndo/RedoはSQLiteの`AUTOINCREMENT`により新しい`detection
 **読み出しAPIは無い(Phase A-1時点)**: このテーブルを返すAPIエンドポイントは
 今回追加していない。Phase A-2で検討する。
 
+## 6.6. EstimateConfirmation / EstimateConfirmationItem (積算確定snapshot、Issue #4 Phase B-1で追加)
+
+製番(`product_no`)単位で、確定操作を行った時点の積算結果一式を丸ごと
+コピー保存する専用テーブル。設計の詳細・理由付けは
+`docs/decision-snapshot-design.md`を参照。current state(`detections`/
+`estimate_master_items`)・event history(`decision_events`)のいずれとも
+完全に独立しており、既存テーブルへのALTERは行っていない。
+
+`estimate_items`/`estimate_references`(Phase 0/1のダミー専用テーブル)は
+対象にしない。実データの積算集約はこれらを経由せず、Frontend側
+`estimateAggregationReal.ts::buildRealEstimateAggregation`が`detections`×
+`estimate_master_items`×外部CSVから都度計算しているため、snapshotも
+Detection単位(積算明細`detailItems`相当)の粒度で保存する。
+
+### estimate_confirmations (header)
+
+| 列 | 説明 | 状態 |
+|---|---|---|
+| id | PK | 確定 |
+| product_no | 製番。`drawing_pages.product_no`と同じ、正規化テーブルを持たない生の文字列 | 確定 |
+| confirmed_at | 確定日時 | 確定 |
+
+1回の確定操作 = 1行。**再確定は上書きせず、都度新しい行を追加する
+(append-only)**。既存行を更新・削除する操作は実装していない。
+
+### estimate_confirmation_items (明細、Detection単位)
+
+| 列 | 説明 | 状態 |
+|---|---|---|
+| id | PK | 確定 |
+| confirmation_id | 対象の`estimate_confirmations.id`。header行が常に先にINSERTされる設計のため、**FK制約あり**(decision_eventsのような自己参照削除の問題が起きないため) | 確定 |
+| detection_id / drawing_page_id | 歴史的参照。`decision_events`と同じ理由で**意図的にFK制約を持たない**(確定後にDetectionが削除されてもsnapshot行自体は残す) | 確定 |
+| target_id / target_type / ban_menno / ban_no / panel_name | 確定時点のBBox所属判定結果の非正規化コピー(`product_df.csv`/`estcode_df.csv`が将来変わっても所属は固定される) | 確定 |
+| master_item_id | 参考情報のみ(FKなし)。表示・金額の再現は下記の非正規化コピー列自体を使う | 確定 |
+| code / category / model / rating | 確定時点の積算コード表示情報の非正規化コピー(`estimate_master_items`の再UPSERT後も変化しない) | 確定 |
+| source_type | 確定時点のDetection.source_type(ai/manual) | 確定 |
+| quantity | Detection単位の行のため常に1(将来の拡張余地として列を残す) | 確定 |
+| unit_price / amount | 確定時点の`estimate_master_items.total_price_a`のコピー、およびその金額。値が無い場合はNULL(0円へ捏造しない) | 確定 |
+| status | 確定時点のDetection.status(○/△/×の元値) | 確定 |
+| bbox_x/y/w/h / page_no | 確定時点のBBox座標・ページ番号の非正規化コピー(図面参照はベストエフォート) | 確定 |
+
+**確定操作を呼び出すAPI(Phase B-2で追加)**: `POST /api/products/{product_no}/
+estimate-confirmations`。リクエストボディは受け取らず、Backend自身が
+その時点の`detections`×`estimate_master_items`×`product_df.csv`/
+`estcode_df.csv`から確定snapshotを組み立てて保存する
+(`app/services/estimate_confirmation_builder.py`。Frontendから計算済みの値を
+信頼して丸ごと受け取る方式は採用しなかった)。0件確定(積算コードに紐づく
+Detectionが1件も無い製番の確定)も許可する。
+
+**読み出しAPIは無い(Phase B-2時点)**。過去snapshotの一覧・詳細を返す
+APIエンドポイントは今回追加していない。Phase B-3で検討する
+(`docs/decision-snapshot-design.md` 11章/13章)。
+
 ## 7. system_settings (Phase 1.5で追加)
 
 管理者が変更可能なシステム共通設定を key-value で保持する。

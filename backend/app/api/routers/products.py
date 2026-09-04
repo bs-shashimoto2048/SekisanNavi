@@ -9,7 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from app.api.deps import get_db
+from app.repositories.estimate_confirmations import save_confirmation
 from app.repositories.system_settings import get_data_source_root
+from app.schemas.estimate_confirmations import (
+    EstimateConfirmationItemOut,
+    EstimateConfirmationOut,
+)
 from app.schemas.settings import (
     DetectedPreviewItemOut,
     EstimatePanelInfoOut,
@@ -33,6 +38,7 @@ from app.services.data_source import (
 )
 from app.services.detected_df import load_detected_df
 from app.services.estcode_df import load_estcode_df
+from app.services.estimate_confirmation_builder import build_confirmation_items
 from app.services.product_df import load_page_scales, load_product_df
 
 router = APIRouter(prefix="/api/products", tags=["products"])
@@ -235,3 +241,57 @@ def read_estimate_panels(
         )
         for panel in result.panels
     ]
+
+
+@router.post(
+    "/{product_no}/estimate-confirmations",
+    response_model=EstimateConfirmationOut,
+    status_code=201,
+)
+def create_estimate_confirmation(
+    product_no: str, conn: sqlite3.Connection = Depends(get_db)
+) -> EstimateConfirmationOut:
+    """製番`product_no`の現在の積算結果を丸ごと確定snapshotとして保存する
+    (Issue #4 Phase B-2)。
+
+    リクエストボディは受け取らない。Frontendから計算済みの値を信頼して
+    そのまま保存するのではなく、この時点の`detections`(DB)×
+    `estimate_master_items`(DB)×`product_df.csv`/`estcode_df.csv`
+    (都度読み込み)から、Backend自身が`build_confirmation_items()`で
+    Frontend `estimateAggregationReal.ts`と同じ対象所属判定ロジックを使って
+    組み立てる(Issue #4最新コメントの方針)。
+
+    保存はDetection単位(積算明細相当)の粒度で行い、対象別・総合計の集約は
+    保存しない(`docs/decision-snapshot-design.md` 4章。読み出しAPIを
+    追加した際に、保存済みの明細から同じ考え方で再現する想定)。
+
+    対応するダミーDrawingPage行が無い実製番(Phase 1.8以降の既存の制約。
+    `docs/data-model.md`参照)や、積算コードに紐づくDetectionが1件も無い
+    製番でも、明細0件のconfirmationとして保存できる(**0件確定を許容する**。
+    「対象データが無いこと」自体も、その時点の事実として記録する価値があり、
+    かつPhase B-1のrepository層は既にこれを許容する設計であるため、API層で
+    追加の禁止ルールを設けない)。
+
+    同時実行/transaction境界: 既存の他の書き込みAPIと同じく、この
+    エンドポイントも`get_db`依存関係が提供する「1リクエスト=1トランザクション」
+    の接続をそのまま使う。`build_confirmation_items()`(読み取りのみ)から
+    `save_confirmation()`(header+明細行のINSERT)までを同一トランザクション内で
+    実行し、途中で例外が発生した場合は`get_connection()`がロールバックする
+    (Phase B-1の`save_confirmation()`自体のtransaction保証をそのまま利用する。
+    新しいtransaction管理コードは追加していない)。
+    """
+    root = get_data_source_root(conn)
+    try:
+        items = build_confirmation_items(conn, root, product_no)
+    except DataSourceError as e:
+        raise _error_to_http(e) from e
+
+    confirmation = save_confirmation(conn, product_no=product_no, items=items)
+
+    return EstimateConfirmationOut(
+        id=confirmation.id,
+        product_no=confirmation.product_no,
+        confirmed_at=confirmation.confirmed_at,
+        item_count=len(confirmation.items),
+        items=[EstimateConfirmationItemOut(**item.__dict__) for item in confirmation.items],
+    )
