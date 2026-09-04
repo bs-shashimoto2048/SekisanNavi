@@ -290,3 +290,83 @@ class EstimateItem:
     confidence: float | None
     status: EstimateStatus
     references: list[EstimateReference] = field(default_factory=list)
+
+
+class EstimateTargetType(str, Enum):
+    """積算対象の種類 (Issue #4 Phase B-1)。
+
+    Frontend `types/estimateAggregation.ts::EstimateTargetType`
+    ('product'/'panel'/'tie') と同じ3値を、確定snapshot側でも
+    非正規化コピーとして保存するために使う(`docs/decision-snapshot-design.md`
+    4章/5章)。Backend側はこの対象種別を独自に判定しない
+    (BBox所属判定`assignDetectionToPanel`はFrontend側のロジックのままであり、
+    確定操作の呼び出し側が既に確定した結果をそのまま渡す想定)。
+    """
+
+    PRODUCT = "product"
+    PANEL = "panel"
+    TIE = "tie"
+
+
+@dataclass
+class EstimateConfirmationItemInput:
+    """`save_confirmation()`への入力1行分 (Issue #4 Phase B-1)。
+
+    Detection 1件 = 1行の粒度(積算明細`detailItems`相当)で渡す。
+    id/confirmation_idはINSERT時にDBが払い出すため、入力側は持たない
+    (`docs/decision-snapshot-design.md` 4章)。呼び出し側(将来のPhase B-2の
+    確定API)が、その時点の`detections`×`estimate_master_items`×
+    `product_df.csv`/`estcode_df.csv`から解決済みの値をここへ集めて渡す。
+    """
+
+    target_id: str
+    target_type: EstimateTargetType
+    code: str
+    source_type: DetectionSourceType
+    status: DetectionStatus
+    detection_id: int | None = None
+    drawing_page_id: int | None = None
+    ban_menno: int | None = None
+    ban_no: int | None = None
+    panel_name: str | None = None
+    master_item_id: int | None = None
+    category: str | None = None
+    model: str | None = None
+    rating: str | None = None
+    quantity: float = 1
+    unit_price: float | None = None
+    amount: float | None = None
+    bbox_x: float | None = None
+    bbox_y: float | None = None
+    bbox_w: float | None = None
+    bbox_h: float | None = None
+    page_no: int | None = None
+
+
+@dataclass
+class EstimateConfirmationItem(EstimateConfirmationItemInput):
+    """保存後の確定snapshot明細行 (`save_confirmation()`の戻り値要素)。
+
+    `EstimateConfirmationItemInput`にDB採番済みの`id`/`confirmation_id`を
+    加えたもの。読み出しAPIはPhase B-1のスコープ外のため、このモデル自体は
+    どのAPIからも返さない(`docs/decision-snapshot-design.md` 11章)。
+    """
+
+    id: int = 0
+    confirmation_id: int = 0
+
+
+@dataclass
+class EstimateConfirmation:
+    """積算確定snapshotのheader (Issue #4 Phase B-1)。
+
+    `estimate_confirmations`の1行 = 1回の確定操作。製番(`product_no`)単位で
+    その時点の積算結果一式を丸ごと固定する(`docs/decision-snapshot-design.md`
+    3章)。再確定のたびに新しい行を追加するappend-only設計であり、既存行を
+    更新・削除する操作は用意しない(同8章/9章)。
+    """
+
+    id: int
+    product_no: str
+    confirmed_at: str
+    items: list[EstimateConfirmationItem] = field(default_factory=list)

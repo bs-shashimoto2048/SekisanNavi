@@ -251,11 +251,23 @@ snapshot行が持つ値をそのまま表示する設計とする(現在の`dete
 
 ## 13. 次のステップ
 
-1. 本設計のレビュー。
-2. (レビュー後、別作業として)Phase B-1: migrationのみ実装
-   (`0007_estimate_confirmations.sql`。書き込み/読み出しAPI・UIは含めない)。
-3. (レビュー後、別作業として)Phase B-2: 確定操作のAPI設計・実装
-   (§10のa/b方式の決定を含む)。
-4. (レビュー後、別作業として)Phase B-3: 読み出しAPI・UI(過去snapshot参照)。
-
-今回は設計確定までで、実装(migration/API/UI)には進んでいない。
+1. ~~本設計のレビュー。~~ **完了**。
+2. ~~Phase B-1: migration + repository実装~~ **完了**。
+   `0007_estimate_confirmations.sql`(`estimate_confirmations`/
+   `estimate_confirmation_items`の2テーブル)+
+   `backend/app/repositories/estimate_confirmations.py::save_confirmation()`
+   として実装した(詳細は`docs/implementation-plan.md` 8.18章参照)。
+   本文書で決定した方針(製番単位・append-only・header/item分離・
+   confirmation_idはFKあり/detection_id等はFKなし・非正規化コピーによる
+   再現性確保)から変更した点は無い。書き込み用API・読み出しAPI・UIは
+   設計通りPhase B-1のスコープに含めていない。
+3. ~~Phase B-1のtests~~ **完了**。`backend/tests/test_estimate_confirmations.py`
+   (9件)で、header+明細行の保存内容・複数明細行の独立保存・明細0件の確定・
+   append-only(再確定で既存snapshotが上書きされないこと)・
+   transaction共有(rollback時にheader/itemsが中途半端に残らないこと)・
+   confirmation_idのFK制約が機能すること・detection_idにFK制約が無いため
+   参照先Detection削除後もsnapshot行が残ること・Master再UPSERT後もsnapshot
+   の値自体が変化しないことを検証した。
+4. **今回はここまで(Phase B-1)。** Phase B-2(確定操作のAPI設計・実装、
+   §10のa/b方式の決定を含む)・Phase B-3(読み出しAPI・UI)は別Issue/別作業
+   として着手する。

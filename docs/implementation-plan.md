@@ -1464,6 +1464,54 @@ before/after連鎖、leader_label-only更新でbbox_editが記録されないこ
 repository層を直接呼んだ場合の状態変更+event記録の同時ロールバック。
 既存146件(Phase A-1着手前)と合わせて158件、全件成功を確認済み。
 
+## 8.18. Issue #4 Phase B-1: 積算確定snapshotのschema/repository実装 (完了)
+
+Issue #4 `Preserve decision history for future estimation automation`の
+Phase B-1(実装前設計は`docs/decision-snapshot-design.md`で確定済み)を実装した。
+
+- 新規テーブル`estimate_confirmations`(header、`product_no`/`confirmed_at`)・
+  `estimate_confirmation_items`(明細、Detection単位=積算明細`detailItems`
+  相当の粒度)を追加(migration `0007_estimate_confirmations.sql`)。既存の
+  `detections`/`estimate_master_items`/`estimate_items`等へのALTERは無い、
+  完全に独立した追加専用(append-only)テーブル。
+- `backend/app/repositories/estimate_confirmations.py`(新規)に
+  `save_confirmation()`を実装。headerを先にINSERTしてから明細行をINSERTし、
+  同一トランザクションでcommit/rollbackされる(呼び出し側の`get_connection()`
+  に相乗りする設計。`decision_events`の`record_event()`と同じ考え方)。
+  - `confirmation_id`(明細→header)はFK制約を有効化した(header行が
+    常に先に存在するため、decision_eventsのような自己参照削除の問題が
+    起きない)。
+  - `detection_id`/`drawing_page_id`は`decision_events`と同じ理由で
+    意図的にFK制約を持たない歴史的参照とし、確定後にDetectionが削除されても
+    snapshot行自体は影響を受けない。
+  - `code`/`category`/`model`/`rating`/`unit_price`/`amount`/対象所属
+    (`target_id`/`target_type`/`ban_menno`/`ban_no`/`panel_name`)/BBox座標
+    (`bbox_x/y/w/h`)は、いずれも確定時点の値を非正規化コピーとして保存し、
+    `estimate_master_items`の再UPSERTや`product_df.csv`/`estcode_df.csv`の
+    変更後もsnapshotの値自体は変化しない。
+  - `EstimateTargetType`/`EstimateConfirmationItemInput`/
+    `EstimateConfirmationItem`/`EstimateConfirmation`を`domain/models.py`に
+    追加(読み出しAPIは今回追加していないため、どのAPIからも返さない)。
+- append-only専用: 既存snapshotを更新・削除する関数は実装しない
+  (再確定は新しいheader行を都度追加する)。
+- 確定操作を呼び出すAPI・読み出しAPI・UIはいずれも今回追加していない
+  (Phase B-2/B-3で検討。設計10章/11章)。既存の積算集約ロジック
+  (`estimateAggregationReal.ts`)・BBox所属判定・`decision_events`・
+  Undo/Redoはすべて無変更。
+- Frontend側の変更は無い。
+
+### テスト
+
+`backend/tests/test_estimate_confirmations.py`(新規、9件)で以下を確認した:
+header+明細行の保存内容(対象所属・積算コード・BBox座標等の非正規化コピー
+含む)、複数明細行の独立した保存、明細0件の確定、再確定(2回目の保存)が
+既存snapshotを上書きしないこと(append-only)、repository層を直接呼んだ
+場合の状態変更(header+items)の同時ロールバック、`confirmation_id`のFK制約
+が実際に機能すること、`detection_id`にFK制約が無いため参照先Detectionの
+削除後もsnapshot行が残ること、`estimate_master_items`の価格を確定後に
+変更してもsnapshotの値自体は変化しないこと(Master再UPSERT後の再現性)。
+既存158件(Phase B-1着手前)と合わせて167件、全件成功を確認済み。
+
 ## 9. Phase 2以降の候補 (未確定・本Phaseでは未着手)
 
 以下は次フェーズの候補であり、実施順序・要否は未確定:
@@ -1879,3 +1927,26 @@ Master Importer・APIの主要経路、Frontendの主要表示ロジック(グ�
   (積算集約・BBox所属判定・Undo/Redoのロジック自体はFrontend側にあり、
   今回変更したBackend側のevent記録は既存レスポンスに影響しない追加のみの
   副作用であることをコードレビューで確認した)。
+
+## 24. テスト結果 (Issue #4 Phase B-1: 積算確定snapshotのschema/repository実装時点)
+
+- Backend: `pytest` — **167 passed**(既存158件 + 新規
+  `test_estimate_confirmations.py` 9件)。新規テストはheader+明細行の
+  保存内容(対象所属・積算コード・BBox座標等の非正規化コピー含む)、複数
+  明細行の独立した保存、明細0件の確定、再確定(2回目の保存)が既存snapshotを
+  上書きしないこと(append-only)、repository層を直接呼んだ場合の状態変更
+  (header+items)の同時ロールバック、`confirmation_id`のFK制約が実際に
+  機能すること、`detection_id`にFK制約が無いため参照先Detectionの削除後も
+  snapshot行が残ること、`estimate_master_items`の価格を確定後に変更しても
+  snapshotの値自体は変化しないこと(Master再UPSERT後の再現性)を検証する。
+  既存158件は全て無変更ロジックのまま通過 = 回帰なし(decision_events・
+  BBox作成/削除/リサイズ・Manual BBox・Master importer・積算集約・
+  盤所属判定関連の既存挙動を含む)。
+- Frontend: 変更なし(今回はBackendのみの実装のため、frontendのtests/
+  typecheck/lint/buildは対象外)。確定操作を呼び出すAPI・UIを今回追加して
+  いないため、Frontend側の動作(積算集約・積算明細・Undo/Redo)に影響する
+  変更は無い。
+- 実ブラウザでの回帰確認: 今回はBackend内部(DB schema・repository層)の
+  追加に限定され、既存のAPIエンドポイントの入出力仕様は一切変更していない
+  (確定操作を呼び出す新しいAPIエンドポイント自体を追加していない)ため、
+  Frontend側の実ブラウザ回帰確認は実施していない。
