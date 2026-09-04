@@ -70,7 +70,7 @@ describe('DrawingNavigator (Phase 1.8: PNGサムネイル表示)', () => {
     expect(screen.getByText('その他')).toBeInTheDocument()
   })
 
-  it('shows a short description under a group with BAN info, mentioning ページ/クロスリファレンス番号・盤番号 (Phase 1.11 UI改修指示20章)', () => {
+  it('shows the drawing-list legend text once, using 面番号/盤番号 (not クロスリファレンス番号) (図面一覧の説明表記を共通化・簡素化 指示1章)', () => {
     const pages = [
       makePage({
         page_no: 16,
@@ -87,11 +87,11 @@ describe('DrawingNavigator (Phase 1.8: PNGサムネイル表示)', () => {
         error={null}
       />,
     )
-    expect(screen.getByText(/クロスリファレンス番号/)).toBeInTheDocument()
-    expect(screen.getByText(/盤番号/)).toBeInTheDocument()
+    expect(screen.getByText('P：ページ、面番号 / 盤番号')).toBeInTheDocument()
+    expect(screen.queryByText(/クロスリファレンス番号/)).not.toBeInTheDocument()
   })
 
-  it('shows a shorter description (no BAN mention) for a group whose pages have no product_df panels', () => {
+  it('shows the same legend text regardless of whether a group has BAN info (no per-group text variation, 指示1章/2章)', () => {
     const pages = [makePage({ page_no: 18, drawing_type: '基礎図', panels: [] })]
     render(
       <DrawingNavigator
@@ -102,31 +102,15 @@ describe('DrawingNavigator (Phase 1.8: PNGサムネイル表示)', () => {
         error={null}
       />,
     )
-    expect(screen.getByText('P：ページ番号')).toBeInTheDocument()
-    expect(screen.queryByText(/クロスリファレンス番号/)).not.toBeInTheDocument()
+    expect(screen.getByText('P：ページ、面番号 / 盤番号')).toBeInTheDocument()
+    expect(screen.queryByText('P：ページ番号')).not.toBeInTheDocument()
   })
 
-  it('shows no description for the "その他" fallback group', () => {
-    const pages = [makePage({ page_no: 99, drawing_type: null })]
-    render(
-      <DrawingNavigator
-        pages={pages}
-        selectedPageNo={null}
-        onSelectPage={() => {}}
-        loading={false}
-        error={null}
-      />,
-    )
-    expect(document.querySelector('.drawing-navigator__group-description')).not.toBeInTheDocument()
-  })
-
-  it('keeps the description short (not a long sentence, 指示書20章)', () => {
+  it('shows the legend exactly once for the whole section, even with multiple drawing-type groups (指示2章: グループごとの繰り返し表示を廃止)', () => {
     const pages = [
-      makePage({
-        page_no: 16,
-        drawing_type: '外形図',
-        panels: [makePanel({ ban_menno: 5, ban_no: 5 })],
-      }),
+      makePage({ page_no: 16, drawing_type: '外形図', panels: [makePanel({ ban_menno: 5, ban_no: 5 })] }),
+      makePage({ page_no: 18, drawing_type: '基礎図', panels: [] }),
+      makePage({ page_no: 21, drawing_type: null }), // 「その他」グループ
     ]
     render(
       <DrawingNavigator
@@ -137,8 +121,46 @@ describe('DrawingNavigator (Phase 1.8: PNGサムネイル表示)', () => {
         error={null}
       />,
     )
-    const description = document.querySelector('.drawing-navigator__group-description')
-    expect(description?.textContent?.length ?? 0).toBeLessThanOrEqual(30)
+    expect(screen.getAllByText('P：ページ、面番号 / 盤番号')).toHaveLength(1)
+    // グループ見出し(外形図/基礎図/その他)自体は従来どおり複数表示される。
+    expect(screen.getByText('外形図')).toBeInTheDocument()
+    expect(screen.getByText('基礎図')).toBeInTheDocument()
+    expect(screen.getByText('その他')).toBeInTheDocument()
+  })
+
+  it('places the legend directly under the "図面一覧" heading, before any group', () => {
+    const pages = [makePage({ page_no: 16, drawing_type: '外形図' })]
+    const { container } = render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    const children = Array.from(container.querySelector('.drawing-navigator')!.children)
+    const headingIndex = children.findIndex((c) => c.className.includes('drawing-navigator__heading'))
+    const legendIndex = children.findIndex((c) => c.className.includes('drawing-navigator__legend'))
+    const groupIndex = children.findIndex((c) => c.className.includes('drawing-navigator__group'))
+    expect(headingIndex).toBe(0)
+    expect(legendIndex).toBe(1)
+    expect(groupIndex).toBeGreaterThan(legendIndex)
+  })
+
+  it('keeps the legend short (not a long sentence)', () => {
+    const pages = [makePage({ page_no: 16, drawing_type: '外形図' })]
+    render(
+      <DrawingNavigator
+        pages={pages}
+        selectedPageNo={null}
+        onSelectPage={() => {}}
+        loading={false}
+        error={null}
+      />,
+    )
+    const legend = document.querySelector('.drawing-navigator__legend')
+    expect(legend?.textContent?.length ?? 0).toBeLessThanOrEqual(30)
   })
 
   it('renders a PNG thumbnail img sourced from thumbnail_url', () => {
