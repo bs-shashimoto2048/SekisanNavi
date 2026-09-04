@@ -74,6 +74,10 @@ def update_detection(
     updated = update_detection_bbox(
         conn,
         detection_id,
+        # Issue #4 Phase A-1: 上で404判定のために取得済みのスナップショットを
+        # 「変更前」としてそのまま渡す (追加のSELECTを増やさない。
+        # docs/decision-event-design.md 4.4章)。
+        before=detection,
         bbox_x=body.bbox_x,
         bbox_y=body.bbox_y,
         bbox_w=body.bbox_w,

@@ -358,13 +358,22 @@ gap-analysis 2.1/2.6で確認した通り、`detected_df.csv`(YOLO推論結果)�
   積算コード変更・盤所属変更・要確認確定・状態変更の履歴
   (対応するAPIが無いため)。
 
-## 12. 次のステップ(今回は実施しない)
+## 12. 次のステップ
 
-1. 本設計のレビュー。
-2. Phase A-1の実装(migration + repository層のみ、API/UI変更なし)。
-3. Phase A-1のtests(repository層の単体テスト: create/delete/bbox_edit
-   それぞれでevent行が正しく記録されること、leader_label-onlyの
-   PATCHではbbox_editが記録されないこと、削除後もevent行が残ること等)。
-4. 実ブラウザでの回帰確認(BBox所属判定・積算集約・Viewer・Undo/Redoに
-   影響が無いことを確認)。
-5. Phase A-2(読み出しAPI)の設計・実装。
+1. ~~本設計のレビュー。~~ **完了**。
+2. ~~Phase A-1の実装(migration + repository層のみ、API/UI変更なし)。~~
+   **完了**。`0006_decision_events.sql` + `repositories/decision_events.py` +
+   `repositories/detections.py`の3関数への組み込みとして実装した
+   (詳細は`docs/implementation-plan.md` 8.17章参照)。
+3. ~~Phase A-1のtests~~ **完了**。`backend/tests/test_decision_events.py`
+   (12件)で、create/delete/bbox_editそれぞれの記録内容・削除後もevent行が
+   残ること・leader_label-only更新で記録されないこと・Undo相当操作の
+   記録され方・transaction共有(rollback時にevent単独で残らないこと)を検証。
+4. ~~実ブラウザでの回帰確認~~ **完了**。実際にA1GV2421へManual BBoxを作成→
+   移動→Ctrl+Zで元へ戻す(通常のbbox_editイベントとして記録されることを
+   確認)→削除、という一連の操作を行い、`decision_events`が設計通り
+   `create→bbox_edit→bbox_edit(Undo)→delete`の順で記録されること、
+   積算集約(製番合計)・積算明細の面/盤列(BBox所属判定)・Undo/Redoボタンの
+   状態がいずれも操作前後で一致すること(回帰なし)を確認した。
+5. **今回はここまで(Phase A-1)。** Phase A-2(読み出しAPI)は別Issue/別作業
+   として着手する(今回のIssue #4本文の作業順序どおり、まだcloseしない)。

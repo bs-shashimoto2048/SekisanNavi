@@ -1417,6 +1417,53 @@ UI視覚階層改善・配色体系整理・積算集約の数量集約・Produc
 = product-vision.md、構造 = architecture.md、データ = data-model.md、
 UI挙動 = ui-spec.md、実装履歴 = 本ファイル)は`product-vision.md`末尾に明記した。
 
+## 8.17. Issue #4 Phase A-1: 判断・修正データの最小event logging (完了)
+
+Issue #4 `Preserve decision history for future estimation automation`の
+Phase A-1(実装前設計は`docs/decision-event-design.md`で確定済み)を実装した。
+
+- 新規テーブル`decision_events`を追加(migration `0006_decision_events.sql`)。
+  既存の`detections`/`estimate_master_items`等へのALTERは無い、完全に独立した
+  追加専用(append-only)テーブル。
+- `backend/app/repositories/decision_events.py`(新規)に`record_event()`を
+  実装し、`repositories/detections.py`の`create_manual_detection`/
+  `delete_detection`/`update_detection_bbox`の3関数から呼び出す形で、
+  create/delete/bbox move・resizeの事実を記録する。
+  - move/resizeは記録時に区別せず`event_type='bbox_edit'`に統合する
+    (前後のw/h比較で分析時に判別可能)。
+  - leader_label_x/yのみを変更する呼び出し(bbox自体は不変)では、
+    before==afterの無意味なイベントを記録しない。
+  - `decision_events.detection_id`はFK制約を持たない
+    (`PRAGMA foreign_keys=ON`環境でdelete記録時に自己参照によるFK違反が
+    起きるのを避けるため)。削除後も`drawing_page_id`/`source_type`/
+    `master_item_id`/`before_bbox_*`の非正規化コピーだけで解釈できる。
+- event insertは既存のリクエスト単位トランザクション(`get_db`→
+  `get_connection`)にそのまま乗せ、状態変更(INSERT/UPDATE/DELETE)と
+  同一commit/rollback対象にした。新しいtransaction管理コードは追加していない。
+- Undo/Redoは特別扱いしていない。Frontend側の実装(既存の`editHistory.ts`)は
+  変更しておらず、Undo/Redoも通常のAPI呼び出しとして自然にevent記録される
+  (bbox_editのUndo/Redoは同一detection_idで連続するが、create/deleteの
+  Undo/RedoはSQLiteのAUTOINCREMENTにより新detection_idになるため、event履歴が
+  detection_idをまたいで分断される既知の制約がある。`editHistory.ts`の
+  `DeleteEditCommand`が既に開示している制約と同根)。
+- 読み出しAPI・UIは今回追加していない(Phase A-2で検討)。AI
+  `detected_df.csv`の`detections`テーブルへの永続化対応も今回のスコープ外
+  (現状どおり、実データのcreateイベントは事実上すべて`source_type='manual'`)。
+- Frontend側の変更は無い(`App.tsx`/`editHistory.ts`/APIクライアント
+  いずれも無変更)。既存API(`POST/PATCH/DELETE /api/detections`)の
+  レスポンス形・呼び出し方も変更していない。
+
+### テスト
+
+`backend/tests/test_decision_events.py`(新規、12件)で以下を確認した:
+create/delete/bbox_editそれぞれのevent記録内容(before/after・
+非正規化コピー列)、delete後もevent行が残ること、複数回のbbox編集での
+before/after連鎖、leader_label-only更新でbbox_editが記録されないこと、
+存在しないDetectionへの操作でeventが記録されないこと、Undo相当の操作
+(move後に元へ戻すPATCH、delete後の再create)の記録のされ方、および
+repository層を直接呼んだ場合の状態変更+event記録の同時ロールバック。
+既存146件(Phase A-1着手前)と合わせて158件、全件成功を確認済み。
+
 ## 9. Phase 2以降の候補 (未確定・本Phaseでは未着手)
 
 以下は次フェーズの候補であり、実施順序・要否は未確定:
@@ -1810,3 +1857,25 @@ Master Importer・APIの主要経路、Frontendの主要表示ロジック(グ�
   集約前後で変化しないことを実ブラウザで確認した。BBox移動+Undo/Redo・
   Master行選択/Esc・PaneSplitter(5本すべて)・タブ切替・検索の回帰確認も
   実ブラウザで実施し、いずれも問題なし。
+
+## 23. テスト結果 (Issue #4 Phase A-1: 判断・修正データの最小event logging時点)
+
+- Backend: `pytest` — **158 passed**(既存146件 + 新規`test_decision_events.py`
+  12件)。新規テストは create/delete/bbox_editそれぞれのevent記録内容、
+  delete後もevent行が残ること、複数回bbox編集でのbefore/after連鎖、
+  leader_label-only更新でbbox_editが記録されないこと、存在しないDetectionへの
+  操作でeventが記録されないこと、Undo相当操作(move後に元へ戻すPATCH、
+  delete後の再create)の記録のされ方、repository層を直接呼んだ場合の
+  状態変更+event記録の同時ロールバックを検証する。既存146件は全て無変更
+  ロジックのまま通過 = 回帰なし(BBox作成/削除/リサイズ・Manual BBox・
+  Master importer・積算集約・盤所属判定関連の既存挙動を含む)。
+- Frontend: 変更なし(今回はBackendのみの実装のため、frontendのtests/
+  typecheck/lint/buildは対象外)。既存の`App.tsx`/`editHistory.ts`/
+  `api/client.ts`はいずれも無変更であり、Frontend側の動作(Undo/Redo・
+  積算集約・積算明細・BBox操作)に影響する変更は無い。
+- 実ブラウザでの回帰確認: 今回はBackend内部(DB schema・repository層)の
+  変更に限定され、既存のAPIレスポンス形・エンドポイントの入出力仕様は
+  一切変更していないため、Frontend側の実ブラウザ回帰確認は実施していない
+  (積算集約・BBox所属判定・Undo/Redoのロジック自体はFrontend側にあり、
+  今回変更したBackend側のevent記録は既存レスポンスに影響しない追加のみの
+  副作用であることをコードレビューで確認した)。
