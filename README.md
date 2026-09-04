@@ -16,6 +16,7 @@ Phase 1.7 (実積算Master全面参照・BBox削除/リサイズ編集) / Phase 
 - [`docs/ui-spec.md`](docs/ui-spec.md) — UI仕様
 - [`docs/data-source.md`](docs/data-source.md) — 実データソース調査結果 (Phase 1.5)
 - [`docs/implementation-plan.md`](docs/implementation-plan.md) — 実装計画・確定/暫定/未確定の分類
+- [`docs/decision-data-gap-analysis.md`](docs/decision-data-gap-analysis.md) — 将来自動化に向けた判断・修正データの保存状況棚卸し (実装はまだしていない分析)
 
 ## 構成
 

@@ -279,5 +279,6 @@ product_df / estcode_df 等
 | `data-model.md` | 何をどう表現するか |
 | `ui-spec.md` | UIがどう動くか |
 | `implementation-plan.md` | 何をいつ実装したか (実装履歴・計画) |
+| `decision-data-gap-analysis.md` | 本文書の思想に対し、現在の実装が判断データを実際どこまで保存できているかの棚卸し・将来案の比較 |
 
 Phase毎の詳細な実装記録は`implementation-plan.md`側にあり、本文書へは大量にコピーしない。
