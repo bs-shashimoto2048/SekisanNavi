@@ -44,15 +44,33 @@
    実画面ではA(現行white)/B(淡い青白色+旧shadow)/C(淡い青白色+新shadow+
    1.14rem)の3案を比較し、周囲情報との差が最も明確でありながら派手すぎない
    C案を採用した(指示29章)。 */
+/* Issue #9 追加修正: 過去ラウンドでcolor/shadow/letter-spacingを何度か
+   微調整したが(#eaf2ff・shadow強化等、上記コメント参照)、実画面では依然
+   周囲の業務情報(整理番号/製番等、color:#fffそのまま・font-weight未指定)と
+   ほぼ同じ見た目で、「プロダクト名」として一目で認識しづらいという指摘を
+   受けた。根本原因は、#eaf2ffが実質ほぼ白(rgb(234,242,255))で、業務情報の
+   純白(#fff)とほとんど区別が付かなかったこと。今回は色調そのものを変える
+   のではなく、**サイズ・太さ・字間の差をさらに広げる**方向で強調する
+   (色相を変えると解析状態バッジ等の意味色と衝突しかねないため)。
+   - font-size: 1.14rem→1.32rem(業務情報0.98remとの比率を約1.16倍→1.35倍へ)。
+   - font-weight: 700→800(900は依然使わない。太すぎる=安易な強調という
+     過去の判断を踏襲)。
+   - color: #eaf2ff→#ffffff(純白)。地の背景色(#2455e2)に対するコントラストを
+     最大化し、周囲の白文字とは明確なサイズ・太さの差で区別する。
+   - text-shadow: 影の不透明度をわずかに強め、文字の輪郭・立体感を増す
+     ことでロゴ的な存在感を補強する。
+   - letter-spacing: 0.02em→0.04em。
+   Header自体のpadding/line-height/heightは変更していない(指示の「レイアウト
+   寸法・ヘッダー高さは原則維持」に従う)。 */
 .project-header__brand {
   font-family: Inter, 'Segoe UI', 'Yu Gothic UI', 'Meiryo UI', sans-serif;
-  font-weight: 700;
-  font-size: 1.14rem;
-  color: #eaf2ff;
+  font-weight: 800;
+  font-size: 1.32rem;
+  color: #ffffff;
   text-shadow:
-    0 1px 1px rgba(0, 0, 0, 0.22),
-    0 0 8px rgba(219, 234, 254, 0.2);
-  letter-spacing: 0.02em;
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 0 10px rgba(219, 234, 254, 0.25);
+  letter-spacing: 0.04em;
   white-space: nowrap;
 }
 

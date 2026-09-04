@@ -375,6 +375,33 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
     expect(scrollArea?.contains(grandTotal as Node)).toBe(false)
   })
 
+  it('shows the 製番合計 amount in red, distinct from the app error color, without reddening other rows (Issue #9)', () => {
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[makeTotalLineItem()]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+      />,
+    )
+    const amountStrong = document.querySelector('.estimate-aggregation__grand-total strong') as HTMLElement
+    expect(amountStrong).not.toBeNull()
+    // #dc2626 (赤系)。旧来のwarning系(茶色 #b45309 = rgb(180,83,9))ではないこと、
+    // かつ既存のエラー表示色(--status-error, #b91c1c = rgb(185,28,28))とも
+    // 異なる値であること(エラー表示との誤認を避けるため意図的に別の赤を使う)。
+    expect(getComputedStyle(amountStrong).color).toBe('rgb(220, 38, 38)')
+    expect(getComputedStyle(amountStrong).color).not.toBe('rgb(180, 83, 9)')
+    expect(getComputedStyle(amountStrong).color).not.toBe('rgb(185, 28, 28)')
+
+    // 通常明細行の金額列・単価列は赤へ変更していない(強調範囲を製番合計の
+    // 金額文字だけに閉じる)。
+    const amountCell = document.querySelector('.estimate-aggregation__col-amount') as HTMLElement
+    const priceCell = document.querySelector('.estimate-aggregation__col-price') as HTMLElement
+    expect(getComputedStyle(amountCell).color).not.toBe('rgb(220, 38, 38)')
+    expect(getComputedStyle(priceCell).color).not.toBe('rgb(220, 38, 38)')
+  })
+
   it('highlights the target select when Viewer is focused on a specific target (individual panel), not when 総合計 is selected', () => {
     const targets = [makeTarget(), makePanelTarget()]
     const { rerender } = render(

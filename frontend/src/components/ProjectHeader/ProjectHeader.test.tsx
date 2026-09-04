@@ -56,6 +56,29 @@ describe('ProjectHeader', () => {
     expect(getComputedStyle(brand).whiteSpace).toBe('nowrap')
   })
 
+  it('makes the brand title clearly larger/bolder/whiter than the surrounding business-info text (Issue #9: 実画面でタイトルが目立たないとの指摘への対応)', () => {
+    render(
+      <ProjectHeader
+        project={project}
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+      />,
+    )
+    const brand = screen.getByText('Sekisan Navi')
+    const brandStyle = getComputedStyle(brand)
+    // 純白(#ffffff)・weight 800・letter-spacing強化(0.04em)。
+    expect(brandStyle.color).toBe('rgb(255, 255, 255)')
+    expect(brandStyle.fontWeight).toBe('800')
+
+    const info = screen.getByText(/整理番号: A1AB3211/)
+    const infoStyle = getComputedStyle(info)
+    // 業務情報側はbrandより明確に小さい/太くない(相対比較。px値は
+    // ブラウザ既定フォントサイズに依存するため、絶対px値ではなく大小関係で検証する)。
+    expect(parseFloat(brandStyle.fontSize)).toBeGreaterThan(parseFloat(infoStyle.fontSize))
+    expect(Number(brandStyle.fontWeight)).toBeGreaterThan(Number(infoStyle.fontWeight) || 400)
+  })
+
   it('does not add any height-affecting style (padding/line-height/height) to the brand title (指示6章/12章/19章: Header高さを変えない)', () => {
     render(
       <ProjectHeader
