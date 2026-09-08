@@ -131,6 +131,9 @@ Frontend側`estimateAggregationReal.ts`が`detections`×`estimate_master_items`�
 | GET | `/api/products/{product_no}/estimate-confirmations` | 過去確定snapshot一覧(新しい順、明細は含まない)(Issue #4 Phase B-4) | `list[EstimateConfirmationSummaryOut]` |
 | GET | `/api/products/{product_no}/estimate-confirmations/{confirmation_id}` | 確定snapshot1件の詳細(明細一式を含む)(Issue #4 Phase B-4) | `EstimateConfirmationDetailOut` |
 | GET | `/api/products/{product_no}/decision-events` | 判断履歴(decision_events)一覧、発生順(古い順)(Issue #4 Phase A-2) | `list[DecisionEventOut]` |
+| GET | `/api/products/{product_no}/decision-analysis/summary` | decision_eventsのevent_type別・ページ別・積算コード別集計(Issue #17 Phase C-1) | `DecisionAnalysisSummaryOut` |
+| GET | `/api/products/{product_no}/decision-analysis/detections` | Detection単位の操作系列・編集回数一覧(Issue #17 Phase C-1) | `list[DecisionAnalysisDetectionSummaryOut]` |
+| GET | `/api/products/{product_no}/decision-analysis/confirmations` | 確定snapshot明細と確定時点以前のevent突合(Issue #17 Phase C-1) | `list[DecisionAnalysisConfirmationOut]` |
 
 `ProductSearchOut`: `matches: string[]`, `truncated: bool`。
 `ProductInfoOut`: `product_no`, `exists`, `ccv_resolved`。
@@ -261,6 +264,87 @@ Frontend側`estimateAggregationReal.ts`が`detections`×`estimate_master_items`�
 区別せず`bbox_edit`へ統合。詳細は`docs/decision-event-design.md`)。`page_no`
 のみBackend側で`drawing_pages`とのJOINにより付与した表示補助情報で、
 `decision_events`自体の列ではない。
+
+### `GET /api/products/{product_no}/decision-analysis/summary` (判断履歴の集計)
+
+Issue #17 Phase C-1: `decision_events`をevent_type別・ページ別・積算コード別に
+集計する。read-only SELECTのみで、新規テーブル・カラムは追加していない。
+
+```json
+{
+  "product_no": "A1GV2421",
+  "event_counts": { "create": 2, "bbox_edit": 4, "delete": 3 },
+  "total_events": 9,
+  "bbox_edit_count_by_page_no": { "16": 4 },
+  "bbox_edit_count_by_master_item": [
+    { "master_item_id": 1, "current_code": "11002", "bbox_edit_count": 4 }
+  ]
+}
+```
+
+`bbox_edit_count_by_master_item`の`current_code`のみ、表示用に**現在の**
+`estimate_master_items`をJOINして参照する(現在値JOIN。記録時点や確定snapshot
+の値ではない。参照先が無ければ`null`)。
+
+### `GET /api/products/{product_no}/decision-analysis/detections` (Detection単位の操作系列)
+
+`decision_events`が1件以上存在するDetection単位で、操作系列・編集回数を返す。
+`page_no`/`source_type`/`master_item_id`は、その`detection_id`の**最初に
+記録されたevent**の値をそのまま転記する(現在の`detections`には依存しないため、
+Detectionが既に削除されていても取得できる)。
+
+```json
+[
+  {
+    "detection_id": 84,
+    "page_no": 16,
+    "source_type": "manual",
+    "master_item_id": 1,
+    "event_count": 3,
+    "bbox_edit_count": 2,
+    "first_event_id": 1,
+    "last_event_id": 5
+  }
+]
+```
+
+### `GET /api/products/{product_no}/decision-analysis/confirmations` (確定snapshotとevent突合)
+
+製番の各確定snapshotについて、明細ごとに「確定時点以前にそのdetection_idへ
+何件のevent/bbox_editが存在したか」を返す。明細の`code`は確定snapshot自身の
+非正規化コピーをそのまま使う(現在のMasterへは再度JOINしない)。
+
+```json
+[
+  {
+    "confirmation_id": 1,
+    "confirmed_at": "2026-09-04 04:29:46",
+    "items": [
+      {
+        "detection_id": 84,
+        "code": "11002",
+        "event_count_before_confirmation": 2,
+        "bbox_edit_count_before_confirmation": 1
+      }
+    ]
+  }
+]
+```
+
+`detection_id`が特定できない明細(値が`null`)はevent件数をいずれも0として
+扱う(エラーにしない)。
+
+**既知の制約(いずれも隠さず明示する)**:
+- `decision_events.occurred_at`/`estimate_confirmations.confirmed_at`は
+  いずれも秒精度の文字列のため、同一秒に発生したevent/確定の前後関係は
+  厳密には区別できない(`occurred_at <= confirmed_at`を「確定時点以前」の
+  判定に使う)。
+- `detection_id`はUndo/Redoによるcreate/delete(AUTOINCREMENTでの再採番)で
+  分断されうる。分断前後のIDは別のDetectionとして扱われ、統合しない。
+- Undo/Redoは通常のevent(create/delete/bbox_edit)と区別できないため、
+  この分析でも区別しない。move/resizeも同様に区別せず`bbox_edit`のまま扱う。
+
+詳細は`docs/architecture.md`・`docs/data-model.md`を参照。
 
 ## health
 

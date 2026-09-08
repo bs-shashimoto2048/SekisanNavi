@@ -851,6 +851,29 @@ flowchart LR
 3層の間に結合キーは設けていない(責務分離を優先。`docs/decision-snapshot-design.md`
 6章)。
 
+### 分析read model (Issue #17 Phase C-1)
+
+Phase C-0の棚卸し(Issue #17)を受け、上記3層のデータを**保存済みのまま**
+event_type別・Detection単位・確定snapshot突合の形に集計するread-onlyの
+分析エンドポイント群(`GET /api/products/{product_no}/decision-analysis/*`、
+`app/repositories/decision_analysis.py`)を追加した。
+
+- **新規テーブル・カラムは追加していない**。上記3層(current state/event
+  history/confirmed snapshot)への書き込み処理(BBox編集・Undo/Redo・
+  積算確定)も一切変更していない。
+- event historyとconfirmed snapshotの突合(`.../decision-analysis/confirmations`)
+  は、両テーブルが共に持つ生の`detection_id`列をそのまま結合キーとして使う
+  (追加の結合キーを新設したわけではない。3層設計自体は変更していない)。
+  ただしUndo/Redoによる`detection_id`の分断(AUTOINCREMENTでの再採番)は
+  そのまま突合の限界として残る(分断前後は別のDetectionとして扱われる)。
+- `decision_events.occurred_at`と`estimate_confirmations.confirmed_at`は
+  いずれも秒精度のため、「確定時点以前」の判定(`occurred_at <= confirmed_at`)
+  には同一秒での前後不定というギャップが残る。
+- move/resizeの区別、Undo/Redoの識別はいずれも行わない(元データがそれを
+  区別していないため。`event_type`は`decision_events`の値をそのまま使う)。
+
+詳細は`docs/api-reference.md`を参照。
+
 ## 18. Phase 1.12/1.14: detected_df(AI検出プレビュー)・estcode_df(盤情報)
 
 Phase 1.9以降に追加した、都度読み込み・DB非永続化の実データ参照サービスを
