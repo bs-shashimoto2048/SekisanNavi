@@ -70,8 +70,9 @@
 `leader_label_x/y`(任意。省略時は既存値を保持)。
 
 いずれの書き込み(POST/PATCH/DELETE)も、`decision_events`テーブルへ
-create/bbox_edit/deleteイベントを同一トランザクションで記録する(読み出しAPIは
-無い。詳細は`docs/decision-event-design.md`)。
+create/bbox_edit/deleteイベントを同一トランザクションで記録する。読み出しAPIは
+`products`セクションの`GET /api/products/{product_no}/decision-events`
+(Issue #4 Phase A-2)を参照。詳細は`docs/decision-event-design.md`。
 
 ## estimate-items — `/api/estimate-items`
 
@@ -129,6 +130,7 @@ Frontend側`estimateAggregationReal.ts`が`detections`×`estimate_master_items`�
 | POST | `/api/products/{product_no}/estimate-confirmations` | **積算確定snapshotを新規作成**(Issue #4 Phase B-2) | `EstimateConfirmationOut`(201) |
 | GET | `/api/products/{product_no}/estimate-confirmations` | 過去確定snapshot一覧(新しい順、明細は含まない)(Issue #4 Phase B-4) | `list[EstimateConfirmationSummaryOut]` |
 | GET | `/api/products/{product_no}/estimate-confirmations/{confirmation_id}` | 確定snapshot1件の詳細(明細一式を含む)(Issue #4 Phase B-4) | `EstimateConfirmationDetailOut` |
+| GET | `/api/products/{product_no}/decision-events` | 判断履歴(decision_events)一覧、発生順(古い順)(Issue #4 Phase A-2) | `list[DecisionEventOut]` |
 
 `ProductSearchOut`: `matches: string[]`, `truncated: bool`。
 `ProductInfoOut`: `product_no`, `exists`, `ccv_resolved`。
@@ -224,6 +226,41 @@ Frontend側`estimateAggregationReal.ts`が`detections`×`estimate_master_items`�
 `EstimateConfirmationDetailOut`: `EstimateConfirmationSummaryOut`のフィールドに
 加えて`items: EstimateConfirmationItemOut[]`(上記`POST`レスポンスの`items`と
 同じ形)を返す。
+
+### `GET /api/products/{product_no}/decision-events` (判断履歴一覧)
+
+製番`product_no`のdecision_events(BBox追加/削除/移動・サイズ変更の判断履歴)を
+発生順(古い順、`id`昇順)で返す。読み出し専用のSELECTのみで、`decision_events`
+のappend-only方針・record_event()のtransaction境界には手を入れていない。
+保存済みの値をそのまま返すのみで、現在の`detections`/`estimate_master_items`
+から値を補完・再計算しない。
+
+`decision_events`自体には`product_no`列が無いため、`drawing_page_id`から
+`drawing_pages.product_no`をJOINで解決して絞り込む。製番自体がデータソース上に
+実在するかはこのエンドポイントの責務外(履歴が1件も無い製番は空配列を返し、
+404にはしない)。
+
+`DecisionEventOut`:
+
+```json
+{
+  "id": 1,
+  "occurred_at": "2026-09-04 04:29:46",
+  "event_type": "create",
+  "detection_id": 84,
+  "drawing_page_id": 1,
+  "page_no": 16,
+  "source_type": "manual",
+  "master_item_id": 1,
+  "before_bbox_x": null, "before_bbox_y": null, "before_bbox_w": null, "before_bbox_h": null,
+  "after_bbox_x": 0.65, "after_bbox_y": 0.51, "after_bbox_w": 0.07, "after_bbox_h": 0.07
+}
+```
+
+`event_type`は`create`/`delete`/`bbox_edit`のいずれか(move/resizeは保存時に
+区別せず`bbox_edit`へ統合。詳細は`docs/decision-event-design.md`)。`page_no`
+のみBackend側で`drawing_pages`とのJOINにより付与した表示補助情報で、
+`decision_events`自体の列ではない。
 
 ## health
 

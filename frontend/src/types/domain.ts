@@ -11,6 +11,7 @@ export type EstimateSourceType = 'program' | 'ai' | 'manual'
 export type EstimateStatus = 'auto' | 'confirmed' | 'needs_review' | 'excluded'
 export type DrawingPageSourceType = 'placeholder' | 'product_file'
 export type DetectionSourceType = 'ai' | 'manual'
+export type DecisionEventType = 'create' | 'delete' | 'bbox_edit'
 
 export interface ProjectInfo {
   id: number
@@ -303,4 +304,28 @@ export interface EstimateConfirmationDetail {
   item_count: number
   total_amount: number
   items: EstimateConfirmationItem[]
+}
+
+/** 判断履歴1件 (Issue #4 Phase A-2、
+ * `GET /api/products/{product_no}/decision-events`のレスポンス要素)。
+ * `decision_events`に保存済みの値をそのまま返すものであり、現在の
+ * `detections`/`estimate_master_items`からの補完・再計算は行わない。
+ * `page_no`のみBackend側でJOINして付与した表示補助情報。 */
+export interface DecisionEvent {
+  id: number
+  occurred_at: string
+  event_type: DecisionEventType
+  detection_id: number
+  drawing_page_id: number
+  page_no: number | null
+  source_type: DetectionSourceType
+  master_item_id: number | null
+  before_bbox_x: number | null
+  before_bbox_y: number | null
+  before_bbox_w: number | null
+  before_bbox_h: number | null
+  after_bbox_x: number | null
+  after_bbox_y: number | null
+  after_bbox_w: number | null
+  after_bbox_h: number | null
 }

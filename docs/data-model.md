@@ -289,8 +289,14 @@ create/deleteのUndo/RedoはSQLiteの`AUTOINCREMENT`により新しい`detection
 払い出されるため、同じ物理的なBBoxのevent履歴が`detection_id`をまたいで
 分断される(bbox_editのUndo/Redoは同一`detection_id`のまま連続する)。
 
-**読み出しAPIは無い(Phase A-1時点)**: このテーブルを返すAPIエンドポイントは
-今回追加していない。Phase A-2で検討する。
+**読み出しAPI(Phase A-2で追加)**: `GET /api/products/{product_no}/decision-events`
+(発生順(古い順)で製番単位のdecision_eventsを返す)。`decision_events`自体には
+`product_no`列が無いため、`drawing_page_id`から`drawing_pages.product_no`を
+JOINで解決して絞り込む(`app/repositories/decision_events.py::
+list_events_for_product`)。読み出し専用のSELECTのみで、append-only方針・
+`record_event()`のtransaction境界には手を入れていない。保存済みの値をそのまま
+返すのみで、現在の`detections`/`estimate_master_items`から値を補完・再計算
+しない。詳細は`docs/api-reference.md`参照。
 
 ## 6.6. EstimateConfirmation / EstimateConfirmationItem (積算確定snapshot、Issue #4 Phase B-1で追加)
 

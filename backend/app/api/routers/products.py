@@ -9,12 +9,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from app.api.deps import get_db
+from app.repositories.decision_events import list_events_for_product
 from app.repositories.estimate_confirmations import (
     get_confirmation,
     list_confirmations,
     save_confirmation,
 )
 from app.repositories.system_settings import get_data_source_root
+from app.schemas.decision_events import DecisionEventOut
 from app.schemas.estimate_confirmations import (
     EstimateConfirmationDetailOut,
     EstimateConfirmationItemOut,
@@ -367,3 +369,29 @@ def read_estimate_confirmation(
         total_amount=total_amount,
         items=[EstimateConfirmationItemOut(**item.__dict__) for item in confirmation.items],
     )
+
+
+@router.get(
+    "/{product_no}/decision-events",
+    response_model=list[DecisionEventOut],
+)
+def list_decision_events(
+    product_no: str, conn: sqlite3.Connection = Depends(get_db)
+) -> list[DecisionEventOut]:
+    """製番`product_no`の判断履歴(decision_events)を発生順(古い順)で返す
+    (Issue #4 Phase A-2)。
+
+    読み出し専用のSELECTのみで、`decision_events`のappend-only方針・
+    `record_event()`のtransaction境界には一切手を入れていない。保存済みの
+    値をそのまま返すのみで、現在の`detections`/`estimate_master_items`から
+    値を補完・再計算しない。
+
+    `decision_events`自体には`product_no`列が無いため、`drawing_page_id`から
+    `drawing_pages.product_no`をJOINで解決して絞り込む
+    (`repositories/decision_events.py::list_events_for_product`)。製番自体が
+    データソース上に実在するかはこのエンドポイントの責務外とする
+    (`resolve_product_dir`は呼ばない。履歴が1件も無い製番は空配列を返し、
+    404にはしない。confirmation履歴読み出しAPIと同じ方針)。
+    """
+    events = list_events_for_product(conn, product_no=product_no)
+    return [DecisionEventOut(**e.__dict__) for e in events]
