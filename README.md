@@ -72,12 +72,15 @@ Sekisan Naviは、これらを画面上で完結させ、かつ将来の段階�
    根拠(BBox)を追跡する。
 5. 内容を確認できたら「積算確定する」で、その時点の結果をsnapshotとして確定保存する。
 
-詳細な画面仕様は [`docs/ui-spec.md`](docs/ui-spec.md) を参照。
+より詳しい操作方法(初めての方向け、専門知識不要)は
+[`docs/user-guide.md`](docs/user-guide.md)、詳細な画面仕様(開発者向け)は
+[`docs/ui-spec.md`](docs/ui-spec.md) を参照。
 
 ## Documentation
 
 | Doc | 内容 |
 |---|---|
+| [`docs/user-guide.md`](docs/user-guide.md) | **操作ガイド(初めての方向け)** — プログラムの知識が無い方でも読める、画面の使い方マニュアル |
 | [`docs/product-vision.md`](docs/product-vision.md) | Product Vision — なぜ作るのか・将来の段階的自動化への方向性 |
 | [`docs/architecture.md`](docs/architecture.md) | アーキテクチャ(レイヤー構成・ディレクトリ構成・主要な設計判断、Mermaid図あり) |
 | [`docs/data-model.md`](docs/data-model.md) | データモデル(テーブル定義・状態一覧) |
