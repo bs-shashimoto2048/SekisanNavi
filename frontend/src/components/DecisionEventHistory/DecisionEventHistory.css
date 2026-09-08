@@ -1,0 +1,137 @@
+.decision-event-history__trigger {
+  font-size: 0.9rem; /* 隣接するUndo/Redoボタンと同じサイズ感に揃える */
+  padding: 0.2rem 0.7rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+}
+
+.decision-event-history__trigger:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+/* モーダル(EstimateConfirmationHistory/ProductSelectorと同じ構造・z-indexの考え方に揃える) */
+
+.decision-event-history__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.decision-event-history {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem;
+  width: min(560px, 94vw);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.decision-event-history__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.decision-event-history__header h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.decision-event-history__header button {
+  border: none;
+  background: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.decision-event-history__status,
+.decision-event-history__empty {
+  color: #9ca3af;
+  font-size: 0.85rem;
+  margin: 0.4rem 0;
+}
+
+.decision-event-history__error {
+  color: var(--status-error);
+  font-size: 0.85rem;
+  margin: 0.4rem 0;
+}
+
+.decision-event-history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.decision-event-history__item {
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.decision-event-history__item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.15rem;
+}
+
+.decision-event-history__date {
+  color: #6b7280;
+}
+
+.decision-event-history__type {
+  font-weight: 600;
+  padding: 0.05rem 0.45rem;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.decision-event-history__type--create {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.decision-event-history__type--delete {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.decision-event-history__type--bbox_edit {
+  color: #1e3a8a;
+  background: #dbeafe;
+}
+
+.decision-event-history__item-meta {
+  color: #374151;
+}
+
+.decision-event-history__bbox {
+  margin-top: 0.25rem;
+  color: #4b5563;
+  font-size: 0.8rem;
+}
+
+.decision-event-history__bbox-line {
+  white-space: nowrap;
+  overflow-x: auto;
+}

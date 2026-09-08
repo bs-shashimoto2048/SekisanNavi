@@ -67,8 +67,8 @@ app/
     migrations/*.sql    スキーマ定義 (連番)
     seed.py             ダミーデータ投入
   repositories/       SQLiteの行 <-> domainモデル の変換 (SQLはここに閉じ込める)
-    decision_events.py         判断・修正データevent記録 (Issue #4 Phase A-1、16章)
-    estimate_confirmations.py  積算確定snapshotの保存 (Issue #4 Phase B-1、17章)
+    decision_events.py         判断・修正データevent記録・読み出し (Issue #4 Phase A-1/A-2、16章)
+    estimate_confirmations.py  積算確定snapshotの保存・読み出し (Issue #4 Phase B-1/B-4、17章)
   services/           DB以外の外部境界を扱う層 (Phase 1.5で追加)
     data_source.py      データ参照ルート・製番ディレクトリの安全な解決
     admin_auth.py        管理者パスワード検証
@@ -737,7 +737,7 @@ Resize Handle(40) → Tooltip(50) の順に明示し、JSX描画順(コンポー
 横方向Resize Handle(既存)と縦方向Resize Handle(Master領域の高さ変更)を
 同じコンポーネントで実現している。
 
-## 16. decision_events — 判断・修正データの最小event記録 (Issue #4 Phase A-1)
+## 16. decision_events — 判断・修正データの最小event記録 (Issue #4 Phase A-1/A-2)
 
 将来の見積り自動化に向けて、「通常の積算作業を行うだけで判断データが自然に
 蓄積される」(`docs/product-vision.md`)ことを目指し、`detections`テーブルへの
@@ -764,11 +764,17 @@ flowchart TD
 - move/resizeは記録時に区別せず`bbox_edit`へ統合する(前後のw/h比較で分析時に
   判別可能)。Undo/Redoは特別扱いせず、通常のAPI呼び出しと同じイベントとして
   記録される。
-- **読み出しAPIは無い**(Phase A-2は現時点で不要と判断され未着手。Issue #4の
-  コメント履歴参照)。分析・閲覧が必要な場合は現状DBへ直接SQLを実行する。
+- **読み出しAPI・最小閲覧UIをIssue #4 Phase A-2で追加した**。
+  `GET /api/products/{product_no}/decision-events`(発生順(古い順)で
+  製番単位のdecision_eventsを返す。`drawing_page_id`から`drawing_pages.
+  product_no`をJOINで解決)、およびFrontend側の「操作履歴を見る」ボタン
+  (`DecisionEventHistory.tsx`。積算集約パネル内ではなく、Undo/Redoボタンの
+  隣の編集ツールバーに配置)。いずれも読み出し専用で、保存済みの値を
+  そのまま返す/表示するのみで、現在の`detections`/`estimate_master_items`
+  から補完・再計算しない。
 
 詳細設計・理由付けは`docs/decision-event-design.md`、schemaの正式な記述は
-`docs/data-model.md` 6.5章を参照。
+`docs/data-model.md` 6.5章、API仕様は`docs/api-reference.md`を参照。
 
 ## 17. 積算確定snapshot (Issue #4 Phase B)
 
@@ -825,7 +831,7 @@ flowchart LR
         Detections[("detections<br/>estimate_master_items")]
     end
     subgraph History["event history (過程の記録)"]
-        Events[("decision_events<br/>append-only、読み出しAPI無し")]
+        Events[("decision_events<br/>append-only、読み出しAPIあり(Phase A-2)")]
     end
     subgraph Snapshot["confirmed snapshot (確定時点の凍結)"]
         Confirmations[("estimate_confirmations<br/>estimate_confirmation_items")]

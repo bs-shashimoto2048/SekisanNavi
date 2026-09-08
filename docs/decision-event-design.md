@@ -325,6 +325,9 @@ gap-analysis 2.1/2.6で確認した通り、`detected_df.csv`(YOLO推論結果)�
 
 ### Phase A-2(読み出し・検証)
 
+**(この節はPhase A-1設計時点の提案。実際の実装内容は§12「次のステップ」
+6.を参照。パス・UIの有無とも、以下の提案から変更している。)**
+
 - `decision_events`を参照する最小限のAPI(例:
   `GET /api/detections/{id}/events`、または
   `GET /api/decision-events?drawing_page_id=...`)を追加する。
@@ -345,9 +348,12 @@ gap-analysis 2.1/2.6で確認した通り、`detected_df.csv`(YOLO推論結果)�
 
 ## 11. 既存Docsとの整合性
 
-- `data-model.md`/`architecture.md`は今回変更していない
-  (本文書はあくまで設計案であり、`decision_events`は未実装のため、
-  実装済みであるかのように記載しない)。
+- (この章はPhase A-1設計時点の記述) `data-model.md`/`architecture.md`は
+  **当時は**変更していなかった(本文書はあくまで設計案であり、
+  `decision_events`は未実装のため、実装済みであるかのように記載しない、
+  という方針だった)。その後Phase A-1実装時、およびPhase A-2
+  (読み出しAPI・閲覧UI)実装時に、いずれも実装済みの内容へ更新済み
+  (`docs/data-model.md` 6.5章、`docs/architecture.md` 16章)。
 - `docs/decision-data-gap-analysis.md`で指摘したGapのうち、Phase Aが
   **部分的に解消するもの**: 「Detectionにcreated_at/updated_atが無い」
   (→対応するevent の occurred_at で代替可能)、「BBox編集前後が
@@ -375,5 +381,28 @@ gap-analysis 2.1/2.6で確認した通り、`detected_df.csv`(YOLO推論結果)�
    `create→bbox_edit→bbox_edit(Undo)→delete`の順で記録されること、
    積算集約(製番合計)・積算明細の面/盤列(BBox所属判定)・Undo/Redoボタンの
    状態がいずれも操作前後で一致すること(回帰なし)を確認した。
-5. **今回はここまで(Phase A-1)。** Phase A-2(読み出しAPI)は別Issue/別作業
-   として着手する(今回のIssue #4本文の作業順序どおり、まだcloseしない)。
+5. (Phase A-1完了時点ではここまで。) Phase A-2(読み出しAPI)は別Issue/別作業
+   として着手する予定だった(今回のIssue #4本文の作業順序どおり、まだ
+   closeしない)。
+6. ~~Phase A-2: 読み出しAPI + 最小閲覧UI~~ **完了**。
+   §10で提案した候補パス(`GET /api/detections/{id}/events`等)ではなく、
+   **`GET /api/products/{product_no}/decision-events`**として実装した
+   (製番単位で発生順(古い順)に取得する形。他の読み出しAPI
+   (`GET /api/products/{product_no}/estimate-confirmations`)と経路を揃えた
+   ため。`decision_events`自体に`product_no`列が無いため、`drawing_page_id`
+   から`drawing_pages.product_no`をJOINで解決する)。
+   `repositories/decision_events.py::list_events_for_product`として実装し、
+   読み出し専用のSELECTのみでappend-only方針・transaction境界は変更して
+   いない。§10で「この段階ではUIへの表示は行わない」としていたが、実際には
+   Frontend側に`DecisionEventHistory.tsx`(「操作履歴を見る」ボタン。
+   積算集約パネル内ではなく、Undo/Redoボタンの隣の編集ツールバーに配置)を
+   同時に追加した。`event_type`は`create`→「BBox追加」等、非技術者向けの
+   日本語ラベルへ変換して表示し、move/resizeは保存データから区別できないため
+   細分化せず「BBox移動/サイズ変更」と表示する。tests
+   (`backend/tests/test_decision_event_history_api.py`、8件)+ 実ブラウザで、
+   作成→移動→Undo/Redo→削除の一連の操作が履歴UIに時系列(古い順)で反映される
+   こと、削除済みDetectionのeventも取得できること、製番が分離されること、
+   既存のappend-only/current state/Undo-Redo/積算集約/確定snapshot機能への
+   回帰が無いことを確認した。
+7. **Phase A(A-1/A-2)は今回で完了。** Phase C(分析・自動化)は別Issue/
+   別作業として着手する。

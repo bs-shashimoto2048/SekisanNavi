@@ -205,18 +205,28 @@ class Detection:
 
 @dataclass
 class DecisionEvent:
-    """判断・修正データの最小event記録 (Issue #4 Phase A-1)。
+    """判断・修正データの最小event記録 (Issue #4 Phase A-1、読み出しはPhase A-2)。
 
     `detections`テーブルへのcreate/delete/bbox move・resizeの事実だけを
-    append-onlyで記録する。current state(`detections`本体)とは責務を分離し、
-    このモデル自体はどのAPIからも返さない(Phase A-1では読み出しAPIを
-    追加しない。docs/decision-event-design.md 10章のPhase A-2で検討する)。
+    append-onlyで記録する。current state(`detections`本体)とは責務を分離した
+    モデル。Phase A-1時点ではどのAPIからも返さない書き込み専用の記録だったが、
+    Phase A-2で`GET /api/products/{product_no}/decision-events`のレスポンスと
+    してこのモデルを使うようになった
+    (`repositories/decision_events.py::list_events_for_product`)。
 
     `detection_id`は意図的に外部キーを持たない設計であるため、参照先の
     Detectionが既に削除されていても、このモデル自体の情報
     (drawing_page_id/source_type/master_item_id/before_bbox_*)だけで
     解釈できるよう、イベント発生時点の値を非正規化コピーとして保持する
     (`docs/decision-event-design.md` 6章参照)。
+
+    `page_no`のみPhase A-2で追加した読み出し専用の補助情報で、
+    `decision_events`自体の列ではなく、`drawing_page_id`から`drawing_pages`
+    (製番単位の絞り込みにも使うテーブル)を都度引いて表示補助として付与する
+    (値そのものは変わらない安定した識別情報であり、`estimate_master_items`の
+    価格のように後から変化しうる値の補完・再計算ではない)。型としては`None`を
+    許容するが、`list_events_for_product()`は`drawing_pages`とのJOINで
+    製番を絞り込む都合上、実際には常に値が入る。
     """
 
     id: int
@@ -234,6 +244,7 @@ class DecisionEvent:
     after_bbox_y: float | None
     after_bbox_w: float | None
     after_bbox_h: float | None
+    page_no: int | None = None
 
 
 @dataclass

@@ -5,6 +5,7 @@
 import type {
   DataSourceSetting,
   DataSourceTestResult,
+  DecisionEvent,
   Detection,
   DetectedPreviewItem,
   DrawingPage,
@@ -249,6 +250,15 @@ export function getEstimateConfirmation(
   return getJson(
     `/api/products/${encodeURIComponent(productNo)}/estimate-confirmations/${confirmationId}`,
   )
+}
+
+// --- Issue #4 Phase A-2: 判断履歴(decision_events)の読み出し ---
+
+/** 製番`productNo`の判断履歴(BBox追加/削除/移動・サイズ変更の事実)を
+ * 発生順(古い順)で取得する。保存済みの値をそのまま返すAPIであり、
+ * Frontend側で再計算はしない。 */
+export function listDecisionEvents(productNo: string): Promise<DecisionEvent[]> {
+  return getJson(`/api/products/${encodeURIComponent(productNo)}/decision-events`)
 }
 
 export { ApiError }

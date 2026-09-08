@@ -59,6 +59,7 @@ import { EstimateDetail, type DetailSourceFilter } from './components/EstimateDe
 import { EstimateMasterPicker } from './components/EstimateMasterPicker/EstimateMasterPicker'
 import { SystemSettings } from './components/SystemSettings/SystemSettings'
 import { ProductSelector } from './components/ProductSelector/ProductSelector'
+import { DecisionEventHistory } from './components/DecisionEventHistory/DecisionEventHistory'
 import { PaneSplitter } from './components/Layout/PaneSplitter'
 import { usePaneWidth } from './hooks/usePaneWidth'
 import './App.css'
@@ -1207,6 +1208,12 @@ function App() {
         >
           ↷ やり直す
         </button>
+        {/* Issue #4 Phase A-2: decision_events(BBox追加/削除/移動・サイズ変更の
+            判断履歴)を後から時系列で参照できる最小UI。積算集約パネル内の
+            確定履歴(EstimateConfirmationHistory)とは性質が異なる(Detection編集
+            そのものの履歴)ため、積算画面の作業導線を邪魔しないこの編集
+            ツールバー側に置く。 */}
+        <DecisionEventHistory productNo={activeProductNo} />
       </div>
       {/* 指示9章: BBox編集によって積算先(面/盤)が変わった場合の一時通知。 */}
       {targetChangeNotification && (
