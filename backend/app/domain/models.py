@@ -402,3 +402,97 @@ class EstimateConfirmationSummary:
     confirmed_at: str
     item_count: int
     total_amount: float
+
+
+# --- Issue #17 Phase C-1: decision_events × estimate_confirmations の
+#     最小read-only分析 (analytics dashboardではなく、保存済みデータの
+#     集計・突合のみ)。新規テーブル・カラムは追加しない。 ---
+
+
+@dataclass
+class DecisionAnalysisMasterItemBreakdown:
+    """積算コード別のbbox_edit件数1行分 (Issue #17 Phase C-1)。
+
+    `master_item_id`は`decision_events`自体の非正規化コピー(イベント記録時点の
+    値)。`current_code`は**現在の**`estimate_master_items`をJOINして参照した
+    表示用の積算コード文字列であり、イベント記録時点のcodeを保証するものでは
+    ない(codeはMaster再インポートのUPSERT unique keyのため通常は変わらないが、
+    参照先のMaster行自体が万一存在しない場合は`None`になる)。
+    """
+
+    master_item_id: int
+    current_code: str | None
+    bbox_edit_count: int
+
+
+@dataclass
+class DecisionAnalysisSummary:
+    """製番単位のdecision_events集計 (Issue #17 Phase C-1)。
+
+    `GET /api/products/{product_no}/decision-analysis/summary`のレスポンス元。
+    保存済みの`decision_events`から件数を集計するのみで、現在の
+    `detections`/`estimate_master_items`の値を補完・再計算しない
+    (`current_code`のみ、表示のための現在値参照であることを明示する)。
+    """
+
+    product_no: str
+    event_counts: dict[str, int]
+    total_events: int
+    bbox_edit_count_by_page_no: dict[int, int]
+    bbox_edit_count_by_master_item: list[DecisionAnalysisMasterItemBreakdown] = field(
+        default_factory=list
+    )
+
+
+@dataclass
+class DecisionAnalysisDetectionSummary:
+    """Detection単位の操作系列・編集回数1行分 (Issue #17 Phase C-1)。
+
+    `page_no`/`source_type`/`master_item_id`は、その`detection_id`の
+    **最初に記録されたevent**(`first_event_id`)が持つ値をそのまま使う
+    (これらは通常この3値が事後に変わる経路が無いため一定だが、あくまで
+    「最初のeventの記録値」であり、現在の`detections`から再取得した値では
+    ない。Detectionが既に削除されていても取得できる)。
+    """
+
+    detection_id: int
+    page_no: int | None
+    source_type: DetectionSourceType
+    master_item_id: int | None
+    event_count: int
+    bbox_edit_count: int
+    first_event_id: int
+    last_event_id: int
+
+
+@dataclass
+class DecisionAnalysisConfirmationItemAnalysis:
+    """確定snapshot明細1件についての、確定時点以前のevent突合結果
+    (Issue #17 Phase C-1)。
+
+    `code`は確定snapshot自身(`estimate_confirmation_items.code`)の
+    非正規化コピーをそのまま使う(現在のMasterへは再度JOINしない。
+    確定時点の値を維持するため)。`detection_id`が`None`
+    (対象Detectionが特定できない明細)の場合、event件数はいずれも0とする
+    (`decision_events`側に対応するdetection_idが無いためJOINできない。
+    エラーにはしない)。
+
+    `occurred_at`(decision_events)と`confirmed_at`(estimate_confirmations)は
+    いずれも秒精度の文字列のため、同一秒に発生したeventと確定の前後関係は
+    厳密には区別できない(`occurred_at <= confirmed_at`を「確定時点以前」の
+    判定に使う。既知の制約としてAPI/Docsで明示する)。
+    """
+
+    detection_id: int | None
+    code: str
+    event_count_before_confirmation: int
+    bbox_edit_count_before_confirmation: int
+
+
+@dataclass
+class DecisionAnalysisConfirmation:
+    """確定snapshot1件分の、明細ごとのevent突合結果 (Issue #17 Phase C-1)。"""
+
+    confirmation_id: int
+    confirmed_at: str
+    items: list[DecisionAnalysisConfirmationItemAnalysis] = field(default_factory=list)

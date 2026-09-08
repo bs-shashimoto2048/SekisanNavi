@@ -9,6 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from app.api.deps import get_db
+from app.repositories.decision_analysis import (
+    list_confirmation_analysis_for_product,
+    list_detection_summaries_for_product,
+    summarize_events_for_product,
+)
 from app.repositories.decision_events import list_events_for_product
 from app.repositories.estimate_confirmations import (
     get_confirmation,
@@ -16,6 +21,13 @@ from app.repositories.estimate_confirmations import (
     save_confirmation,
 )
 from app.repositories.system_settings import get_data_source_root
+from app.schemas.decision_analysis import (
+    DecisionAnalysisConfirmationItemOut,
+    DecisionAnalysisConfirmationOut,
+    DecisionAnalysisDetectionSummaryOut,
+    DecisionAnalysisMasterItemBreakdownOut,
+    DecisionAnalysisSummaryOut,
+)
 from app.schemas.decision_events import DecisionEventOut
 from app.schemas.estimate_confirmations import (
     EstimateConfirmationDetailOut,
@@ -395,3 +407,91 @@ def list_decision_events(
     """
     events = list_events_for_product(conn, product_no=product_no)
     return [DecisionEventOut(**e.__dict__) for e in events]
+
+
+@router.get(
+    "/{product_no}/decision-analysis/summary",
+    response_model=DecisionAnalysisSummaryOut,
+)
+def read_decision_analysis_summary(
+    product_no: str, conn: sqlite3.Connection = Depends(get_db)
+) -> DecisionAnalysisSummaryOut:
+    """製番`product_no`のdecision_eventsをevent_type別・ページ別・積算コード別に
+    集計する (Issue #17 Phase C-1)。
+
+    Phase C-0の棚卸し(Issue #17)で推奨された「候補1: 既存データだけを使った
+    最小分析API」の一部。read-only SELECTのみで、新規テーブル・カラムは
+    追加しない。`decision_events`のappend-only保存・BBox編集・Undo/Redoの
+    書き込み処理は一切変更しない。
+
+    既知の制約: Undo/Redoは通常のcreate/delete/bbox_editと区別できないため
+    この集計でも区別しない。move/resizeも保存時に区別していないため
+    `bbox_edit`のまま扱う。`bbox_edit_count_by_master_item`の`current_code`
+    のみ、表示用に**現在の**`estimate_master_items`を参照する(現在値JOIN。
+    確定snapshot値や記録時点の値ではない)。
+    """
+    summary = summarize_events_for_product(conn, product_no=product_no)
+    return DecisionAnalysisSummaryOut(
+        product_no=summary.product_no,
+        event_counts=summary.event_counts,
+        total_events=summary.total_events,
+        bbox_edit_count_by_page_no=summary.bbox_edit_count_by_page_no,
+        bbox_edit_count_by_master_item=[
+            DecisionAnalysisMasterItemBreakdownOut(**b.__dict__)
+            for b in summary.bbox_edit_count_by_master_item
+        ],
+    )
+
+
+@router.get(
+    "/{product_no}/decision-analysis/detections",
+    response_model=list[DecisionAnalysisDetectionSummaryOut],
+)
+def list_decision_analysis_detections(
+    product_no: str, conn: sqlite3.Connection = Depends(get_db)
+) -> list[DecisionAnalysisDetectionSummaryOut]:
+    """製番`product_no`について、decision_eventsが1件以上存在するDetection単位で
+    操作系列・編集回数を返す (Issue #17 Phase C-1)。
+
+    `event_count`/`bbox_edit_count`/`first_event_id`/`last_event_id`のみを
+    集計し、`page_no`/`source_type`/`master_item_id`は最初に記録されたevent
+    (`first_event_id`)の値をそのまま転記する(現在の`detections`へは依存
+    しないため、Detectionが既に削除されていても取得できる)。読み出し専用の
+    SELECTのみ。
+    """
+    detections = list_detection_summaries_for_product(conn, product_no=product_no)
+    return [DecisionAnalysisDetectionSummaryOut(**d.__dict__) for d in detections]
+
+
+@router.get(
+    "/{product_no}/decision-analysis/confirmations",
+    response_model=list[DecisionAnalysisConfirmationOut],
+)
+def list_decision_analysis_confirmations(
+    product_no: str, conn: sqlite3.Connection = Depends(get_db)
+) -> list[DecisionAnalysisConfirmationOut]:
+    """製番`product_no`の各確定snapshotについて、明細ごとに「確定時点以前に
+    そのdetection_idへ何件のevent/bbox_editが存在したか」を突合して返す
+    (Issue #17 Phase C-1)。
+
+    明細の`code`は確定snapshot自身(`estimate_confirmation_items.code`)の
+    非正規化コピーをそのまま使う(現在のMasterへは再度JOINしない)。
+    `detection_id`が特定できない明細(値が`None`)はevent件数を0として扱う
+    (エラーにはしない)。
+
+    既知の制約: `decision_events.occurred_at`/`estimate_confirmations.
+    confirmed_at`はいずれも秒精度のため、同一秒に発生したevent/確定の前後
+    関係は厳密には区別できない(`occurred_at <= confirmed_at`で「確定時点
+    以前」と判定する)。また`detection_id`はUndo/Redoによるcreate/delete
+    (AUTOINCREMENTでの再採番)で分断されうるため、分断前後のIDは別の
+    Detectionとして扱われ、統合しない。
+    """
+    confirmations = list_confirmation_analysis_for_product(conn, product_no=product_no)
+    return [
+        DecisionAnalysisConfirmationOut(
+            confirmation_id=c.confirmation_id,
+            confirmed_at=c.confirmed_at,
+            items=[DecisionAnalysisConfirmationItemOut(**item.__dict__) for item in c.items],
+        )
+        for c in confirmations
+    ]
