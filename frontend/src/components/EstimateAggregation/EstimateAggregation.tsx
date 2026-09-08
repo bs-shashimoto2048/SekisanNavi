@@ -3,6 +3,7 @@ import type { EstimateLineItem, EstimateTarget } from '../../types/estimateAggre
 import { formatTargetLabel } from '../../domain/estimateTargetLabel'
 import { CollapsibleSectionHeading } from '../Layout/CollapsibleSectionHeading'
 import { EstimateConfirmationAction } from './EstimateConfirmationAction'
+import { EstimateConfirmationHistory } from './EstimateConfirmationHistory'
 import './EstimateAggregation.css'
 
 /** 対象セレクトの「総合計」を表す値。実対象(製品全体/各盤/要確認)のidとは
@@ -288,8 +289,15 @@ export function EstimateAggregation({
 
         {/* Issue #4 Phase B-3: 積算確定ボタンは、積算コード0件の場合の空表示
             (下記totalCodeCount===0分岐)とは無関係に常に表示する(0件確定を
-            UI側で独自に禁止しない方針のため。あえてtotalCodeCountの条件の外に置く)。 */}
-        {!collapsed && <EstimateConfirmationAction productNo={productNo} />}
+            UI側で独自に禁止しない方針のため。あえてtotalCodeCountの条件の外に置く)。
+            Phase B-4の確定履歴ボタンも同様に、積算コード0件でも過去確定は
+            参照できるべきため同じ条件(!collapsedのみ)の外に置かない。 */}
+        {!collapsed && (
+          <div className="estimate-aggregation__confirmation-row">
+            <EstimateConfirmationAction productNo={productNo} />
+            <EstimateConfirmationHistory productNo={productNo} />
+          </div>
+        )}
 
         {/* Issue #6: 折りたたみ時は見出しだけを残し、本文(製番合計・対象セレクト・
             要確認警告・表)はすべて非表示にする。積算対象の選択状態(selectedTargetId)

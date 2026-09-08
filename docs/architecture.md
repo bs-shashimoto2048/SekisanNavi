@@ -802,8 +802,14 @@ Frontendから計算済みの値を信頼して受け取る方式は採用して
 - **再確定は上書きしない**(append-only。新しい`estimate_confirmations`行を
   都度追加する)。0件確定(積算コードに紐づくDetectionが1件も無い製番の確定)も
   許可する。
-- **読み出しAPI・確定履歴の一覧/詳細閲覧UIは無い**。`POST`のレスポンス
-  (`EstimateConfirmationOut`)でしか内容を確認できない。
+- **読み出しAPI・確定履歴の閲覧UIをIssue #4 Phase B-4で追加した**。
+  `GET /api/products/{product_no}/estimate-confirmations`(過去snapshot一覧、
+  新しい順、明細は含まない)と`GET .../estimate-confirmations/{confirmation_id}`
+  (確定1件の詳細、明細一式)の2エンドポイント、およびFrontend側の
+  「確定履歴を見る」ボタン(`EstimateConfirmationHistory.tsx`、積算確定ボタンの隣に
+  配置)。いずれも保存済みの値をそのまま返す/表示するのみで、現在の
+  `estimate_master_items`やCSVから再計算しない。`confirmation_id`が別製番に
+  属する場合は404とし、他製番のconfirmationを横断的に閲覧できないようにしている。
 
 詳細設計は`docs/decision-snapshot-design.md`、API仕様は`docs/api-reference.md`、
 schemaは`docs/data-model.md` 6.6章を参照。

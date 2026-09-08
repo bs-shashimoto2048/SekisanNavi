@@ -9,6 +9,8 @@ import type {
   DetectedPreviewItem,
   DrawingPage,
   EstimateConfirmation,
+  EstimateConfirmationDetail,
+  EstimateConfirmationSummary,
   EstimateItem,
   EstimateMasterItem,
   EstimatePanelInfo,
@@ -227,6 +229,26 @@ export function searchProducts(query: string, limit?: number): Promise<ProductSe
  * 確定直後の内容確認はこの戻り値(header+全明細)のみで行う。 */
 export function createEstimateConfirmation(productNo: string): Promise<EstimateConfirmation> {
   return postJsonNoBody(`/api/products/${encodeURIComponent(productNo)}/estimate-confirmations`)
+}
+
+// --- Issue #4 Phase B-4: 積算確定snapshotの読み出し(過去confirmationの一覧・詳細) ---
+
+/** 製番`productNo`の過去確定snapshot一覧を新しい順で取得する(明細は含まない)。
+ * 保存済みの値をそのまま返すAPIであり、Frontend側で再計算はしない。 */
+export function listEstimateConfirmations(productNo: string): Promise<EstimateConfirmationSummary[]> {
+  return getJson(`/api/products/${encodeURIComponent(productNo)}/estimate-confirmations`)
+}
+
+/** 確定snapshot1件の詳細(明細一式を含む)を取得する。`confirmationId`が
+ * `productNo`に属さない場合はBackend側で404になる(別製番のconfirmation idへは
+ * アクセスできない)。 */
+export function getEstimateConfirmation(
+  productNo: string,
+  confirmationId: number,
+): Promise<EstimateConfirmationDetail> {
+  return getJson(
+    `/api/products/${encodeURIComponent(productNo)}/estimate-confirmations/${confirmationId}`,
+  )
 }
 
 export { ApiError }

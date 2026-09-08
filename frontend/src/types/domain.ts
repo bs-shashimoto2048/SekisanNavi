@@ -267,13 +267,40 @@ export interface EstimateConfirmationItem {
 }
 
 /** 積算確定snapshotのheader (Issue #4 Phase B-2)。製番単位でその時点の
- * 積算結果一式を丸ごと保存したもの。読み出しAPIは無い(Phase B-2時点)ため、
- * `POST /api/products/{product_no}/estimate-confirmations`のレスポンスとして
- * のみ得られる。 */
+ * 積算結果一式を丸ごと保存したもの。
+ * `POST /api/products/{product_no}/estimate-confirmations`(確定操作)の
+ * レスポンス形。過去snapshotの一覧・詳細取得(Phase B-4)は下記
+ * `EstimateConfirmationSummary`/`EstimateConfirmationDetail`を使う。 */
 export interface EstimateConfirmation {
   id: number
   product_no: string
   confirmed_at: string
   item_count: number
+  items: EstimateConfirmationItem[]
+}
+
+/** 過去確定snapshot一覧の1件分 (Issue #4 Phase B-4、
+ * `GET /api/products/{product_no}/estimate-confirmations`のレスポンス要素)。
+ * 明細(items)は含まない一覧表示専用の軽量版。`total_amount`は明細のうち
+ * `amount`がnull(単価不明)の行を除いた合計(Backend側で算出済みの値を
+ * そのまま表示する。Frontend側で再計算しない)。 */
+export interface EstimateConfirmationSummary {
+  id: number
+  product_no: string
+  confirmed_at: string
+  item_count: number
+  total_amount: number
+}
+
+/** 過去確定snapshot詳細 (Issue #4 Phase B-4、
+ * `GET /api/products/{product_no}/estimate-confirmations/{confirmation_id}`の
+ * レスポンス)。保存済みの値をそのまま返すものであり、現在のEstimate Master・
+ * 現在のBBox/CSVからの再計算は行わない(確定時点の再現性を保つ)。 */
+export interface EstimateConfirmationDetail {
+  id: number
+  product_no: string
+  confirmed_at: string
+  item_count: number
+  total_amount: number
   items: EstimateConfirmationItem[]
 }

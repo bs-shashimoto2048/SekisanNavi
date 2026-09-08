@@ -1,0 +1,168 @@
+.estimate-confirmation-history__trigger {
+  font-size: 0.82rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid #6b7280;
+  border-radius: 4px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  margin: 0.2rem 0 0.4rem;
+}
+
+.estimate-confirmation-history__trigger:hover {
+  background: #f3f4f6;
+}
+
+/* モーダル(ProductSelectorと同じ構造・z-indexの考え方に揃える) */
+
+.estimate-confirmation-history__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.estimate-confirmation-history {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem;
+  width: min(640px, 94vw);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.estimate-confirmation-history__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.estimate-confirmation-history__header h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.estimate-confirmation-history__header button {
+  border: none;
+  background: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.estimate-confirmation-history__status {
+  color: #9ca3af;
+  font-size: 0.85rem;
+  margin: 0.4rem 0;
+}
+
+.estimate-confirmation-history__error {
+  color: var(--status-error);
+  font-size: 0.85rem;
+  margin: 0.4rem 0;
+}
+
+.estimate-confirmation-history__empty {
+  color: #9ca3af;
+  font-size: 0.85rem;
+  margin: 0.4rem 0;
+}
+
+.estimate-confirmation-history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.estimate-confirmation-history__list-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  text-align: left;
+}
+
+.estimate-confirmation-history__list-item:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.estimate-confirmation-history__list-date {
+  color: #374151;
+  flex: 1;
+}
+
+.estimate-confirmation-history__list-count {
+  color: #6b7280;
+}
+
+.estimate-confirmation-history__list-amount {
+  color: #111827;
+  font-weight: 600;
+}
+
+.estimate-confirmation-history__back {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0.2rem 0;
+  margin-bottom: 0.4rem;
+}
+
+.estimate-confirmation-history__back:hover {
+  text-decoration: underline;
+}
+
+.estimate-confirmation-history__detail-summary {
+  font-size: 0.88rem;
+  color: #374151;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.estimate-confirmation-history__table-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+.estimate-confirmation-history__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.estimate-confirmation-history__table th,
+.estimate-confirmation-history__table td {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.estimate-confirmation-history__table th {
+  color: #6b7280;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  background: #fff;
+}

@@ -341,9 +341,15 @@ estimate-confirmations`。リクエストボディは受け取らず、Backend�
 信頼して丸ごと受け取る方式は採用しなかった)。0件確定(積算コードに紐づく
 Detectionが1件も無い製番の確定)も許可する。
 
-**読み出しAPIは無い(Phase B-2時点)**。過去snapshotの一覧・詳細を返す
-APIエンドポイントは今回追加していない。Phase B-3で検討する
-(`docs/decision-snapshot-design.md` 11章/13章)。
+**読み出しAPI(Phase B-4で追加)**: `GET /api/products/{product_no}/
+estimate-confirmations`(過去snapshot一覧、新しい順、明細は含まない)、
+`GET /api/products/{product_no}/estimate-confirmations/{confirmation_id}`
+(確定1件の詳細、明細一式を含む)。いずれも保存済みの値をそのまま返すのみで、
+現在の`estimate_master_items`や`product_df.csv`/`estcode_df.csv`から再計算
+しない。`confirmation_id`が別製番に属する場合は404とし、他製番のconfirmation
+を横断的に閲覧できないようにしている(`app/repositories/estimate_confirmations.py::
+list_confirmations`/`get_confirmation`。詳細は`docs/api-reference.md`、
+設計は`docs/decision-snapshot-design.md` 11章/13章参照)。
 
 ## 7. system_settings (Phase 1.5で追加)
 
