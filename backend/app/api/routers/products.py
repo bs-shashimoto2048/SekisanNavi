@@ -9,11 +9,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from app.api.deps import get_db
-from app.repositories.estimate_confirmations import save_confirmation
+from app.repositories.estimate_confirmations import (
+    get_confirmation,
+    list_confirmations,
+    save_confirmation,
+)
 from app.repositories.system_settings import get_data_source_root
 from app.schemas.estimate_confirmations import (
+    EstimateConfirmationDetailOut,
     EstimateConfirmationItemOut,
     EstimateConfirmationOut,
+    EstimateConfirmationSummaryOut,
 )
 from app.schemas.settings import (
     DetectedPreviewItemOut,
@@ -293,5 +299,71 @@ def create_estimate_confirmation(
         product_no=confirmation.product_no,
         confirmed_at=confirmation.confirmed_at,
         item_count=len(confirmation.items),
+        items=[EstimateConfirmationItemOut(**item.__dict__) for item in confirmation.items],
+    )
+
+
+@router.get(
+    "/{product_no}/estimate-confirmations",
+    response_model=list[EstimateConfirmationSummaryOut],
+)
+def list_estimate_confirmations(
+    product_no: str, conn: sqlite3.Connection = Depends(get_db)
+) -> list[EstimateConfirmationSummaryOut]:
+    """製番`product_no`の過去確定snapshot一覧を新しい順で返す (Issue #4 Phase B-4)。
+
+    明細(items)は含めない一覧表示用の軽量版(`EstimateConfirmationSummaryOut`)。
+    `item_count`/`total_amount`はDBから都度算出するのみで、保存済みの値自体は
+    一切変更しない(append-only方針は維持したまま、読み出し専用のSELECTを
+    追加しただけ)。
+
+    製番自体がデータソース上に実在するかどうかはこのエンドポイントの責務外
+    とする(`create_estimate_confirmation`と異なり、`resolve_product_dir`は
+    呼ばない)。確定snapshotは`detection_id`/`drawing_page_id`同様、実データ
+    ディレクトリの現在状態から独立した歴史的記録であるため、確定履歴が
+    1件も無い製番(=まだ一度も確定していない製番、または製番自体が誤り)は
+    どちらも同じ「空配列」として扱う(404にしない。「確定履歴0件」は
+    正常系であり、エラーではない)。
+    """
+    summaries = list_confirmations(conn, product_no=product_no)
+    return [EstimateConfirmationSummaryOut(**s.__dict__) for s in summaries]
+
+
+@router.get(
+    "/{product_no}/estimate-confirmations/{confirmation_id}",
+    response_model=EstimateConfirmationDetailOut,
+)
+def read_estimate_confirmation(
+    product_no: str,
+    confirmation_id: int,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> EstimateConfirmationDetailOut:
+    """確定snapshot1件の詳細(header + 明細一式)を返す (Issue #4 Phase B-4)。
+
+    保存済みの値をそのまま返すのみで、現在の`estimate_master_items`や
+    `product_df.csv`/`estcode_df.csv`から再計算しない(確定時点の再現性を
+    保つ。設計7章)。
+
+    `confirmation_id`が存在しない、または存在していても`product_no`が
+    一致しない(=別製番のconfirmation)場合は404とする。確定snapshotの
+    `id`は製番横断で連番のため、`product_no`を無視して`id`だけで検索すると
+    他製番のconfirmationを閲覧できてしまう(要件6: 別製番のconfirmation id
+    へアクセスできないこと)。
+    """
+    confirmation = get_confirmation(conn, product_no=product_no, confirmation_id=confirmation_id)
+    if confirmation is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"confirmation {confirmation_id} not found for product {product_no}",
+        )
+
+    total_amount = sum(item.amount for item in confirmation.items if item.amount is not None)
+
+    return EstimateConfirmationDetailOut(
+        id=confirmation.id,
+        product_no=confirmation.product_no,
+        confirmed_at=confirmation.confirmed_at,
+        item_count=len(confirmation.items),
+        total_amount=total_amount,
         items=[EstimateConfirmationItemOut(**item.__dict__) for item in confirmation.items],
     )

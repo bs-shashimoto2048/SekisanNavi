@@ -2,9 +2,17 @@
 
 > **この文書の位置付け**
 > Issue #4 `Preserve decision history for future estimation automation` の
-> Phase B(積算確定snapshot)について、**実装前の設計を確定するための文書**
-> である。本文書自体はDB migration・API実装・UI追加のいずれも行っていない
-> (設計のみ)。実装は別Issue/別作業として着手する。
+> Phase B(積算確定snapshot)について、当初(本文書の1〜11章執筆時点)は
+> **実装前の設計を確定するための文書**として作成し、その時点ではDB
+> migration・API実装・UI追加のいずれも行っていなかった(設計のみ)。
+>
+> その後、Phase B-1(migration/repository)→B-2(確定API)→B-3(確定操作の
+> 最小UI)→B-4(読み出しAPI・確定履歴閲覧UI)の実装を進め、**現時点では
+> Phase B-1〜B-4すべてが実装済み**である(進捗は§13「次のステップ」に
+> 都度追記している)。1〜11章は執筆当時(schema設計段階)の検討記録として
+> そのまま残し、実装後に判明した差分・完了状況は§12/§13へ追記する運用と
+> している(11章「UI追加をこの段階で行うかどうか」の結論はPhase B-1時点の
+> ものであり、その後Phase B-3/B-4でUIを追加済みである点に注意)。
 >
 > 前提となる調査・設計は以下を参照する。
 > - `docs/decision-data-gap-analysis.md`(Gap分析。§7.2/§8/§13/§14で
@@ -229,14 +237,18 @@ snapshot行が持つ値をそのまま表示する設計とする(現在の`dete
 
 ## 11. UI追加をこの段階で行うかどうか
 
-**行わない。** 本文書はschema設計のみであり、「確定」ボタン・過去snapshot
-一覧画面等のUIはいずれも将来のPhase B-2/B-3(または別Issue)で検討する
-(Issue #4最新コメントの非対象指定と整合)。
+**(この章はPhase B-1時点の判断であり、その後Phase B-3/B-4でUIを追加済み。
+最新の実装状況は§13を参照)** 本章執筆時点(schema設計段階)では行わない、
+とした。「確定」ボタン・過去snapshot一覧画面等のUIはいずれも将来のPhase
+B-2/B-3(または別Issue)で検討する、という結論だった(Issue #4最新コメントの
+非対象指定と整合)。実際には、確定ボタン(Phase B-3)・確定履歴一覧/詳細閲覧
+(Phase B-4)とも実装済みである。
 
 ## 12. 既存Docsとの整合性
 
-- `data-model.md`/`architecture.md`は今回変更していない(本文書はあくまで
-  設計案であり、`estimate_confirmations`/`estimate_confirmation_items`は
+- (この章も本文書の1〜11章と同じくPhase B-1設計時点の記述)
+  `data-model.md`/`architecture.md`は**当時は**変更していなかった(本文書は
+  あくまで設計案であり、`estimate_confirmations`/`estimate_confirmation_items`は
   未実装のため、実装済みであるかのように記載しない)。
 - `docs/decision-data-gap-analysis.md`で指摘したGapのうち、Phase Bが
   **解消を目指すもの**: 「Master Excel由来の価格・型式・定格が保持されない」
@@ -282,8 +294,28 @@ snapshot行が持つ値をそのまま表示する設計とする(現在の`dete
    `frontend/src/components/EstimateAggregation/EstimateConfirmationAction.tsx`
    として実装した(詳細は`docs/implementation-plan.md` 8.20章、
    `docs/ui-spec.md` 5.5章参照)。既存のPhase B-2 API(無変更)を呼ぶだけの
-   最小UIとし、snapshot内容の再計算・送信は行っていない。**読み出しAPIは
-   引き続き追加していない**ため、確定履歴の一覧・詳細閲覧UIはスコープ外の
-   まま。
-6. **今回はここまで(Phase B-1/B-2/B-3)。** 確定履歴の読み出しAPI・一覧UI
-   (仮称Phase B-4)は別Issue/別作業として着手する。
+   最小UIとし、snapshot内容の再計算・送信は行っていない。この時点では
+   読み出しAPIを追加していなかったため、確定履歴の一覧・詳細閲覧UIは
+   スコープ外だった。
+6. ~~Phase B-4: 確定履歴の読み出しAPI・閲覧UI~~ **完了**。
+   `GET /api/products/{product_no}/estimate-confirmations`(過去snapshot
+   一覧、新しい順、明細は含まない)・
+   `GET /api/products/{product_no}/estimate-confirmations/{confirmation_id}`
+   (確定1件の詳細、明細一式を含む)を
+   `backend/app/repositories/estimate_confirmations.py::list_confirmations`/
+   `get_confirmation`として実装した。いずれも保存済みの値をそのまま返す
+   読み出し専用のSELECTであり、既存のappend-only方針・save_confirmation()の
+   transaction境界には一切手を入れていない。Frontend側は
+   `EstimateConfirmationHistory.tsx`(積算確定ボタンの隣に「確定履歴を見る」
+   ボタンを追加)として実装し、一覧→詳細の最小UIを提供する。表示項目は
+   Backendが返すsnapshotの値のみを使い、現在のEstimate Master/BBox/CSVから
+   補完・再計算はしていない。tests(`backend/tests/
+   test_estimate_confirmation_history_api.py`、11件)+ 実ブラウザ確認で、
+   確定履歴0件・1件確定後の表示・複数回確定時の新しい順表示・詳細の内容・
+   Master価格変更後もsnapshot表示が変化しないこと・別製番のconfirmation id
+   へアクセスできないこと・0件confirmationの閲覧・既存の積算確定/積算集約/
+   Undo-Redo/BBox選択への回帰が無いことを確認した(詳細は
+   `docs/implementation-plan.md`参照)。
+7. **Phase B(B-1〜B-4)は今回で完了。** Phase C(分析・自動化)は別Issue/
+   別作業として着手する(Issue #4本文の非目標のとおり、このPhaseでは
+   recommendation/confidence/自動確定等には進んでいない)。

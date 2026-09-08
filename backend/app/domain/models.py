@@ -348,8 +348,10 @@ class EstimateConfirmationItem(EstimateConfirmationItemInput):
     """保存後の確定snapshot明細行 (`save_confirmation()`の戻り値要素)。
 
     `EstimateConfirmationItemInput`にDB採番済みの`id`/`confirmation_id`を
-    加えたもの。読み出しAPIはPhase B-1のスコープ外のため、このモデル自体は
-    どのAPIからも返さない(`docs/decision-snapshot-design.md` 11章)。
+    加えたもの。Phase B-1時点では読み出しAPIのスコープ外だったが、
+    Issue #4 Phase B-4で`GET /api/products/{product_no}/estimate-confirmations/
+    {confirmation_id}`の明細としてこのモデルを返すようになった
+    (`repositories/estimate_confirmations.py::get_confirmation`)。
     """
 
     id: int = 0
@@ -370,3 +372,22 @@ class EstimateConfirmation:
     product_no: str
     confirmed_at: str
     items: list[EstimateConfirmationItem] = field(default_factory=list)
+
+
+@dataclass
+class EstimateConfirmationSummary:
+    """積算確定snapshotの一覧表示用header (Issue #4 Phase B-4)。
+
+    `EstimateConfirmation`の明細(items)を含まない軽量版。過去確定の一覧画面で
+    件数・合計金額だけを表示するために使う(明細そのものは詳細取得
+    (`get_confirmation`)でのみ必要になる)。`total_amount`は明細のうち
+    `amount`が`None`(単価不明)の行を除いた合計(Frontend
+    `EstimateConfirmationAction.tsx::summarizeAmount`と同じ考え方。0円へ
+    捏造しているわけではなく、合計の単位元としての0を採用しているだけ)。
+    """
+
+    id: int
+    product_no: str
+    confirmed_at: str
+    item_count: int
+    total_amount: float

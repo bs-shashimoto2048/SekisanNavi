@@ -15,6 +15,15 @@
   flex-shrink: 0;
 }
 
+/* Issue #4 Phase B-4: 積算確定ボタンと確定履歴ボタンを横並びにする
+   ラッパー(見た目上は2つの独立ボタンのまま、配置だけをまとめる)。 */
+.estimate-aggregation__confirmation-row {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 /* 3領域(盤情報・積算集約・積算明細)の見出しを統一する (指示9章/10章)。
    薄いコバルトブルー背景で「主要ブロックの先頭」であることを一目で示す。
    UI視覚階層改善 指示10章/11章: 左に2〜3px程度のアクセントバー(▌相当)を

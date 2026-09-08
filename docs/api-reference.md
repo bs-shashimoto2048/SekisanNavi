@@ -127,6 +127,8 @@ Frontend側`estimateAggregationReal.ts`が`detections`×`estimate_master_items`�
 | GET | `/api/products/{product_no}/drawings/{page_no}/detected-preview` | YOLO検出結果プレビュー(該当データが無ければ空配列) | `list[DetectedPreviewItemOut]` |
 | GET | `/api/products/{product_no}/estimate-panels` | 盤情報一覧(`estcode_df.csv`由来、製番単位) | `list[EstimatePanelInfoOut]` |
 | POST | `/api/products/{product_no}/estimate-confirmations` | **積算確定snapshotを新規作成**(Issue #4 Phase B-2) | `EstimateConfirmationOut`(201) |
+| GET | `/api/products/{product_no}/estimate-confirmations` | 過去確定snapshot一覧(新しい順、明細は含まない)(Issue #4 Phase B-4) | `list[EstimateConfirmationSummaryOut]` |
+| GET | `/api/products/{product_no}/estimate-confirmations/{confirmation_id}` | 確定snapshot1件の詳細(明細一式を含む)(Issue #4 Phase B-4) | `EstimateConfirmationDetailOut` |
 
 `ProductSearchOut`: `matches: string[]`, `truncated: bool`。
 `ProductInfoOut`: `product_no`, `exists`, `ccv_resolved`。
@@ -182,8 +184,46 @@ Frontend側`estimateAggregationReal.ts`が`detections`×`estimate_master_items`�
 }
 ```
 
-**読み出しAPIは無い**(このエンドポイントのレスポンス以外に、過去のconfirmationを
-一覧・詳細取得する手段は現時点で存在しない)。
+読み出しAPI(過去confirmationの一覧・詳細取得)はIssue #4 Phase B-4で追加した
+(下記2エンドポイント)。
+
+### `GET /api/products/{product_no}/estimate-confirmations` (確定履歴一覧)
+
+製番`product_no`の過去確定snapshotを新しい順(`id`降順)で返す。明細(items)は
+含めない一覧表示用の軽量レスポンス。`item_count`/`total_amount`はDBから都度
+算出するのみで、保存済みの値自体は変更しない(append-only方針を維持したまま
+読み出し専用のSELECTを追加しただけ)。`total_amount`は明細のうち`amount`が
+`null`(単価不明)の行を除いた合計。
+
+製番自体がデータソース上に実在するかはこのエンドポイントの責務外(確定履歴が
+1件も無い製番は空配列を返す。404にはしない)。
+
+`EstimateConfirmationSummaryOut`:
+
+```json
+{
+  "id": 1,
+  "product_no": "A1GV2421",
+  "confirmed_at": "2026-09-04 07:28:06",
+  "item_count": 15,
+  "total_amount": 322000.0
+}
+```
+
+### `GET /api/products/{product_no}/estimate-confirmations/{confirmation_id}` (確定詳細)
+
+確定snapshot1件の詳細(header + 明細一式)を返す。保存済みの値をそのまま
+返すのみで、現在の`estimate_master_items`や`product_df.csv`/`estcode_df.csv`
+から再計算しない(確定時点の再現性を保つ)。
+
+`confirmation_id`が存在しない、または存在していても`product_no`が一致しない
+(別製番のconfirmation)場合は`404`。確定snapshotの`id`は製番横断で連番のため、
+`product_no`もあわせて照合することで他製番のconfirmationを閲覧できないように
+している。
+
+`EstimateConfirmationDetailOut`: `EstimateConfirmationSummaryOut`のフィールドに
+加えて`items: EstimateConfirmationItemOut[]`(上記`POST`レスポンスの`items`と
+同じ形)を返す。
 
 ## health
 
