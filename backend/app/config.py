@@ -71,3 +71,10 @@ MASTER_EXCEL_PATH = PROJECT_ROOT / "data" / "master" / "estimate_master_a.xlsx"
 # "Sheet1" は同一データを一部のみコピーした作業用シートのため使用しない
 # (docs/data-model.md, docs/implementation-plan.md 参照)。
 MASTER_EXCEL_SHEET = "Sheet2"
+
+# 積算資料PDF Help (Issue #19 Phase 3)。積算コードMaster(MASTER_EXCEL_PATH)と
+# 同様、社内業務資料はGit管理対象外とし、プロジェクト直下 data/help/ に配置する
+# 運用とする(`.gitignore`の`/data/`で既に除外済み)。積算コードMasterを置き換える
+# ものではなく、あくまでHelp/参考資料としての位置付け。ファイルが無くてもアプリ
+# 自体は起動する(Help機能のみ「未配置」応答になる。app/api/routers/help_pdf.py参照)。
+HELP_PDF_PATH = PROJECT_ROOT / "data" / "help" / "estimate-help.pdf"

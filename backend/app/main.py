@@ -13,6 +13,7 @@ from app.api.routers import (
     detections,
     drawings,
     estimates,
+    help_pdf,
     master,
     panel_areas,
     panels,
@@ -77,6 +78,7 @@ app.include_router(estimates.router)
 app.include_router(master.router)
 app.include_router(settings.router)
 app.include_router(products.router)
+app.include_router(help_pdf.router)
 
 
 @app.get("/api/health")

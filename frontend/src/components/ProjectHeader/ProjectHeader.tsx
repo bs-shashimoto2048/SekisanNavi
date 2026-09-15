@@ -14,9 +14,19 @@ interface Props {
   loading: boolean
   onOpenProductViewer: () => void
   onOpenSystemSettings: () => void
+  /** Issue #19 Phase 3: 積算資料PDF Helpを開く。既存の製番操作・システム設定と
+   * 同じHeader右側の操作群へ置くことで、Viewer周辺(floating panelトグル等)とは
+   * 競合しない位置にする。 */
+  onOpenHelp: () => void
 }
 
-export function ProjectHeader({ project, loading, onOpenProductViewer, onOpenSystemSettings }: Props) {
+export function ProjectHeader({
+  project,
+  loading,
+  onOpenProductViewer,
+  onOpenSystemSettings,
+  onOpenHelp,
+}: Props) {
   return (
     <header className="project-header">
       {/* UI視覚階層改善 指示6章: 表示名のみ「Sekisan Navi」へ変更する。
@@ -42,6 +52,12 @@ export function ProjectHeader({ project, loading, onOpenProductViewer, onOpenSys
       <div className="project-header__actions">
         <button type="button" onClick={onOpenProductViewer}>
           製番を開く
+        </button>
+        {/* Issue #19 Phase 3: 積算資料PDFをHelpとして参照するボタン。積算コード
+            Masterを置き換えるものではなく、あくまで参考資料の位置付けのため、
+            「システム設定」の隣ではなく、それより手前(通常操作寄り)に置く。 */}
+        <button type="button" onClick={onOpenHelp} title="積算資料PDFを参照する">
+          積算資料
         </button>
         <button type="button" onClick={onOpenSystemSettings} title="管理者向け設定">
           システム設定

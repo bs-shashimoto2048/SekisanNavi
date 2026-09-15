@@ -59,6 +59,7 @@ import { EstimateDetail, type DetailSourceFilter } from './components/EstimateDe
 import { EstimateMasterPicker } from './components/EstimateMasterPicker/EstimateMasterPicker'
 import { SystemSettings } from './components/SystemSettings/SystemSettings'
 import { ProductSelector } from './components/ProductSelector/ProductSelector'
+import { HelpPdfModal } from './components/HelpPdf/HelpPdfModal'
 import { DecisionEventHistory } from './components/DecisionEventHistory/DecisionEventHistory'
 import { PaneSplitter } from './components/Layout/PaneSplitter'
 import { FloatingPanel } from './components/Layout/FloatingPanel'
@@ -236,6 +237,10 @@ function App() {
 
   const [isSettingsOpen, setSettingsOpen] = useState(false)
   const [isProductSelectorOpen, setProductSelectorOpen] = useState(false)
+  // Issue #19 Phase 3: 積算資料PDF Help modal。SystemSettings/ProductSelectorと
+  // 同じ「開閉のみを持つ独立したUI状態」で、製番・図面ページ・積算対象・BBox選択等
+  // 他のstateには一切触れない(閉じても既存の作業状態を失わない)。
+  const [isHelpOpen, setHelpOpen] = useState(false)
 
   // 積算コードMasterで「Manual BBox追加対象」として選択中のMaster Item (Phase 1.6)。
   const [selectedMasterItemId, setSelectedMasterItemId] = useState<number | null>(null)
@@ -922,14 +927,17 @@ function App() {
   //      (Manual BBox追加モード・crosshairカーソルも連動して終了する。
   //      bboxAddModeはselectedMasterItemIdから導出しているため自動的に解除される)
   //   3. 盤選択中(selectedPanel) → その選択のみ解除
-  // Modal(SystemSettings/ProductSelector)が開いている間は何もしない
+  // Modal(SystemSettings/ProductSelector/HelpPdfModal)が開いている間は何もしない
   // (将来Modal自身がEscで閉じる機能を実装しても競合しないようにする。指示書3章)。
+  // Issue #19 Phase 3: HelpPdfModal自身もEscキーでは閉じない(SystemSettings/
+  // ProductSelectorと同じく、×ボタン/背景クリックのみで閉じる。指示: 既存modalの
+  // Escape優先順位を壊さないことを優先し、新たなEscapeハンドリングを追加しない)。
   // input/textarea等にフォーカスがあっても「モード解除」として自然に働くよう、
   // Deleteキー処理とは異なりisEditableTargetのガードは設けない (指示書3章)。
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
-      if (isSettingsOpen || isProductSelectorOpen) return
+      if (isSettingsOpen || isProductSelectorOpen || isHelpOpen) return
       if (selectedDetectionId != null) {
         setSelectedDetectionId(null)
         return
@@ -945,7 +953,14 @@ function App() {
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isSettingsOpen, isProductSelectorOpen, selectedDetectionId, selectedMasterItemId, selectedPanel])
+  }, [
+    isSettingsOpen,
+    isProductSelectorOpen,
+    isHelpOpen,
+    selectedDetectionId,
+    selectedMasterItemId,
+    selectedPanel,
+  ])
 
   // Undo/Redo本体 (積算明細強化・Undo/Redo・要確認警告・編集追従 指示6章)。
   // 実際のBackend呼び出し(方向で処理が変わる部分)はここで個別に書くが、所属追従
@@ -1127,7 +1142,7 @@ function App() {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (isSettingsOpen || isProductSelectorOpen) return
+      if (isSettingsOpen || isProductSelectorOpen || isHelpOpen) return
       if (!(e.ctrlKey || e.metaKey)) return
       if (e.key.toLowerCase() !== 'z') return
       // input/textarea等ではブラウザ/input自身のUndo/Redoを奪わない (指示6章)。
@@ -1142,7 +1157,7 @@ function App() {
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isSettingsOpen, isProductSelectorOpen])
+  }, [isSettingsOpen, isProductSelectorOpen, isHelpOpen])
 
   return (
     <div className="app-layout">
@@ -1151,6 +1166,7 @@ function App() {
         loading={loading}
         onOpenProductViewer={() => setProductSelectorOpen(true)}
         onOpenSystemSettings={() => setSettingsOpen(true)}
+        onOpenHelp={() => setHelpOpen(true)}
       />
       {/* 指示7章: 要確認(BBox所属判定でtieになった項目)が1件以上ある場合、
           UI最上部に警告を表示する。0件になれば自動的に非表示になる。
@@ -1350,6 +1366,7 @@ function App() {
           onClose={() => setProductSelectorOpen(false)}
         />
       )}
+      {isHelpOpen && <HelpPdfModal onClose={() => setHelpOpen(false)} />}
     </div>
   )
 }

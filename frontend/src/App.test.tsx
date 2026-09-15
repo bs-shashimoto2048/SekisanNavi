@@ -339,6 +339,11 @@ vi.mock('./api/client', () => ({
   ),
   drawingPageFileUrl: vi.fn((id: number) => `http://localhost:8000/api/drawing-pages/${id}/file`),
   deleteDetection: vi.fn(async () => {}),
+  // Issue #19 Phase 3: 積算資料PDF Help。既定では「未配置」を返す(Help modalを
+  // 開くテスト以外に影響しないようにするため)。available=trueにするテストは
+  // 個別にmockResolvedValueOnce等で上書きする。
+  fetchHelpPdfStatus: vi.fn(async () => ({ available: false })),
+  helpPdfFileUrl: vi.fn(() => 'http://localhost:8000/api/help/estimate-pdf/file'),
   // 積算明細強化・Undo/Redo・要確認警告・編集追従 指示8章: BBox本体はidで特定した
   // 元のDetectionを基準に更新する (実Backendの既存仕様と同じく、bbox_x/y/w/h以外の
   // 項目(master_item_id/source_type等)は変更しない。以前は常に`detectionOnOutline`を
@@ -1639,6 +1644,101 @@ describe('App: Escキーによる編集モード解除 (Phase 1.11 UI改修指�
 
     // Master選択状態は維持されたまま (Modal内のEsc処理に委ねる方針)。
     expect(row11001.className).toContain('master-picker__row--selected')
+  })
+
+  it('HelpPdfModalが開いている間はEscで編集モードを解除しない (Issue #19 Phase 3、SystemSettingsと同じ方針)', async () => {
+    render(<App />)
+    const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
+    fireEvent.click(row11001)
+    await waitFor(() => expect(row11001.className).toContain('master-picker__row--selected'))
+
+    fireEvent.click(screen.getByRole('button', { name: '積算資料' }))
+    await screen.findByRole('heading', { name: '積算資料' })
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    // Master選択状態は維持されたまま(HelpPdfModal自身もEscでは閉じない、
+    // 指示: 既存modal/BBox選択等のEscape優先順位を壊さない)。
+    expect(row11001.className).toContain('master-picker__row--selected')
+    expect(screen.getByRole('heading', { name: '積算資料' })).toBeInTheDocument()
+  })
+})
+
+describe('App: 積算資料PDF Help (Issue #19 Phase 3)', () => {
+  afterEach(async () => {
+    vi.clearAllMocks()
+    const { fetchHelpPdfStatus } = await import('./api/client')
+    vi.mocked(fetchHelpPdfStatus).mockImplementation(async () => ({ available: false }))
+  })
+
+  it('opens the Help modal from the header button', async () => {
+    render(<App />)
+    await screen.findAllByText('基礎図(P18)')
+
+    fireEvent.click(screen.getByRole('button', { name: '積算資料' }))
+
+    expect(await screen.findByRole('heading', { name: '積算資料' })).toBeInTheDocument()
+  })
+
+  it('shows a clear "not configured" message when the PDF is unavailable (指示: 空白viewerではなく明確な案内)', async () => {
+    render(<App />)
+    await screen.findAllByText('基礎図(P18)')
+
+    fireEvent.click(screen.getByRole('button', { name: '積算資料' }))
+
+    expect(await screen.findByText(/積算資料が配置されていません/)).toBeInTheDocument()
+    expect(screen.queryByTitle('積算資料PDF')).not.toBeInTheDocument()
+  })
+
+  it('renders the PDF <iframe> when the PDF is available', async () => {
+    const { fetchHelpPdfStatus } = await import('./api/client')
+    vi.mocked(fetchHelpPdfStatus).mockResolvedValueOnce({ available: true })
+    render(<App />)
+    await screen.findAllByText('基礎図(P18)')
+
+    fireEvent.click(screen.getByRole('button', { name: '積算資料' }))
+
+    const frame = await screen.findByTitle('積算資料PDF')
+    expect(frame.tagName).toBe('IFRAME')
+  })
+
+  it('closes the modal via the × button, and does not affect the current product/page/target/BBox selection state', async () => {
+    render(<App />)
+    const thumbnail = await screen.findByRole('img', { name: 'P16' })
+    fireEvent.click(thumbnail)
+    await screen.findByTitle(/roof_fan/)
+
+    // 積算対象を個別盤へ切り替え、BBoxも選択しておく (作業状態の一例)。
+    const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+    fireEvent.change(select, { target: { value: 'panel:1:1' } })
+    await waitFor(() => expect(select.value).toBe('panel:1:1'))
+    fireEvent.click(screen.getByTitle(/roof_fan/))
+    await screen.findAllByRole('button', { name: /BBoxサイズ変更/ })
+
+    fireEvent.click(screen.getByRole('button', { name: '積算資料' }))
+    await screen.findByRole('heading', { name: '積算資料' })
+
+    fireEvent.click(screen.getByRole('button', { name: '閉じる' }))
+
+    expect(screen.queryByRole('heading', { name: '積算資料' })).not.toBeInTheDocument()
+    // 製番・図面ページ・積算対象・BBox選択のいずれも維持されている。
+    expect(screen.getByTitle(/roof_fan/)).toBeInTheDocument()
+    expect(
+      (document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement).value,
+    ).toBe('panel:1:1')
+    expect(screen.getAllByRole('button', { name: /BBoxサイズ変更/ }).length).toBeGreaterThan(0)
+  })
+
+  it('does not call fetchHelpPdfStatus until the Help button is clicked (lazy loading)', async () => {
+    const { fetchHelpPdfStatus } = await import('./api/client')
+    render(<App />)
+    await screen.findAllByText('基礎図(P18)')
+
+    expect(fetchHelpPdfStatus).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '積算資料' }))
+    await screen.findByText(/積算資料が配置されていません/)
+
+    expect(fetchHelpPdfStatus).toHaveBeenCalledTimes(1)
   })
 })
 
