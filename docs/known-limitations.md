@@ -27,19 +27,31 @@
 
 ## decision history(判断履歴)の読み出し
 
-- `decision_events`テーブル(Issue #4 Phase A-1)は書き込み専用。作成/削除/BBox編集
-  イベントを記録するが、これを返す読み出しAPIエンドポイントは存在しない
-  (`docs/decision-event-design.md` 10章のPhase A-2は未実装と判断済み。
-  Issue #4コメント参照)。
-- 履歴を確認する手段は、現時点ではDBファイルへ直接SQLを実行する以外に無い。
+**[2026-09 訂正]** 本節はIssue #4 Phase A-2着手前の記述だったが、Phase A-2は
+その後実装済みになった。
+
+- `GET /api/products/{product_no}/decision-events`(Issue #4 Phase A-2、
+  `backend/app/api/routers/products.py`)が、製番`product_no`の判断履歴
+  (`decision_events`、作成/削除/BBox編集イベント)を発生順(古い順)で返す。
+  保存済みの値をそのまま返す読み取り専用のエンドポイントで、書き込みは行わない。
+- Frontend側にも一覧表示UI(`components/DecisionEventHistory/`、画面上部の
+  編集ツールバー「操作履歴を見る」ボタン)がある。
 
 ## 積算確定snapshotの履歴閲覧
 
+**[2026-09 訂正]** 本節はIssue #4 Phase B-4着手前の記述だったが、Phase B-4は
+その後実装済みになった。
+
 - `POST /api/products/{product_no}/estimate-confirmations`(Issue #4 Phase B-2)で
-  確定snapshotを作成できるが、過去のconfirmationを一覧・詳細取得する読み出しAPIは
-  無い。作成直後のレスポンス(`EstimateConfirmationOut`)でしか内容を確認できない。
-- Frontend側にも確定履歴の一覧・詳細閲覧UIは無い(`EstimateConfirmationAction`は
-  「確定する」ボタンのみを提供する最小UI。`docs/decision-snapshot-design.md` 13章)。
+  確定snapshotを作成できる。加えて`GET /api/products/{product_no}/estimate-confirmations`
+  (過去のconfirmationを新しい順の一覧で返す)・
+  `GET /api/products/{product_no}/estimate-confirmations/{confirmation_id}`
+  (1件の詳細=header+明細一式を返す)がIssue #4 Phase B-4で実装済み
+  (`backend/app/api/routers/products.py`)。いずれも保存済みの値をそのまま返す
+  読み取り専用で、確定時点の再現性を保つため現在のMaster価格等での再計算はしない。
+- Frontend側にも確定履歴の一覧・詳細閲覧UI(`components/EstimateAggregation/
+  EstimateConfirmationHistory.tsx`、積算集約(現在はViewer上のfloating panel、
+  `docs/ui-spec.md` 1.7章)内の「確定履歴を見る」ボタン)がある。
 
 ## CI / GitHub Actions
 

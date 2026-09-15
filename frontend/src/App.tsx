@@ -61,6 +61,8 @@ import { SystemSettings } from './components/SystemSettings/SystemSettings'
 import { ProductSelector } from './components/ProductSelector/ProductSelector'
 import { DecisionEventHistory } from './components/DecisionEventHistory/DecisionEventHistory'
 import { PaneSplitter } from './components/Layout/PaneSplitter'
+import { FloatingPanel } from './components/Layout/FloatingPanel'
+import { FloatingPanelToggleBar } from './components/Layout/FloatingPanelToggleBar'
 import { usePaneWidth } from './hooks/usePaneWidth'
 import './App.css'
 
@@ -101,28 +103,6 @@ const MASTER_PANE_HEIGHT_INITIAL = 260
 const MASTER_PANE_HEIGHT_MIN = 120
 const MASTER_PANE_HEIGHT_MAX_VH_RATIO = 0.6
 const MASTER_PANE_HEIGHT_STORAGE_KEY = 'sekisan-navi:master-pane-height'
-
-// 右ペイン②「積算集約」の高さ (盤フォーカス・積算明細再設計 指示6章)。
-// 盤情報は内容量に応じた自動高さのまま、残り領域を積算集約(この値)と
-// 積算明細(flex:1で残りを埋める)の2つで分割し、その境界だけドラッグできるようにする。
-// min値は「操作不能にならない最低高さ」の目安 (指示6章の例に準拠)。
-const ESTIMATE_AGGREGATION_HEIGHT_INITIAL = 260
-const ESTIMATE_AGGREGATION_HEIGHT_MIN = 180
-const ESTIMATE_AGGREGATION_HEIGHT_MAX_VH_RATIO = 0.6
-const ESTIMATE_AGGREGATION_HEIGHT_STORAGE_KEY = 'sekisan-navi:estimate-aggregation-height'
-// 積算明細側も同様に最低高さを設ける (flex:1で伸縮するため直接pxでは持たないが、
-// CSS側のmin-heightとして同じ値を使う。指示6章の例に準拠)。
-const ESTIMATE_DETAIL_HEIGHT_MIN = 180
-
-// 盤情報1行化・3領域リサイズ拡張・Redo時引出線回帰修正 指示3章/5章: 右ペイン
-// 「盤情報」の高さも、積算集約・積算明細と同じ`usePaneWidth`フックでリサイズ可能に
-// する(盤情報↔積算集約の間にも1本splitterを追加する)。1行化により1カードあたりの
-// 高さが下がったため、初期値は「5件が概ね見える」目安の低めの値にしておく
-// (指示3章の例: 盤情報80〜100px・積算集約180px・積算明細180pxを最低高さとして踏襲)。
-const PANEL_INFO_HEIGHT_INITIAL = 180
-const PANEL_INFO_HEIGHT_MIN = 90
-const PANEL_INFO_HEIGHT_MAX_VH_RATIO = 0.5
-const PANEL_INFO_HEIGHT_STORAGE_KEY = 'sekisan-navi:panel-info-height'
 
 // メイン画面が既定で参照する製番 (Phase 1.8)。デモ用のダミーDetection/Panel/
 // EstimateItem (db/seed.py) が実際に紐付けているのと同じ製番であり、
@@ -283,32 +263,25 @@ function App() {
     MASTER_PANE_HEIGHT_MAX_VH_RATIO,
     'height',
   )
-  // 右ペイン②「積算集約」の高さ (盤フォーカス・積算明細再設計 指示6章/7章)。
-  // 積算明細はflex:1でこの残り(かつ`ESTIMATE_DETAIL_HEIGHT_MIN`以上)を使う。
-  const [estimateAggregationHeight, resizeEstimateAggregationBy] = usePaneWidth(
-    ESTIMATE_AGGREGATION_HEIGHT_STORAGE_KEY,
-    ESTIMATE_AGGREGATION_HEIGHT_INITIAL,
-    ESTIMATE_AGGREGATION_HEIGHT_MIN,
-    ESTIMATE_AGGREGATION_HEIGHT_MAX_VH_RATIO,
-    'height',
-  )
-  // 右ペイン①「盤情報」の高さ (指示3章/5章: 盤情報↔積算集約の間にもsplitterを追加する)。
-  const [panelInfoHeight, resizePanelInfoBy] = usePaneWidth(
-    PANEL_INFO_HEIGHT_STORAGE_KEY,
-    PANEL_INFO_HEIGHT_INITIAL,
-    PANEL_INFO_HEIGHT_MIN,
-    PANEL_INFO_HEIGHT_MAX_VH_RATIO,
-    'height',
-  )
-
-  // Issue #6: 右ペイン3領域(盤情報/積算集約/積算明細)をそれぞれ独立して
-  // 折りたたみ可能にする。デフォルトはすべて展開(false)。積算対象選択・
-  // 図面一覧連動・Viewer連動・Undo/Redo等、他のロジックには一切接続しない
-  // 独立したUI状態のため、localStorageへは永続化しない(リロードのたびに
-  // 「初期表示は3項目ともOPEN」を素直に満たす)。
+  // Issue #6: 盤情報・積算集約・積算明細それぞれの見出し折りたたみ。デフォルトは
+  // すべて展開(false)。積算対象選択・図面一覧連動・Viewer連動・Undo/Redo等、
+  // 他のロジックには一切接続しない独立したUI状態のため、localStorageへは
+  // 永続化しない(リロードのたびに「初期表示は全項目OPEN」を素直に満たす)。
+  // Issue #19 Phase 2: 積算集約・積算明細は右ペインからViewer上のfloating panelへ
+  // 移動したが、各パネル自身の折りたたみ(見出しクリックで本文だけ隠す)は
+  // そのまま維持する(コンポーネント自体は変更していない)。
   const [panelInfoCollapsed, setPanelInfoCollapsed] = useState(false)
   const [estimateAggregationCollapsed, setEstimateAggregationCollapsed] = useState(false)
   const [estimateDetailCollapsed, setEstimateDetailCollapsed] = useState(false)
+
+  // Issue #19 Phase 2: 積算集約・積算明細をViewer上のfloating panelとして個別に
+  // 表示/非表示できるようにする(上記の折りたたみ=パネル内の本文を隠す、とは別の
+  // 「パネルそのものを画面から消す」操作)。初期値は「既存利用性を損なわない設定」
+  // として両方表示(true)にする(従来の右ペイン常設と同じ見え方から始まる)。
+  // セッション内のみのUI状態で、localStorageへは永続化しない(Phase 2指示:
+  // レイアウト設定の永続化は今回非対象)。
+  const [estimateAggregationFloatingVisible, setEstimateAggregationFloatingVisible] = useState(true)
+  const [estimateDetailFloatingVisible, setEstimateDetailFloatingVisible] = useState(true)
 
   // 初期データ読込 (案件情報 / ダミー図面一覧 / 全ページ分のDetection)。
   // `fetchDetections()`を引数無しで呼ぶとDB全件が返る (Backend側の既存の
@@ -1252,32 +1225,81 @@ function App() {
               />
             </div>
             <PaneSplitter onDrag={resizeLeftPaneBy} ariaLabel="図面一覧の幅を変更" />
-            <DrawingViewer
-              productNo={activeProductNo}
-              pageNo={selectedProductPageNo}
-              pageImageUrl={activeProductPage?.thumbnail_url ?? null}
-              pageLabel={pageLabel}
-              panels={activeProductPage?.panels ?? []}
-              selectedPanelKey={selectedPanel?.key ?? null}
-              onSelectPanel={handleSelectPanel}
-              masterItemById={masterItemById}
-              masterItemSelected={selectedMasterItemId != null}
-              detectedPreview={detectedPreview}
-              detections={viewerDetections}
-              selectedDetectionId={selectedDetectionId}
-              highlightedDetectionId={highlightedDetectionId}
-              onSelectDetection={handleSelectDetection}
-              bboxAddMode={selectedMasterItemId != null && matchingDbPage != null}
-              onCreateBBox={handleCreateManualBBox}
-              onResizeDetection={handleResizeDetection}
-              onMoveDetectionLabel={handleMoveDetectionLabel}
-              onDeleteSelectedDetection={() => {
-                if (selectedDetectionId != null) void handleDeleteDetection(selectedDetectionId)
-              }}
-              onDeselectDetection={handleDeselectDetection}
-              detailHoveredDetectionId={detailHoveredDetectionId}
-              focusPanel={viewerFocusPanel}
-            />
+            {/* Issue #19 Phase 2: 積算集約・積算明細を右ペインから外し、この
+                Viewer上へfloating panelとして重ねて表示する。DrawingViewer自体
+                (内部のOverlay z-index/pointer-events契約、docs/architecture.md
+                15章)は変更せず、その外側にposition:relativeのコンテナを1枚
+                追加して、floating panel/トグルバーをこのコンテナ基準で
+                絶対配置するだけにしている。 */}
+            <div className="app-workspace__viewer-wrap">
+              <DrawingViewer
+                productNo={activeProductNo}
+                pageNo={selectedProductPageNo}
+                pageImageUrl={activeProductPage?.thumbnail_url ?? null}
+                pageLabel={pageLabel}
+                panels={activeProductPage?.panels ?? []}
+                selectedPanelKey={selectedPanel?.key ?? null}
+                onSelectPanel={handleSelectPanel}
+                masterItemById={masterItemById}
+                masterItemSelected={selectedMasterItemId != null}
+                detectedPreview={detectedPreview}
+                detections={viewerDetections}
+                selectedDetectionId={selectedDetectionId}
+                highlightedDetectionId={highlightedDetectionId}
+                onSelectDetection={handleSelectDetection}
+                bboxAddMode={selectedMasterItemId != null && matchingDbPage != null}
+                onCreateBBox={handleCreateManualBBox}
+                onResizeDetection={handleResizeDetection}
+                onMoveDetectionLabel={handleMoveDetectionLabel}
+                onDeleteSelectedDetection={() => {
+                  if (selectedDetectionId != null) void handleDeleteDetection(selectedDetectionId)
+                }}
+                onDeselectDetection={handleDeselectDetection}
+                detailHoveredDetectionId={detailHoveredDetectionId}
+                focusPanel={viewerFocusPanel}
+              />
+              <FloatingPanelToggleBar
+                aggregationVisible={estimateAggregationFloatingVisible}
+                onToggleAggregation={() => setEstimateAggregationFloatingVisible((v) => !v)}
+                detailVisible={estimateDetailFloatingVisible}
+                onToggleDetail={() => setEstimateDetailFloatingVisible((v) => !v)}
+              />
+              <FloatingPanel
+                visible={estimateAggregationFloatingVisible}
+                position="aggregation"
+                collapsed={estimateAggregationCollapsed}
+              >
+                <EstimateAggregation
+                  targets={estimateAggregationData.targets}
+                  lineItems={estimateAggregationData.lineItems}
+                  totalLineItems={estimateAggregationData.totalLineItems}
+                  selectedTargetId={selectedEstimateTargetId}
+                  onSelectTarget={setSelectedEstimateTargetId}
+                  collapsed={estimateAggregationCollapsed}
+                  onToggleCollapsed={() => setEstimateAggregationCollapsed((c) => !c)}
+                  productNo={activeProductNo}
+                />
+              </FloatingPanel>
+              <FloatingPanel
+                visible={estimateDetailFloatingVisible}
+                position="detail"
+                collapsed={estimateDetailCollapsed}
+              >
+                <EstimateDetail
+                  detailItems={detailItemsWithEditMeta}
+                  targets={estimateAggregationData.targets}
+                  selectedTargetId={selectedEstimateTargetId}
+                  currentPageNo={selectedProductPageNo}
+                  onNavigateReference={handleNavigateReference}
+                  onHoverDetail={handleHoverEstimateDetail}
+                  sourceFilter={estimateDetailSourceFilter}
+                  onSourceFilterChange={setEstimateDetailSourceFilter}
+                  editFollowDetectionId={editFollowDetectionId}
+                  collapsed={estimateDetailCollapsed}
+                  onToggleCollapsed={() => setEstimateDetailCollapsed((c) => !c)}
+                />
+              </FloatingPanel>
+            </div>
           </div>
 
           <PaneSplitter
@@ -1298,20 +1320,14 @@ function App() {
         />
 
         <div className="app-workspace__right" style={{ width: rightPaneWidth }}>
-          {/* 盤情報1行化・3領域リサイズ拡張・Redo時引出線回帰修正 指示3章/5章:
-              盤情報・積算集約・積算明細の3領域すべてを高さ制御可能にする。
-              盤情報↔積算集約の間にもsplitterを追加し、複数盤表示時に盤情報が
-              大きな高さを占有する問題を、ユーザー自身が調整できるようにする
-              (右ペイン全体を押し広げるのではなく、3領域間で高さを分け合う)。 */}
-          {/* Issue #6: 折りたたみ中のセクションは`height:'auto'`(内容=見出しのみに
-              自然に縮む)にし、隣接領域(下記right-lower、ひいてはその中の
-              積算集約/積算明細)へ高さを還元する。折りたたみ中は対応するsplitterも
-              非表示にする(ドラッグしても見た目に反映されない「不自然な」操作を
-              避けるため。指示: 折りたたみ中の高さ計算・ドラッグ挙動が不自然に
-              ならないようにする)。 */}
+          {/* Issue #19 Phase 2: 積算集約・積算明細をViewer上のfloating panelへ
+              移動したため、右ペインは盤情報(PanelInfo)のみになった。盤情報の
+              高さを他領域と分け合う必要が無くなったため、右ペイン内の高さ
+              splitter(旧: 盤情報↔積算集約)は廃止し、右ペインの残り高さを
+              そのまま使う(展開中はflex:1、折りたたみ中は見出し分のみ)。 */}
           <div
             className="app-workspace__panel-info-wrap"
-            style={{ height: panelInfoCollapsed ? 'auto' : panelInfoHeight }}
+            style={{ flex: panelInfoCollapsed ? '0 0 auto' : '1 1 auto' }}
           >
             <PanelInfo
               panel={panel}
@@ -1322,67 +1338,6 @@ function App() {
               collapsed={panelInfoCollapsed}
               onToggleCollapsed={() => setPanelInfoCollapsed((c) => !c)}
             />
-          </div>
-          {!panelInfoCollapsed && (
-            <PaneSplitter
-              onDrag={(delta) => resizePanelInfoBy(delta)}
-              ariaLabel="盤情報の高さを変更"
-              axis="y"
-            />
-          )}
-          {/* 積算集約(②)と積算明細(③)で残り領域を分割する (盤フォーカス・積算明細
-              再構成 指示6章)。Issue #6: 積算明細が折りたたまれている間は、積算集約
-              側がflex:1で残り領域全体を引き継ぐ(旧来のドラッグ幅指定は一時的に
-              無視する。積算明細を再度開くと元の高さ指定へ戻る)。 */}
-          <div className="app-workspace__right-lower">
-            <div
-              className="app-workspace__estimate-aggregation-wrap"
-              style={
-                estimateDetailCollapsed
-                  ? { flex: '1 1 auto', minHeight: 0 }
-                  : { height: estimateAggregationCollapsed ? 'auto' : estimateAggregationHeight, flexShrink: 0 }
-              }
-            >
-              <EstimateAggregation
-                targets={estimateAggregationData.targets}
-                lineItems={estimateAggregationData.lineItems}
-                totalLineItems={estimateAggregationData.totalLineItems}
-                selectedTargetId={selectedEstimateTargetId}
-                onSelectTarget={setSelectedEstimateTargetId}
-                collapsed={estimateAggregationCollapsed}
-                onToggleCollapsed={() => setEstimateAggregationCollapsed((c) => !c)}
-                productNo={activeProductNo}
-              />
-            </div>
-            {!estimateAggregationCollapsed && !estimateDetailCollapsed && (
-              <PaneSplitter
-                onDrag={(delta) => resizeEstimateAggregationBy(delta)}
-                ariaLabel="積算集約の高さを変更"
-                axis="y"
-              />
-            )}
-            <div
-              className="app-workspace__estimate-detail-wrap"
-              style={
-                estimateDetailCollapsed
-                  ? { flex: '0 0 auto' }
-                  : { flex: '1 1 auto', minHeight: ESTIMATE_DETAIL_HEIGHT_MIN }
-              }
-            >
-              <EstimateDetail
-                detailItems={detailItemsWithEditMeta}
-                targets={estimateAggregationData.targets}
-                selectedTargetId={selectedEstimateTargetId}
-                currentPageNo={selectedProductPageNo}
-                onNavigateReference={handleNavigateReference}
-                onHoverDetail={handleHoverEstimateDetail}
-                sourceFilter={estimateDetailSourceFilter}
-                onSourceFilterChange={setEstimateDetailSourceFilter}
-                editFollowDetectionId={editFollowDetectionId}
-                collapsed={estimateDetailCollapsed}
-                onToggleCollapsed={() => setEstimateDetailCollapsed((c) => !c)}
-              />
-            </div>
           </div>
         </div>
       </div>

@@ -125,8 +125,11 @@ src/
                            Phase 1.8で製番検索UIへ役割変更・改名)
     Layout/
       PaneSplitter.tsx       左右/上下ペイン境界のResize Handle
-      CollapsibleSectionHeading.tsx  右ペイン3領域(盤情報/積算集約/積算明細)の
-                                     折りたたみ見出し (共通化。Issue #6)
+      CollapsibleSectionHeading.tsx  盤情報/積算集約/積算明細の折りたたみ見出し
+                                     (共通化。Issue #6)
+      FloatingPanel.tsx      積算集約・積算明細をViewer上へ重ねるfloating panel
+                             シェル (Issue #19 Phase 2、20章)
+      FloatingPanelToggleBar.tsx  floating panelのON/OFFトグルバー (同上)
   domain/                Frontend側の純粋な業務ロジック (Backendを介さない計算)
     estimateAggregationReal.ts  積算集約・積算明細を実データから組み立てる
                                  (対象別/総合計の数量集約、BBox所属判定を含む)
@@ -705,6 +708,15 @@ PNG(0) → 盤領域(10) → 引出線(15) → BBox本体(20) → 選択中BBox(
 Resize Handle(40) → Tooltip(50) の順に明示し、JSX描画順(コンポーネントの
 記述順)に暗黙で依存しない。
 
+**[2026-09 Issue #19 Phase 2で追加]** この契約はいずれも`DrawingViewer`
+内部(正確には`DrawingCanvas`の`position: relative`な`.drawing-canvas__viewport`
+が作るスタッキングコンテキスト内)の話であり、Viewerの**外側**に乗る
+floating panel(積算集約・積算明細、20章参照)はこの契約とは別のレイヤーとして
+扱う。floating panelはViewerを内包する`app-workspace__viewer-wrap`基準の
+`position: absolute`で、Overlay契約の最大値(Tooltip: 50)より確実に前面へ出る
+z-index(floating panel: 100、トグルバー: 110)を使うが、この契約の0〜50の
+並び自体は変更していない。
+
 ### Escキーの状態解除優先順位
 
 `App.tsx`の`keydown`(`Escape`)リスナーは、SystemSettings/ProductSelectorの
@@ -889,13 +901,46 @@ Phase 1.9以降に追加した、都度読み込み・DB非永続化の実デー
   `PAGE`列を持たない製番単位のデータで、右ペイン「盤情報」(`PanelInfo.tsx`)の
   表示元として`product_df.csv`由来の旧盤パラメータ表示より優先される。
 
-## 19. 右ペイン3領域の折りたたみ・対象Select視認性 (Issue #6)
+## 19. 盤情報・積算集約・積算明細の折りたたみ・対象Select視認性 (Issue #6)
 
 盤情報・積算集約・積算明細の3領域それぞれの見出しをクリックすることで
 折りたたみ/展開できるようにした。実装は`CollapsibleSectionHeading`
 (共有コンポーネント、2章参照)を3箇所で再利用する形で行い、開閉状態は
 `App.tsx`がcontrolled stateとして保持する(セッション内のみ、永続化しない)。
-折りたたみ中の領域は隣接領域へ高さを還元する(`App.tsx`側のwrapper divで
-`flex`/`height`を条件分岐)。積算集約の「対象」Selectは、通常状態でも
+折りたたみ中の領域は高さを縮める(`App.tsx`/`FloatingPanel.tsx`側のwrapper
+divで`flex`/`height`を条件分岐)。積算集約の「対象」Selectは、通常状態でも
 重要な操作であることが視認できるよう強調している(コバルト系の枠+淡い背景、
 Viewer連動中はさらに一段強い強調)。詳細は`docs/ui-spec.md` 1.6章を参照。
+
+**[2026-09 Issue #19 Phase 2で構成変更]** 実装当時は盤情報・積算集約・
+積算明細が右ペイン内で隣接領域として高さを分け合っていたため「隣接領域へ
+高さを還元する」設計だったが、積算集約・積算明細がViewer上のfloating panelへ
+移動した後は、各領域は隣接領域と高さを分け合わない独立した折りたたみになった
+(20章参照)。
+
+## 20. 積算集約・積算明細のfloating panel化 (Issue #19 Phase 2)
+
+作業者打合せで確認した要望(図面Viewerをなるべく大きく見たい)を受け、
+右ペイン常設だった積算集約(`EstimateAggregation`)・積算明細
+(`EstimateDetail`)を、図面Viewer上へ重ねて表示するfloating panelへ変更した。
+右ペインは盤情報(`PanelInfo`)のみになった。詳細な仕様は`docs/ui-spec.md`
+1.7章を参照。実装上のポイントのみ記す:
+
+- **新規component**: `components/Layout/FloatingPanel.tsx`(表示中のみ描画する
+  シェル、`visible`/`position`/`collapsed`をprops化)と
+  `components/Layout/FloatingPanelToggleBar.tsx`(Viewer右上のON/OFFトグル
+  ボタン2つ)を追加した。`EstimateAggregation`/`EstimateDetail`自体のprops・
+  内部ロジックは変更していない(既存componentを極力再利用する方針)。
+- **配置基準**: `App.tsx`側で`DrawingViewer`を`app-workspace__viewer-wrap`
+  (`position: relative`)という新しいコンテナで包み、floating panel/トグル
+  バーをこのコンテナ基準の`position: absolute`で配置する。`DrawingViewer`
+  自体・その内部のOverlay z-index/pointer-events契約(15章)は変更していない
+  (15章末尾の追記も参照)。
+- **表示状態**: floating panelの表示/非表示(`estimateAggregationFloatingVisible`/
+  `estimateDetailFloatingVisible`、初期値true)は`App.tsx`のuseStateのみで、
+  localStorageへは永続化しない(Issue #19 Phase 2の対象外)。各panel内部の
+  折りたたみ(Issue #6の既存`collapsed` state)はそのまま独立して機能する。
+- **右ペインの簡素化**: 右ペインが盤情報のみになったことに伴い、旧来の
+  「盤情報↔積算集約」高さsplitter・`app-workspace__right-lower`/
+  `estimate-aggregation-wrap`/`estimate-detail-wrap`のCSS/DOM構造は削除した。
+  右ペイン幅のリサイズ(`PaneSplitter`)自体は変更していない。
