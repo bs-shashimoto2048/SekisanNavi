@@ -1,0 +1,40 @@
+/* Issue #19 Phase 2: 積算集約・積算明細をViewer上へ重ねるfloating panel。
+   `DrawingViewer`内部のOverlay(0.0〜1.0正規化座標のBBox/盤領域等)とは別の、
+   Viewerの外側(App.tsx側、`.app-workspace__viewer-wrap`基準)に乗る新しい
+   レイヤーとして扱う。DrawingViewer内部のz-index/pointer-events契約
+   (docs/architecture.md 15章、PNG(0)〜Tooltip(50))はこのfloating panel導入で
+   一切変更していない。 */
+.floating-panel {
+  position: absolute;
+  /* Viewer内部Overlayの最大値(Tooltip: 50)より確実に前面へ出す。floating panel
+     同士の重なり順を明示する必要は無い(既定配置で重ならないため)。 */
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100% - 2rem));
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--border-region);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+}
+
+/* 積算集約: トグルバー(top: 3rem)の下、Viewer右上寄りに配置する。高さは
+   `vh`(ブラウザウィンドウ基準)ではなく、position:absoluteの基準である
+   `.app-workspace__viewer-wrap`自身の高さに対する`%`で指定する。Viewer領域は
+   左ペイン/積算コードMaster領域とウィンドウ高さを分け合うため実際の高さは
+   ウィンドウ高さよりかなり小さく、`vh`ベースだと積算明細(下記)と重なって
+   しまうことを実ブラウザ確認で確認した (2026-09)。 */
+.floating-panel--aggregation {
+  top: 5.4rem;
+  right: 1.25rem;
+  height: 32%;
+}
+
+/* 積算明細: Viewer右下寄りに配置する。積算集約と縦方向で重ならないよう、
+   上(top固定)ではなく下(bottom固定)を基準にする。 */
+.floating-panel--detail {
+  bottom: 0.75rem;
+  right: 1.25rem;
+  height: 38%;
+}

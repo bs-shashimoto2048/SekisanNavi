@@ -147,6 +147,20 @@
   min-height: 0;
 }
 
+/* Issue #19 Phase 2: 図面Viewerの上に積算集約・積算明細をfloating表示するための
+   位置基準コンテナ。DrawingViewer自体(内部のOverlay z-index/pointer-events契約、
+   docs/architecture.md 15章)は変更せず、その外側にposition:relativeのコンテナを
+   1枚追加し、floating panel/トグルバー(`components/Layout/FloatingPanel.css`)を
+   このコンテナ基準で絶対配置する。DrawingViewerは従来通りflex:1でこのコンテナの
+   残り幅いっぱいに広がる。 */
+.app-workspace__viewer-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
 /* 右ペイン: Header直下から画面下端まで1本のペインとして全高表示する。
    内部は盤パラメータ(可変・上限あり)+積算結果(残り全部)の縦積みで、
    それぞれが自分自身の内部でスクロールする (指示書15章、画面全体はスクロールしない)。 */
@@ -161,38 +175,12 @@
   border-left: 1px solid var(--border-region);
 }
 
-/* 盤情報1行化・3領域リサイズ拡張・Redo時引出線回帰修正 指示3章/5章:
-   盤情報の高さもJS側(`panelInfoHeight`, ドラッグで可変)で指定する。中の
-   `PanelInfo`自身がheader固定+内部スクロールを持つため、ここでは高さを
-   伝えるだけでよい (EstimateAggregation/EstimateDetailと同じ設計)。 */
+/* Issue #19 Phase 2: 積算集約・積算明細をViewer上のfloating panelへ移動した
+   ため、右ペインは盤情報(PanelInfo)のみになった。盤情報自身がheader固定+
+   内部スクロールを持つため、ここでは高さ(flex)を伝えるだけでよい。展開中は
+   右ペインの残り高さいっぱい(flex:1)、折りたたみ中は見出し分のみ(flex:0 0 auto、
+   `App.tsx`側のinline styleで切り替える)。 */
 .app-workspace__panel-info-wrap {
-  flex-shrink: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-/* 盤情報の下で、積算集約と積算明細が残り全部を分け合う領域
-   (盤フォーカス・積算明細再設計 指示6章)。 */
-.app-workspace__right-lower {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 積算集約: 高さは`estimateAggregationHeight`(px, ドラッグで可変)をJS側で
-   指定する。中の`EstimateAggregation`自身がheader固定+内部スクロールを持つため、
-   ここでは高さを伝えるだけで良い。 */
-.app-workspace__estimate-aggregation-wrap {
-  flex-shrink: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-/* 積算明細: 残り全部を使う。最低高さはJS側の`ESTIMATE_DETAIL_HEIGHT_MIN`と
-   揃えたinline styleで指定する (指示6章の最低高さ制約)。 */
-.app-workspace__estimate-detail-wrap {
-  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
 }
