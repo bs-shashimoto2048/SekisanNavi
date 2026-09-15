@@ -944,3 +944,38 @@ Viewer連動中はさらに一段強い強調)。詳細は`docs/ui-spec.md` 1.6�
   「盤情報↔積算集約」高さsplitter・`app-workspace__right-lower`/
   `estimate-aggregation-wrap`/`estimate-detail-wrap`のCSS/DOM構造は削除した。
   右ペイン幅のリサイズ(`PaneSplitter`)自体は変更していない。
+
+## 21. 積算資料PDF Help (Issue #19 Phase 3)
+
+作業者打合せで出た「積算資料PDFをHelpとして軽量に参照したい」という要望
+(Phase 1調査 D章)を受け、積算作業中に画面から離れず参照できるHelp機能を
+追加した。積算コードMasterを置き換えるものではなく、あくまで参考資料。
+
+- **Backend**: `app/api/routers/help_pdf.py`(新規router)が、固定パス
+  (`app.config.HELP_PDF_PATH`、`data/help/estimate-help.pdf`、gitignore対象・
+  各自配置)からread-onlyで配信する。既存の図面PDF配信(`drawings.py`/
+  `products.py`)と同じ`FileResponse`パターンを踏襲するが、製番・ページ番号の
+  ようなリクエスト由来のパス要素は一切無く、常に1つの固定ファイルのみを
+  対象とする(任意パスをURLから指定できる設計にしない)。存在確認専用の
+  軽量エンドポイント(`/estimate-pdf/status`)を分け、Frontend側がファイル
+  本体を要求する前に配置状況だけを確認できるようにしている。パス自体は
+  FastAPIの依存関数(`get_help_pdf_path`)経由で取得しており、テストでは
+  `app.dependency_overrides`で一時ファイルへ差し替える(実業務資料はテストで
+  一切使わない)。
+- **Frontend**: `components/HelpPdf/HelpPdfModal.tsx`が、`SystemSettings`と
+  同じbackdrop+中央パネルのmodalパターンを踏襲する。PDF表示自体は独自
+  viewer/PDF.jsを使わず`<iframe>`でブラウザ標準のPDF表示に委譲する。modalを
+  開いた時点でまず`status`のみを呼び、配置されている場合のみ`<iframe src>`へ
+  実ファイルURLを設定する(lazy loading。未配置・modal未表示の間はPDF本体を
+  一切要求しない)。呼び出しボタンは`ProjectHeader`の既存操作群(「製番を開く」
+  「システム設定」)と同じ並びに追加した。
+- **Escape優先順位**: `SystemSettings`/`ProductSelector`と同様、
+  `HelpPdfModal`自身もEscキーでは閉じない設計にした(×ボタン/背景クリックの
+  みで閉じる)。既存のEscape優先順位チェーン(15章近辺のkeydown effect、
+  BBox選択→Master選択→盤選択の順に1段階ずつ解除)のガード条件へ
+  `isHelpOpen`を追加しただけで、チェーン自体のロジックは変更していない。
+- **作業状態の非破壊**: `HelpPdfModal`は開閉のON/OFF以外、`App.tsx`側の
+  製番・図面ページ・積算対象・BBox選択等のstateには一切触れない
+  (`SystemSettings`と同じ設計)。
+- **未確認事項**: 大容量PDF配信のRange Request対応等、高度な配信最適化は
+  今回実装していない(`docs/known-limitations.md`参照)。

@@ -329,3 +329,10 @@ export interface DecisionEvent {
   after_bbox_w: number | null
   after_bbox_h: number | null
 }
+
+/** 積算資料PDF(Help)の配置状況 (Issue #19 Phase 3、
+ * `GET /api/help/estimate-pdf/status`のレスポンス)。ファイル自体の中身は
+ * 含まない軽量な存在確認のみ。 */
+export interface HelpPdfStatus {
+  available: boolean
+}

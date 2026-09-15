@@ -15,6 +15,7 @@ import type {
   EstimateItem,
   EstimateMasterItem,
   EstimatePanelInfo,
+  HelpPdfStatus,
   ManualDetectionCreateInput,
   Panel,
   PanelArea,
@@ -259,6 +260,20 @@ export function getEstimateConfirmation(
  * Frontend側で再計算はしない。 */
 export function listDecisionEvents(productNo: string): Promise<DecisionEvent[]> {
   return getJson(`/api/products/${encodeURIComponent(productNo)}/decision-events`)
+}
+
+// --- Issue #19 Phase 3: 積算資料PDF Help ---
+
+/** 積算資料PDFが配置されているかどうかだけを軽量に取得する(ファイル自体は
+ * 取得しない)。Help modalを開いた時点でのみ呼ぶ(常時ポーリングはしない)。 */
+export function fetchHelpPdfStatus(): Promise<HelpPdfStatus> {
+  return getJson('/api/help/estimate-pdf/status')
+}
+
+/** 積算資料PDF実ファイルのURL。`<iframe src>`へ直接渡す用途のみで、
+ * fetchでは使わない(ブラウザ標準のPDF表示に委譲するため)。 */
+export function helpPdfFileUrl(): string {
+  return `${BASE_URL}/api/help/estimate-pdf/file`
 }
 
 export { ApiError }

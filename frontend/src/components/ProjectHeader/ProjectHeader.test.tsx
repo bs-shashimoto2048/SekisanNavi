@@ -21,6 +21,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
+        onOpenHelp={noop}
       />,
     )
     expect(screen.getByText('Sekisan Navi')).toBeInTheDocument()
@@ -35,6 +36,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
+        onOpenHelp={noop}
       />,
     )
     const brand = screen.getByText('Sekisan Navi')
@@ -50,6 +52,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
+        onOpenHelp={noop}
       />,
     )
     const brand = screen.getByText('Sekisan Navi')
@@ -63,6 +66,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
+        onOpenHelp={noop}
       />,
     )
     const brand = screen.getByText('Sekisan Navi')
@@ -86,6 +90,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
+        onOpenHelp={noop}
       />,
     )
     // jsdomはlayoutを持たないため、実際に描画されたHeaderの高さ(px)は
@@ -105,6 +110,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
+        onOpenHelp={noop}
       />,
     )
     const brand = screen.getByText('Sekisan Navi')
@@ -123,6 +129,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
+        onOpenHelp={noop}
       />,
     )
     const header = container.querySelector('.project-header') as HTMLElement
@@ -145,6 +152,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
+        onOpenHelp={noop}
       />,
     )
     const openProductButton = screen.getByRole('button', { name: '製番を開く' })
@@ -163,6 +171,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
+        onOpenHelp={noop}
       />,
     )
 
@@ -172,7 +181,13 @@ describe('ProjectHeader', () => {
 
   it('shows a loading indicator when loading and no project yet', () => {
     render(
-      <ProjectHeader project={null} loading onOpenProductViewer={noop} onOpenSystemSettings={noop} />,
+      <ProjectHeader
+        project={null}
+        loading
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+        onOpenHelp={noop}
+      />,
     )
     expect(screen.getByText('読込中...')).toBeInTheDocument()
   })
@@ -191,6 +206,7 @@ describe('ProjectHeader', () => {
           loading={false}
           onOpenProductViewer={noop}
           onOpenSystemSettings={noop}
+          onOpenHelp={noop}
         />,
       )
       const badge = container.querySelector('.project-header__status') as HTMLElement
@@ -206,6 +222,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
+        onOpenHelp={noop}
       />,
     )
     const button = screen.getByText('解析実行') as HTMLButtonElement
@@ -220,9 +237,25 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={onOpenSystemSettings}
+        onOpenHelp={noop}
       />,
     )
     fireEvent.click(screen.getByText('システム設定'))
     expect(onOpenSystemSettings).toHaveBeenCalled()
+  })
+
+  it('calls onOpenHelp when the "積算資料" button is clicked (Issue #19 Phase 3)', () => {
+    const onOpenHelp = vi.fn()
+    render(
+      <ProjectHeader
+        project={project}
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+        onOpenHelp={onOpenHelp}
+      />,
+    )
+    fireEvent.click(screen.getByText('積算資料'))
+    expect(onOpenHelp).toHaveBeenCalled()
   })
 })

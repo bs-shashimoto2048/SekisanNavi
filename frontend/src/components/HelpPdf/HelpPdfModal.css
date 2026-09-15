@@ -1,0 +1,66 @@
+/* Issue #19 Phase 3: 積算資料PDF Help modal。
+   SystemSettings.cssと同じbackdrop+中央パネルパターンを踏襲するが、PDF閲覧に
+   十分な表示領域を確保するため、幅・高さはSystemSettingsより大きく取る。 */
+.help-pdf-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.help-pdf-modal {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem;
+  width: min(960px, 92vw);
+  height: min(85vh, 900px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.help-pdf-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  margin-bottom: 0.75rem;
+}
+
+.help-pdf-modal__header h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.help-pdf-modal__header button {
+  border: none;
+  background: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.help-pdf-modal__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.help-pdf-modal__message {
+  margin: auto;
+  color: #6b7280;
+  font-size: 0.95rem;
+}
+
+/* PDF表示領域: 図面Viewerとは別に、この枠内だけで独立してスクロール/ページ
+   送りできる(ブラウザ標準PDF viewerの既定挙動をそのまま使う)。 */
+.help-pdf-modal__frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+}

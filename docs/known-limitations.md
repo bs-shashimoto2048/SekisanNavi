@@ -90,3 +90,16 @@
   「未確定」の記述として管理されている。
 - 元図面・PDF・設計データは read-only 前提で、書き込み・削除・移動・リネームに
   相当するAPI/関数は実装していない(`docs/architecture.md` 6章)。
+
+## 積算資料PDF Helpの配信最適化 (Issue #19 Phase 3)
+
+- `GET /api/help/estimate-pdf/file`(`app/api/routers/help_pdf.py`)は
+  Starletteの`FileResponse`をそのまま返すのみで、HTTP Range Requestへの
+  明示的な対応・chunked配信・キャッシュ制御ヘッダの意図的な付与は行っていない
+  (`FileResponse`のデフォルト動作に依存)。実際の積算資料PDFの想定ファイル数・
+  サイズ(数MB/複数ページ程度を想定)であれば、開発環境での動作確認では
+  UIが固まる等の問題は見られなかったが、より大きなファイルや低速回線での
+  挙動、Range Requestが必要かどうかは今回調査・実装していない(要調査)。
+- 積算資料PDFの表示は`<iframe>`によるブラウザ標準PDF表示に委譲しており、
+  ページ数・サイズに応じた独自の遅延読み込み(プログレッシブ表示等)は
+  実装していない(ブラウザのPDF viewer自体の挙動に依存する)。

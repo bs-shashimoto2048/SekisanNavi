@@ -346,6 +346,22 @@ Detectionが既に削除されていても取得できる)。
 
 詳細は`docs/architecture.md`・`docs/data-model.md`を参照。
 
+## help — `/api/help`
+
+積算資料PDF(Help)のread-only配信API(Issue #19 Phase 3)。積算コードMasterを
+置き換えるものではなく、あくまでHelp/参考資料。配信対象は常に固定パス
+(`app.config.HELP_PDF_PATH`)1ファイルのみで、リクエストから任意のパスを
+指定できる仕組みは無い。書き込み・アップロード・削除のエンドポイントは無い。
+
+| Method | Path | 説明 | レスポンス |
+|---|---|---|---|
+| GET | `/api/help/estimate-pdf/status` | 積算資料PDFが配置されているかどうかだけを軽量に返す(ファイル自体は読まない) | `HelpPdfStatusOut` |
+| GET | `/api/help/estimate-pdf/file` | 積算資料PDFの実ファイルを返す(無ければ404、`{"detail": "積算資料PDFが配置されていません。"}`) | `application/pdf` |
+
+`HelpPdfStatusOut`: `available`(bool)。Frontend側はmodalを開いた時点でまず`status`を
+呼び、`available=true`の場合のみ`<iframe>`の`src`へ`file`のURLを設定する
+(modalを開くまでPDFファイル自体はリクエストしない)。
+
 ## health
 
 | Method | Path | 説明 | レスポンス |
