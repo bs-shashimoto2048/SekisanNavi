@@ -74,7 +74,7 @@ export function EstimateConfirmationAction({ productNo }: Props) {
 
     const confirmed = window.confirm(
       `製番 ${targetProductNo} の現在の積算結果を確定として保存します。\n` +
-        '保存後に積算コードMasterの価格や図面データが変わっても、この確定内容自体は変化しません。\n\n' +
+        '保存後に部品台帳の価格や図面データが変わっても、この確定内容自体は変化しません。\n\n' +
         'よろしいですか？',
     )
     if (!confirmed) return

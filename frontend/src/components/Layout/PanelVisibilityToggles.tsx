@@ -76,14 +76,17 @@ export function PanelVisibilityToggles({
         積算明細
       </button>
       <span className="panel-visibility-toggles__divider" aria-hidden="true" />
+      {/* [追加修正: UI名称変更] ユーザー向け表示名を「積算コードMaster」から
+          「部品台帳」へ変更した(props名`masterVisible`/`onToggleMaster`等の
+          内部命名は変更していない)。 */}
       <button
         type="button"
         className="panel-visibility-toggles__button panel-visibility-toggles__button--tool"
         aria-pressed={masterVisible}
-        title={masterVisible ? '積算コードMasterを隠す' : '積算コードMasterを表示'}
+        title={masterVisible ? '部品台帳を隠す' : '部品台帳を表示'}
         onClick={onToggleMaster}
       >
-        積算コードMaster
+        部品台帳
       </button>
     </div>
   )

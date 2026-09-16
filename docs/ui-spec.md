@@ -15,7 +15,7 @@ GitHub上で崩れやすいため、実スクリーンショット+テキスト�
 
 **UIレイアウト追加修正指示 (2026-08) で右ペインを全高化**し、右ペイン
 はHeader直下から画面下端まで1本のペインとして表示する構成へ変更した。
-積算コードMasterはその下へ潜り込まず、左ペイン+Viewerの幅のみを使用する。
+部品台帳はその下へ潜り込まず、左ペイン+Viewerの幅のみを使用する。
 
 **[2026-09 Issue #19 Phase 2で仕様変更]** 作業者要望(図面をなるべく大きく
 見たい)を受け、積算集約(EstimateAggregation)・積算明細(EstimateDetail)を
@@ -33,15 +33,16 @@ floating panel化し、**右ペイン自体を廃止**した。図面Viewerは�
 - **ヘッダー(ProjectHeader)**: 画面最上部、横幅全体。アプリ名(ブランドブロック)・
   案件情報・解析状態・製番検索/積算資料(Help)/システム設定ボタン。
 - **編集ツールバー**: ヘッダー直下。左から元に戻す/やり直す/操作履歴を見る、
-  右端にfloating panel(盤情報/積算集約/積算明細)の表示トグル(1.7章参照)。
+  右端にfloating panel(盤情報/積算集約/積算明細/部品台帳)の表示トグル(1.7章参照)。
 - **左ペイン(DrawingNavigator)**: 図面一覧。種類別グループ+ページサムネイル。
 - **中央(DrawingViewer)**: 選択中ページの拡大表示 + Detection BBox/盤領域(Panel
   Overlay)の重畳。左ペイン幅変更後の残り幅(=右ペイン廃止後は画面右端まで)を
-  可変で使用する(固定幅にしない)。盤情報・積算集約・積算明細のfloating panel
-  (いずれも個別にON/OFF可能)を重ねて表示する(1.7章参照)。
-- **左ペイン下部**: 積算コードMaster(EstimateMasterPicker)。品目検索・選択。
+  可変で使用する(固定幅にしない)。盤情報・積算集約・積算明細・部品台帳の
+  floating panel(いずれも個別にON/OFF可能)を重ねて表示する(1.7章参照。
+  部品台帳は[2026-09 Issue #19 追加修正]でfloating panel化するまでは
+  左ペイン下部に常設していた、7章参照)。品目選択(部品台帳)は要件2/3参照。
 
-左ペイン・積算コードMaster領域の境界はマウスドラッグで幅/高さを変更できる
+左ペイン・部品台帳領域の境界はマウスドラッグで幅/高さを変更できる
 Resize Handle(`PaneSplitter`)。**[2026-09 Issue #19 Phase 4で仕様変更]**
 右ペイン自体を廃止したため、右ペイン幅のResize Handle
 (`sekisan-navi:right-pane-width`)は廃止した。floating panel化した盤情報・
@@ -51,13 +52,23 @@ Resize Handle(`PaneSplitter`)。**[2026-09 Issue #19 Phase 4で仕様変更]**
 CSS Flexboxで実装 (`App.css`。以前のCSS Gridから変更): `app-layout`
 (縦方向: Header → 編集ツールバー → Workspace) → `app-workspace` (横方向:
 MainAreaのみ。Phase 4で右ペインを廃止したため単一のflexアイテム) →
-`app-workspace__main` (縦方向: 上段(図面一覧+Viewer) / 積算コードMaster)。
+`app-workspace__main` (縦方向: 上段(図面一覧+Viewer) / 部品台帳)。
 コンポーネント分割自体 (ProjectHeader/DrawingNavigator/DrawingViewer/
 PanelProperties/EstimateTree/EstimateMasterPicker) は要件15の構成を維持し、変更していない。
 盤情報・積算集約・積算明細のfloating panel化(Issue #19 Phase 2/4)は、Viewerを
 内包する`app-workspace__viewer-wrap`(`position: relative`)を新設し、その上へ
 `position: absolute`で重ねる形で実現しており、既存のCSS構造・コンポーネント分割
 自体は変更していない(1.7章参照)。
+
+**[2026-09 Issue #19 追加修正で訂正]** 上記(18行目「部品台帳はその下へ
+潜り込まず〜」、42行目「左ペイン下部: 部品台帳」、44〜49行目の
+`PaneSplitter`/Resize Handle、54行目「`app-workspace__main`(縦方向:
+上段/部品台帳)」)はいずれも、部品台帳(旧称: 積算コードMaster)が
+MainArea下段に固定表示されていた時点の記述。部品台帳は盤情報・積算集約・
+積算明細と同じくViewer上のfloating panelへ移行済みであり、専用の
+`PaneSplitter`・高さ調整用Resize Handle・`sekisan-navi:master-pane-height`
+localStorageキーはいずれも廃止した(直下の「### 下部Master領域の高さ
+リサイズ」章も参照。floating panel化に伴う仕様は1.7章・7章参照)。
 
 ### 左ペインのリサイズ (2026-08 追加修正、Phase 4で右ペイン分を削除)
 
@@ -83,9 +94,17 @@ PanelProperties/EstimateTree/EstimateMasterPicker) は要件15の構成を維持
   Master高さ変更・ウィンドウリサイズのいずれでも自動的に再Fitするよう変更した。
   詳細は「### Viewer自動Fit (2026-09 追加修正指示18章〜35章)」を参照。
 
-### 下部Master領域の高さリサイズ (Phase 1.11 指示書24章〜26章)
+### 下部Master領域の高さリサイズ (Phase 1.11 指示書24章〜26章、[2026-09 Issue #19 追加修正で廃止])
 
-- 中央Viewer(上段)と積算コードMaster(下段)の境界にも横方向のResize Handle
+**この章全体が歴史的経緯であり、現行仕様にはもはや当てはまらない。**
+部品台帳(旧称: 積算コードMaster)が盤情報・積算集約・積算明細と同じ
+floating panelへ移行したことに伴い、専用の`PaneSplitter`(`axis="y"`)・
+`sekisan-navi:master-pane-height` localStorageキーはいずれも削除した。
+高さ調整は他3panelと同じfloating panel共通のドラッグリサイズ(1.7章、
+最小高さ150px)に置き換わっている。以下は移行前(MainArea下段常設時代)の
+記述として残す。
+
+- 中央Viewer(上段)と部品台帳(下段)の境界にも横方向のResize Handle
   (`PaneSplitter` `axis="y"`) を配置し、上下ドラッグでMaster領域の高さを変更できる。
 - 高さの範囲: 120px 〜 60vh (初期値260px、旧CSSの固定値を踏襲)。Viewerが実質
   見えなくなる高さ・Masterが操作不能になる高さにはならない (指示書25章)。
@@ -109,7 +128,7 @@ PanelProperties/EstimateTree/EstimateMasterPicker) は要件15の構成を維持
 
 ## 1.5. 表の共通スタイル方針 (セル境界・配置) — 表セル境界の統一 + ヘッダ左寄せ/数値セル右寄せ
 
-積算集約(5.5)・積算明細(5.6)・積算コードMaster(7)の3表に共通する表示方針。
+積算集約(5.5)・積算明細(5.6)・部品台帳(7)の3表に共通する表示方針。
 Excelのような重い罫線にはせず、「セルは認識できるが罫線は主張しないライト
 グリッド」を目指す。
 
@@ -119,7 +138,7 @@ Excelのような重い罫線にはせず、「セルは認識できるが罫線
   するための縦罫線(`border-right`)のみを`--border-cell`で追加した。選択中
   Masterカテゴリの濃色ヘッダ帯の上だけは、グレー系の線がほぼ見えず色面を
   分断して見えるため、`rgba(255,255,255,0.18)`程度の半透明白を使う。
-- **ヘッダ文字は左寄せ**: 数値列(単価(暫定)/数量/金額、積算コードMasterの
+- **ヘッダ文字は左寄せ**: 数値列(単価(暫定)/数量/金額、部品台帳の
   価格・工数系列)も含め、列見出し文字は原則左寄せにする。
 - **値セルは内容に応じて配置**: 文字列・コードは左寄せ、単価・数量・金額・
   Masterの価格/工数系列は右寄せのまま維持する(桁の比較がしやすいように)。
@@ -146,14 +165,14 @@ ON/OFFのみで行う。1.7章参照)。`CollapsibleSectionHeading.tsx`は他に
 よりさらに一段強い状態として維持している(通常 < Viewer連動中、の階層を保つ)。
 padding・高さは変更していない。
 
-## 1.7. 盤情報・積算集約・積算明細・積算コードMasterのfloating panel化 (Issue #19 Phase 2/4)
+## 1.7. 盤情報・積算集約・積算明細・部品台帳のfloating panel化 (Issue #19 Phase 2/4)
 
 作業者打合せで確認した要望(図面をなるべく大きく見ながら作業したい)を受け、
 右ペイン常設方式だった盤情報・積算集約・積算明細を、図面Viewer上へ重ねて表示する
 floating panelへ変更した(Phase 2で積算集約・積算明細、Phase 4で盤情報)。
 Phase 4で**右ペイン自体を廃止**したため、図面Viewerは左ペインの右側全幅を
 使えるようになった。**[2026-09 追加修正]** MainArea下段に常設していた
-積算コードMaster(7章参照)も同じ仕組みでfloating panel化し、floating panel
+部品台帳(7章参照)も同じ仕組みでfloating panel化し、floating panel
 の総数は4つになった。4つとも非表示にすると、Viewer上に何も乗らない状態
 (図面のみ)になる。
 
@@ -165,12 +184,12 @@ Phase 4で**右ペイン自体を廃止**したため、図面Viewerは左ペイ
 変更した(既存componentを極力再利用する方針)。
 
 **表示トグル**: `components/Layout/PanelVisibilityToggles.tsx`が
-「盤情報」「積算集約」「積算明細」「積算コードMaster」(この順)の4つを
+「盤情報」「積算集約」「積算明細」「部品台帳」(この順)の4つを
 個別にON/OFFできる。**[2026-09 Phase 4で配置変更]** Phase 2ではViewer右上に
 独立したfloating toggle barとして浮かせていたが、追加UI修正指示により
 Undo/Redoボタンと同じ編集ツールバー(`app-layout__edit-toolbar`)の右端へ
 移動した(左から元に戻す/やり直す/操作履歴を見る、区切り線を挟んで盤情報/
-積算集約/積算明細の表示トグル)。**[2026-09 追加修正]** 積算コードMasterの
+積算集約/積算明細の表示トグル)。**[2026-09 追加修正]** 部品台帳の
 トグルは、情報系3panelとは別の「作業ツール」であることを示すため、
 さらに区切り線(`.panel-visibility-toggles__divider`)を挟んで末尾へ独立
 配置し、専用のslate系配色(下記)にしている。初期状態は4つともON(既存利用性を
@@ -211,11 +230,11 @@ Undo/Redoボタンと同じ編集ツールバー(`app-layout__edit-toolbar`)の�
 
 **既定配置(初期表示のみ)**: 盤情報はViewer左上寄り、積算集約はViewer右上寄り、
 積算明細はViewer右下寄りに、既定でそれぞれ配置する。**[2026-09 追加修正]**
-積算コードMasterはViewer左下寄りに配置し、4panelが対角に分散するようにした。
+部品台帳はViewer左下寄りに配置し、4panelが対角に分散するようにした。
 4つとも表示していても重ならないよう、盤情報・積算集約は`top`基準(左右で
-分かれる)、積算明細・積算コードMasterは`bottom`基準(左右で分かれる)で
+分かれる)、積算明細・部品台帳は`bottom`基準(左右で分かれる)で
 初期位置を計算する(`components/Layout/FloatingPanel.tsx`の`defaultRectFor`)。
-積算コードMasterは価格列を複数持つ横長の表のため、既定幅を他3panelより
+部品台帳は価格列を複数持つ横長の表のため、既定幅を他3panelより
 やや広め(480px、他は360px)にしている。ユーザーが移動/リサイズした後は、
 そのセッション中は変更後の位置・大きさを保持する(下記「ドラッグ移動・
 リサイズ」参照)。
@@ -240,7 +259,7 @@ Events (`onPointerDown`/`onPointerMove`/`onPointerUp`、`setPointerCapture`)の
   panel種別ごとにさらに縮小]** 最小高さは以前は4panel共通180pxだったが、
   「タイトル+最低限の操作UI+1〜2行程度の表示が成立するところまで縮小可能に
   する」指示を受け、実ブラウザ確認のうえ種別ごとの値へ変更した:
-  盤情報120px・積算明細150px・積算コードMaster150px・積算集約160px
+  盤情報120px・積算明細150px・部品台帳150px・積算集約160px
   (積算集約は確定操作+製番合計/対象select等、固定領域の情報量が最も
   多いため4panel中もっとも大きい下限のまま)。Viewerコンテナ
   (`app-workspace__viewer-wrap`)の幅・高さを超えるサイズにはならない
@@ -299,7 +318,7 @@ Viewer上の図面がうっすら透けて見えるが、`PanelInfo`/`EstimateAg
 境界色をさらに一段濃く(`rgba(30, 41, 59, 0.65)`)して強調する。
 4panelとも`.floating-panel`の共通ルールとして同じ枠線を共有する
 (`FloatingPanel.css`に一括定義、component側で個別に上書きしていない)。
-**[2026-09 追加修正]** 積算コードMasterのみ、7章で説明する「ツール系panel」
+**[2026-09 追加修正]** 部品台帳のみ、7章で説明する「ツール系panel」
 の識別のため、この共通枠線に加えて上端3px太のslate系アクセントバー
 (`.floating-panel--master`)を追加している。
 
@@ -648,7 +667,7 @@ z-indexを押し上げた状態でもmodalが前面に出ることを確認済�
 
 ### Manual BBox追加 (Phase 1.6, 要件9-16)
 
-- 下部の積算コードMasterで行を選択すると、Viewerが「BBox追加モード」になる
+- 下部の部品台帳で行を選択すると、Viewerが「BBox追加モード」になる
   (ツールバーに「✎ BBox追加モード」バッジを表示、カーソルがcrosshairに変化)。
 - この状態でViewer上をドラッグすると、Pan操作の代わりにManual BBoxの矩形選択になる
   (ドラッグ中は紫の破線でプレビュー表示、マウスを離した時点で確定)。
@@ -658,7 +677,7 @@ z-indexを押し上げた状態でもmodalが前面に出ることを確認済�
 - Manual BBoxはAI検出結果と視覚的に区別できる: 紫系の破線枠・背景、ラベルに
   「✎」を付与する。ただし `selected`/`needs_review`/`excluded`/一時強調 等の
   状態表示は引き続き優先される (要件16)。
-- 積算コードMasterの選択状態はBBox追加後も維持され、同じ積算コードで
+- 部品台帳の選択状態はBBox追加後も維持され、同じ積算コードで
   複数のBBoxを連続追加できる (要件8)。
 
 ### BBoxの選択・削除・リサイズ (Phase 1.7)
@@ -697,7 +716,7 @@ z-indexを押し上げた状態でもmodalが前面に出ることを確認済�
 - Escキーは、現在アクティブな状態に応じて1段階だけ解除する (一度のEscで複数の
   状態を予期せず全消去しない):
   1. BBox編集中 (`selectedDetectionId`) → その選択のみ解除
-  2. 積算コードMaster選択中 (`selectedMasterItemId`) → その選択のみ解除
+  2. 部品台帳選択中 (`selectedMasterItemId`) → その選択のみ解除
      (Manual BBox追加モード・crosshairカーソルも連動して終了する。
      `bboxAddMode`は`selectedMasterItemId`から導出しているため自動的に解除される)
   3. 盤選択中 (`selectedPanel`) → その選択のみ解除
@@ -1102,7 +1121,7 @@ Tree表示)は、実データによる`EstimateAggregation`(5.5)・`EstimateDeta
 `EstimateTree`/`PanelProperties`の記載は、本節と合わせて今後の更新時に整理する
 (現時点では本節のみを更新し、他の古い記述は対象外としている)。
 
-## 7. EstimateMasterPicker (積算コードMaster) — Phase 1.6で刷新、Phase 1.7で実データ対応、2026-09 Issue #19追加修正でfloating panel化
+## 7. EstimateMasterPicker (部品台帳) — Phase 1.6で刷新、Phase 1.7で実データ対応、2026-09 Issue #19追加修正でfloating panel化
 
 **[2026-09 Issue #19 追加修正]** 従来はMainArea下段に常設(PaneSplitterで
 高さ手動リサイズ)されていたが、盤情報・積算集約・積算明細と同じ
@@ -1113,18 +1132,55 @@ localStorageキーによる高さ調整は廃止し、floating panel共通のド
 リサイズ(1.7章)に置き換わった。
 
 **ツール系panelとしての配色区別**: 盤情報・積算集約・積算明細は
-「表示情報」のfloating panelだが、積算コードMasterはこの表からManual
+「表示情報」のfloating panelだが、部品台帳はこの表からManual
 BBox追加対象を選ぶという**作業ツール**であるため、同じ見た目に見えないよう
 専用の配色にしている。
 - floating panel shell自体の上端に3px太のslate系(`#334155`)アクセントバー
   (情報系3panelの通常の1px枠線とは別に追加)。
-- component内部の`master-picker__toolbar`(見出し+検索欄+件数)を、白背景
-  ではなく濃色(slate)の帯にする。
+- component内部の`master-picker__toolbar`(見出し+件数。**[2026-09 追加修正]**
+  検索欄は廃止したため現在は含まない、下記参照)を、白背景ではなく濃色(slate)
+  の帯にする。
 - 表示切替トグル(`PanelVisibilityToggles`)も、情報系3ボタン(violet系)と
   区切り線を挟んで分離し、専用のslate系配色にする。
 - 既存のMasterカテゴリ色(`--cat-tab-*`)・選択行の意味色(コバルトブルー)は
   一切変更していない。派手な警告色(赤・amber)は使わず、あくまで
   「種類が違う」ことが一目で分かる程度の落ち着いた配色にとどめている。
+
+### 部品台帳への再設計 (2026-09 Issue #19 追加修正)
+
+**以下の下位項目(Phase 1.6〜1.11時点の記述)のうち、「検索欄」「タブ表示」
+「10列表示」に関する部分は、この追加修正により実態と異なる(歴史的経緯として
+残す)。現行仕様は以下のとおり。**
+
+- **UI名称の変更**: floating panelタイトル・表示ON/OFFボタンとも、ユーザー
+  向け表示名を「積算コードMaster」から**「部品台帳」**へ統一した。
+  component名(`EstimateMasterPicker`)・CSSクラス名(`master-picker__*`)・
+  domain名(`estimate_master_items`等)は変更していない(大規模リファクタリング
+  は行わない方針)。エラーメッセージ・積算確定の確認ダイアログ・積算集約下部の
+  単価注記など、他のユーザー向け文言も同様に統一した。
+- **検索欄の廃止**: 従来のコード・型式によるテキスト検索入力欄は廃止した。
+- **カテゴリタブ → カテゴリ選択リストへの変更**: 横一列のタブ表示は狭い
+  floating panelでは横幅を浪費するため、単一の`<select>`によるカテゴリ切替
+  へ置き換えた。カテゴリの定義・並び順・表示ラベル変換
+  (`masterCategoryPresentation.ts`)・切替時の再取得ロジックはタブ時代の
+  ものをそのまま再利用しており、見た目だけを変更している。選択中カテゴリの
+  配色(`toCssVars`)をselect自身の背景/文字色/枠線へ注入し(旧「選択中タブ」
+  と同じ濃色塗り+白文字)、「現在選択中カテゴリが一目で分かる」ことを維持した。
+  横一列タブ/segmented list等の他形式も比較検討したが、カテゴリ数(13)が
+  増減してもfloating panelの幅を圧迫しないselect形式を採用した。
+- **表示カラムを3列(コード/型式/定格)へ限定**: 総合価格A・箱・部品価格・
+  塗装価格・設A・板金・組立・検査の7列は、この部品台帳floating panelでは
+  表示しない。`fetchMasterItems`が返すデータ・`EstimateMasterItem`型・
+  `onSelectItem`経由で渡すMaster item全体の参照はいずれも変更しておらず、
+  **表示上の列を絞るだけ**である(Manual BBox追加時に必要なMaster item全体の
+  情報は従来通り`App.tsx`側の`masterItemById`経由で参照される)。
+  `table-layout: fixed`とし、コード列は必要最小限、型式・定格は残りの幅を
+  配分する(積算明細・積算集約と同じ「短い列は詰め、長い列へ優先配分」方針)。
+  定格は品目によっては長い文字列(例:「3Φ 50kVA 200V級　公共建築
+  (225A)」)になりうるため、既存方針どおり折り返し(`overflow-wrap`)を許容し、
+  省略記号(ellipsis)は使わない。
+- **既存機能の維持**: 行クリックによるManual BBox追加対象の選択・選択解除・
+  トグルロジック(`App.tsx`側が保持)は変更していない。
 
 - **Phase 1.7**: 参照元をExcel資料 (`data/master/estimate_master_a.xlsx`) に
   切り替えた (ダミー21件は廃止)。Frontendは引き続きExcelを直接読まず、必ず
@@ -1160,9 +1216,17 @@ BBox追加対象を選ぶという**作業ツール**であるため、同じ見
   定義しており、列の増減は配列を変更するだけで対応可能 (要件14)。
   品名(category)は列としては表示しない (タブで表現するため)。`item_name`列は
   Phase 1.7で廃止した (`data-model.md` 参照)。
+  **[2026-09 Issue #19 追加修正で訂正]** この10列表示は上記「部品台帳への
+  再設計」により**コード/型式/定格の3列のみ**へ変更済み。`COLUMNS`定数配列で
+  列を定義する設計自体は維持している(配列の要素を減らしただけ)。
 - 数値列は3桁区切りで表示する (元データの数値そのものは変更しない、表示上の整形のみ)。
   値がない項目は空欄表示とし、ダミー値・計算値では埋めない (要件3/4)。
+  **[2026-09 追加修正で訂正]** 3列化により数値列(価格・工数)自体がこの
+  floating panelには存在しなくなったため、3桁区切り表示は対象外になった
+  (元データ・`fetchMasterItems`の値自体は変更していない)。
 - テキスト検索は現在アクティブなタブ内のコード/型式に対して絞り込む。
+  **[2026-09 Issue #19 追加修正で訂正]** 検索欄自体を廃止したため、この
+  記述は現行仕様にはもはや当てはまらない(上記「部品台帳への再設計」参照)。
 - **大量データの表示 (Phase 1.7)**: 実データでは1タブ最大230件になるため、
   ページ全体が伸び続けないよう表テーブル部分を内部スクロール (`overflow-y: auto`)
   にした。検索・行選択は既存動作のまま、全件をDOM上に描画する (省略・打ち切りはしない。

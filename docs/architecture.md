@@ -1267,3 +1267,72 @@ floating panel自体の見た目もglassmorphism(半透明+ぼかし)へ変更�
   積算ロジック・`decision_events`・`estimate_confirmations`・Phase C・
   PDF Help Backend・sort機能・図面リンク・hover強調・Master選択→BBox追加
   モード連携のいずれも変更していない(実ブラウザで回帰が無いことを確認済み)。
+
+## 27. 部品台帳への再設計(旧称: 積算コードMaster)・floating panel初期幅のkind別調整 (Issue #19 追加修正)
+
+26章に続く、PR #22への追加修正。詳細な仕様は`docs/ui-spec.md` 7章
+(部品台帳への再設計)・1.7章(floating panelの既定幅)を参照。実装上の
+ポイントのみ記す:
+
+- **UI名称の変更**: `EstimateMasterPicker`のfloating panelタイトル
+  (`<h2>`)・`PanelVisibilityToggles`の表示切替ボタンを「積算コードMaster」
+  から**「部品台帳」**へ変更した。あわせて、ユーザーに見える他の文言
+  (`App.tsx`のMaster取得失敗エラーメッセージ、`DrawingCanvas.tsx`の
+  BBox追加モードバッジの`title`、`EstimateAggregation.tsx`の単価注記、
+  `EstimateConfirmationAction.tsx`の積算確定確認ダイアログ)も同様に
+  統一した。component名(`EstimateMasterPicker`)・CSSクラス名
+  (`master-picker__*`)・domain名(`estimate_master_items`等)・
+  `FloatingPanelKind`の`'master'`は変更していない(指示1章「大規模
+  リファクタリングは行わない」)。
+- **検索欄の廃止・カテゴリ選択listへの変更**: `EstimateMasterPicker.tsx`の
+  `query`/`setQuery` state・検索用`<input>`・デバウンス付き再取得effectを
+  削除し、`fetchMasterItems({ category })`のみを呼ぶ単純なeffectへ変更した。
+  カテゴリタブ(`role="tab"`のbutton群)は単一の`<select>`へ置き換えたが、
+  `activeCategory` state・`extractCategoryTabs`・
+  `getCategoryPresentation`/`toCssVars`(カテゴリごとの配色)はそのまま
+  再利用しており、見た目の実装だけを差し替えている。選択中カテゴリの
+  配色は、旧「選択中タブ」用の`--cat-tab-active-bg`/`--cat-tab-active-fg`を
+  そのままselect自身の背景/文字色として注入し、「現在選択中カテゴリが
+  明確に分かる」ようにした。
+- **表示カラムを3列(コード/型式/定格)へ限定**: `COLUMNS`定数配列から
+  総合価格A以降の7列を削除しただけで、`fetchMasterItems`が返すデータ・
+  `EstimateMasterItem`型・`onSelectItem`で渡す`itemId`経由のMaster item
+  全体参照はいずれも変更していない(Manual BBox追加時に必要な全項目は
+  `App.tsx`側の`masterItemById`から従来通り参照される)。テーブルは
+  `table-layout: fixed`とし、コード24%・型式34%・定格42%へ配分した
+  (積算明細・積算集約と同じ「短い列を詰め、長い列へ優先配分」方針)。
+  数値列(旧: 総合価格A等)が無くなったため、`formatCell`の`numeric`引数・
+  `.master-picker__cell--numeric`(旧: 詳細度の罠の教訓を含むCSS)は
+  削除した。
+- **floating panel初期幅のkind別調整**: 全kind共通360pxだった
+  `DEFAULT_WIDTH`を`DEFAULT_WIDTH_BY_KIND`(panelInfo/aggregation=360、
+  detail=440、master=300)へ変更した。実ブラウザで各panelの内容
+  (盤情報のカード・積算集約の5列表・積算明細の8列表・部品台帳の3列表)を
+  確認し、以下の方針で決定した。
+  - detail: 表自体のmin-width(730px)には広げず、360px→440pxへ拡大して
+    以前より多くの列が横スクロール無しで見えるようにした。
+  - master: 検索欄廃止+3列化により、旧480pxでは全列に大きな余白が
+    残ることを実測で確認したため、300pxへ大幅に縮小した。
+  - 1024px幅では積算明細(440px)・部品台帳(300px)がともに画面下段
+    (bottom基準)で左右に分かれる既定配置のため、両者の合計幅+左右
+    マージンがViewerコンテナ幅(1024px幅で実測798px)に収まるかを
+    実ブラウザで確認し、重なりが無いことを確認した。
+- **実ブラウザ確認で判明した検証手法上の限界**: Manual BBox追加そのもの
+  (Viewer上でのドラッグによる新規BBox描画)をPlaywrightの合成マウス
+  イベントで再現しようと試みたが、複数の開始位置・タイミングを試しても
+  新規BBoxが作成されなかった。一方で、部品台帳の行クリックによる
+  「BBox追加モード」への遷移(行の`--selected`クラス付与・
+  `.drawing-canvas__mode-badge`「✎ BBox追加モード」表示)は実ブラウザで
+  確認できており、この部分の連携(今回変更した部分)は問題なく機能して
+  いる。実際のBBox新規作成コールバック(`handleCreateManualBBox`)自体は
+  今回変更しておらず、この経路は`App.test.tsx`の既存自動テスト
+  (「積算コードMaster行選択 → Manual BBox追加モード」describe、
+  `fireEvent`ベースでコールバックを直接検証する既存の確立された手法)で
+  引き続き検証されている。実ブラウザでの生ドラッグ再現ができなかったのは
+  検証スクリプト側(Playwrightの合成マウスイベントとcanvas/PDF描画面との
+  相性)の制約であり、製品側の回帰ではないと判断した。
+- **既存ロジックへの非干渉**: 26章までと同様、BBox所属判定・Undo/Redoロジック・
+  積算ロジック・`decision_events`・`estimate_confirmations`・Phase C・
+  PDF Help Backend・前面化ルール・drag/resize・最小高さ・glassmorphism/枠線の
+  いずれも変更していない(実ブラウザ・自動テストの両方で回帰が無いことを
+  確認済み)。

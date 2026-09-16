@@ -959,16 +959,21 @@ describe('App: BBox削除 (Phase 1.7)', () => {
     await waitFor(() => expect(deleteDetection).toHaveBeenCalledWith(100))
   })
 
-  it('does not delete when the Delete key is pressed while a text input is focused (master picker search box)', async () => {
+  it('does not delete when the Delete key is pressed while a text input is focused (部品台帳のカテゴリ選択select)', async () => {
+    // [追加修正: 部品台帳への再設計] 旧来はMaster picker検索欄(text input)を
+    // 使っていたが検索欄自体を廃止したため、同じガード(INPUT/TEXTAREA/SELECT/
+    // contentEditableへフォーカス中はDeleteキーでのBBox削除を無視する。
+    // `App.tsx`のisEditableTarget相当ロジック参照)を検証できる代替として、
+    // 部品台帳のカテゴリ選択select(SELECT要素、ガード対象に含まれる)を使う。
     const { deleteDetection } = await import('./api/client')
     render(<App />)
     await navigateToOutlinePage()
     fireEvent.click(screen.getByTitle(/roof_fan/))
     await waitFor(() => expect(screen.getByRole('button', { name: 'BBox削除' })).not.toBeDisabled())
 
-    const searchBox = screen.getByPlaceholderText('コード・型式で検索 (現在のタブ内)')
-    searchBox.focus()
-    fireEvent.keyDown(searchBox, { key: 'Delete' })
+    const categorySelect = screen.getByRole('combobox', { name: 'カテゴリ' })
+    categorySelect.focus()
+    fireEvent.keyDown(categorySelect, { key: 'Delete' })
 
     expect(deleteDetection).not.toHaveBeenCalled()
     // 選択状態・BBoxも消えていないこと
@@ -1156,13 +1161,14 @@ describe('App: 積算コードMasterのfloating panel化 (Issue #19 追加修正
 
     const masterFloat = document.querySelector('.floating-panel--master') as HTMLElement
     expect(masterFloat).toBeInTheDocument()
-    expect(within(masterFloat).getByRole('heading', { name: '積算コードMaster' })).toBeInTheDocument()
+    // [追加修正: UI名称変更] floating panelタイトルは「部品台帳」(指示1章)。
+    expect(within(masterFloat).getByRole('heading', { name: '部品台帳' })).toBeInTheDocument()
     expect(await within(masterFloat).findByText('11001')).toBeInTheDocument()
   })
 
-  it('shows 積算コードMaster by default, and can be hidden/shown via its toggle', async () => {
+  it('shows 部品台帳 by default, and can be hidden/shown via its toggle', async () => {
     await renderApp()
-    const toggle = screen.getByRole('button', { name: '積算コードMaster' })
+    const toggle = screen.getByRole('button', { name: '部品台帳' })
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
 
     fireEvent.click(toggle)
@@ -1183,11 +1189,11 @@ describe('App: 積算コードMasterのfloating panel化 (Issue #19 追加修正
   it('groups the Master toggle visually apart from the 3 info-panel toggles, with a distinct (non-violet) color', async () => {
     await renderApp()
     const toggleGroup = document.querySelector('.panel-visibility-toggles') as HTMLElement
-    expect(within(toggleGroup).getByRole('button', { name: '積算コードMaster' })).toBeInTheDocument()
+    expect(within(toggleGroup).getByRole('button', { name: '部品台帳' })).toBeInTheDocument()
     expect(toggleGroup.querySelector('.panel-visibility-toggles__divider')).toBeInTheDocument()
 
     const infoToggle = screen.getByRole('button', { name: '積算集約' })
-    const masterToggle = screen.getByRole('button', { name: '積算コードMaster' })
+    const masterToggle = screen.getByRole('button', { name: '部品台帳' })
     expect(getComputedStyle(masterToggle).backgroundColor).not.toBe(getComputedStyle(infoToggle).backgroundColor)
   })
 
@@ -1261,8 +1267,8 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
     const buttons = within(toggleGroup).getAllByRole('button')
     // 追加UI修正指示1章: ボタン表示文字はON/OFFに関わらず常に固定ラベル。
     // [追加修正] 積算コードMasterのfloating panel化に伴い、区切り線を挟んで
-    // 4つ目のトグルが末尾へ追加された。
-    expect(buttons.map((b) => b.textContent)).toEqual(['盤情報', '積算集約', '積算明細', '積算コードMaster'])
+    // 4つ目のトグルが末尾へ追加された。UI名称は「部品台帳」(指示1章)。
+    expect(buttons.map((b) => b.textContent)).toEqual(['盤情報', '積算集約', '積算明細', '部品台帳'])
     expect(buttons.every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true)
   })
 
@@ -1857,14 +1863,17 @@ describe('App: Escキーによる編集モード解除 (Phase 1.11 UI改修指�
   })
 
   it('Escは検索欄等にフォーカスがあっても機能する (Deleteキーの除外ガードとは異なる。指示書3章)', async () => {
+    // [追加修正: 部品台帳への再設計] 検索欄(text input)自体は廃止したため、
+    // 同じ「入力要素にフォーカスがあってもEscは効く」ことを、部品台帳の
+    // カテゴリ選択select(SELECT要素)で検証する。
     render(<App />)
     const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
     fireEvent.click(row11001)
     await waitFor(() => expect(row11001.className).toContain('master-picker__row--selected'))
 
-    const searchBox = screen.getByPlaceholderText('コード・型式で検索 (現在のタブ内)')
-    searchBox.focus()
-    fireEvent.keyDown(searchBox, { key: 'Escape' })
+    const categorySelect = screen.getByRole('combobox', { name: 'カテゴリ' })
+    categorySelect.focus()
+    fireEvent.keyDown(categorySelect, { key: 'Escape' })
 
     await waitFor(() => expect(row11001.className).not.toContain('master-picker__row--selected'))
   })

@@ -426,7 +426,7 @@ function App() {
       .then((items) => {
         setMasterItemById(new Map(items.map((item) => [item.id, item])))
       })
-      .catch((e: unknown) => setError(describeFetchError(e, '積算コードMasterを取得できませんでした')))
+      .catch((e: unknown) => setError(describeFetchError(e, '部品台帳を取得できませんでした')))
   }, [])
 
   // 選択中Detectionに紐づく盤情報を取得

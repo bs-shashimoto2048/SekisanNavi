@@ -410,7 +410,7 @@ export function EstimateAggregation({
 
           <div className="estimate-aggregation__fixed-bottom">
             <p className="estimate-aggregation__footnote">
-              ※単価は積算コードMasterの「総合価格A」を暫定的に表示しています。正式な価格仕様として確定した値ではありません。
+              ※単価は部品台帳の「総合価格A」を暫定的に表示しています。正式な価格仕様として確定した値ではありません。
             </p>
           </div>
         </>

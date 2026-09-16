@@ -50,14 +50,32 @@ const MIN_HEIGHT_BY_KIND: Record<FloatingPanelKind, number> = {
   detail: 150,
   master: 150,
 }
-const DEFAULT_WIDTH = 360
-// 積算コードMasterは価格列を複数持つ横長の表のため、他3panelより既定幅を
-// 少し広めにする(あくまで既定値。ユーザーは自由にリサイズできる)。
+// [追加修正: 各floating panelの初期幅を内容に合わせて調整]
+// 全kind共通の360pxを既定としていたが、panelごとに「通常必要なカラムが
+// 無理なく見える幅」は異なるため、実ブラウザ確認のうえkind別の値へ変更した
+// (あくまで既定値。ユーザーは自由にリサイズでき、4panelを同じ幅へ揃える
+// 必要は無い)。
+// - panelInfo: カード1枚が2行程度で収まり、360pxで既に折り返しが自然。
+// - aggregation: 5列の表(コード/内容/単価/数量/金額)が360pxで無理なく
+//   収まる(内容列を最優先で広く取る配分のため)。上部の確定操作・製番合計・
+//   対象selectも360pxで1行にまとまる。
+// - detail: 8列の表(min-width 730px)は360pxだと4列目(型式)の途中までしか
+//   見えず、以前は横スクロールが常時必要だった。図面Viewerを過度に圧迫しない
+//   範囲で440pxへ拡大し、より多くの列が見えるようにした(730pxへは広げない。
+//   残りは既存の内部横スクロールに任せる)。
+// - master(部品台帳): 追加修正でコード/型式/定格の3列のみになり、検索欄も
+//   廃止したため、旧来の480pxは明らかに広すぎた(実測で全列に大きな余白)。
+//   3列が無理なく見える最小限として300pxへ大幅に縮小した(指示4章
+//   「旧Master表より明確にコンパクトな初期幅を狙う」)。
+// 既定位置は積算明細・部品台帳とも下段(bottom基準)で左右に分かれるため、
+// 1024px幅でも両者の合計幅+左右マージンがViewerコンテナ幅に収まるよう
+// (実測: 1024px幅で798px)、detail 440px+master 300pxで検証している
+// (740px、798pxに対して十分な余白がある。実ブラウザ確認済み)。
 const DEFAULT_WIDTH_BY_KIND: Record<FloatingPanelKind, number> = {
-  panelInfo: DEFAULT_WIDTH,
-  aggregation: DEFAULT_WIDTH,
-  detail: DEFAULT_WIDTH,
-  master: 480,
+  panelInfo: 360,
+  aggregation: 360,
+  detail: 440,
+  master: 300,
 }
 const SIDE_MARGIN = 20
 // DrawingCanvas自身のtoolbar(図面名+Zoom/Fit/BBox削除、Viewer上端いっぱいの1行)を
