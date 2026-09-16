@@ -906,8 +906,8 @@ describe('EstimateAggregation: 表セル境界の統一・ヘッダ左寄せ/数
   // 実ブラウザ確認(スクリーンショット)で行う。
 })
 
-describe('EstimateAggregation: 折りたたみ (Issue #6: Improve estimation target visibility and collapsible right pane sections)', () => {
-  it('defaults to expanded (collapsed prop omitted) and shows the table/target select', () => {
+describe('EstimateAggregation: 見出し (Issue #19 追加修正で折りたたみ機能は廃止、常に本文を表示する)', () => {
+  it('always shows the table/target select (no collapse feature)', () => {
     const item = makeLineItem()
     render(
       <EstimateAggregation
@@ -920,92 +920,9 @@ describe('EstimateAggregation: 折りたたみ (Issue #6: Improve estimation tar
     )
     expect(screen.getByRole('table')).toBeInTheDocument()
     expect(screen.getByRole('combobox')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /積算集約/ })).toHaveAttribute('aria-expanded', 'true')
-  })
-
-  it('hides the body (grand total/target select/table) but keeps the heading when collapsed=true, without touching selectedTargetId/onSelectTarget logic', () => {
-    const onSelectTarget = vi.fn()
-    const item = makeLineItem()
-    render(
-      <EstimateAggregation
-        targets={[makeTarget()]}
-        lineItems={[item]}
-        totalLineItems={[makeTotalLineItem(item)]}
-        selectedTargetId={null}
-        onSelectTarget={onSelectTarget}
-        collapsed
-        onToggleCollapsed={() => {}}
-      />,
-    )
-    expect(screen.queryByRole('table')).not.toBeInTheDocument()
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
-    expect(screen.getByText('積算集約')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /積算集約/ })).toHaveAttribute('aria-expanded', 'false')
-    expect(onSelectTarget).not.toHaveBeenCalled()
-  })
-
-  it('calls onToggleCollapsed when the heading is clicked, independent of sort state/column click handling', () => {
-    const onToggleCollapsed = vi.fn()
-    const item = makeLineItem()
-    render(
-      <EstimateAggregation
-        targets={[makeTarget()]}
-        lineItems={[item]}
-        totalLineItems={[makeTotalLineItem(item)]}
-        selectedTargetId={null}
-        onSelectTarget={() => {}}
-        collapsed={false}
-        onToggleCollapsed={onToggleCollapsed}
-      />,
-    )
-    fireEvent.click(screen.getByRole('button', { name: /積算集約/ }))
-    expect(onToggleCollapsed).toHaveBeenCalledTimes(1)
-    // ソート列クリック用のボタンには影響しない(別のボタン)。
-    expect(screen.getByRole('button', { name: 'コードでソート' })).toBeInTheDocument()
-  })
-
-  it('keeps sort state intact across collapse/expand (collapse does not reset sortColumn/sortDirection)', () => {
-    const items = [
-      makeTotalLineItem({ id: 'a', code: '18002' }),
-      makeTotalLineItem({ id: 'b', code: '18001' }),
-    ]
-    const { rerender } = render(
-      <EstimateAggregation
-        targets={[makeTarget()]}
-        lineItems={items}
-        totalLineItems={items}
-        selectedTargetId={null}
-        onSelectTarget={() => {}}
-        collapsed={false}
-        onToggleCollapsed={() => {}}
-      />,
-    )
-    fireEvent.click(screen.getByRole('button', { name: '金額でソート' }))
-    expect(screen.getByRole('button', { name: '金額でソート' }).textContent).toContain('▲')
-
-    rerender(
-      <EstimateAggregation
-        targets={[makeTarget()]}
-        lineItems={items}
-        totalLineItems={items}
-        selectedTargetId={null}
-        onSelectTarget={() => {}}
-        collapsed
-        onToggleCollapsed={() => {}}
-      />,
-    )
-    rerender(
-      <EstimateAggregation
-        targets={[makeTarget()]}
-        lineItems={items}
-        totalLineItems={items}
-        selectedTargetId={null}
-        onSelectTarget={() => {}}
-        collapsed={false}
-        onToggleCollapsed={() => {}}
-      />,
-    )
-    expect(screen.getByRole('button', { name: '金額でソート' }).textContent).toContain('▲')
+    expect(screen.getByRole('heading', { name: '積算集約' })).toBeInTheDocument()
+    // 折りたたみ用のchevronトグルボタンは存在しない (見出しは<h2>のプレーンテキスト)。
+    expect(screen.queryByRole('button', { name: /積算集約/ })).not.toBeInTheDocument()
   })
 })
 

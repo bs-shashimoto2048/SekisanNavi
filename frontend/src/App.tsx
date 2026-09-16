@@ -62,7 +62,7 @@ import { ProductSelector } from './components/ProductSelector/ProductSelector'
 import { HelpPdfModal } from './components/HelpPdf/HelpPdfModal'
 import { DecisionEventHistory } from './components/DecisionEventHistory/DecisionEventHistory'
 import { PaneSplitter } from './components/Layout/PaneSplitter'
-import { FloatingPanel } from './components/Layout/FloatingPanel'
+import { FloatingPanel, type FloatingPanelRect } from './components/Layout/FloatingPanel'
 import { PanelVisibilityToggles } from './components/Layout/PanelVisibilityToggles'
 import { usePaneWidth } from './hooks/usePaneWidth'
 import './App.css'
@@ -261,27 +261,33 @@ function App() {
     MASTER_PANE_HEIGHT_MAX_VH_RATIO,
     'height',
   )
-  // Issue #6: 盤情報・積算集約・積算明細それぞれの見出し折りたたみ。デフォルトは
-  // すべて展開(false)。積算対象選択・図面一覧連動・Viewer連動・Undo/Redo等、
-  // 他のロジックには一切接続しない独立したUI状態のため、localStorageへは
-  // 永続化しない(リロードのたびに「初期表示は全項目OPEN」を素直に満たす)。
-  // Issue #19 Phase 2: 積算集約・積算明細は右ペインからViewer上のfloating panelへ
-  // 移動したが、各パネル自身の折りたたみ(見出しクリックで本文だけ隠す)は
-  // そのまま維持する(コンポーネント自体は変更していない)。
-  const [panelInfoCollapsed, setPanelInfoCollapsed] = useState(false)
-  const [estimateAggregationCollapsed, setEstimateAggregationCollapsed] = useState(false)
-  const [estimateDetailCollapsed, setEstimateDetailCollapsed] = useState(false)
-
   // Issue #19 Phase 2: 積算集約・積算明細をViewer上のfloating panelとして個別に
-  // 表示/非表示できるようにする(上記の折りたたみ=パネル内の本文を隠す、とは別の
-  // 「パネルそのものを画面から消す」操作)。初期値は「既存利用性を損なわない設定」
-  // として両方表示(true)にする(従来の右ペイン常設と同じ見え方から始まる)。
+  // 表示/非表示できるようにする。初期値は「既存利用性を損なわない設定」として
+  // 両方表示(true)にする(従来の右ペイン常設と同じ見え方から始まる)。
   // セッション内のみのUI状態で、localStorageへは永続化しない(Phase 2指示:
   // レイアウト設定の永続化は今回非対象)。
   // Issue #19 Phase 4: 盤情報も同じ仕組みでfloating panel化する(初期値true)。
+  // [追加修正] Issue #6由来の「見出しクリックでの折りたたみ」機能は、3領域とも
+  // floating panel化したことに伴い廃止した(表示/非表示はこのstateのみで行う。
+  // PanelInfo/EstimateAggregation/EstimateDetail自体からもcollapsed関連の
+  // props/状態を削除済み)。
   const [panelInfoFloatingVisible, setPanelInfoFloatingVisible] = useState(true)
   const [estimateAggregationFloatingVisible, setEstimateAggregationFloatingVisible] = useState(true)
   const [estimateDetailFloatingVisible, setEstimateDetailFloatingVisible] = useState(true)
+
+  // floating panel(盤情報/積算集約/積算明細)の位置・大きさ ([追加修正]
+  // ドラッグ移動・リサイズ対応)。`FloatingPanel`コンポーネント自身のstateではなく
+  // ここへ持ち上げているのは、表示ON/OFF(上記state)でfloating panelがunmountされても
+  // 移動/リサイズ結果をセッション中は保持し続けるため(指示: 「ユーザーが移動/
+  // リサイズした後は、そのセッション中は状態を保持してください」)。`null`は
+  // 「まだ初期配置を計算していない」ことを表し、`FloatingPanel`側が初回描画時に
+  // Viewerの実際のサイズを見て計算する。localStorageへは永続化しない
+  // (指示: 今回はセッション内保持で良い)。
+  const [panelInfoRect, setPanelInfoRect] = useState<FloatingPanelRect | null>(null)
+  const [aggregationRect, setAggregationRect] = useState<FloatingPanelRect | null>(null)
+  const [detailRect, setDetailRect] = useState<FloatingPanelRect | null>(null)
+  // floating panelの位置・大きさのクランプ基準となるコンテナ要素。
+  const viewerWrapRef = useRef<HTMLDivElement>(null)
 
   // 初期データ読込 (案件情報 / ダミー図面一覧 / 全ページ分のDetection)。
   // `fetchDetections()`を引数無しで呼ぶとDB全件が返る (Backend側の既存の
@@ -1253,7 +1259,7 @@ function App() {
                 15章)は変更せず、その外側にposition:relativeのコンテナを1枚
                 追加して、floating panel/トグルバーをこのコンテナ基準で
                 絶対配置するだけにしている。 */}
-            <div className="app-workspace__viewer-wrap">
+            <div className="app-workspace__viewer-wrap" ref={viewerWrapRef}>
               <DrawingViewer
                 productNo={activeProductNo}
                 pageNo={selectedProductPageNo}
@@ -1282,8 +1288,10 @@ function App() {
               />
               <FloatingPanel
                 visible={panelInfoFloatingVisible}
-                position="panelInfo"
-                collapsed={panelInfoCollapsed}
+                kind="panelInfo"
+                containerRef={viewerWrapRef}
+                rect={panelInfoRect}
+                onRectChange={setPanelInfoRect}
               >
                 <PanelInfo
                   panel={panel}
@@ -1291,14 +1299,14 @@ function App() {
                   estimatePanels={estimatePanels}
                   selectedPanel={selectedPanel}
                   onSelectPanel={handleSelectPanel}
-                  collapsed={panelInfoCollapsed}
-                  onToggleCollapsed={() => setPanelInfoCollapsed((c) => !c)}
                 />
               </FloatingPanel>
               <FloatingPanel
                 visible={estimateAggregationFloatingVisible}
-                position="aggregation"
-                collapsed={estimateAggregationCollapsed}
+                kind="aggregation"
+                containerRef={viewerWrapRef}
+                rect={aggregationRect}
+                onRectChange={setAggregationRect}
               >
                 <EstimateAggregation
                   targets={estimateAggregationData.targets}
@@ -1306,15 +1314,15 @@ function App() {
                   totalLineItems={estimateAggregationData.totalLineItems}
                   selectedTargetId={selectedEstimateTargetId}
                   onSelectTarget={setSelectedEstimateTargetId}
-                  collapsed={estimateAggregationCollapsed}
-                  onToggleCollapsed={() => setEstimateAggregationCollapsed((c) => !c)}
                   productNo={activeProductNo}
                 />
               </FloatingPanel>
               <FloatingPanel
                 visible={estimateDetailFloatingVisible}
-                position="detail"
-                collapsed={estimateDetailCollapsed}
+                kind="detail"
+                containerRef={viewerWrapRef}
+                rect={detailRect}
+                onRectChange={setDetailRect}
               >
                 <EstimateDetail
                   detailItems={detailItemsWithEditMeta}
@@ -1326,8 +1334,6 @@ function App() {
                   sourceFilter={estimateDetailSourceFilter}
                   onSourceFilterChange={setEstimateDetailSourceFilter}
                   editFollowDetectionId={editFollowDetectionId}
-                  collapsed={estimateDetailCollapsed}
-                  onToggleCollapsed={() => setEstimateDetailCollapsed((c) => !c)}
                 />
               </FloatingPanel>
             </div>

@@ -430,8 +430,8 @@ describe('PanelInfo: 1行表示レイアウト (盤情報1行化・3領域リサ
   })
 })
 
-describe('PanelInfo: 折りたたみ (Issue #6: Improve estimation target visibility and collapsible right pane sections)', () => {
-  it('defaults to expanded (collapsed prop omitted) and shows the card list', () => {
+describe('PanelInfo: 見出し (Issue #19 追加修正で折りたたみ機能は廃止、常に本文を表示する)', () => {
+  it('always shows the card list (no collapse feature)', () => {
     render(
       <PanelInfo
         panel={null}
@@ -442,60 +442,8 @@ describe('PanelInfo: 折りたたみ (Issue #6: Improve estimation target visibi
       />,
     )
     expect(screen.getByText('No.2-1低圧動力盤')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /盤情報/ })).toHaveAttribute('aria-expanded', 'true')
-  })
-
-  it('hides the body (card list) but keeps the heading when collapsed=true, without touching onSelectPanel/selectedPanel logic', () => {
-    const onSelectPanel = vi.fn()
-    render(
-      <PanelInfo
-        panel={null}
-        panels={[makeProductPanel()]}
-        estimatePanels={[makeEstimatePanel()]}
-        selectedPanel={null}
-        onSelectPanel={onSelectPanel}
-        collapsed
-        onToggleCollapsed={() => {}}
-      />,
-    )
-    expect(screen.queryByText('No.2-1低圧動力盤')).not.toBeInTheDocument()
     expect(document.querySelector('.panel-info__heading')?.textContent).toContain('盤情報　1件')
-    expect(screen.getByRole('button', { name: /盤情報/ })).toHaveAttribute('aria-expanded', 'false')
-    expect(onSelectPanel).not.toHaveBeenCalled()
-  })
-
-  it('calls onToggleCollapsed when the heading is clicked, without the component managing its own collapse state', () => {
-    const onToggleCollapsed = vi.fn()
-    render(
-      <PanelInfo
-        panel={null}
-        panels={[makeProductPanel()]}
-        estimatePanels={[makeEstimatePanel()]}
-        selectedPanel={null}
-        onSelectPanel={() => {}}
-        collapsed={false}
-        onToggleCollapsed={onToggleCollapsed}
-      />,
-    )
-    fireEvent.click(screen.getByRole('button', { name: /盤情報/ }))
-    expect(onToggleCollapsed).toHaveBeenCalledTimes(1)
-  })
-
-  it('does not add padding/margin to the heading toggle button itself (指示: 見出しの高さを変えない)', () => {
-    render(
-      <PanelInfo
-        panel={null}
-        panels={[makeProductPanel()]}
-        estimatePanels={[makeEstimatePanel()]}
-        selectedPanel={null}
-        onSelectPanel={() => {}}
-        collapsed={false}
-        onToggleCollapsed={() => {}}
-      />,
-    )
-    const toggle = screen.getByRole('button', { name: /盤情報/ })
-    const style = getComputedStyle(toggle)
-    expect(style.padding).toBe('0px')
-    expect(style.margin).toBe('0px')
+    // 折りたたみ用のchevronトグルボタンは存在しない (見出しは<h2>のプレーンテキスト)。
+    expect(screen.queryByRole('button', { name: /盤情報/ })).not.toBeInTheDocument()
   })
 })

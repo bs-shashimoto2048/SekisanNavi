@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { EstimateLineItem, EstimateTarget } from '../../types/estimateAggregation'
 import { formatTargetLabel } from '../../domain/estimateTargetLabel'
-import { CollapsibleSectionHeading } from '../Layout/CollapsibleSectionHeading'
 import { EstimateConfirmationAction } from './EstimateConfirmationAction'
 import { EstimateConfirmationHistory } from './EstimateConfirmationHistory'
 import './EstimateAggregation.css'
@@ -114,12 +113,6 @@ interface Props {
    * ここへcontrolledで渡す。 */
   selectedTargetId: string | null
   onSelectTarget: (targetId: string | null) => void
-  /** Issue #6: 見出しクリックでの開閉状態。App.tsxが保持するcontrolled state
-   * (盤情報↔積算集約↔積算明細の高さ配分をApp.tsx側のwrapper divで切り替える
-   * 必要があるため)。積算対象選択・ソート状態・Undo/Redo等、他のロジックには
-   * 一切接続しない独立したUI状態。 */
-  collapsed?: boolean
-  onToggleCollapsed?: () => void
   /** Issue #4 Phase B-3: 積算確定操作のボタンに使う、現在Viewerで開いている
    * 実製番。積算確定は対象セレクトの選択状態とは無関係に常に製番全体が対象の
    * ため、既存の`selectedTargetId`とは別に受け取る(意味を混同しない)。 */
@@ -215,8 +208,6 @@ export function EstimateAggregation({
   totalLineItems,
   selectedTargetId,
   onSelectTarget,
-  collapsed = false,
-  onToggleCollapsed = () => {},
   productNo = null,
 }: Props) {
   // ソート列/方向は「ユーザーが選んだ表示上の好み」であり、対象切替(総合計/製品全体/
@@ -280,77 +271,63 @@ export function EstimateAggregation({
   return (
     <section className="estimate-aggregation">
       <div className="estimate-aggregation__fixed-top">
-        <CollapsibleSectionHeading
-          title="積算集約"
-          collapsed={collapsed}
-          onToggle={onToggleCollapsed}
-          headingClassName="estimate-aggregation__heading"
-        />
+        {/* Issue #19 Phase 4追加修正: floating panel化に伴い折りたたみ機能を廃止した
+            (表示/非表示はPanelVisibilityTogglesのみで行う)。この見出し領域は
+            FloatingPanel側のドラッグハンドル判定(`h2`要素であること)を兼ねる。 */}
+        <h2 className="estimate-aggregation__heading">積算集約</h2>
 
-        {/* Issue #4 Phase B-3: 積算確定ボタンは、積算コード0件の場合の空表示
-            (下記totalCodeCount===0分岐)とは無関係に常に表示する(0件確定を
-            UI側で独自に禁止しない方針のため。あえてtotalCodeCountの条件の外に置く)。
-            Phase B-4の確定履歴ボタンも同様に、積算コード0件でも過去確定は
-            参照できるべきため同じ条件(!collapsedのみ)の外に置かない。 */}
-        {!collapsed && (
-          <div className="estimate-aggregation__confirmation-row">
-            <EstimateConfirmationAction productNo={productNo} />
-            <EstimateConfirmationHistory productNo={productNo} />
-          </div>
-        )}
+        <div className="estimate-aggregation__confirmation-row">
+          <EstimateConfirmationAction productNo={productNo} />
+          <EstimateConfirmationHistory productNo={productNo} />
+        </div>
 
-        {/* Issue #6: 折りたたみ時は見出しだけを残し、本文(製番合計・対象セレクト・
-            要確認警告・表)はすべて非表示にする。積算対象の選択状態(selectedTargetId)
-            自体はApp.tsx側で保持されたまま変化しない。 */}
-        {!collapsed && (
-          totalCodeCount === 0 ? (
-            <p className="estimate-aggregation__empty">現在の製番に付加されている積算コードがありません</p>
-          ) : (
-            <>
-              <div className="estimate-aggregation__grand-total">
-                {headerLabel}
-                {headerUnknownCount > 0 && (
-                  <span className="estimate-aggregation__warn"> (単価未設定 {headerUnknownCount}件を含まず)</span>
-                )}{' '}
-                <strong>{formatCurrency(headerAmount)}</strong>
-              </div>
-              <div className="estimate-aggregation__summary">
-                <span>
-                  積算コード <strong>{totalCodeCount}</strong>件
-                </span>
-              </div>
+        {totalCodeCount === 0 ? (
+          <p className="estimate-aggregation__empty">現在の製番に付加されている積算コードがありません</p>
+        ) : (
+          <>
+            <div className="estimate-aggregation__grand-total">
+              {headerLabel}
+              {headerUnknownCount > 0 && (
+                <span className="estimate-aggregation__warn"> (単価未設定 {headerUnknownCount}件を含まず)</span>
+              )}{' '}
+              <strong>{formatCurrency(headerAmount)}</strong>
+            </div>
+            <div className="estimate-aggregation__summary">
+              <span>
+                積算コード <strong>{totalCodeCount}</strong>件
+              </span>
+            </div>
 
-              <label className="estimate-aggregation__target-select-label">
-                対象
-                <select
-                  className={
-                    'estimate-aggregation__target-select' +
-                    (isViewerFocused ? ' estimate-aggregation__target-select--focused' : '')
-                  }
-                  value={selectedTargetId ?? ALL_OPTION_VALUE}
-                  onChange={(e) => onSelectTarget(e.target.value === ALL_OPTION_VALUE ? null : e.target.value)}
-                >
-                  <option value={ALL_OPTION_VALUE}>総合計</option>
-                  {targets.map((target) => (
-                    <option key={target.id} value={target.id}>
-                      {targetOptionLabel(target)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            <label className="estimate-aggregation__target-select-label">
+              対象
+              <select
+                className={
+                  'estimate-aggregation__target-select' +
+                  (isViewerFocused ? ' estimate-aggregation__target-select--focused' : '')
+                }
+                value={selectedTargetId ?? ALL_OPTION_VALUE}
+                onChange={(e) => onSelectTarget(e.target.value === ALL_OPTION_VALUE ? null : e.target.value)}
+              >
+                <option value={ALL_OPTION_VALUE}>総合計</option>
+                {targets.map((target) => (
+                  <option key={target.id} value={target.id}>
+                    {targetOptionLabel(target)}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-              {selectedTarget?.type === 'tie' && (
-                <p className="estimate-aggregation__warn estimate-aggregation__warn--block">
-                  根拠BBoxが複数の盤と同じ交差面積で重なっており、機械的に一意の盤へ決定
-                  できませんでした。実図面を確認し、手動で判断してください。
-                </p>
-              )}
-            </>
-          )
+            {selectedTarget?.type === 'tie' && (
+              <p className="estimate-aggregation__warn estimate-aggregation__warn--block">
+                根拠BBoxが複数の盤と同じ交差面積で重なっており、機械的に一意の盤へ決定
+                できませんでした。実図面を確認し、手動で判断してください。
+              </p>
+            )}
+          </>
         )}
       </div>
 
-      {!collapsed && totalCodeCount > 0 && (
+      {totalCodeCount > 0 && (
         <>
           <div className="estimate-aggregation__table-scroll">
             <table className="estimate-aggregation__table">

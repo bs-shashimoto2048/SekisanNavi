@@ -1,17 +1,19 @@
-/* Issue #19 Phase 2で新設・Phase 4で拡張: 盤情報・積算集約・積算明細をViewer上へ
-   重ねるfloating panel。`DrawingViewer`内部のOverlay(0.0〜1.0正規化座標のBBox/
-   盤領域等)とは別の、Viewerの外側(App.tsx側、`.app-workspace__viewer-wrap`
-   基準)に乗る新しいレイヤーとして扱う。DrawingViewer内部のz-index/
-   pointer-events契約(docs/architecture.md 15章、PNG(0)〜Tooltip(50))はこの
-   floating panel導入で一切変更していない。 */
+/* Issue #19 Phase 2で新設・Phase 4で拡張・追加修正でドラッグ移動/リサイズに対応:
+   盤情報・積算集約・積算明細をViewer上へ重ねるfloating panel。`DrawingViewer`
+   内部のOverlay(0.0〜1.0正規化座標のBBox/盤領域等)とは別の、Viewerの外側
+   (App.tsx側、`.app-workspace__viewer-wrap`基準)に乗る新しいレイヤーとして扱う。
+   DrawingViewer内部のz-index/pointer-events契約(docs/architecture.md 15章、
+   PNG(0)〜Tooltip(50))はこのfloating panel導入で一切変更していない。
+   位置・大きさ(top/left/width/height)は`FloatingPanel.tsx`側でinline styleとして
+   都度計算するため、ここではCSSで固定値を持たない。 */
 .floating-panel {
   position: absolute;
-  /* Viewer内部Overlayの最大値(Tooltip: 50)より確実に前面へ出す。floating panel
-     同士の重なり順を明示する必要は無い(既定配置で重ならないため)。 */
+  /* Viewer内部Overlayの最大値(Tooltip: 50)より確実に前面へ出す。実際の重なり順は
+     `FloatingPanel.tsx`側でパネルごとにz-indexを個別採番する(操作したパネルが
+     前面に来る)。 */
   z-index: 100;
   display: flex;
   flex-direction: column;
-  width: min(360px, calc(100% - 2rem));
   /* Issue #19 Phase 4: グラス調(glassmorphism)。半透明の白background +
      backdrop-filterで背後の図面がうっすら透けるようにしつつ、表・文字の
      可読性を落とさないよう十分な不透明度を残す(完全透明にはしない)。
@@ -35,30 +37,50 @@
   }
 }
 
-/* 盤情報: Viewer左上寄りに配置する(Issue #19 Phase 4で右ペインを廃止し
-   floating panel化)。積算集約(右上)とは左右で分かれるため重ならない。 */
-.floating-panel--panelInfo {
-  top: 3rem;
-  left: 1.25rem;
-  height: 34%;
+/* ドラッグ中/リサイズ中の軽い強調 (指示5章「active/frontmost時の軽い強調」)。
+   frontmost自体は実際のz-index(前面に来る)で視覚的に表現できているため、
+   ここでは「今まさに操作している」ことだけを控えめに強調する。 */
+.floating-panel--interacting {
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.32);
+  border-color: rgba(255, 255, 255, 0.8);
 }
 
-/* 積算集約: Viewer右上寄りに配置する。高さは`vh`(ブラウザウィンドウ基準)では
-   なく、position:absoluteの基準である`.app-workspace__viewer-wrap`自身の
-   高さに対する`%`で指定する。Viewer領域は左ペイン/積算コードMaster領域と
-   ウィンドウ高さを分け合うため実際の高さはウィンドウ高さよりかなり小さく、
-   `vh`ベースだと積算明細(下記)と重なってしまうことを実ブラウザ確認で
-   確認した (2026-09)。 */
-.floating-panel--aggregation {
-  top: 3rem;
-  right: 1.25rem;
-  height: 32%;
+/* childrenの内容(PanelInfo/EstimateAggregation/EstimateDetail)は元々
+   「親から高さ100%で受け取る」設計のため、この1枚を挟んで高さの基準を作る。 */
+.floating-panel__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-/* 積算明細: Viewer右下寄りに配置する。積算集約と縦方向で重ならないよう、
-   上(top固定)ではなく下(bottom固定)を基準にする。 */
-.floating-panel--detail {
-  bottom: 0.75rem;
-  right: 1.25rem;
-  height: 38%;
+/* ドラッグハンドル (指示: 見出し領域をドラッグハンドルとして使う)。
+   PanelInfo/EstimateAggregation/EstimateDetailそれぞれが描画する`<h2>`見出しに
+   対して、子コンポーネント側を変更せずcursor/選択不可を当てる
+   (`FloatingPanel.tsx`側はpointerdownのevent delegationで`closest('h2')`判定)。 */
+.floating-panel h2 {
+  cursor: grab;
+  user-select: none;
+}
+
+.floating-panel--interacting h2 {
+  cursor: grabbing;
+}
+
+/* リサイズハンドル (指示: 右下角のみ、視認性を確保する)。 */
+.floating-panel__resize-handle {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(71, 85, 105, 0.55) 0,
+    rgba(71, 85, 105, 0.55) 1.5px,
+    transparent 1.5px,
+    transparent 4px
+  );
 }

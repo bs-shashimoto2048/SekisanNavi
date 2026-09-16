@@ -913,12 +913,16 @@ divで`flex`/`height`を条件分岐)。積算集約の「対象」Selectは、�
 重要な操作であることが視認できるよう強調している(コバルト系の枠+淡い背景、
 Viewer連動中はさらに一段強い強調)。詳細は`docs/ui-spec.md` 1.6章を参照。
 
-**[2026-09 Issue #19 Phase 2/4で構成変更]** 実装当時は盤情報・積算集約・
-積算明細が右ペイン内で隣接領域として高さを分け合っていたため「隣接領域へ
-高さを還元する」設計だったが、Phase 2で積算集約・積算明細が、Phase 4で
-盤情報もViewer上のfloating panelへ移動した後は、3領域とも隣接領域と高さを
-分け合わない独立した折りたたみになった(右ペイン自体もPhase 4で廃止済み。
-20章/22章参照)。
+**[2026-09 Issue #19 Phase 2/4で構成変更、追加修正で機能自体を廃止]**
+実装当時は盤情報・積算集約・積算明細が右ペイン内で隣接領域として高さを
+分け合っていたため「隣接領域へ高さを還元する」設計だったが、Phase 2で積算集約・
+積算明細が、Phase 4で盤情報もViewer上のfloating panelへ移動した後は、3領域とも
+隣接領域と高さを分け合わない独立した折りたたみになった(右ペイン自体も
+Phase 4で廃止済み。20章/22章参照)。**さらに追加修正で、この折りたたみ機能
+自体を完全に廃止した**(`CollapsibleSectionHeading`は他に利用箇所が無かった
+ため削除済み。表示/非表示は`PanelVisibilityToggles`のON/OFFのみで行う。
+23章参照)。本章の「折りたたみ/展開できるようにした」という記述は
+**現行mainにはもはや当てはまらない**(歴史的経緯としてのみ残す)。
 
 ## 20. 積算集約・積算明細のfloating panel化 (Issue #19 Phase 2)
 
@@ -954,6 +958,11 @@ Viewer連動中はさらに一段強い強調)。詳細は`docs/ui-spec.md` 1.6�
 `components/Layout/PanelVisibilityToggles.tsx`へ置き換えられ、Viewer右上の
 独立したfloating toggle barではなく編集ツールバーの右端へ移動した。詳細は
 22章を参照。
+
+**[2026-09 Issue #19 追加修正で訂正]** 「各panel内部の折りたたみ(Issue #6の
+既存`collapsed` state)はそのまま独立して機能する」は現行mainにはもはや
+当てはまらない。この追加修正で折りたたみ機能自体を完全に廃止し、`FloatingPanel`
+の`collapsed` propも削除した。詳細は23章を参照。
 
 ## 21. 積算資料PDF Help (Issue #19 Phase 3)
 
@@ -1036,3 +1045,62 @@ floating panel自体の見た目もglassmorphism(半透明+ぼかし)へ変更�
 - **PDF Help標準配置場所の確認**: `HELP_PDF_PATH`(`data/help/estimate-help.pdf`、
   Issue #19 Phase 3で導入)を、この追加指示により正式な標準配置場所として
   再確認した。実装・値ともに変更していない(21章参照)。
+
+**[2026-09 Issue #19 追加修正で訂正]** 上記「既定配置の見直し」に記載した
+`top: 3rem`等のCSS固定位置(`components/Layout/FloatingPanel.css`の
+`.floating-panel--panelInfo`等)は、追加修正でドラッグ移動・リサイズに対応した
+ことに伴い、**初期表示時のみ使う既定値をJS側(`FloatingPanel.tsx`の
+`defaultRectFor`)で計算する方式へ変更した**(CSS側に固定の位置ルールはもはや
+無い)。位置・大きさ自体は`App.tsx`側のstateへ持ち上げてある。詳細は23章を参照。
+
+## 23. floating panelのドラッグ移動・リサイズ、折りたたみ機能の廃止 (Issue #19 追加修正)
+
+作業者が図面上の邪魔にならない位置・大きさへfloating panel(盤情報・積算集約・
+積算明細)を自由に調整できるようにする追加修正。詳細な仕様は`docs/ui-spec.md`
+1.6章/1.7章を参照。実装上のポイントのみ記す:
+
+- **折りたたみ機能の廃止**: `PanelInfo`/`EstimateAggregation`/`EstimateDetail`
+  それぞれから`collapsed`/`onToggleCollapsed` propsと`CollapsibleSectionHeading`
+  の利用を削除し、見出しをプレーンな`<h2>`(`panel-info__heading`等、既存の
+  className・見た目はそのまま)に置き換えた。`CollapsibleSectionHeading.tsx`/
+  `.css`は他に利用箇所が無かったため削除した(削除前にgrepで利用箇所を確認済み)。
+  表示/非表示は`PanelVisibilityToggles`のON/OFFのみで行う。
+- **ドラッグ移動**: `FloatingPanel.tsx`は自身のルート要素へ`onPointerDown`を
+  event delegationとして仕込み、`e.target.closest('h2')`が見つかった場合のみ
+  ドラッグを開始する。各component自身が描画する見出し`<h2>`をそのまま
+  ドラッグハンドルとして再利用しており、`FloatingPanel`側は見出しのDOM構造
+  そのものを知らない(component間の結合を増やさない)。表・Select・button等は
+  `<h2>`の外側にあるため、それらの操作は誤ってドラッグを開始しない。
+  `Element.setPointerCapture`はjsdom(テスト環境)が未実装のため
+  `?.()`(オプショナル呼び出し)で存在確認してから呼ぶ(実ブラウザでは
+  通常通り動作する)。
+- **リサイズ**: 右下角の専用ハンドル(`.floating-panel__resize-handle`)のみに
+  対応する。最小サイズ(幅260px・高さ180px)、コンテナ
+  (`app-workspace__viewer-wrap`)の幅・高さを超えないサイズ上限をそれぞれ
+  `clampSize`で適用する。
+- **範囲のクランプ・追従**: `containerRef`(`viewerWrapRef`、`App.tsx`が
+  `.app-workspace__viewer-wrap`へ設定)を基準に、位置は`clampPosition`で
+  常にコンテナ範囲内に収める。`ResizeObserver`でコンテナ自身のサイズ変化も
+  検知し、既存panelの位置・大きさを再クランプする(ウィンドウリサイズ後も
+  見出しが操作可能な範囲に残る)。
+  - **実装上の注意 (Reactのcommit順序)**: 初期配置の計測は当初
+    `useLayoutEffect`で実装していたが、`containerRef`は`FloatingPanel`から見て
+    「親」(`App.tsx`側の`.app-workspace__viewer-wrap`)が持つrefであり、
+    Reactのcommit順序(子のlayout effectは親自身のref付与より先に走る)により
+    初回マウント時に`containerRef.current`が常にnullのままになり、floating
+    panelが一切描画されない不具合が実際に発生した。`useEffect`(passive)へ
+    変更することで、ツリー全体のref付与・layout effectが完了した後に発火する
+    ようになり解消した。
+- **前面化(z-index)**: `FloatingPanel.tsx`モジュールスコープの単調増加カウンタ
+  (`zCounter`)を3つのpanelインスタンスで共有し、pointerdown時
+  (`onPointerDownCapture`、bubbling途中のstopPropagationの影響を受けない)に
+  そのpanelのz-indexを引き上げる。
+- **位置・大きさの永続化(セッション内)**: `rect`は`FloatingPanel`自身のuseState
+  ではなく、`App.tsx`側のstate(`panelInfoRect`/`aggregationRect`/`detailRect`、
+  型は`FloatingPanel.tsx`がexportする`FloatingPanelRect`)として持ち上げてある。
+  表示ON/OFFで`FloatingPanel`がunmount/remountされても値は消えない(指示:
+  「ユーザーが移動/リサイズした後は、そのセッション中は状態を保持する」)。
+  localStorageへの永続化は今回の対象外。
+- **既存ロジックへの非干渉**: `EstimateMasterPicker`・`DrawingNavigator`・
+  BBox所属判定・Undo/Redoロジック・積算ロジック・`decision_events`・
+  `estimate_confirmations`・Phase C・PDF Help Backendのいずれも変更していない。

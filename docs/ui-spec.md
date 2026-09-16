@@ -127,16 +127,16 @@ Excelのような重い罫線にはせず、「セルは認識できるが罫線
   すぐ右に自然に並ぶ(ヘッダ用のボタンは数値列でも右寄せにしない)。
 - 情報密度(padding・行高さ・header高さ・font-size・列幅)は変更しない。
 
-## 1.6. 盤情報・積算集約・積算明細の折りたたみ + 積算対象Selectの視認性 (Issue #6)
+## 1.6. 積算対象Selectの視認性 (Issue #6、盤情報・積算集約・積算明細の折りたたみはIssue #19追加修正で廃止)
 
-**[2026-09 Issue #19 Phase 2/4で構成変更]** 本章の折りたたみ機能自体
-(`CollapsibleSectionHeading`、見出しクリックで本文を隠す)はIssue #6実装当時
-のまま変更していない。Phase 2で積算集約・積算明細を、Phase 4で盤情報も
-右ペインからViewer上のfloating panelへ移動した(1.7章参照、右ペイン自体は
-Phase 4で廃止済み)ため、「右ペイン3領域」という表現・隣接領域との高さの
-分け合いに関する記述は**もはやどの領域にも該当しない**。3領域それぞれの
-折りたたみは、いずれも自分自身が乗っているfloating panelの高さを(隣接領域と
-ではなく)自分自身で`auto`に縮めるだけになる。
+**[2026-09 Issue #19 追加修正で廃止]** 本章は元々Issue #6で実装した「盤情報・
+積算集約・積算明細の折りたたみ機能」(`CollapsibleSectionHeading`、見出し
+クリックで本文を隠す)も扱っていたが、3領域ともfloating panel化したことに伴い
+**この折りたたみ機能自体を廃止した**(表示/非表示は`PanelVisibilityToggles`の
+ON/OFFのみで行う。1.7章参照)。`CollapsibleSectionHeading.tsx`は他に利用箇所が
+無かったため削除済み。`PanelInfo`/`EstimateAggregation`/`EstimateDetail`は
+いずれも見出しを常時プレーンな`<h2>`で表示するのみとなり、`collapsed`/
+`onToggleCollapsed` props・chevron・`aria-expanded`は無くなった。
 
 **積算対象Selectの視認性向上**: `EstimateAggregation`の「対象」`<select>`
 (総合計/製品全体/各盤)は、既存の構造色(濃紺/コバルト/白/灰)の範囲内で
@@ -145,24 +145,6 @@ Phase 4で廃止済み)ため、「右ペイン3領域」という表現・隣�
 強調(`--focused`修飾、個別盤選択時のみ淡い塗り+外側リング)は、この常時強調
 よりさらに一段強い状態として維持している(通常 < Viewer連動中、の階層を保つ)。
 padding・高さは変更していない。
-
-**盤情報・積算集約・積算明細の折りたたみ**: それぞれの見出し
-(`<h2>`)をクリックすると、本文(カード一覧・製番合計/対象セレクト/表・情報源
-タブ/表/凡例)だけが非表示になり、見出し自体は残る。共通の挙動は
-`components/Layout/CollapsibleSectionHeading.tsx`(chevron表示+
-`aria-expanded`)に集約し、3箇所へ同じクリックハンドラ・アクセシビリティ属性を
-複製していない(`PaneSplitter`と同じ考え方)。
-
-- 初期表示は3項目ともOPEN(展開)。開閉状態はコンポーネント外部
-  (`App.tsx`)のcontrolled stateとして持つが、積算対象選択・図面一覧連動・
-  Viewer連動・Undo/Redo等、他のロジックには一切接続しない独立したUI状態
-  (リロードで初期状態=全展開に戻る。localStorageへは永続化しない)。
-- **盤情報・積算集約・積算明細(いずれもViewer上のfloating panel、1.7章参照)**:
-  折りたたみ中は`components/Layout/FloatingPanel.tsx`側で`height: 'auto'`に
-  することで見出しの高さまで縮む。以前(右ペイン常設時代)のような「隣接領域への
-  高さの還元」「盤情報の高さを変更/積算集約の高さを変更」splitterは、3領域とも
-  独立したfloating panelになったことで意味を持たなくなったため、いずれも廃止した
-  (折りたたんでもfloating panel自体の既定位置・幅は変わらない)。
 
 ## 1.7. 盤情報・積算集約・積算明細のfloating panel化 (Issue #19 Phase 2/4)
 
@@ -189,11 +171,51 @@ floating toggle barとして浮かせていたが、追加UI修正指示によ�
 右ペイン常設と同じ見え方から始まる)。このON/OFF状態はセッション内のみの
 UI状態で、localStorageへは永続化しない(リロードのたびに3つともONへ戻る)。
 
-**既定配置**: 盤情報はViewer左上寄り、積算集約はViewer右上寄り、積算明細は
-Viewer右下寄りに、既定でそれぞれ固定配置する。3つとも表示していても重ならないよう、
-盤情報・積算集約は`top`基準(左右で分かれる)、積算明細は`bottom`基準で
-CSS配置している(`components/Layout/FloatingPanel.css`)。ドラッグによる
-移動・自由リサイズはPhase 2/4いずれも対象外(将来の拡張余地として残す)。
+**既定配置(初期表示のみ)**: 盤情報はViewer左上寄り、積算集約はViewer右上寄り、
+積算明細はViewer右下寄りに、既定でそれぞれ配置する。3つとも表示していても
+重ならないよう、盤情報・積算集約は`top`基準(左右で分かれる)、積算明細は
+`bottom`基準で初期位置を計算する(`components/Layout/FloatingPanel.tsx`の
+`defaultRectFor`)。ユーザーが移動/リサイズした後は、そのセッション中は変更後の
+位置・大きさを保持する(下記「ドラッグ移動・リサイズ」参照)。
+
+### ドラッグ移動・リサイズ (2026-09 Issue #19 追加修正)
+
+作業者が図面上の邪魔にならない位置・大きさへfloating panel(盤情報・積算集約・
+積算明細)を自由に調整できるようにした。実装は既存依存を増やさず、Pointer
+Events (`onPointerDown`/`onPointerMove`/`onPointerUp`、`setPointerCapture`)の
+自前実装のみで行っている(新規DnD/resizeライブラリは導入していない)。
+
+- **ドラッグハンドル**: 各componentが自分自身で描画する見出し(`<h2>`、
+  `panel-info__heading`/`estimate-aggregation__heading`/
+  `estimate-detail__heading`)をそのままドラッグハンドルとして使う。
+  `FloatingPanel`はchildrenの内部構造を知らないため、pointerdownの
+  event delegationで`e.target.closest('h2')`を見て「見出しが押されたか」だけを
+  判定する。表・Select・button等は`<h2>`の外側にあるため、それらを操作しても
+  誤ってドラッグは始まらない。
+- **リサイズハンドル**: 各floating panel右下角の専用ハンドル
+  (`.floating-panel__resize-handle`)のみで対応する(複数辺からのリサイズは
+  対象外)。最小サイズは幅260px・高さ180px。Viewerコンテナ
+  (`app-workspace__viewer-wrap`)の幅・高さを超えるサイズにはならない
+  (`clampSize`)。
+- **範囲の補正**: 位置は`app-workspace__viewer-wrap`の範囲内にクランプし
+  (`clampPosition`)、Viewer基準の範囲外へ完全に飛び出すことはない。
+  `ResizeObserver`でViewerコンテナ自身のサイズ変化(ウィンドウリサイズ等)も
+  検知し、既存panelの位置・大きさを都度再クランプすることで、画面サイズ変更後も
+  見出し(操作の起点)が必ず操作可能な範囲に残るようにしている。
+- **前面化(z-index)**: floating panel内のどこかをpointerdownすると、その
+  panelのz-indexを他の2つより確実に高い値へ引き上げる(3つのpanelインスタンス
+  間で共有するモジュールスコープの単調増加カウンタを使用)。3panel同士が
+  重なっても構わない設計とし、操作したパネルが自然に前面へ来る。
+- **位置・大きさの保持**: `rect`(位置・大きさ)は`FloatingPanel`自身の
+  stateではなく`App.tsx`側のstate(`panelInfoRect`/`aggregationRect`/
+  `detailRect`)として持ち上げている。表示ON/OFF(`PanelVisibilityToggles`)で
+  `FloatingPanel`がunmount/remountされても、移動/リサイズの結果はセッション中
+  保持される(再表示すると直前の位置・大きさへ戻る)。localStorageへの永続化は
+  今回対象外(セッション内保持のみ)。
+- **視覚的なヒント**: 見出しに`cursor: grab`(ドラッグ中は`grabbing`)、
+  右下角に小さな斜線ストライプのリサイズハンドル、ドラッグ/リサイズ中は
+  box-shadowとborderをわずかに強める(`.floating-panel--interacting`)。
+  過度な装飾は避け、図面Viewerを主役にする方針を維持している。
 
 **glassmorphism(2026-09 Phase 4で追加)**: floating panel自体の見た目を、
 半透明の白background(`rgba(255, 255, 255, 0.6)`)+
@@ -227,9 +249,9 @@ Zoom/Fitが行える。floating panelの既定位置がBBoxの実際の位置と
 **積算対象の選択状態(`selectedEstimateTargetId`)は`App.tsx`側で一元管理**
 したまま変更していないため、積算集約の対象切替・Viewer盤フォーカス・
 図面一覧絞り込み・積算明細との連動は、floating panelの表示/非表示や
-折りたたみ状態とは無関係にすべて従来通り動作する。floating panelの
-表示/非表示の切替自体は、積算ロジックやデータ(積算集約の集計・積算明細の
-明細一覧)を一切変更しない(単に画面上に描画するかどうかだけを切り替える)。
+位置/大きさとは無関係にすべて従来通り動作する。floating panelの表示/非表示・
+移動・リサイズはいずれも、積算ロジックやデータ(積算集約の集計・積算明細の
+明細一覧)を一切変更しない(単に画面上の見た目だけを切り替える)。
 
 ## 2. ProjectHeader
 
@@ -792,8 +814,9 @@ Zoom/Fitが行える。floating panelの既定位置がBBoxの実際の位置と
 ### 積算確定 (Issue #4 Phase B-3、最小UI)
 
 見出し直下、「対象」セレクトより上に、`製番 {製番} の積算確定` ラベルと
-「積算確定する」ボタンを常時表示する(折りたたみ中は非表示。積算コードが
-0件の空表示中でも表示する)。
+「積算確定する」ボタンを常時表示する(積算コードが0件の空表示中でも表示する。
+**[2026-09 Issue #19 追加修正]** 折りたたみ機能自体を廃止したため、
+「折りたたみ中は非表示」という分岐は無くなった)。
 
 - **製番単位であることを明示**: このボタンは現在選択中の「対象」(総合計/
   製品全体/個別盤/要確認)に関わらず、常に製番全体を対象とする
