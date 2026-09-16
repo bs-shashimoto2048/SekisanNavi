@@ -182,26 +182,33 @@
   table-layout: fixed;
 }
 
+/* 追加UI修正指示3章: 列幅の再配分。コード(5桁程度の数値文字列)・数量は
+   文字数が少ないため必要最小限へ縮小し、余った幅は最も長くなりやすい
+   「内容」列へ優先配分する。単価・金額は「単価(暫定)」ヘッダ文言や
+   大きめの金額(¥1,234,567等)がnowrapで収まる幅は維持しつつ、
+   従来より少し引き締める。 */
 .estimate-aggregation__col-code {
-  width: 18%;
+  width: 10%;
+  white-space: nowrap; /* 短い列はヘッダ・値とも折り返させない */
 }
 
 .estimate-aggregation__col-content {
-  width: 34%;
+  width: 44%;
   text-align: left;
+  min-width: 0;
   overflow-wrap: break-word; /* 内容は必要に応じて2段表示を許容する */
 }
 
 .estimate-aggregation__col-price {
-  width: 20%;
+  width: 18%;
 }
 
 .estimate-aggregation__col-qty {
-  width: 10%;
+  width: 8%;
 }
 
 .estimate-aggregation__col-amount {
-  width: 18%;
+  width: 20%;
 }
 
 /* 単価・金額は右寄せ、常に1行で収まる幅を確保する。 */
@@ -213,6 +220,7 @@
 
 .estimate-aggregation__col-qty {
   text-align: right;
+  white-space: nowrap; /* 数量も短い列として折り返させない */
 }
 
 /* 表ヘッダは常に見える (position:sticky。指示5章)。表ヘッダの背景は

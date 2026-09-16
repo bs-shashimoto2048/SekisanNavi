@@ -156,13 +156,20 @@
   margin-bottom: 0.35rem;
 }
 
+/* 追加UI修正指示3章: このtable(product_df由来の盤情報が無い場合の
+   フォールバック表示のみで使われる、属性名/値/取得元の3列key-value表)にも
+   列幅の最適化を適用する。属性名(型式・定格等、短い)と取得元
+   (SOURCE_LABEL、短い)は必要最小限へ、値列(内容によっては長くなりうる)へ
+   優先的に幅を回す。table-layout: fixedにして列幅指定を確定させる。 */
 .panel-info__table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.92rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
+  table-layout: fixed;
 }
 
 .panel-info__table th {
+  width: 30%;
   text-align: left;
   color: #6b7280;
   font-weight: 500;
@@ -172,9 +179,12 @@
 
 .panel-info__table td {
   padding: 0.15rem 0.35rem;
+  overflow-wrap: break-word;
 }
 
 .panel-info__source {
+  width: 20%;
   color: #9ca3af;
   text-align: right;
+  white-space: nowrap;
 }

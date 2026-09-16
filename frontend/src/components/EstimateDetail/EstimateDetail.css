@@ -92,39 +92,56 @@
   border-collapse: separate;
   border-spacing: 0;
   font-size: 0.88rem; /* 旧0.78rem→引き上げ (表データも本文相当まで拡大) */
+  /* 追加UI修正指示3章: 従来`table-layout`未指定(=auto)だったため、各列の
+     width指定はブラウザ側で内容量に応じて再計算される弱いヒントに過ぎず、
+     本来幅に余裕がある列でも不自然な1〜2文字だけの折り返しが起きうる状態
+     だった。`fixed`にして列幅指定を確定値として機能させ、以下の再配分と
+     組み合わせて意図した配分を安定させる(積算集約表と同じ方針)。 */
+  table-layout: fixed;
 }
 
+/* 追加UI修正指示3章: 文字数が少ない列(面/盤、コード、図面、状態)は
+   必要最小限へ縮小し、余った幅は長い文字列列(品名・型式・定格)へ優先配分。
+   編集順は日時/通し番号の切替(container query)を持つため従来よりは
+   縮小幅を抑える。既存のellipsis省略は使わず(このリポジトリの既存方針:
+   PanelInfo等でも「文字が途中で切れない」ことを優先しているため)、
+   overflow-wrap: break-word(既存の`.estimate-detail__table td`ルールで
+   全列に適用済み)による折り返しのみで対応する。 */
 .estimate-detail__col-panel {
-  width: 9%;
+  width: 7%;
+  white-space: nowrap;
 }
 
 .estimate-detail__col-name {
-  width: 13%;
+  width: 20%;
 }
 
 .estimate-detail__col-code {
-  width: 12%;
+  width: 8%;
+  white-space: nowrap;
 }
 
 .estimate-detail__col-model {
-  width: 17%;
+  width: 20%;
 }
 
 .estimate-detail__col-rating {
-  width: 17%;
+  width: 19%;
 }
 
 .estimate-detail__col-page {
-  width: 10%;
+  width: 8%;
+  white-space: nowrap;
 }
 
 .estimate-detail__col-status {
-  width: 8%;
+  width: 6%;
   text-align: center;
+  white-space: nowrap;
 }
 
 .estimate-detail__col-edit-order {
-  width: 14%;
+  width: 12%;
   white-space: nowrap;
 }
 

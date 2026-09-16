@@ -1213,16 +1213,20 @@ describe('App: 盤情報のfloating panel化・右ペイン廃止 (Issue #19 Pha
     expect(within(panelInfoFloat).queryByRole('button', { name: /盤情報/ })).not.toBeInTheDocument()
   })
 
-  it('shows 盤情報 by default, and can be hidden/shown via its toggle (盤情報を隠す/を表示)', async () => {
+  it('shows 盤情報 by default, and can be hidden/shown via its toggle (追加UI修正: ボタン文言は常に固定「盤情報」、ON/OFFはaria-pressedと配色のみで表現)', async () => {
     await renderApp()
-    expect(screen.getByRole('button', { name: '盤情報を隠す' })).toHaveAttribute('aria-pressed', 'true')
+    const toggle = screen.getByRole('button', { name: '盤情報' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
 
-    fireEvent.click(screen.getByRole('button', { name: '盤情報を隠す' }))
+    fireEvent.click(toggle)
     expect(document.querySelector('.floating-panel--panelInfo')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '盤情報を表示' })).toHaveAttribute('aria-pressed', 'false')
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    // 文言自体はON/OFFで変化しない(旧「盤情報を隠す/を表示」の出し分けは廃止)。
+    expect(toggle).toHaveTextContent('盤情報')
 
-    fireEvent.click(screen.getByRole('button', { name: '盤情報を表示' }))
+    fireEvent.click(toggle)
     expect(document.querySelector('.floating-panel--panelInfo')).toBeInTheDocument()
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('keeps panel click → selection sync working while floating (Phase 1.9の既存挙動を維持)', async () => {
@@ -1252,32 +1256,56 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
     expect(document.querySelector('.floating-panel-toggle-bar')).not.toBeInTheDocument()
 
     const buttons = within(toggleGroup).getAllByRole('button')
-    expect(buttons.map((b) => b.textContent)).toEqual(['盤情報を隠す', '積算集約を隠す', '積算明細を隠す'])
+    // 追加UI修正指示1章: ボタン表示文字はON/OFFに関わらず常に固定ラベル。
+    expect(buttons.map((b) => b.textContent)).toEqual(['盤情報', '積算集約', '積算明細'])
+    expect(buttons.every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true)
+  })
+
+  it('gives the panel-visibility toggles a color distinct from Undo/Redo, and a filled ON vs. muted OFF look (追加UI修正指示2章)', async () => {
+    await renderApp()
+    const undoButton = screen.getByRole('button', { name: /元に戻す/ })
+    const toggle = screen.getByRole('button', { name: '積算集約' })
+
+    // ON(表示中): 塗りつぶし系。Undo/Redo等の通常操作ボタン(白背景)とは
+    // 明確に異なる背景色にする。
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    const onStyle = getComputedStyle(toggle)
+    const undoStyle = getComputedStyle(undoButton)
+    expect(onStyle.backgroundColor).not.toBe(undoStyle.backgroundColor)
+    expect(onStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)')
+    expect(onStyle.color).toBe('rgb(255, 255, 255)')
+
+    // OFF(非表示中): 控えめな背景+境界線だが、Undo/Redoの白背景とは異なる色相を保つ。
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    const offStyle = getComputedStyle(toggle)
+    expect(offStyle.backgroundColor).not.toBe(undoStyle.backgroundColor)
+    expect(offStyle.backgroundColor).not.toBe(onStyle.backgroundColor)
   })
 
   it('shows both floating panels from the start (指示: 初期状態は既存利用性を損なわない設定=両方ON)', async () => {
     await renderApp()
     expect(document.querySelector('.floating-panel--aggregation')).toBeInTheDocument()
     expect(document.querySelector('.floating-panel--detail')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '積算集約を隠す' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: '積算明細を隠す' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '積算集約' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '積算明細' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('toggles the 積算集約 floating panel independently of 積算明細', async () => {
     await renderApp()
-    fireEvent.click(screen.getByRole('button', { name: '積算集約を隠す' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
 
     expect(document.querySelector('.floating-panel--aggregation')).not.toBeInTheDocument()
     expect(document.querySelector('.floating-panel--detail')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '積算集約を表示' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: '積算集約' })).toHaveAttribute('aria-pressed', 'false')
 
-    fireEvent.click(screen.getByRole('button', { name: '積算集約を表示' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
     expect(document.querySelector('.floating-panel--aggregation')).toBeInTheDocument()
   })
 
   it('toggles the 積算明細 floating panel independently of 積算集約', async () => {
     await renderApp()
-    fireEvent.click(screen.getByRole('button', { name: '積算明細を隠す' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
 
     expect(document.querySelector('.floating-panel--detail')).not.toBeInTheDocument()
     expect(document.querySelector('.floating-panel--aggregation')).toBeInTheDocument()
@@ -1285,14 +1313,14 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
 
   it('hides both floating panels when both toggles are turned off, and restores both', async () => {
     await renderApp()
-    fireEvent.click(screen.getByRole('button', { name: '積算集約を隠す' }))
-    fireEvent.click(screen.getByRole('button', { name: '積算明細を隠す' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
 
     expect(document.querySelector('.floating-panel--aggregation')).not.toBeInTheDocument()
     expect(document.querySelector('.floating-panel--detail')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '積算集約を表示' }))
-    fireEvent.click(screen.getByRole('button', { name: '積算明細を表示' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
 
     expect(document.querySelector('.floating-panel--aggregation')).toBeInTheDocument()
     expect(document.querySelector('.floating-panel--detail')).toBeInTheDocument()
@@ -1302,8 +1330,13 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
     await renderApp()
     expect(screen.getByRole('heading', { name: '積算集約' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '積算明細' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '積算集約' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '積算明細' })).not.toBeInTheDocument()
+    // 追加UI修正でトグルボタン自体の文言も「積算集約」「積算明細」固定になったため、
+    // ここでは各floating panelの内部に限定して「chevron的な折りたたみボタンが
+    // 無いこと」を確認する(表示切替トグル自体はツールバー側にあり対象外)。
+    const aggregationPanel = document.querySelector('.floating-panel--aggregation') as HTMLElement
+    const detailPanel = document.querySelector('.floating-panel--detail') as HTMLElement
+    expect(within(aggregationPanel).queryByRole('button', { name: '積算集約' })).not.toBeInTheDocument()
+    expect(within(detailPanel).queryByRole('button', { name: '積算明細' })).not.toBeInTheDocument()
   })
 
   it('does not change selectedEstimateTargetId or aggregation data when a floating panel is hidden/shown (指示: floating panelの表示/非表示だけで積算ロジックやデータは変化しないこと)', async () => {
@@ -1312,8 +1345,8 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
     fireEvent.change(select, { target: { value: 'panel:1:1' } })
     await waitFor(() => expect(select.value).toBe('panel:1:1'))
 
-    fireEvent.click(screen.getByRole('button', { name: '積算明細を隠す' }))
-    fireEvent.click(screen.getByRole('button', { name: '積算明細を表示' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
 
     expect((document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement).value).toBe(
       'panel:1:1',
@@ -1327,12 +1360,12 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
     expect(undoButton).toBeDisabled()
     expect(redoButton).toBeDisabled()
 
-    fireEvent.click(screen.getByRole('button', { name: '盤情報を隠す' }))
-    fireEvent.click(screen.getByRole('button', { name: '積算集約を隠す' }))
-    fireEvent.click(screen.getByRole('button', { name: '積算明細を隠す' }))
-    fireEvent.click(screen.getByRole('button', { name: '盤情報を表示' }))
-    fireEvent.click(screen.getByRole('button', { name: '積算集約を表示' }))
-    fireEvent.click(screen.getByRole('button', { name: '積算明細を表示' }))
+    fireEvent.click(screen.getByRole('button', { name: '盤情報' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
+    fireEvent.click(screen.getByRole('button', { name: '盤情報' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
 
     expect(undoButton).toBeDisabled()
     expect(redoButton).toBeDisabled()
@@ -1468,9 +1501,9 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     const movedLeft = panel.style.left
     const movedTop = panel.style.top
 
-    fireEvent.click(screen.getByRole('button', { name: '積算集約を隠す' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
     expect(document.querySelector('.floating-panel--aggregation')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '積算集約を表示' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
 
     const reshown = document.querySelector('.floating-panel--aggregation') as HTMLElement
     expect(reshown.style.left).toBe(movedLeft)
@@ -1495,6 +1528,30 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     // floating panelのドラッグはDrawingCanvas側のBBox選択状態に影響しない
     // (パネルとViewerは別要素であり、イベントも競合しない)。
     expect(screen.getAllByRole('button', { name: /BBoxサイズ変更/ }).length).toBeGreaterThan(0)
+  })
+})
+
+describe('App: floating panelの枠線強化 (Issue #19 追加UI修正指示4章)', () => {
+  async function renderApp() {
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
+  }
+
+  it('gives all 3 floating panels a visible, non-transparent-white border (背景図面との境界を明確にする)', async () => {
+    await renderApp()
+    const panels = [
+      document.querySelector('.floating-panel--panelInfo'),
+      document.querySelector('.floating-panel--aggregation'),
+      document.querySelector('.floating-panel--detail'),
+    ] as HTMLElement[]
+
+    const borderColors = panels.map((p) => getComputedStyle(p).borderTopColor)
+    // 旧来のrgba(255,255,255,0.55)(白系、明るい図面上でほぼ見えない)ではないこと。
+    for (const color of borderColors) {
+      expect(color).not.toBe('rgba(255, 255, 255, 0.55)')
+    }
+    // 3パネルとも同じ枠線ルールを使う(指示: 盤情報・積算集約・積算明細で同じ枠線ルール)。
+    expect(new Set(borderColors).size).toBe(1)
   })
 })
 

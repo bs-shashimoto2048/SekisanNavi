@@ -22,9 +22,17 @@
   background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(14px) saturate(160%);
   -webkit-backdrop-filter: blur(14px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  /* 追加UI修正指示4章: 背景図面との境界が曖昧にならないよう、細め(1px)だが
+     明確に認識できる境界線にする。従来の半透明白(rgba(255,255,255,0.55))は
+     明るい背景図面上でほぼ見えなくなってしまうため、glassmorphismと調和する
+     寒色〜中性色系(slate系、青系構造色・状態色とは別トーン)へ変更する。
+     内側にごく薄い白のハイライトリング(inset box-shadow)を重ね、
+     「フロストガラスの縁」らしい見た目を保ちつつ外周の視認性を確保する。 */
+  border: 1px solid rgba(51, 65, 85, 0.45);
   border-radius: 10px;
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.22);
+  box-shadow:
+    0 8px 28px rgba(15, 23, 42, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35);
   overflow: hidden;
 }
 
@@ -41,8 +49,12 @@
    frontmost自体は実際のz-index(前面に来る)で視覚的に表現できているため、
    ここでは「今まさに操作している」ことだけを控えめに強調する。 */
 .floating-panel--interacting {
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.32);
-  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow:
+    0 14px 36px rgba(15, 23, 42, 0.32),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  /* 追加UI修正指示4章: active時はfocus/frontmostの目印として境界色をわずかに
+     強める(色相・太さは変えず、濃さのみ上げる)。 */
+  border-color: rgba(30, 41, 59, 0.65);
 }
 
 /* childrenの内容(PanelInfo/EstimateAggregation/EstimateDetail)は元々

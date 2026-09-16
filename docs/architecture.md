@@ -1104,3 +1104,56 @@ floating panel自体の見た目もglassmorphism(半透明+ぼかし)へ変更�
 - **既存ロジックへの非干渉**: `EstimateMasterPicker`・`DrawingNavigator`・
   BBox所属判定・Undo/Redoロジック・積算ロジック・`decision_events`・
   `estimate_confirmations`・Phase C・PDF Help Backendのいずれも変更していない。
+
+## 24. 表示切替ボタンの文言・配色/表カラム幅最適化/floating panel枠線強化 (Issue #19 追加UI修正)
+
+23章に続く、PR #22への追加UI修正。詳細な仕様は`docs/ui-spec.md`
+1.7章(表示トグル・枠線)、5章/5.5章/5.6章(カラム幅)を参照。実装上のポイント
+のみ記す:
+
+- **ボタン文言の固定化**: `PanelVisibilityToggles.tsx`のボタン表示文字を、
+  ON/OFFで出し分けていた「盤情報を隠す/盤情報を表示」形式から、常に固定
+  ラベル(「盤情報」「積算集約」「積算明細」)へ変更した。旧文言は`title`
+  属性(hoverツールチップ)としてのみ残している。ON/OFF自体は`aria-pressed`と
+  配色で表現する(アクセシビリティツリー上のname自体は変わらないため、
+  `App.test.tsx`側の`getByRole('button', { name: ... })`によるテストは
+  ON/OFF問わず同じ要素を指すよう簡略化できた)。
+- **配色とCSS詳細度の罠**: 表示切替3ボタンにUndo/Redo等とは異なる専用配色
+  (violet系、`PanelVisibilityToggles.css`)を与えたところ、実ブラウザ確認で
+  「OFF時の背景色・hover時の背景色が意図した値にならない」不具合が見つかった。
+  原因は、この3ボタンが`.app-layout__edit-toolbar`の内側に配置される
+  `<button>`であるため、ツールバー側の汎用ルール
+  `.app-layout__edit-toolbar button`(詳細度`(0,1,1)`: class+element)や
+  `.app-layout__edit-toolbar button:hover:not(:disabled)`(詳細度`(0,3,1)`)が、
+  コンポーネント自身の単一classセレクタ(`.panel-visibility-toggles__button`
+  単体では詳細度`(0,1,0)`〜hover込みでも`(0,2,0)`)を**詳細度の比較で
+  上回ってしまい**、意図した専用配色を静かに上書きしていたこと。
+  `App.css`側のツールバー汎用ルールに`:not(.panel-visibility-toggles__button)`
+  を追加し、表示切替3ボタンを明示的に除外することで解決した(このボタン自身の
+  font-size/padding/border-radius/cursor等は元々`PanelVisibilityToggles.css`側
+  で自己完結して指定済みのため、除外による見た目のサイズ変化は無い)。
+  **教訓**: 特定コンポーネント配下に置かれるだけの`<button>`へ専用スタイルを
+  与える場合、親コンテナ側の汎用ルールの詳細度を必ず確認すること
+  (class+elementの組み合わせは単一classより詳細度が高い)。
+- **floating panelの枠線強化**: `FloatingPanel.css`の`.floating-panel`の
+  `border`を、半透明白(`rgba(255, 255, 255, 0.55)`、明るい図面上でほぼ不可視)
+  から寒色系(`rgba(51, 65, 85, 0.45)`、slate系)へ変更し、内側にごく薄い
+  白のハイライト(`inset box-shadow`)を追加した。ドラッグ/リサイズ中
+  (`.floating-panel--interacting`)はさらに一段濃くする。3panelとも
+  `.floating-panel`の共通ルールのみで実現しており、component側で個別に
+  上書きしていない。
+- **表カラム幅の再配分**: `EstimateAggregation.css`/`EstimateDetail.css`/
+  `PanelInfo.css`(フォールバック属性表)それぞれで、文字数の少ない列
+  (コード・数量・面/盤・図面・状態)の`width`を縮小し、長い文字列列
+  (内容・品名・型式・定格)へ優先配分した。特に`EstimateDetail.css`は
+  従来`table-layout`を指定しておらず(既定の`auto`)、`width`指定が
+  実質「弱いヒント」に留まっていた点を新たに`table-layout: fixed`へ変更し、
+  積算集約表と同じ「列幅指定が確定値として機能する」状態に揃えた
+  (実ブラウザでヘッダの`scrollHeight`/`clientHeight`が一致すること、
+  `scrollWidth`が`clientWidth`を超えないことを1024/1280/1600px幅で確認済み)。
+  短い列には`white-space: nowrap`を追加している。この一覧は既存方針として
+  文字を途中で切らない(省略記号を使わない)ため、長い列は
+  `overflow-wrap: break-word`による折り返しのみで対応する。
+- **既存ロジックへの非干渉**: 23章と同様、BBox所属判定・Undo/Redoロジック・
+  積算ロジック・`decision_events`・`estimate_confirmations`・Phase C・
+  PDF Help Backendのいずれも変更していない。
