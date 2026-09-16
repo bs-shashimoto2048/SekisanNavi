@@ -6,7 +6,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0.5rem;
+  /* [追加修正: floating panelの最小高さをさらに縮める] */
+  padding: 0.35rem 0.5rem;
 }
 
 .estimate-detail__fixed-top {
@@ -17,8 +18,9 @@
    薄いコバルトブルー背景で「主要ブロックの先頭」であることを一目で示す。
    UI視覚階層改善 指示10章/11章: 左アクセントバーを追加する。背景色は既存の
    #eff6ffを維持する(#dbeafeは.estimate-detail__row--current-pageの意味色と
-   重複するため使わない。指示25章)。padding/font-sizeは変えず、高さは維持する
-   (border-bottomはbox-shadowで表現)。 */
+   重複するため使わない。指示25章)。[追加修正] floating panelの最小高さを
+   さらに縮めるため、上下padding/margin-bottomを引き締める(font-size/背景色は
+   変更しない)。 */
 .estimate-detail__heading {
   font-size: 0.98rem; /* 全体フォント拡大 指示1章 */
   font-weight: 700;
@@ -26,8 +28,8 @@
   background: #eff6ff;
   border-left: 3px solid var(--accent-section);
   box-shadow: inset 0 -1px 0 0 #93c5fd;
-  margin: 0 0 0.4rem;
-  padding: 0.3rem 0.5rem;
+  margin: 0 0 0.3rem;
+  padding: 0.2rem 0.5rem;
   border-radius: 0 4px 4px 0;
 }
 
@@ -35,7 +37,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.3rem;
 }
 
 .estimate-detail__source-tab {

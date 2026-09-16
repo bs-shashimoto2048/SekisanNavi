@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ApiError, getEstimateConfirmation, listEstimateConfirmations } from '../../api/client'
 import type { EstimateConfirmationDetail, EstimateConfirmationItem, EstimateConfirmationSummary } from '../../types/domain'
 import './EstimateConfirmationHistory.css'
@@ -105,7 +106,18 @@ export function EstimateConfirmationHistory({ productNo }: Props) {
     )
   }
 
-  return (
+  // [追加修正: 積算コードMasterのfloating panel化・前面化ルール追加に伴う対応]
+  // このmodalは`EstimateAggregation`(floating panel化されたcomponent)の中で
+  // 開くため、通常のDOM上の位置のままだと`.floating-panel`(position:absolute +
+  // 動的z-index)が作る新しいstacking contextの内側に閉じ込められてしまう。
+  // その場合、このmodal自身のz-indexをどれだけ大きくしても、「他のfloating
+  // panelの方が現在z-indexが高い」場合にそちらの後ろへ回り込んでしまう
+  // (stacking contextの比較は祖先の`.floating-panel`単位で行われるため)。
+  // `document.body`直下へportalすることでfloating panelのstacking context
+  // から完全に抜け出させ、`.estimate-confirmation-history__backdrop`の
+  // z-index(1000、EstimateConfirmationHistory.css)がfloating panel全体
+  // (100番台)より確実に前面へ出るようにしている。
+  return createPortal(
     <div className="estimate-confirmation-history__backdrop" onClick={handleClose}>
       <div className="estimate-confirmation-history" onClick={(e) => e.stopPropagation()}>
         <div className="estimate-confirmation-history__header">
@@ -213,6 +225,7 @@ export function EstimateConfirmationHistory({ productNo }: Props) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

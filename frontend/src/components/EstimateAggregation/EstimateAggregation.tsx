@@ -285,37 +285,46 @@ export function EstimateAggregation({
           <p className="estimate-aggregation__empty">現在の製番に付加されている積算コードがありません</p>
         ) : (
           <>
-            <div className="estimate-aggregation__grand-total">
-              {headerLabel}
-              {headerUnknownCount > 0 && (
-                <span className="estimate-aggregation__warn"> (単価未設定 {headerUnknownCount}件を含まず)</span>
-              )}{' '}
-              <strong>{formatCurrency(headerAmount)}</strong>
-            </div>
-            <div className="estimate-aggregation__summary">
-              <span>
+            {/* [追加修正: 積算集約上部の余白削減・再配置] 旧来は「製番合計」
+                「積算コードN件」「対象select」を縦に3ブロック積んでいたため、
+                floating panel化に伴い上部の固定UIだけで縦の場所を大きく
+                占有していた。情報量自体は変えず、3つを1つのflex-wrap行へ
+                まとめることで、パネルが十分な幅を持つ場合は横並びに収まり、
+                狭い場合のみ自然に折り返す(縦の固定コストを増やさない)。
+                製番合計金額の赤系強調(.estimate-aggregation__grand-total
+                strong)・積算コード件数・対象selectの各要素・クラス名は
+                そのまま維持し、意味・文言は変更していない。 */}
+            <div className="estimate-aggregation__summary-row">
+              <div className="estimate-aggregation__grand-total">
+                {headerLabel}
+                {headerUnknownCount > 0 && (
+                  <span className="estimate-aggregation__warn"> (単価未設定 {headerUnknownCount}件を含まず)</span>
+                )}{' '}
+                <strong>{formatCurrency(headerAmount)}</strong>
+              </div>
+              <span className="estimate-aggregation__code-count">
                 積算コード <strong>{totalCodeCount}</strong>件
               </span>
-            </div>
 
-            <label className="estimate-aggregation__target-select-label">
-              対象
-              <select
-                className={
-                  'estimate-aggregation__target-select' +
-                  (isViewerFocused ? ' estimate-aggregation__target-select--focused' : '')
-                }
-                value={selectedTargetId ?? ALL_OPTION_VALUE}
-                onChange={(e) => onSelectTarget(e.target.value === ALL_OPTION_VALUE ? null : e.target.value)}
-              >
-                <option value={ALL_OPTION_VALUE}>総合計</option>
-                {targets.map((target) => (
-                  <option key={target.id} value={target.id}>
-                    {targetOptionLabel(target)}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <label className="estimate-aggregation__target-select-label">
+                対象
+                <select
+                  className={
+                    'estimate-aggregation__target-select' +
+                    (isViewerFocused ? ' estimate-aggregation__target-select--focused' : '')
+                  }
+                  value={selectedTargetId ?? ALL_OPTION_VALUE}
+                  onChange={(e) => onSelectTarget(e.target.value === ALL_OPTION_VALUE ? null : e.target.value)}
+                >
+                  <option value={ALL_OPTION_VALUE}>総合計</option>
+                  {targets.map((target) => (
+                    <option key={target.id} value={target.id}>
+                      {targetOptionLabel(target)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
             {selectedTarget?.type === 'tie' && (
               <p className="estimate-aggregation__warn estimate-aggregation__warn--block">

@@ -10,7 +10,8 @@
   display: flex;
   flex-direction: column;
   border-bottom: 1px solid #e5e7eb;
-  padding: 0.4rem 0.5rem;
+  /* [追加修正: floating panelの最小高さをさらに縮める] 上下paddingを引き締める。 */
+  padding: 0.3rem 0.5rem;
 }
 
 /* 3領域(盤情報・積算集約・積算明細)の見出しを統一する (盤フォーカス・積算明細
@@ -29,8 +30,9 @@
   background: #eff6ff;
   border-left: 3px solid var(--accent-section);
   box-shadow: inset 0 -1px 0 0 #93c5fd;
-  margin: 0 0 0.3rem;
-  padding: 0.3rem 0.5rem;
+  /* [追加修正: floating panelの最小高さをさらに縮める] */
+  margin: 0 0 0.25rem;
+  padding: 0.2rem 0.5rem;
   border-radius: 0 4px 4px 0;
 }
 

@@ -1,19 +1,17 @@
+/* [追加修正: 積算コードMasterのfloating panel化] 従来はMainArea下段に
+   常設(高さはPaneSplitterで手動リサイズ)されていたが、盤情報/積算集約/
+   積算明細と同じfloating panelへ移行した(`App.tsx`で
+   `<FloatingPanel kind="master">`により包む)。このcomponent自身の業務
+   ロジック・選択状態・BBox追加モードとの連携は一切変更していない。
+   高さはfloating panel側(`.floating-panel__body`、flex:1)から100%で
+   受け取る形に変更し、旧来のPaneSplitter連動`height` propベースの指定は
+   使わなくなった(props自体は後方互換のため残しているが、App.tsxからは
+   渡さない)。 */
 .master-picker {
-  /* MainArea(左ペイン+Viewer)の幅のみを使用し、右ペインの下へは潜り込まない
-     (指示書3章/7章)。親のapp-workspace__mainがflex-columnのため、
-     このブロックは下段に固定表示される。
-     高さはApp.tsx側からinline style(height)で指定する (Phase 1.11 指示書24章〜26章:
-     中央ViewerとMasterの境界のResize Handleでユーザーが変更できる)。
-     このCSSのheightは、heightをまだ指定していない場合(単体テスト等)の既定値。 */
-  height: 260px;
-  /* UI視覚階層改善 指示8章/21章: Viewer|積算コードMasterの大領域境界(Level1)。
-     積算コードMasterがViewerの続きに見えないよう、表内部の罫線より
-     一段明確なトーンにする(幅は1pxのまま)。見出し自体の高さは変更しない。 */
-  border-top: 1px solid var(--border-region);
-  padding: 0.5rem 0.75rem;
+  height: 100%;
+  padding: 0.3rem 0.6rem;
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
   min-width: 0;
   min-height: 0;
   /* UI視覚階層改善 追加修正第2ラウンド 11章: 選択中タブに与えるz-index(下記
@@ -23,17 +21,27 @@
   isolation: isolate;
 }
 
+/* [追加修正: ツール系panelとして配色を区別] 盤情報/積算集約/積算明細は
+   「表示情報」のfloating panelだが、積算コードMasterはBBox追加操作へ
+   直接つながる「作業ツール」であるため、同じ見た目にならないよう
+   ツールバー全体を濃色(slate系、寒色〜中性色)の帯にする。既存の
+   Masterカテゴリ色(--cat-tab-*)・選択行の意味色(コバルト)は一切変更しない。
+   派手な警告色(赤・amber)は避け、あくまで「種類が違う」ことが分かる程度の
+   落ち着いた配色にとどめる。 */
 .master-picker__toolbar {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.3rem;
+  background: #334155;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
 }
 
 .master-picker__heading {
   font-size: 0.98rem; /* 全体フォント拡大 指示1章: 旧0.88rem→引き上げ */
   font-weight: 700;
-  color: #374151;
+  color: #fff;
   margin: 0;
   white-space: nowrap;
 }
@@ -41,21 +49,21 @@
 .master-picker__search {
   flex: 1;
   max-width: 320px;
-  padding: 0.3rem 0.55rem;
-  border: 1px solid #d1d5db;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #94a3b8;
   border-radius: 4px;
   font-size: 0.92rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
 }
 
 .master-picker__loading {
   font-size: 0.88rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
-  color: #9ca3af;
+  color: #cbd5e1;
 }
 
 .master-picker__count {
   margin-left: auto;
   font-size: 0.88rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
-  color: #6b7280;
+  color: #e2e8f0;
   white-space: nowrap;
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import './FloatingPanel.css'
 
-export type FloatingPanelKind = 'panelInfo' | 'aggregation' | 'detail'
+export type FloatingPanelKind = 'panelInfo' | 'aggregation' | 'detail' | 'master'
 
 /** floating panelの位置・大きさ (px、`containerRef`の要素基準)。 */
 export interface FloatingPanelRect {
@@ -34,15 +34,38 @@ interface Props {
 }
 
 const MIN_WIDTH = 260
-const MIN_HEIGHT = 180
+// [追加修正: 積算コードMasterのfloating化 / 最小高さのさらなる縮小]
+// 従来は全kind共通の単一MIN_HEIGHT(180px)だったが、各panelの実際の構成
+// (見出し+最低限の操作UI+1〜2行程度が成立するライン)は種別ごとに異なるため、
+// kind別のmin-heightへ変更した。いずれも「タイトル+最低限の操作+1〜2行の
+// データ」が入りきる範囲で、実ブラウザ確認のうえ調整した値。
+// - panelInfo: 見出し+カード1枚分。操作UIが無く最も軽いため最小。
+// - aggregation: 見出し+確定操作+製番合計/対象select+表1行分。4panel中もっとも
+//   上部の固定UIが多いため、4種の中では最大の下限を確保する。
+// - detail: 見出し+情報源タブ+表1行分。
+// - master: 見出し+検索欄+カテゴリタブ+表1行分。
+const MIN_HEIGHT_BY_KIND: Record<FloatingPanelKind, number> = {
+  panelInfo: 120,
+  aggregation: 160,
+  detail: 150,
+  master: 150,
+}
 const DEFAULT_WIDTH = 360
+// 積算コードMasterは価格列を複数持つ横長の表のため、他3panelより既定幅を
+// 少し広めにする(あくまで既定値。ユーザーは自由にリサイズできる)。
+const DEFAULT_WIDTH_BY_KIND: Record<FloatingPanelKind, number> = {
+  panelInfo: DEFAULT_WIDTH,
+  aggregation: DEFAULT_WIDTH,
+  detail: DEFAULT_WIDTH,
+  master: 480,
+}
 const SIDE_MARGIN = 20
 // DrawingCanvas自身のtoolbar(図面名+Zoom/Fit/BBox削除、Viewer上端いっぱいの1行)を
 // クリアするための既定オフセット。
 const TOP_CLEARANCE = 48
 const BOTTOM_MARGIN = 12
 
-// 3つのfloating panelインスタンス間で共有する、単調増加のz-indexカウンタ
+// 4つのfloating panelインスタンス間で共有する、単調増加のz-indexカウンタ
 // (Issue #19 追加修正: 操作したパネルが前面へ来る)。永続化不要のセッション内
 // UI状態のため、React stateではなくモジュールスコープの変数で十分
 // (`App.tsx`の`editSequenceRef`と同じ考え方)。
@@ -58,31 +81,41 @@ function clampPosition(rect: FloatingPanelRect, container: Size): FloatingPanelR
   }
 }
 
-function clampSize(rect: FloatingPanelRect, container: Size): FloatingPanelRect {
+function clampSize(rect: FloatingPanelRect, container: Size, kind: FloatingPanelKind): FloatingPanelRect {
+  const minHeight = MIN_HEIGHT_BY_KIND[kind]
   const maxWidth = Math.max(MIN_WIDTH, container.width - rect.left)
-  const maxHeight = Math.max(MIN_HEIGHT, container.height - rect.top)
+  const maxHeight = Math.max(minHeight, container.height - rect.top)
   return {
     ...rect,
     width: Math.min(Math.max(MIN_WIDTH, rect.width), maxWidth),
-    height: Math.min(Math.max(MIN_HEIGHT, rect.height), maxHeight),
+    height: Math.min(Math.max(minHeight, rect.height), maxHeight),
   }
 }
 
 /** 初期配置(既定位置)を計算する。盤情報=左上寄り、積算集約=右上寄り、
- * 積算明細=右下寄り(Issue #19 Phase 2/4から踏襲)。 */
+ * 積算明細=右下寄り(Issue #19 Phase 2/4から踏襲)。積算コードMaster([追加修正]
+ * floating化)は左下寄りとし、4panelが対角に分散する既定レイアウトにする。 */
 function defaultRectFor(kind: FloatingPanelKind, container: Size): FloatingPanelRect {
-  const width = Math.max(MIN_WIDTH, Math.min(DEFAULT_WIDTH, container.width - SIDE_MARGIN * 2))
-  const availableHeight = Math.max(MIN_HEIGHT, container.height - TOP_CLEARANCE - BOTTOM_MARGIN)
+  const minHeight = MIN_HEIGHT_BY_KIND[kind]
+  const width = Math.max(MIN_WIDTH, Math.min(DEFAULT_WIDTH_BY_KIND[kind], container.width - SIDE_MARGIN * 2))
+  const availableHeight = Math.max(minHeight, container.height - TOP_CLEARANCE - BOTTOM_MARGIN)
 
   if (kind === 'panelInfo') {
-    const height = Math.min(availableHeight, Math.max(MIN_HEIGHT, container.height * 0.34))
+    const height = Math.min(availableHeight, Math.max(minHeight, container.height * 0.34))
     return clampPosition({ top: TOP_CLEARANCE, left: SIDE_MARGIN, width, height }, container)
   }
   if (kind === 'aggregation') {
-    const height = Math.min(availableHeight, Math.max(MIN_HEIGHT, container.height * 0.32))
+    const height = Math.min(availableHeight, Math.max(minHeight, container.height * 0.32))
     return clampPosition({ top: TOP_CLEARANCE, left: container.width - SIDE_MARGIN - width, width, height }, container)
   }
-  const height = Math.min(availableHeight, Math.max(MIN_HEIGHT, container.height * 0.38))
+  if (kind === 'master') {
+    const height = Math.min(availableHeight, Math.max(minHeight, container.height * 0.34))
+    return clampPosition(
+      { top: container.height - BOTTOM_MARGIN - height, left: SIDE_MARGIN, width, height },
+      container,
+    )
+  }
+  const height = Math.min(availableHeight, Math.max(minHeight, container.height * 0.38))
   return clampPosition(
     { top: container.height - BOTTOM_MARGIN - height, left: container.width - SIDE_MARGIN - width, width, height },
     container,
@@ -90,12 +123,13 @@ function defaultRectFor(kind: FloatingPanelKind, container: Size): FloatingPanel
 }
 
 /**
- * 盤情報・積算集約・積算明細をViewer上へ重ねて表示するためのfloating panel
- * シェル (Issue #19 Phase 2/4で新設・拡張、追加修正でドラッグ移動・リサイズに対応)。
+ * 盤情報・積算集約・積算明細・積算コードMasterをViewer上へ重ねて表示するための
+ * floating panelシェル (Issue #19 Phase 2/4で新設・拡張、追加修正でドラッグ移動・
+ * リサイズに対応、さらなる追加修正で積算コードMasterも対象に追加)。
  *
- * `PanelInfo`/`EstimateAggregation`/`EstimateDetail`自体は一切変更していない
- * (これら3コンポーネント自身の折りたたみ機能はPhase 4追加修正で廃止済み。
- * 表示/非表示は`PanelVisibilityToggles`のみで行う)。
+ * `PanelInfo`/`EstimateAggregation`/`EstimateDetail`/`EstimateMasterPicker`自体は
+ * 一切変更していない(前3コンポーネント自身の折りたたみ機能はPhase 4追加修正で
+ * 廃止済み。表示/非表示は`PanelVisibilityToggles`のみで行う)。
  *
  * **ドラッグ移動**: 各componentが自分自身で描画する見出し(`<h2>`)領域を
  * ドラッグハンドルとして使う。`FloatingPanel`はchildrenの内部構造を知らないため、
@@ -109,6 +143,16 @@ function defaultRectFor(kind: FloatingPanelKind, container: Size): FloatingPanel
  * **位置・サイズの保持**: `rect`はこのcomponent自身のstateではなく`App.tsx`側で
  * 保持するcontrolled値。非表示(`visible=false`)でunmountされても値は消えず、
  * 再表示時に直前の位置・サイズへ戻る(セッション内のみ、localStorage永続化はしない)。
+ *
+ * **前面化(z-index)**: 以下いずれの操作でも、このpanelを他panelより確実に
+ * 前面へ出す(モジュール共有の単調増加カウンタ`zCounter`を使う、[追加修正]で
+ * 4パターンへ拡張)。
+ * - panel本体のどこかをpointerdown(`onPointerDownCapture`、キャプチャフェーズの
+ *   ため子要素のstopPropagationに関わらず必ず発火する。本体クリック・ドラッグ
+ *   開始・リサイズ開始のいずれもこれ1つでカバーできる)
+ * - 表示トグルをONにした瞬間(`visible`がtrueへ変わったことを検知するuseEffect。
+ *   このcomponentインスタンス自体は`visible=false`の間も内部で`return null`
+ *   しているだけでunmountはされないため、明示的な検知が必要)
  */
 export function FloatingPanel({ visible, kind, containerRef, rect, onRectChange, children }: Props) {
   const [zIndex, setZIndex] = useState(100)
@@ -147,7 +191,7 @@ export function FloatingPanel({ visible, kind, containerRef, rect, onRectChange,
       onRectChange((prev) =>
         prev == null
           ? defaultRectFor(kind, { width, height })
-          : clampPosition(clampSize(prev, { width, height }), { width, height }),
+          : clampPosition(clampSize(prev, { width, height }, kind), { width, height }),
       )
     }
 
@@ -164,6 +208,19 @@ export function FloatingPanel({ visible, kind, containerRef, rect, onRectChange,
     zCounter += 1
     setZIndex(zCounter)
   }
+
+  // [追加修正: 表示ONにしたfloating panelを必ず最前面へ]
+  // 本体クリック・ドラッグ開始・リサイズ開始は`onPointerDownCapture={bringToFront}`
+  // (下記JSX、キャプチャフェーズのため子要素へのバブリング経路に関わらず必ず発火する)
+  // で既にカバーしている。唯一カバーできていなかったのが「表示トグルをONにした
+  // 瞬間」で、このcomponentインスタンス自体はApp.tsx側で常時マウントされたまま
+  // (`visible`がfalseの間は内部で`return null`しているだけで、unmount/remountは
+  // 発生しない)ため、`visible`が真に変わったタイミングを検知して明示的に
+  // 前面化する必要がある。
+  useEffect(() => {
+    if (visible) bringToFront()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible])
 
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.button !== 0) return
@@ -213,7 +270,7 @@ export function FloatingPanel({ visible, kind, containerRef, rect, onRectChange,
       startX: e.clientX,
       startY: e.clientY,
       startWidth: rect?.width ?? MIN_WIDTH,
-      startHeight: rect?.height ?? MIN_HEIGHT,
+      startHeight: rect?.height ?? MIN_HEIGHT_BY_KIND[kind],
     }
   }
 
@@ -229,7 +286,11 @@ export function FloatingPanel({ visible, kind, containerRef, rect, onRectChange,
     onRectChange((prev) =>
       prev == null
         ? prev
-        : clampSize({ ...prev, width: resize.startWidth + dx, height: resize.startHeight + dy }, { width, height }),
+        : clampSize(
+            { ...prev, width: resize.startWidth + dx, height: resize.startHeight + dy },
+            { width, height },
+            kind,
+          ),
     )
   }
 

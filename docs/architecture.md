@@ -1193,3 +1193,77 @@ floating panel自体の見た目もglassmorphism(半透明+ぼかし)へ変更�
   積算ロジック・`decision_events`・`estimate_confirmations`・Phase C・
   PDF Help Backend・sort機能・図面リンク・hover強調のいずれも変更していない
   (実ブラウザで回帰が無いことを確認済み)。
+
+## 26. 積算コードMasterのfloating panel化・前面化ルール拡張・最小高さ縮小・積算集約上部の再配置 (Issue #19 追加修正)
+
+24〜25章に続く、PR #22への追加修正。詳細な仕様は`docs/ui-spec.md` 1.7章
+(floating panel全般)・5.5章(積算集約上部再配置)・7章(積算コードMaster)を
+参照。実装上のポイントのみ記す:
+
+- **積算コードMasterのfloating panel化**: `App.tsx`のMainArea下段に
+  `PaneSplitter`+`EstimateMasterPicker`(inline style `height`指定)として
+  常設していた構造を廃止し、他3panelと同じ`<FloatingPanel kind="master">`
+  で包む形へ変更した。`usePaneWidth`による高さ手動リサイズ+
+  `sekisan-navi:master-pane-height`localStorageキーも併せて削除した。
+  `EstimateMasterPicker`自体の業務ロジック・選択状態・BBox追加モードとの
+  連携コードは一切変更していない(`height` propは後方互換のため残しているが
+  App.tsxからは渡さない。CSS側で`height: 100%`にして`floating-panel__body`
+  からflexで受け取る)。
+- **ツール系panelとしての配色区別**: `FloatingPanel.tsx`の
+  `FloatingPanelKind`に`'master'`を追加し、`.floating-panel--master`へ
+  上端3px太のslate系(`#334155`)アクセントバーを追加した。
+  `EstimateMasterPicker.css`側は`.master-picker__toolbar`(見出し+検索欄+
+  件数)を白背景から濃色(slate)の帯へ変更している。`PanelVisibilityToggles`
+  にも4つ目のボタン(`--tool`修飾classでslate系配色)を区切り線
+  (`.panel-visibility-toggles__divider`)を挟んで追加した。いずれも
+  既存のMasterカテゴリ色(`--cat-tab-*`)・選択行の意味色(コバルトブルー)は
+  変更していない。
+- **前面化条件の拡張**: 従来は`onPointerDownCapture={bringToFront}`
+  (キャプチャフェーズ、本体クリック・ドラッグ開始・リサイズ開始をこれ1つで
+  カバー)のみだったが、「表示ONボタンを押したときも最前面へ」という要件を
+  満たすため、`visible`の変化を検知する`useEffect(() => { if (visible)
+  bringToFront() }, [visible])`を追加した。`FloatingPanel`自身は
+  `visible=false`の間もunmountされず(内部で`return null`するだけ)、
+  React stateのzIndexはそのまま保持され続けるため、この検知が無いと
+  「表示ONにしても以前のz-indexのまま(他panelより背面)」という不具合になる
+  (実ブラウザ確認で発覚)。
+- **kind別min-height**: 従来の全kind共通`MIN_HEIGHT`(180px)を
+  `MIN_HEIGHT_BY_KIND`(`Record<FloatingPanelKind, number>`)へ変更し、
+  `clampSize`/`defaultRectFor`双方がkindを受け取って参照する形にした。
+  値は実ブラウザ確認のうえ決定(盤情報120/積算明細150/積算コードMaster150/
+  積算集約160)。
+- **`.floating-panel__body`のoverflow修正**: 各panelを最小高さまで縮めると、
+  中の`flex-shrink:0`な固定領域(見出し・確定操作群・製番合計等)自体が
+  panelの高さを超える場合がある。従来`overflow: hidden`だったため、その
+  場合は固定領域の下側が単純に見えなくなり操作不能になっていた
+  (積算集約で実際に発生を確認)。`overflow-y: auto`(横は`hidden`のまま)へ
+  変更し、panel全体を縦スクロールして到達できるようにした。
+- **`EstimateConfirmationHistory`のmodal portal化(CSS stacking contextの罠)**:
+  このmodalは`EstimateAggregation`(floating panel化されたcomponent)の中で
+  開くため、対策なしでは`.floating-panel`(`position: absolute`+動的
+  z-index)が作るstacking contextの内側に閉じ込められる。z-indexは
+  「どれだけ大きくしても祖先の`.floating-panel`単位でしか比較されない」ため、
+  他のfloating panelの方が現在z-indexが高い場合はそちらの後ろへ回り込んで
+  しまう(実ブラウザ確認で発覚。表示ONにした瞬間の前面化を追加した結果、
+  すべてのpanelが初期状態で既にz-index:100を超えるようになり、旧来
+  z-index:100だった各modalのbackdropが常に露呈する状態になっていた)。
+  `EstimateConfirmationHistory.tsx`を`ReactDOM.createPortal(..., document.body)`
+  でdocument.body直下へ描画するよう変更し、floating panelのstacking
+  contextから完全に抜け出させた。あわせてProductSelector/SystemSettings/
+  HelpPdfModal/EstimateConfirmationHistoryの各backdrop z-indexを100→1000へ
+  引き上げた(HelpPdfModal等はApp.tsxのトップレベルJSXに直接置かれておりportal
+  化は不要だが、floating panelのz-indexカウンタが100から単調増加し続ける
+  以上、数値そのものも余裕を持って引き上げておく必要がある)。
+  **教訓**: `position: fixed`の要素は、祖先に`position:absolute`等+
+  z-index指定の要素(stacking contextを作る要素)があると、その祖先の
+  中に押し込められる。floating panel等「動的にz-indexが変わる要素」の
+  内側でmodalを開く設計にする場合は、`createPortal`で確実に外へ出すか、
+  そもそもmodalをfloating panelの外側(App.tsxのトップレベル)で管理する
+  設計にすることを検討する。
+  テスト側もこの変更に合わせ、`EstimateConfirmationHistory.test.tsx`の
+  backdrop取得を`render()`の`container`(コンポーネント自身のDOM位置)から
+  `document.body`基準へ変更した。
+- **既存ロジックへの非干渉**: 前章までと同様、BBox所属判定・Undo/Redoロジック・
+  積算ロジック・`decision_events`・`estimate_confirmations`・Phase C・
+  PDF Help Backend・sort機能・図面リンク・hover強調・Master選択→BBox追加
+  モード連携のいずれも変更していない(実ブラウザで回帰が無いことを確認済み)。

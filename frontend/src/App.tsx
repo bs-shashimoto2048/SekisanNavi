@@ -99,10 +99,10 @@ const LEFT_PANE_STORAGE_KEY = 'sekisan-navi:left-pane-width'
 // 下部積算コードMaster領域の高さ (Phase 1.11 指示書24章〜26章)。既存のCSS既定値
 // (260px) を初期値として踏襲する。min/maxは「Viewerが実質見えなくなる」
 // 「Masterが操作不能になる」高さを避けるための制限 (指示書25章)。
-const MASTER_PANE_HEIGHT_INITIAL = 260
-const MASTER_PANE_HEIGHT_MIN = 120
-const MASTER_PANE_HEIGHT_MAX_VH_RATIO = 0.6
-const MASTER_PANE_HEIGHT_STORAGE_KEY = 'sekisan-navi:master-pane-height'
+// [追加修正: 積算コードMasterのfloating panel化] 従来はここで
+// MASTER_PANE_HEIGHT_*定数(PaneSplitterによる高さ手動リサイズ+localStorage
+// 復元)を持っていたが、盤情報/積算集約/積算明細と同じfloating panel
+// (ドラッグ移動・リサイズ、セッション内保持)へ移行したため廃止した。
 
 // メイン画面が既定で参照する製番 (Phase 1.8)。デモ用のダミーDetection/Panel/
 // EstimateItem (db/seed.py) が実際に紐付けているのと同じ製番であり、
@@ -252,15 +252,6 @@ function App() {
     LEFT_PANE_MIN,
     LEFT_PANE_MAX_VW_RATIO,
   )
-  // 下部積算コードMaster領域の高さ (Phase 1.11 指示書24章〜26章)。左右ペイン幅と
-  // 同じフックを`dimension: 'height'`で再利用し、保存方式を統一する (指示書26章)。
-  const [masterPaneHeight, resizeMasterPaneBy] = usePaneWidth(
-    MASTER_PANE_HEIGHT_STORAGE_KEY,
-    MASTER_PANE_HEIGHT_INITIAL,
-    MASTER_PANE_HEIGHT_MIN,
-    MASTER_PANE_HEIGHT_MAX_VH_RATIO,
-    'height',
-  )
   // Issue #19 Phase 2: 積算集約・積算明細をViewer上のfloating panelとして個別に
   // 表示/非表示できるようにする。初期値は「既存利用性を損なわない設定」として
   // 両方表示(true)にする(従来の右ペイン常設と同じ見え方から始まる)。
@@ -274,18 +265,24 @@ function App() {
   const [panelInfoFloatingVisible, setPanelInfoFloatingVisible] = useState(true)
   const [estimateAggregationFloatingVisible, setEstimateAggregationFloatingVisible] = useState(true)
   const [estimateDetailFloatingVisible, setEstimateDetailFloatingVisible] = useState(true)
+  // [追加修正: 積算コードMasterのfloating panel化] 従来はMainArea下段に
+  // PaneSplitterで手動リサイズしながら常設していたが、他3panelと同じ
+  // floating panelへ移行した。表示/非表示の考え方(初期値true、セッション内
+  // のみ保持)も他3panelと揃える。
+  const [estimateMasterFloatingVisible, setEstimateMasterFloatingVisible] = useState(true)
 
-  // floating panel(盤情報/積算集約/積算明細)の位置・大きさ ([追加修正]
-  // ドラッグ移動・リサイズ対応)。`FloatingPanel`コンポーネント自身のstateではなく
-  // ここへ持ち上げているのは、表示ON/OFF(上記state)でfloating panelがunmountされても
-  // 移動/リサイズ結果をセッション中は保持し続けるため(指示: 「ユーザーが移動/
-  // リサイズした後は、そのセッション中は状態を保持してください」)。`null`は
-  // 「まだ初期配置を計算していない」ことを表し、`FloatingPanel`側が初回描画時に
-  // Viewerの実際のサイズを見て計算する。localStorageへは永続化しない
-  // (指示: 今回はセッション内保持で良い)。
+  // floating panel(盤情報/積算集約/積算明細/積算コードMaster)の位置・大きさ
+  // ([追加修正] ドラッグ移動・リサイズ対応)。`FloatingPanel`コンポーネント
+  // 自身のstateではなくここへ持ち上げているのは、表示ON/OFF(上記state)で
+  // floating panelがunmountされても移動/リサイズ結果をセッション中は保持し
+  // 続けるため(指示: 「ユーザーが移動/リサイズした後は、そのセッション中は
+  // 状態を保持してください」)。`null`は「まだ初期配置を計算していない」ことを
+  // 表し、`FloatingPanel`側が初回描画時にViewerの実際のサイズを見て計算する。
+  // localStorageへは永続化しない(指示: 今回はセッション内保持で良い)。
   const [panelInfoRect, setPanelInfoRect] = useState<FloatingPanelRect | null>(null)
   const [aggregationRect, setAggregationRect] = useState<FloatingPanelRect | null>(null)
   const [detailRect, setDetailRect] = useState<FloatingPanelRect | null>(null)
+  const [masterRect, setMasterRect] = useState<FloatingPanelRect | null>(null)
   // floating panelの位置・大きさのクランプ基準となるコンテナ要素。
   const viewerWrapRef = useRef<HTMLDivElement>(null)
 
@@ -1214,6 +1211,8 @@ function App() {
           onToggleAggregation={() => setEstimateAggregationFloatingVisible((v) => !v)}
           detailVisible={estimateDetailFloatingVisible}
           onToggleDetail={() => setEstimateDetailFloatingVisible((v) => !v)}
+          masterVisible={estimateMasterFloatingVisible}
+          onToggleMaster={() => setEstimateMasterFloatingVisible((v) => !v)}
         />
       </div>
       {/* 指示9章: BBox編集によって積算先(面/盤)が変わった場合の一時通知。 */}
@@ -1336,19 +1335,21 @@ function App() {
                   editFollowDetectionId={editFollowDetectionId}
                 />
               </FloatingPanel>
+              {/* [追加修正: 積算コードMasterのfloating panel化] 従来は
+                  MainArea下段に常設していたが、他3panelと同じくViewer上へ
+                  floating panelとして重ねる。`EstimateMasterPicker`自体の
+                  業務ロジック・選択状態・BBox追加モードとの連携は変更していない。 */}
+              <FloatingPanel
+                visible={estimateMasterFloatingVisible}
+                kind="master"
+                containerRef={viewerWrapRef}
+                rect={masterRect}
+                onRectChange={setMasterRect}
+              >
+                <EstimateMasterPicker selectedItemId={selectedMasterItemId} onSelectItem={handleSelectMasterItem} />
+              </FloatingPanel>
             </div>
           </div>
-
-          <PaneSplitter
-            onDrag={(delta) => resizeMasterPaneBy(-delta)}
-            ariaLabel="積算コードMasterの高さを変更"
-            axis="y"
-          />
-          <EstimateMasterPicker
-            selectedItemId={selectedMasterItemId}
-            onSelectItem={handleSelectMasterItem}
-            height={masterPaneHeight}
-          />
         </div>
       </div>
 

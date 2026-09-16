@@ -57,14 +57,36 @@
   border-color: rgba(30, 41, 59, 0.65);
 }
 
-/* childrenの内容(PanelInfo/EstimateAggregation/EstimateDetail)は元々
-   「親から高さ100%で受け取る」設計のため、この1枚を挟んで高さの基準を作る。 */
+/* [追加修正: 積算コードMasterのfloating panel化] 盤情報/積算集約/積算明細は
+   「表示情報」のfloating panelだが、積算コードMasterはBBox追加操作へ直接
+   つながる「作業ツール」であるため、panel shellにも上端の太いアクセントバー
+   (濃色slate)を付け、他3panelと一目で区別できるようにする。内部の
+   `.master-picker__toolbar`(同系色の濃色帯)と合わせて「これはツール系
+   panelである」ことを示す。派手な警告色は使わず、既存のMasterカテゴリ色
+   (--cat-tab-*)・glassmorphismの背景/backdrop-filterは変更しない。 */
+.floating-panel--master {
+  border-top: 3px solid #334155;
+}
+
+/* childrenの内容(PanelInfo/EstimateAggregation/EstimateDetail/
+   EstimateMasterPicker)は元々「親から高さ100%で受け取る」設計のため、この
+   1枚を挟んで高さの基準を作る。
+   [追加修正: floating panelの最小高さをさらに縮める] 各childrenは見出し等の
+   固定領域(flex-shrink:0)+内部表のみがスクロールする(overflow-y:auto)構造
+   だが、panelを最小高さまで縮めると固定領域自体がpanelの高さを超える場合が
+   ある。以前は`overflow: hidden`だったため、その場合は固定領域の下側が
+   単純に見えなくなり(スクロールもできず)操作不能になっていた。
+   `overflow-y: auto`にすることで、その場合でもpanel全体を縦スクロールして
+   隠れた内容(製番合計・対象select・表等)へ到達できるようにする(指示:
+   「内容が入りきらない場合はpanel内部scrollを使う」)。横方向は各component
+   自身の内部スクロール領域(表のoverflow-x等)に任せ、ここではhiddenのままにする。 */
 .floating-panel__body {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* ドラッグハンドル (指示: 見出し領域をドラッグハンドルとして使う)。

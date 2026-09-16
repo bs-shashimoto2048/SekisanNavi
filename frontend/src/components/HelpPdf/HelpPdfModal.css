@@ -8,7 +8,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  /* [追加修正] floating panel(`components/Layout/FloatingPanel.css`)のz-index
+     カウンタは操作のたびに100から単調増加するため、modalは常にそれより前面に
+     出るよう現実的に到達しない大きさ(1000)にする(ProductSelector.cssと同じ
+     考え方)。 */
+  z-index: 1000;
 }
 
 .help-pdf-modal {

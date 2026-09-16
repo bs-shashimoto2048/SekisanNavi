@@ -146,30 +146,37 @@ ON/OFFのみで行う。1.7章参照)。`CollapsibleSectionHeading.tsx`は他に
 よりさらに一段強い状態として維持している(通常 < Viewer連動中、の階層を保つ)。
 padding・高さは変更していない。
 
-## 1.7. 盤情報・積算集約・積算明細のfloating panel化 (Issue #19 Phase 2/4)
+## 1.7. 盤情報・積算集約・積算明細・積算コードMasterのfloating panel化 (Issue #19 Phase 2/4)
 
 作業者打合せで確認した要望(図面をなるべく大きく見ながら作業したい)を受け、
 右ペイン常設方式だった盤情報・積算集約・積算明細を、図面Viewer上へ重ねて表示する
 floating panelへ変更した(Phase 2で積算集約・積算明細、Phase 4で盤情報)。
 Phase 4で**右ペイン自体を廃止**したため、図面Viewerは左ペインの右側全幅を
-使えるようになった。floating panelを3つとも非表示にすると、Viewer上に何も
-乗らない状態(図面のみ)になる。
+使えるようになった。**[2026-09 追加修正]** MainArea下段に常設していた
+積算コードMaster(7章参照)も同じ仕組みでfloating panel化し、floating panel
+の総数は4つになった。4つとも非表示にすると、Viewer上に何も乗らない状態
+(図面のみ)になる。
 
 **対象コンポーネントは一切変更していない**: `PanelInfo`/`EstimateAggregation`/
-`EstimateDetail`自体のprops・内部ロジック(数量集約・ソート・情報源タブ・
-積算確定操作・盤クリック連動等)はPhase 1から変更していない。配置場所だけを、
+`EstimateDetail`/`EstimateMasterPicker`自体のprops・内部ロジック(数量集約・
+ソート・情報源タブ・積算確定操作・盤クリック連動・Master選択によるBBox追加
+モード連携等)はPhase 1から変更していない。配置場所だけを、
 `components/Layout/FloatingPanel.tsx`(表示中のみ描画するシェル)で包む形へ
 変更した(既存componentを極力再利用する方針)。
 
 **表示トグル**: `components/Layout/PanelVisibilityToggles.tsx`が
-「盤情報」「積算集約」「積算明細」(この順)の3つを個別にON/OFFできる。
-**[2026-09 Phase 4で配置変更]** Phase 2ではViewer右上に独立した
-floating toggle barとして浮かせていたが、追加UI修正指示によりUndo/Redoボタンと
-同じ編集ツールバー(`app-layout__edit-toolbar`)の右端へ移動した(左から
-元に戻す/やり直す/操作履歴を見る、区切り線を挟んで盤情報/積算集約/積算明細の
-表示トグル)。初期状態は3つともON(既存利用性を損なわない設定として、旧来の
-右ペイン常設と同じ見え方から始まる)。このON/OFF状態はセッション内のみの
-UI状態で、localStorageへは永続化しない(リロードのたびに3つともONへ戻る)。
+「盤情報」「積算集約」「積算明細」「積算コードMaster」(この順)の4つを
+個別にON/OFFできる。**[2026-09 Phase 4で配置変更]** Phase 2ではViewer右上に
+独立したfloating toggle barとして浮かせていたが、追加UI修正指示により
+Undo/Redoボタンと同じ編集ツールバー(`app-layout__edit-toolbar`)の右端へ
+移動した(左から元に戻す/やり直す/操作履歴を見る、区切り線を挟んで盤情報/
+積算集約/積算明細の表示トグル)。**[2026-09 追加修正]** 積算コードMasterの
+トグルは、情報系3panelとは別の「作業ツール」であることを示すため、
+さらに区切り線(`.panel-visibility-toggles__divider`)を挟んで末尾へ独立
+配置し、専用のslate系配色(下記)にしている。初期状態は4つともON(既存利用性を
+損なわない設定として、旧来の右ペイン常設/下段常設と同じ見え方から始まる)。
+このON/OFF状態はセッション内のみのUI状態で、localStorageへは永続化しない
+(リロードのたびに4つともONへ戻る)。
 
 **[2026-09 追加UI修正: ボタン文言・配色]** 旧来はボタン文言そのものを
 「盤情報を隠す」「盤情報を表示」のようにON/OFFで出し分けていたが冗長との
@@ -203,11 +210,15 @@ UI状態で、localStorageへは永続化しない(リロードのたびに3つ�
 除外することで対応した。
 
 **既定配置(初期表示のみ)**: 盤情報はViewer左上寄り、積算集約はViewer右上寄り、
-積算明細はViewer右下寄りに、既定でそれぞれ配置する。3つとも表示していても
-重ならないよう、盤情報・積算集約は`top`基準(左右で分かれる)、積算明細は
-`bottom`基準で初期位置を計算する(`components/Layout/FloatingPanel.tsx`の
-`defaultRectFor`)。ユーザーが移動/リサイズした後は、そのセッション中は変更後の
-位置・大きさを保持する(下記「ドラッグ移動・リサイズ」参照)。
+積算明細はViewer右下寄りに、既定でそれぞれ配置する。**[2026-09 追加修正]**
+積算コードMasterはViewer左下寄りに配置し、4panelが対角に分散するようにした。
+4つとも表示していても重ならないよう、盤情報・積算集約は`top`基準(左右で
+分かれる)、積算明細・積算コードMasterは`bottom`基準(左右で分かれる)で
+初期位置を計算する(`components/Layout/FloatingPanel.tsx`の`defaultRectFor`)。
+積算コードMasterは価格列を複数持つ横長の表のため、既定幅を他3panelより
+やや広め(480px、他は360px)にしている。ユーザーが移動/リサイズした後は、
+そのセッション中は変更後の位置・大きさを保持する(下記「ドラッグ移動・
+リサイズ」参照)。
 
 ### ドラッグ移動・リサイズ (2026-09 Issue #19 追加修正)
 
@@ -225,7 +236,13 @@ Events (`onPointerDown`/`onPointerMove`/`onPointerUp`、`setPointerCapture`)の
   誤ってドラッグは始まらない。
 - **リサイズハンドル**: 各floating panel右下角の専用ハンドル
   (`.floating-panel__resize-handle`)のみで対応する(複数辺からのリサイズは
-  対象外)。最小サイズは幅260px・高さ180px。Viewerコンテナ
+  対象外)。最小幅は4panelとも260px。**[2026-09 追加修正: 最小高さを
+  panel種別ごとにさらに縮小]** 最小高さは以前は4panel共通180pxだったが、
+  「タイトル+最低限の操作UI+1〜2行程度の表示が成立するところまで縮小可能に
+  する」指示を受け、実ブラウザ確認のうえ種別ごとの値へ変更した:
+  盤情報120px・積算明細150px・積算コードMaster150px・積算集約160px
+  (積算集約は確定操作+製番合計/対象select等、固定領域の情報量が最も
+  多いため4panel中もっとも大きい下限のまま)。Viewerコンテナ
   (`app-workspace__viewer-wrap`)の幅・高さを超えるサイズにはならない
   (`clampSize`)。
 - **範囲の補正**: 位置は`app-workspace__viewer-wrap`の範囲内にクランプし
@@ -234,19 +251,34 @@ Events (`onPointerDown`/`onPointerMove`/`onPointerUp`、`setPointerCapture`)の
   検知し、既存panelの位置・大きさを都度再クランプすることで、画面サイズ変更後も
   見出し(操作の起点)が必ず操作可能な範囲に残るようにしている。
 - **前面化(z-index)**: floating panel内のどこかをpointerdownすると、その
-  panelのz-indexを他の2つより確実に高い値へ引き上げる(3つのpanelインスタンス
-  間で共有するモジュールスコープの単調増加カウンタを使用)。3panel同士が
+  panelのz-indexを他の3つより確実に高い値へ引き上げる(4つのpanelインスタンス
+  間で共有するモジュールスコープの単調増加カウンタを使用)。4panel同士が
   重なっても構わない設計とし、操作したパネルが自然に前面へ来る。
+  **[2026-09 追加修正: 前面化条件を4パターンへ拡張]** 以下のいずれの操作でも
+  前面化する: ①panel本体のどこかをpointerdown(本体クリック・ドラッグ開始・
+  リサイズ開始のいずれもこれ1つでカバーできる)、②表示トグルをONにした瞬間。
+  ②は、`FloatingPanel`コンポーネント自身は`visible=false`の間も
+  unmountされず(内部で`return null`しているだけ)、そのままでは表示ONに
+  しても既存のz-indexのまま(他panelより背面のまま)になってしまうため、
+  `visible`がtrueへ変わったことを検知する専用の`useEffect`を追加した。
 - **位置・大きさの保持**: `rect`(位置・大きさ)は`FloatingPanel`自身の
   stateではなく`App.tsx`側のstate(`panelInfoRect`/`aggregationRect`/
-  `detailRect`)として持ち上げている。表示ON/OFF(`PanelVisibilityToggles`)で
-  `FloatingPanel`がunmount/remountされても、移動/リサイズの結果はセッション中
-  保持される(再表示すると直前の位置・大きさへ戻る)。localStorageへの永続化は
-  今回対象外(セッション内保持のみ)。
+  `detailRect`/`masterRect`)として持ち上げている。表示ON/OFF
+  (`PanelVisibilityToggles`)で`FloatingPanel`がunmount/remountされても、
+  移動/リサイズの結果はセッション中保持される(再表示すると直前の位置・
+  大きさへ戻る)。localStorageへの永続化は今回対象外(セッション内保持のみ)。
 - **視覚的なヒント**: 見出しに`cursor: grab`(ドラッグ中は`grabbing`)、
   右下角に小さな斜線ストライプのリサイズハンドル、ドラッグ/リサイズ中は
   box-shadowとborderをわずかに強める(`.floating-panel--interacting`)。
   過度な装飾は避け、図面Viewerを主役にする方針を維持している。
+- **[2026-09 追加修正: 最小高さ縮小時の内部scroll]** panelを最小高さまで
+  縮めると、各component自身の固定領域(見出し+操作UI等、`flex-shrink:0`)
+  だけでpanelの高さを超えてしまう場合がある。以前は`.floating-panel__body`
+  が`overflow: hidden`だったため、その場合は固定領域の下側(例:
+  積算集約の製番合計・対象select・表)が単純に見えなくなり、スクロールも
+  できず実質操作不能になっていた。`overflow-y: auto`へ変更し、panel全体を
+  縦スクロールして隠れた内容へ到達できるようにした(横方向は各component
+  自身の内部スクロール領域に任せ、ここでは`hidden`のまま)。
 
 **glassmorphism(2026-09 Phase 4で追加)**: floating panel自体の見た目を、
 半透明の白background(`rgba(255, 255, 255, 0.6)`)+
@@ -265,9 +297,11 @@ Viewer上の図面がうっすら透けて見えるが、`PanelInfo`/`EstimateAg
 (`inset box-shadow`、`rgba(255, 255, 255, 0.35)`)を重ね、フロストガラスの縁
 らしい質感は保っている。ドラッグ/リサイズ中(`.floating-panel--interacting`)は
 境界色をさらに一段濃く(`rgba(30, 41, 59, 0.65)`)して強調する。
-盤情報・積算集約・積算明細の3panelとも同じ枠線ルールを共有する
-(`FloatingPanel.css`の`.floating-panel`に一括定義、component側で個別に
-上書きしていない)。
+4panelとも`.floating-panel`の共通ルールとして同じ枠線を共有する
+(`FloatingPanel.css`に一括定義、component側で個別に上書きしていない)。
+**[2026-09 追加修正]** 積算コードMasterのみ、7章で説明する「ツール系panel」
+の識別のため、この共通枠線に加えて上端3px太のslate系アクセントバー
+(`.floating-panel--master`)を追加している。
 
 **Viewer操作との重なり・z-index**: `DrawingViewer`内部のOverlay
 (盤領域/引出線/BBox本体/選択中BBox/Resize Handle/Tooltip、
@@ -281,8 +315,24 @@ floating panelは自身の矩形部分のみ操作を受け付け(`DrawingViewer
 Zoom/Fitが行える。floating panelの既定位置がBBoxの実際の位置と重なった場合、
 そのBBoxを直接操作するには該当panelを一時的にOFFにする必要がある
 (トグルで即座に切替可能なため、これを許容する設計とした)。実ブラウザ確認
-(1600px/1280px/1024px幅)では、3つのfloating panelが既定配置のまま重なる
+(1600px/1280px/1024px幅)では、4つのfloating panelが既定配置のまま重なる
 ことは確認されなかった。
+
+**[2026-09 追加修正: modal(確定履歴/Help等)は常にfloating panelより前面]**
+`EstimateConfirmationHistory`(確定履歴modal)は`EstimateAggregation`
+(floating panel化されたcomponent)の中で開くため、対策なしでは
+`.floating-panel`(`position: absolute`+動的z-index)が作るCSSの
+stacking contextの内側に閉じ込められてしまう。この場合、modal自身の
+z-indexをどれだけ大きくしても、「他のfloating panelの方が現在z-index
+(前面化カウンタ)が高い」場合はそちらの後ろへ回り込んでしまう
+(stacking contextの比較は祖先の`.floating-panel`単位で行われるため)。
+`EstimateConfirmationHistory.tsx`は`ReactDOM.createPortal`で
+`document.body`直下へ描画するよう変更し、floating panelのstacking
+contextから完全に抜け出させた。あわせて、ProductSelector/SystemSettings/
+HelpPdfModal/EstimateConfirmationHistoryの各backdropのz-indexを
+100→1000へ引き上げ、floating panelの前面化カウンタ(100から単調増加)より
+確実に前面になるようにした(実ブラウザで、floating panelを複数回操作して
+z-indexを押し上げた状態でもmodalが前面に出ることを確認済み)。
 
 **積算明細のhover→BBox強調・盤情報のクリック連動は維持**: `EstimateDetail`の
 `onHoverDetail`・`PanelInfo`の`onSelectPanel`は変更していないため、行hoverに
@@ -847,6 +897,25 @@ Zoom/Fitが行える。floating panelの既定位置がBBoxの実際の位置と
 行(単価・数量・金額列)や「製番合計」ラベル自体・背景色は変更していない。
 金額の桁揃え・計算値も無変更。
 
+### 上部UIの余白削減・再配置 (2026-09 Issue #19 追加修正)
+
+floating panel化(1.7章)によりpanel自体の高さを縮められるようになったが、
+旧来は見出し直下に「確定操作群」「製番合計」「積算コード件数」「対象
+select」を縦に4ブロック積んでいたため、これらの固定領域だけでpanelの
+縦の場所を大きく占有していた。情報量・文言・意味は一切変更せず、以下の
+再配置で情報密度を上げた。
+
+- 「製番合計」「積算コードN件」「対象select」を`estimate-aggregation__
+  summary-row`という1つのflex-wrap行へまとめた。panel幅が十分な場合は
+  横一列に収まり、狭い場合のみ自然に折り返す(縦の固定コストを増やさない)。
+  各要素自体のクラス名(`estimate-aggregation__grand-total`等)・製番合計
+  金額の赤系強調・「単価(暫定)」等の既存文言はすべて維持している。
+- 確定操作群(`EstimateConfirmationAction`/`EstimateConfirmationHistory`)・
+  見出し・各ブロックの上下padding/marginを引き締め、押しづらくなるほど
+  ボタン自体を小さくすることなく、余白のみを詰めた。
+- 積算集約のfloating panel自体の上下paddingも引き締めた
+  (`.estimate-aggregation`)。
+
 ### 対象 (総合計 / 製品全体 / 個別盤 / 要確認)
 
 画面上部の「対象」セレクトで、以下のいずれかを選ぶ。
@@ -1033,7 +1102,29 @@ Tree表示)は、実データによる`EstimateAggregation`(5.5)・`EstimateDeta
 `EstimateTree`/`PanelProperties`の記載は、本節と合わせて今後の更新時に整理する
 (現時点では本節のみを更新し、他の古い記述は対象外としている)。
 
-## 7. EstimateMasterPicker (下部: 積算コードMaster) — Phase 1.6で刷新、Phase 1.7で実データ対応
+## 7. EstimateMasterPicker (積算コードMaster) — Phase 1.6で刷新、Phase 1.7で実データ対応、2026-09 Issue #19追加修正でfloating panel化
+
+**[2026-09 Issue #19 追加修正]** 従来はMainArea下段に常設(PaneSplitterで
+高さ手動リサイズ)されていたが、盤情報・積算集約・積算明細と同じ
+floating panel(1.7章参照)へ移行した。`EstimateMasterPicker`自体の業務
+ロジック・選択状態・Manual BBox追加モードとの連携(要件2/3、下記)は一切
+変更していない。旧来のPaneSplitter+`sekisan-navi:master-pane-height`
+localStorageキーによる高さ調整は廃止し、floating panel共通のドラッグ移動・
+リサイズ(1.7章)に置き換わった。
+
+**ツール系panelとしての配色区別**: 盤情報・積算集約・積算明細は
+「表示情報」のfloating panelだが、積算コードMasterはこの表からManual
+BBox追加対象を選ぶという**作業ツール**であるため、同じ見た目に見えないよう
+専用の配色にしている。
+- floating panel shell自体の上端に3px太のslate系(`#334155`)アクセントバー
+  (情報系3panelの通常の1px枠線とは別に追加)。
+- component内部の`master-picker__toolbar`(見出し+検索欄+件数)を、白背景
+  ではなく濃色(slate)の帯にする。
+- 表示切替トグル(`PanelVisibilityToggles`)も、情報系3ボタン(violet系)と
+  区切り線を挟んで分離し、専用のslate系配色にする。
+- 既存のMasterカテゴリ色(`--cat-tab-*`)・選択行の意味色(コバルトブルー)は
+  一切変更していない。派手な警告色(赤・amber)は使わず、あくまで
+  「種類が違う」ことが一目で分かる程度の落ち着いた配色にとどめている。
 
 - **Phase 1.7**: 参照元をExcel資料 (`data/master/estimate_master_a.xlsx`) に
   切り替えた (ダミー21件は廃止)。Frontendは引き続きExcelを直接読まず、必ず

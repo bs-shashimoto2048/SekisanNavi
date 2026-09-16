@@ -7,11 +7,15 @@ interface Props {
   onToggleAggregation: () => void
   detailVisible: boolean
   onToggleDetail: () => void
+  /** [追加修正: 積算コードMasterのfloating panel化] 情報系3panelとは別枠
+   * (視覚的な区切り + ツール系配色)で表示ON/OFFを切り替える。 */
+  masterVisible: boolean
+  onToggleMaster: () => void
 }
 
 /**
- * floating panel(盤情報・積算集約・積算明細)の表示トグル群 (Issue #19
- * Phase 4)。
+ * floating panel(盤情報・積算集約・積算明細・積算コードMaster)の表示
+ * トグル群 (Issue #19 Phase 4)。
  *
  * Phase 2ではViewer右上に独立したfloating toggle barとして浮かせていたが、
  * 追加UI修正指示により、Undo/Redoボタンと同じ編集ツールバー
@@ -25,6 +29,12 @@ interface Props {
  * 常に固定ラベル(「盤情報」「積算集約」「積算明細」)にした。ON/OFF状態は
  * `aria-pressed`と専用配色(PanelVisibilityToggles.css、Undo/Redo等の
  * 通常操作ボタンとは異なる色調)のみで表現する。
+ *
+ * [追加修正: 積算コードMasterのfloating panel化] 積算コードMasterは
+ * 「表示情報」の3panelとは異なり、BBox追加操作へ直接つながる「作業ツール」
+ * であるため、区切り線(`.panel-visibility-toggles__divider`)を挟んで
+ * 別グループとして配置し、専用のslate系配色
+ * (`.panel-visibility-toggles__button--tool`)を与える。
  */
 export function PanelVisibilityToggles({
   panelInfoVisible,
@@ -33,6 +43,8 @@ export function PanelVisibilityToggles({
   onToggleAggregation,
   detailVisible,
   onToggleDetail,
+  masterVisible,
+  onToggleMaster,
 }: Props) {
   return (
     <div className="panel-visibility-toggles">
@@ -62,6 +74,16 @@ export function PanelVisibilityToggles({
         onClick={onToggleDetail}
       >
         積算明細
+      </button>
+      <span className="panel-visibility-toggles__divider" aria-hidden="true" />
+      <button
+        type="button"
+        className="panel-visibility-toggles__button panel-visibility-toggles__button--tool"
+        aria-pressed={masterVisible}
+        title={masterVisible ? '積算コードMasterを隠す' : '積算コードMasterを表示'}
+        onClick={onToggleMaster}
+      >
+        積算コードMaster
       </button>
     </div>
   )
