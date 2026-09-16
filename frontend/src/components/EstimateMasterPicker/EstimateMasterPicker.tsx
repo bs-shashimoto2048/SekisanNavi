@@ -68,15 +68,14 @@ export function EstimateMasterPicker({ selectedItemId, onSelectItem, height }: P
 
   const categoryTabs = useMemo(() => extractCategoryTabs(allItems), [allItems])
 
-  // UI視覚階層改善 追加修正第3ラウンド 1章/2章/11章/12章: 選択中タブと同じ
-  // category presentation(`--cat-tab-bg`/`--cat-tab-fg`/`--cat-tab-border`)を
-  // table headerへも注入し、「active tab → header → data」の視覚階層をつなげる。
-  // 新しいpresentation値(tabHeaderBg等)は追加せず、既存のtab用の値をそのまま
-  // 再利用する(指示3章のheaderBg≒tabBg方針。tabBgは既にtabActiveBgより淡いため
-  // 「header <  active tab」の濃淡関係が自然に保たれる)。activeCategoryがまだ
-  // 無い場合(初回読み込み前)はスタイル自体を注入せず、CSS側の既定値
-  // (#f9fafb等)へ委ねる。
-  const activeHeaderStyle = useMemo(() => {
+  // [追加修正: カテゴリ色の変化を簡素化] 以前はtable header全体の背景/文字色を
+  // 選択中カテゴリごとに大きく切り替えていたが(旧「選択中タブ→header→data」の
+  // 視覚階層)、部品台帳では品名を切り替えるたびにpanel全体やtable headerの色が
+  // 大きく変わる表現がくどく見えるため廃止した(table headerは他3panelと同じ
+  // 固定の配色に統一。下記CSS参照)。カテゴリの配色情報自体
+  // (`getCategoryPresentation`/`toCssVars`)は、下記の品名select自身への
+  // ごく控えめな左accent(`--cat-tab-border`のみ)としてのみ限定的に利用する。
+  const selectAccentStyle = useMemo(() => {
     if (activeCategory == null) return undefined
     return toCssVars(getCategoryPresentation(activeCategory).colors)
   }, [activeCategory])
@@ -91,32 +90,34 @@ export function EstimateMasterPicker({ selectedItemId, onSelectItem, height }: P
       .finally(() => setLoading(false))
   }, [activeCategory])
 
+  // [追加修正: UI名称変更] ユーザー向け表示名を「積算コードMaster」から
+  // 「部品台帳」へ変更した(内部のcomponent名・class名・domain名は変更して
+  // いない。指示1章: 大規模リファクタリングは行わない)。
+  // [追加修正: 他floating panelとのフォーマット統一] 盤情報(PanelInfo)の
+  // 見出しが`盤情報　{件数}件`のように件数を見出しテキスト自体へ埋め込む
+  // 形式のため、部品台帳もこれに揃える(旧: 見出しと件数を別要素に分けた
+  // 濃色ツールバー行だったものを廃止)。
+  const heading = activeCategory != null ? `部品台帳　${items.length}件` : '部品台帳'
+
   return (
     <section className="master-picker" style={height != null ? { height } : undefined}>
-      <div className="master-picker__toolbar">
-        {/* [追加修正: UI名称変更] ユーザー向け表示名を「積算コードMaster」から
-            「部品台帳」へ変更した(内部のcomponent名・class名・domain名は
-            変更していない。指示1章: 大規模リファクタリングは行わない)。 */}
-        <h2 className="master-picker__heading">部品台帳</h2>
-        {loading && <span className="master-picker__loading">読み込み中...</span>}
-        <span className="master-picker__count">{items.length}件</span>
-      </div>
+      <h2 className="master-picker__heading">{heading}</h2>
 
-      {/* [追加修正: 検索欄を廃止しカテゴリ選択リストへ変更]
-          横一列のタブ表示は横幅を浪費し、floating panel化(幅を絞りたい)と
-          相性が悪いため、単一の<select>によるカテゴリ切替へ置き換えた。
-          カテゴリの定義・並び順・表示ラベル(`masterCategoryPresentation.ts`)・
-          `activeCategory` state・切替時の再取得ロジックはタブ時代のものを
-          そのまま再利用しており、見た目だけを変更している。選択中カテゴリの
-          配色(`toCssVars`)をselect自身の枠線/背景に注入し、「今どのカテゴリを
-          見ているか」が一目で分かるようにした(タブ時代の「選択中タブが濃色」
-          という表現を、単一selectでも踏襲する)。 */}
+      {/* [追加修正: 検索欄を廃止し品名選択リストへ変更、追加修正でさらに
+          コンパクト化] 横一列のタブ表示は横幅を浪費し、floating panel化
+          (幅を絞りたい)と相性が悪いため、単一の<select>による品名切替へ
+          置き換えた。品名の定義・並び順・表示ラベル
+          (`masterCategoryPresentation.ts`)・`activeCategory` state・切替時の
+          再取得ロジックはタブ時代のものをそのまま再利用しており、見た目だけを
+          変更している。selectの横幅はpanel幅いっぱいまで広げず(下記CSS)、
+          長い品名はselect内で省略表示する。ラベル文言は「カテゴリ」から
+          「品名」へ変更した(指示1章)。 */}
       <label className="master-picker__category-label">
-        カテゴリ
+        品名
         <select
           className="master-picker__category-select"
           value={activeCategory ?? ''}
-          style={activeCategory != null ? toCssVars(getCategoryPresentation(activeCategory).colors) : undefined}
+          style={selectAccentStyle}
           onChange={(e) => setActiveCategory(e.target.value)}
         >
           {categoryTabs.map((c) => (
@@ -125,11 +126,12 @@ export function EstimateMasterPicker({ selectedItemId, onSelectItem, height }: P
             </option>
           ))}
         </select>
+        {loading && <span className="master-picker__loading">読み込み中...</span>}
       </label>
 
       <div className="master-picker__table-wrap">
         <table className="master-picker__table">
-          <thead style={activeHeaderStyle}>
+          <thead>
             <tr>
               {COLUMNS.map((col) => (
                 <th key={col.key} className={col.className}>

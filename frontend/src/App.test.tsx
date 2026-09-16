@@ -971,7 +971,7 @@ describe('App: BBox削除 (Phase 1.7)', () => {
     fireEvent.click(screen.getByTitle(/roof_fan/))
     await waitFor(() => expect(screen.getByRole('button', { name: 'BBox削除' })).not.toBeDisabled())
 
-    const categorySelect = screen.getByRole('combobox', { name: 'カテゴリ' })
+    const categorySelect = screen.getByRole('combobox', { name: '品名' })
     categorySelect.focus()
     fireEvent.keyDown(categorySelect, { key: 'Delete' })
 
@@ -1162,7 +1162,9 @@ describe('App: 積算コードMasterのfloating panel化 (Issue #19 追加修正
     const masterFloat = document.querySelector('.floating-panel--master') as HTMLElement
     expect(masterFloat).toBeInTheDocument()
     // [追加修正: UI名称変更] floating panelタイトルは「部品台帳」(指示1章)。
-    expect(within(masterFloat).getByRole('heading', { name: '部品台帳' })).toBeInTheDocument()
+    // [追加修正: 他panelとのフォーマット統一] 盤情報と同様、見出しに件数
+    // (例:「部品台帳　5件」)を埋め込むため、部分一致で確認する。
+    expect(within(masterFloat).getByRole('heading', { name: /部品台帳/ })).toBeInTheDocument()
     expect(await within(masterFloat).findByText('11001')).toBeInTheDocument()
   })
 
@@ -1197,11 +1199,28 @@ describe('App: 積算コードMasterのfloating panel化 (Issue #19 追加修正
     expect(getComputedStyle(masterToggle).backgroundColor).not.toBe(getComputedStyle(infoToggle).backgroundColor)
   })
 
-  it('gives the master floating panel a distinct tool-like shell accent from the 3 info panels', async () => {
+  it('gives the master floating panel a distinct-but-subtle heading accent, while sharing the same shell format as the 3 info panels (追加修正: フォーマット統一・控えめなaccent)', async () => {
     await renderApp()
     const masterFloat = document.querySelector('.floating-panel--master') as HTMLElement
     const infoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
-    expect(getComputedStyle(masterFloat).borderTopColor).not.toBe(getComputedStyle(infoFloat).borderTopColor)
+
+    // floating panel shell自体(枠線・角丸・glassmorphism)は他panelと共通のもの
+    // を使う(専用の太いaccentバーは追加修正で廃止した)。
+    expect(getComputedStyle(masterFloat).borderTopColor).toBe(getComputedStyle(infoFloat).borderTopColor)
+    expect(getComputedStyle(masterFloat).borderRadius).toBe(getComputedStyle(infoFloat).borderRadius)
+
+    // 差別化は見出し(h2)のaccent色のみに限定する(構造は同じ、色だけ違う)。
+    const masterHeading = within(masterFloat).getByRole('heading', { name: /部品台帳/ })
+    const infoHeading = within(infoFloat).getByRole('heading', { name: /盤情報/ })
+    expect(getComputedStyle(masterHeading).borderLeftColor).not.toBe(getComputedStyle(infoHeading).borderLeftColor)
+    // ただし見出しの構造(padding/font-size等)は統一されている。
+    // 注記: `border-left-width`はpanel-info側が`border-left: 3px solid
+    // var(--accent-section)`のようにvar()を含むshorthandで指定しているため、
+    // jsdom(cssstyle)がこの値を確実に解決できず(このリポジトリの既存の
+    // 注記と同じ制約)、比較には使わない。実際の描画(3px相当)は実ブラウザで
+    // 確認する。
+    expect(getComputedStyle(masterHeading).padding).toBe(getComputedStyle(infoHeading).padding)
+    expect(getComputedStyle(masterHeading).fontSize).toBe(getComputedStyle(infoHeading).fontSize)
   })
 })
 
@@ -1871,7 +1890,7 @@ describe('App: Escキーによる編集モード解除 (Phase 1.11 UI改修指�
     fireEvent.click(row11001)
     await waitFor(() => expect(row11001.className).toContain('master-picker__row--selected'))
 
-    const categorySelect = screen.getByRole('combobox', { name: 'カテゴリ' })
+    const categorySelect = screen.getByRole('combobox', { name: '品名' })
     categorySelect.focus()
     fireEvent.keyDown(categorySelect, { key: 'Escape' })
 

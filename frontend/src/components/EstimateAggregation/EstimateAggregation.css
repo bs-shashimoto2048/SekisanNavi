@@ -205,25 +205,26 @@
   table-layout: fixed;
 }
 
-/* 追加UI修正指示3章: 列幅の再配分。コード(5桁程度の数値文字列)・数量は
-   文字数が少ないため必要最小限へ縮小し、余った幅は最も長くなりやすい
-   「内容」列へ優先配分する。単価・金額は「単価(暫定)」ヘッダ文言や
-   大きめの金額(¥1,234,567等)がnowrapで収まる幅は維持しつつ、
-   従来より少し引き締める。 */
+/* [追加修正: floating panel初期幅の実測ベース再調整] 各列の実測自然幅
+   (隠しnowrap要素による計測。ヘッダ文言・実データのうち最長セル基準)は
+   コード≈39px/内容≈198px/単価≈59px/数量≈26px/金額≈57pxで、
+   これにcell padding等を加えた必要量の比率へ列幅配分を合わせ直した
+   (詳細はIssue #19への報告コメント参照)。floating panelの既定幅自体も
+   360→480pxへ拡大している(`FloatingPanel.tsx`の`DEFAULT_WIDTH_BY_KIND`)。 */
 .estimate-aggregation__col-code {
-  width: 10%;
+  width: 11%;
   white-space: nowrap; /* 短い列はヘッダ・値とも折り返させない */
 }
 
 .estimate-aggregation__col-content {
-  width: 44%;
+  width: 49%;
   text-align: left;
   min-width: 0;
   overflow-wrap: break-word; /* 内容は必要に応じて2段表示を許容する */
 }
 
 .estimate-aggregation__col-price {
-  width: 18%;
+  width: 16%;
 }
 
 .estimate-aggregation__col-qty {
@@ -231,7 +232,7 @@
 }
 
 .estimate-aggregation__col-amount {
-  width: 20%;
+  width: 16%;
 }
 
 /* 単価・金額は右寄せ、常に1行で収まる幅を確保する。 */

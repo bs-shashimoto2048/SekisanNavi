@@ -111,6 +111,15 @@ describe('EstimateMasterPicker: 部品台帳への再設計 (Issue #19 追加修
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   })
 
+  it('labels the selection list as 品名, not カテゴリ (追加修正指示1章: ユーザー向け表記の変更)', async () => {
+    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    await screen.findByText('11001')
+    expect(screen.getByText('品名')).toBeInTheDocument()
+    expect(screen.queryByText('カテゴリ')).not.toBeInTheDocument()
+    // ネイティブ<label>のラップによる暗黙のaccessible name。
+    expect(screen.getByRole('combobox', { name: '品名' })).toBeInTheDocument()
+  })
+
   it('generates category select options from the categories actually present in Master data (no hardcoding), using the full-width label', async () => {
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
     await screen.findByText('11001')
@@ -215,39 +224,43 @@ describe('EstimateMasterPicker: カテゴリ選択リストの配色 (Issue #19 
   })
 })
 
-describe('EstimateMasterPicker: 選択カテゴリ色のtable header連動 (UI視覚階層改善 追加修正第3ラウンドから維持)', () => {
-  it('injects the active category presentation onto <thead> (指示1章/2章/11章)', async () => {
+describe('EstimateMasterPicker: カテゴリ色の変化の簡素化 (Issue #19 追加修正)', () => {
+  // [追加修正] 以前は選択中カテゴリのpresentationを<thead>へ注入し、品名を
+  // 切り替えるたびにtable header全体の色が大きく変わる表現にしていたが、
+  // 「品名を切り替えるたびにpanel全体やtable headerの色が大きく変わる表現は
+  // やめる」との指示を受け廃止した。table headerは他panelと同じ固定配色になり、
+  // カテゴリの配色情報は品名selectの左accent(--cat-tab-border)のみに限定される
+  // (直上の「カテゴリ選択リストの配色」describe参照)。
+  it('does not inject any category presentation onto <thead> (table headerはpanel種別によらず固定配色)', async () => {
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
     await screen.findByText('11001')
     const thead = document.querySelector('.master-picker__table thead') as HTMLElement
 
-    expect(thead.style.getPropertyValue('--cat-tab-bg')).toBe(BOX_TANDOKU.colors.tabBg)
-    expect(thead.style.getPropertyValue('--cat-tab-fg')).toBe(BOX_TANDOKU.colors.tabFg)
-    expect(thead.style.getPropertyValue('--cat-tab-border')).toBe(BOX_TANDOKU.colors.tabBorder)
+    expect(thead.style.getPropertyValue('--cat-tab-bg')).toBe('')
+    expect(thead.getAttribute('style')).toBeNull()
   })
 
-  it('switches the header presentation immediately when the category changes (指示9章/10章)', async () => {
+  it('keeps the table header background/color the same across different categories (品名を切り替えても変化しない)', async () => {
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
     await screen.findByText('11001')
-    const thead = document.querySelector('.master-picker__table thead') as HTMLElement
-    expect(thead.style.getPropertyValue('--cat-tab-bg')).toBe(BOX_TANDOKU.colors.tabBg)
+    const th = screen.getAllByRole('columnheader')[0]
+    const bgBefore = getComputedStyle(th).backgroundColor
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: NAIBU_PANEL.internal } })
     await screen.findByText('18001')
 
-    expect(thead.style.getPropertyValue('--cat-tab-bg')).toBe(NAIBU_PANEL.colors.tabBg)
-    expect(thead.style.getPropertyValue('--cat-tab-bg')).not.toBe(BOX_TANDOKU.colors.tabBg)
+    expect(getComputedStyle(th).backgroundColor).toBe(bgBefore)
   })
 
-  it('does not apply the category presentation to data rows (tbody), only to the header', async () => {
+  it('does not apply any category presentation to data rows (tbody) either', async () => {
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
     const row = (await screen.findByText('11001')).closest('tr') as HTMLElement
     expect(row.style.getPropertyValue('--cat-tab-bg')).toBe('')
   })
 
-  it('assigns every one of the 13 categories a header presentation reusing the already-unique tabBg (no duplicates)', () => {
-    const tabBgs = MASTER_CATEGORY_PRESENTATION.map((p) => p.colors.tabBg)
-    expect(new Set(tabBgs).size).toBe(13)
+  it('assigns every one of the 13 categories a unique tabBorder (used only as the select accent, no duplicates)', () => {
+    const tabBorders = MASTER_CATEGORY_PRESENTATION.map((p) => p.colors.tabBorder)
+    expect(new Set(tabBorders).size).toBe(13)
   })
 
   it('leaves selected-row cobalt styling and bbox/leader colors untouched (指示8章/12章、指示5章: BBox追加モードの部品選択フローは維持)', async () => {

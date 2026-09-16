@@ -50,34 +50,43 @@ const MIN_HEIGHT_BY_KIND: Record<FloatingPanelKind, number> = {
   detail: 150,
   master: 150,
 }
-// [追加修正: 各floating panelの初期幅を内容に合わせて調整]
-// 全kind共通の360pxを既定としていたが、panelごとに「通常必要なカラムが
-// 無理なく見える幅」は異なるため、実ブラウザ確認のうえkind別の値へ変更した
-// (あくまで既定値。ユーザーは自由にリサイズでき、4panelを同じ幅へ揃える
-// 必要は無い)。
-// - panelInfo: カード1枚が2行程度で収まり、360pxで既に折り返しが自然。
-// - aggregation: 5列の表(コード/内容/単価/数量/金額)が360pxで無理なく
-//   収まる(内容列を最優先で広く取る配分のため)。上部の確定操作・製番合計・
-//   対象selectも360pxで1行にまとまる。
-// - detail: 8列の表(min-width 730px)は360pxだと4列目(型式)の途中までしか
-//   見えず、以前は横スクロールが常時必要だった。図面Viewerを過度に圧迫しない
-//   範囲で440pxへ拡大し、より多くの列が見えるようにした(730pxへは広げない。
-//   残りは既存の内部横スクロールに任せる)。
-// - master(部品台帳): 追加修正でコード/型式/定格の3列のみになり、検索欄も
-//   廃止したため、旧来の480pxは明らかに広すぎた(実測で全列に大きな余白)。
-//   3列が無理なく見える最小限として300pxへ大幅に縮小した(指示4章
-//   「旧Master表より明確にコンパクトな初期幅を狙う」)。
-// 既定位置は積算明細・部品台帳とも下段(bottom基準)で左右に分かれるため、
-// 1024px幅でも両者の合計幅+左右マージンがViewerコンテナ幅に収まるよう
-// (実測: 1024px幅で798px)、detail 440px+master 300pxで検証している
-// (740px、798pxに対して十分な余白がある。実ブラウザ確認済み)。
+// [追加修正: floating panelの初期幅を実ブラウザ実測ベースで再調整]
+// 前回(360/360/440/300px)の値は「それぞれのカラムが見えるサイズ」という
+// 指示に対して未達だった。今回はPlaywrightで実データ(製番A1GV2421 P16)を
+// 使い、各表の列ごとに「隠しnowrap要素へ同じfont-size/family/weightで
+// セル文字列を複製し、実際の自然幅(折り返し無し)をgetBoundingClientRect()で
+// 測る」手法(既存の他panelでも使ってきた手法)で、ヘッダ文言・実データの
+// うち最長のセルの自然幅を列ごとに測定し、そこへcell paddingや外周
+// padding・縦スクロールバー分の余白を積み上げてpanel全体の必要幅を算出した
+// (詳細な実測値・計算根拠はIssue #19への報告コメント参照)。
+// - panelInfo: カード1行の主要項目(バッジ+盤名称+型式)の自然幅は約250px
+//   程度で、以前の360pxには十分すぎる余裕があった。「最小限」の指示に
+//   合わせて300pxへ縮小しても主要項目は1行に収まる(寸法・接続情報は
+//   意図的に2行目へ折り返す設計のまま)。
+// - aggregation: 5列(コード/内容/単価/数量/金額)の自然幅合計+パディング+
+//   縦スクロールバー分で約456px必要だったため、360pxでは常に窮屈だった。
+//   480pxへ拡大した(列幅配分も実測比率に合わせてCSS側を再配分)。
+// - detail: 8列(min-width 730pxは維持、列配分もP23実データの定格実測に
+//   基づく既存値を維持)全体が収まるにはpanel幅として約770px必要。ただし
+//   下段で部品台帳と横に並ぶため、後述の「同じ行の相方panel幅を考慮した
+//   動的な上限」で実際の初期幅はコンテナ幅に応じて変わる(1600pxでは
+//   ほぼ全列、1024/1280pxでは一部を内部横スクロールに任せる。物理的な
+//   幅の制約であり、指示の「パネル自体を無理に広げて解決しない」方針とも
+//   整合する)。
+// - master(部品台帳): 3列(コード/型式/定格)の自然幅合計+パディング+
+//   縦スクロールバー分で約299px。旧300pxはほぼこの必要量ちょうどだったが
+//   バッファが薄かったため320pxへ微増した(列幅配分比率も実測に合わせて
+//   再配分し、定格列の不足を解消)。
 const DEFAULT_WIDTH_BY_KIND: Record<FloatingPanelKind, number> = {
-  panelInfo: 360,
-  aggregation: 360,
-  detail: 440,
-  master: 300,
+  panelInfo: 300,
+  aggregation: 480,
+  detail: 770,
+  master: 320,
 }
 const SIDE_MARGIN = 20
+// 同じ行に並ぶ2panel(盤情報+積算集約、部品台帳+積算明細)が初期表示で
+// 重ならないよう最低限確保する隙間。
+const ROW_GAP = 12
 // DrawingCanvas自身のtoolbar(図面名+Zoom/Fit/BBox削除、Viewer上端いっぱいの1行)を
 // クリアするための既定オフセット。
 const TOP_CLEARANCE = 48
@@ -110,12 +119,33 @@ function clampSize(rect: FloatingPanelRect, container: Size, kind: FloatingPanel
   }
 }
 
+/** kind単体の既定幅(相方panelを考慮しない、コンテナ幅によるクランプのみ)。 */
+function baseWidthFor(kind: FloatingPanelKind, container: Size): number {
+  return Math.max(MIN_WIDTH, Math.min(DEFAULT_WIDTH_BY_KIND[kind], container.width - SIDE_MARGIN * 2))
+}
+
 /** 初期配置(既定位置)を計算する。盤情報=左上寄り、積算集約=右上寄り、
  * 積算明細=右下寄り(Issue #19 Phase 2/4から踏襲)。積算コードMaster([追加修正]
  * floating化)は左下寄りとし、4panelが対角に分散する既定レイアウトにする。 */
 function defaultRectFor(kind: FloatingPanelKind, container: Size): FloatingPanelRect {
   const minHeight = MIN_HEIGHT_BY_KIND[kind]
-  const width = Math.max(MIN_WIDTH, Math.min(DEFAULT_WIDTH_BY_KIND[kind], container.width - SIDE_MARGIN * 2))
+  let width = baseWidthFor(kind, container)
+  // [追加修正: floating panelの初期幅を実ブラウザ実測ベースで再調整]
+  // 積算集約(右上)は盤情報(左上)と、積算明細(右下)は部品台帳(左下)と
+  // それぞれ同じ行に並ぶ。両者の既定幅をそのまま合計するとコンテナ幅が
+  // 狭い(1024px等)場合に重なってしまうため、「左側panel(盤情報/部品台帳)は
+  // 自身の既定幅を優先確保し、右側panel(積算集約/積算明細)はコンテナの
+  // 残り幅に収まる範囲まで初期幅を控えめにする」形で、重なりを避けつつ
+  // 可能な限り実測に基づく幅に近づける(指示: 初期幅変更で4panel同時表示時に
+  // 不自然な重なりが増えないよう、必要なら初期位置も最小限調整する)。
+  if (kind === 'aggregation') {
+    const partnerWidth = baseWidthFor('panelInfo', container)
+    width = Math.min(width, Math.max(MIN_WIDTH, container.width - SIDE_MARGIN * 2 - partnerWidth - ROW_GAP))
+  }
+  if (kind === 'detail') {
+    const partnerWidth = baseWidthFor('master', container)
+    width = Math.min(width, Math.max(MIN_WIDTH, container.width - SIDE_MARGIN * 2 - partnerWidth - ROW_GAP))
+  }
   const availableHeight = Math.max(minHeight, container.height - TOP_CLEARANCE - BOTTOM_MARGIN)
 
   if (kind === 'panelInfo') {

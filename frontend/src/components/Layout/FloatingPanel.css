@@ -57,16 +57,14 @@
   border-color: rgba(30, 41, 59, 0.65);
 }
 
-/* [追加修正: 積算コードMasterのfloating panel化] 盤情報/積算集約/積算明細は
-   「表示情報」のfloating panelだが、積算コードMasterはBBox追加操作へ直接
-   つながる「作業ツール」であるため、panel shellにも上端の太いアクセントバー
-   (濃色slate)を付け、他3panelと一目で区別できるようにする。内部の
-   `.master-picker__toolbar`(同系色の濃色帯)と合わせて「これはツール系
-   panelである」ことを示す。派手な警告色は使わず、既存のMasterカテゴリ色
-   (--cat-tab-*)・glassmorphismの背景/backdrop-filterは変更しない。 */
-.floating-panel--master {
-  border-top: 3px solid #334155;
-}
+/* [追加修正: 部品台帳UIを他panelと統一] 以前は`.floating-panel--master`の
+   shell自体にも上端3px太のslate accentバーを追加していたが、他3panelとの
+   統一感を優先し廃止した(指示3章: タイトル見出し・padding・表ヘッダ等を
+   既存3panelと統一感のある見た目にする。ツール系としての差別化は控えめな
+   accentに留める)。「ツール系panelである」ことは、`EstimateMasterPicker.css`
+   側の見出し(`master-picker__heading`)のaccent色(slate系、他panelの
+   コバルト系と区別)のみで表現する。既存のMasterカテゴリ色(--cat-tab-*)・
+   glassmorphismの背景/backdrop-filter/枠線(直上の共通ルール)は変更していない。 */
 
 /* childrenの内容(PanelInfo/EstimateAggregation/EstimateDetail/
    EstimateMasterPicker)は元々「親から高さ100%で受け取る」設計のため、この

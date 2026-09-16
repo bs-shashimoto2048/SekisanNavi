@@ -7,87 +7,89 @@
    受け取る形に変更し、旧来のPaneSplitter連動`height` propベースの指定は
    使わなくなった(props自体は後方互換のため残しているが、App.tsxからは
    渡さない)。 */
+/* [追加修正: 他floating panelとのフォーマット統一] padding/構造を
+   盤情報・積算集約・積算明細と揃える(`.panel-info`/`.estimate-aggregation`/
+   `.estimate-detail`と同じ`height:100%; display:flex; flex-direction:column;`
+   + 上下やや詰めたpadding)。 */
 .master-picker {
   height: 100%;
-  padding: 0.3rem 0.6rem;
+  padding: 0.35rem 0.5rem;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
 }
 
-/* [追加修正: ツール系panelとして配色を区別] 盤情報/積算集約/積算明細は
-   「表示情報」のfloating panelだが、積算コードMasterはBBox追加操作へ
-   直接つながる「作業ツール」であるため、同じ見た目にならないよう
-   ツールバー全体を濃色(slate系、寒色〜中性色)の帯にする。既存の
-   Masterカテゴリ色(--cat-tab-*)・選択行の意味色(コバルト)は一切変更しない。
-   派手な警告色(赤・amber)は避け、あくまで「種類が違う」ことが分かる程度の
-   落ち着いた配色にとどめる。 */
-.master-picker__toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 0.3rem;
-  background: #334155;
-  border-radius: 4px;
-  padding: 0.25rem 0.5rem;
-}
-
+/* [追加修正: 他floating panelとのフォーマット統一] 盤情報・積算集約・
+   積算明細の見出し(`panel-info__heading`等)と全く同じ構造
+   (font-size/weight・淡色背景+左accent bar+下線box-shadow・
+   margin/padding/border-radius)にし、統一感を出す。「ツール系」であることの
+   差別化は、cat色(コバルト)ではなくslate系の控えめなaccentのみに留める
+   (floating panel shell自体の枠線も他panelと共通のものへ戻した。
+   `FloatingPanel.css`参照)。 */
 .master-picker__heading {
+  flex-shrink: 0;
   font-size: 0.98rem; /* 全体フォント拡大 指示1章: 旧0.88rem→引き上げ */
   font-weight: 700;
-  color: #fff;
-  margin: 0;
-  white-space: nowrap;
+  color: #334155; /* slate-700 */
+  background: #f1f5f9; /* slate-100、他panelの#eff6ffと同程度の淡さ */
+  border-left: 3px solid #64748b; /* slate-500、ツール系の控えめな固定accent(カテゴリ非依存) */
+  box-shadow: inset 0 -1px 0 0 #cbd5e1; /* slate-300 */
+  margin: 0 0 0.25rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0 4px 4px 0;
 }
 
 .master-picker__loading {
-  font-size: 0.88rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
-  color: #cbd5e1;
+  font-size: 0.8rem;
+  color: #9ca3af;
 }
 
-.master-picker__count {
-  margin-left: auto;
-  font-size: 0.88rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
-  color: #e2e8f0;
-  white-space: nowrap;
-}
-
-/* [追加修正: 部品台帳への再設計 指示2章] 横一列のカテゴリタブは廃止し、
-   単一の<select>によるカテゴリ切替へ変更した。狭いfloating panelでも
-   幅を浪費しない最小構成として、横一列タブ/segmented list等ではなくselectを
-   採用している(横幅は選択中カテゴリの文字数分だけで済み、タブのように
-   カテゴリ数だけ横に伸びない)。 */
+/* [追加修正: 品名選択リストをコンパクト化・他panelとフォーマット統一]
+   横一列のカテゴリタブは廃止し、単一の<select>による品名切替へ変更した。
+   ラベル+selectの縦積み構成は`.estimate-aggregation__target-select-label`と
+   同じパターン(小さいグレーのラベル文字の下にselect本体)にし、他panelの
+   上部control UIと統一感を持たせる。selectは`flex:1`で横幅いっぱいに
+   広げていた旧実装をやめ、`max-width`を持たせて必要最小限の幅に留める
+   (指示2章: panel幅いっぱいまで広げない。長い品名は省略表示)。 */
 .master-picker__category-label {
   display: flex;
-  align-items: center;
-  gap: 0.4rem;
+  flex-direction: column;
+  gap: 0.15rem;
   margin-bottom: 0.3rem;
   flex-shrink: 0;
   font-size: 0.85rem;
-  color: #4b5563;
+  color: #6b7280;
   font-weight: 500;
 }
 
-/* 実際のHEX/RGBA値は`domain/masterCategoryPresentation.ts`にのみ存在し、
-   `toCssVars()`経由でこのselectへCSSカスタムプロパティ(`--cat-tab-*`)として
-   注入される(旧タブ実装と同じ変数を再利用する)。CSS側は`var(--cat-tab-*)`を
-   参照するだけで、色そのものは一切書かない (指示書30章: HEX/RGB値をCSSへ
-   重複記述しない)。「現在選択中カテゴリが明確に分かる」(指示2章)ことを
-   優先し、旧タブ実装の「選択中タブ」と同じ濃色塗り+白文字の配色にしている
-   (選択肢が1つのselectなので、常にこの「選択中」の見た目のみを使う)。 */
+/* [追加修正: カテゴリ色の変化を簡素化] 背景・文字色は常に一定のslate系に
+   固定し(品名を切り替えても変化しない)、`--cat-tab-border`のみを
+   左accent(`border-left`)として使う(「選択中品名」の軽い目印。
+   実データは`domain/masterCategoryPresentation.ts`にのみ存在し、HEX/RGB値を
+   CSSへ重複記述しない方針は維持)。旧実装(背景/文字色まで品名ごとに
+   大きく変わる濃色塗り)は、部品台帳ではくどく見えるため廃止した。 */
 .master-picker__category-select {
-  flex: 1;
-  min-width: 0;
-  padding: 0.3rem 0.5rem;
-  border: 2px solid var(--cat-tab-border, #d1d5db);
+  /* 品名の長さによらず「必要最小限の幅」に留めるため、実測(13品名中もっとも
+     長い「入力（主回路銅帯）」でも収まる程度)を基準にpxで上限を設ける。
+     `max-width:100%`(パネル幅基準)だけだと長い品名でpanel幅いっぱいまで
+     広がってしまうため採用しなかった。 */
+  width: auto;
+  max-width: 150px;
+  padding: 0.3rem 0.45rem;
+  border: 1.5px solid #cbd5e1; /* slate-300、品名によらず一定 */
+  border-left: 4px solid var(--cat-tab-border, #94a3b8); /* 選択中品名の軽いaccentのみ */
   border-radius: 4px;
-  background: var(--cat-tab-active-bg, #4b5563);
-  color: var(--cat-tab-active-fg, #fff);
+  background: #f8fafc; /* slate-50、品名によらず一定 */
+  color: #334155; /* slate-700、品名によらず一定 */
   font: inherit;
-  font-size: 0.92rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ(旧タブと同じ大きさ) */
-  font-weight: 700;
+  font-size: 0.9rem;
+  font-weight: 600;
   cursor: pointer;
+  /* 長い品名は省略表示にし、panel全体を不必要に広げない (指示2章)。 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .master-picker__table-wrap {
@@ -102,7 +104,12 @@
    コード列は必要最小限、型式・定格は残りの幅を配分する(積算明細・積算集約と
    同じ「短い列は詰め、長い列へ優先配分する」方針)。定格は品目によっては
    長い文字列になりうるため`white-space: nowrap`にはせず、既存の
-   `overflow-wrap: break-word`(文字を途中で切らない方針)で折り返しを許容する。 */
+   `overflow-wrap: break-word`(文字を途中で切らない方針)で折り返しを許容する。
+   [追加修正: floating panel初期幅の実測ベース再調整] 実測自然幅(コード≈36px/
+   型式≈59px/定格≈125px、いずれも実データ全231件中の最長セル基準)の比率に
+   合わせて列幅配分も再調整した(旧配分は定格列がやや手薄だった)。floating
+   panelの既定幅自体も300→320pxへ微増している
+   (`FloatingPanel.tsx`の`DEFAULT_WIDTH_BY_KIND`)。 */
 .master-picker__table {
   width: 100%;
   border-collapse: collapse;
@@ -111,16 +118,16 @@
 }
 
 .master-picker__col-code {
-  width: 24%;
+  width: 19%;
   white-space: nowrap;
 }
 
 .master-picker__col-model {
-  width: 34%;
+  width: 28%;
 }
 
 .master-picker__col-rating {
-  width: 42%;
+  width: 53%;
 }
 
 .master-picker__table th,
@@ -140,27 +147,19 @@
   border-right: none;
 }
 
-/* UI視覚階層改善 追加修正第3/第4ラウンド: 選択中カテゴリのpresentation
-   (`<thead>`へ注入された--cat-tab-active-bg/--cat-tab-active-fg/--cat-tab-border、
-   EstimateMasterPicker.tsx参照)をtable headerへ反映し、「active tab→header→
-   data」の視覚的な連続性を作る。第3ラウンドでは淡色(--cat-tab-bg)を使っていたが、
-   第4ラウンド指示3章/9章「active tabとheaderを同じ濃色帯として認識させる」に
-   合わせ、active tabと同じ`--cat-tab-active-bg`(濃色)/`--cat-tab-active-fg`
-   (白文字)を採用した。activeCategoryがまだ無い場合(vars未注入)はフォールバック値
-   (旧来の#f9fafb等)を使う。データ行(tbody)はheadと別スコープのためこの変数を
-   継承せず、指示11章どおり白背景のまま保たれる。 */
+/* [追加修正: カテゴリ色の変化を簡素化・他floating panelとのフォーマット統一]
+   以前は選択中カテゴリのpresentation(`--cat-tab-active-bg`等)を`<thead>`へ
+   注入し、品名を切り替えるたびにtable header全体の色が大きく変わる表現に
+   していたが、部品台帳ではくどく見えるため廃止した。積算集約・積算明細の
+   table headerと同じ固定配色(`#f1f5f9`薄灰背景+`#475569`文字)に統一し、
+   品名を切り替えてもtable header自体の色は変化しない。 */
 .master-picker__table th {
   position: sticky;
   top: 0;
-  background: var(--cat-tab-active-bg, #f9fafb);
-  color: var(--cat-tab-active-fg, #4b5563);
-  /* 指示3章: ヘッダ下borderもactive tabと同系統の濃色(tabBorder)にする。
-     未選択時(vars未注入)は指示13章までのLevel3トークンへフォールバックする。 */
-  border-bottom-color: var(--cat-tab-border, var(--border-table-outer));
-  /* 表セル境界の統一 指示12章: 選択カテゴリ色(濃色)+白文字の帯の上では、
-     グレー系のセル境界(--border-cell)がほぼ見えない/濃色面を分断して見える
-     ため、非常に薄い半透明白を使う。 */
-  border-right-color: rgba(255, 255, 255, 0.18);
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 600;
+  border-bottom-color: var(--border-table-outer);
 }
 
 .master-picker__row {
