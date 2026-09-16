@@ -20,54 +20,56 @@ GitHub上で崩れやすいため、実スクリーンショット+テキスト�
 **[2026-09 Issue #19 Phase 2で仕様変更]** 作業者要望(図面をなるべく大きく
 見たい)を受け、積算集約(EstimateAggregation)・積算明細(EstimateDetail)を
 右ペインから外し、図面Viewer上へfloating panelとして重ねて表示する構成へ
-変更した。右ペインは盤情報(PanelInfo)のみになった。詳細は
-「1.7. 積算集約・積算明細のfloating panel化」を参照。
+変更した(この段階では右ペインは盤情報(PanelInfo)のみに縮小)。
+
+**[2026-09 Issue #19 Phase 4で仕様変更]** 盤情報(PanelInfo)も同じ仕組みで
+floating panel化し、**右ペイン自体を廃止**した。図面Viewerは左ペイン(図面一覧)
+の右側全幅を使えるようになった。floating panelの表示トグルは、Viewer上の
+独立したトグルバーではなく、Undo/Redoボタンと同じ編集ツールバーの右端へ移動した。
+詳細は「1.7. 盤情報・積算集約・積算明細のfloating panel化」を参照。
 
 領域構成(上から下、左から右):
 
 - **ヘッダー(ProjectHeader)**: 画面最上部、横幅全体。アプリ名(ブランドブロック)・
-  案件情報・解析状態・製番検索/システム設定ボタン。
+  案件情報・解析状態・製番検索/積算資料(Help)/システム設定ボタン。
+- **編集ツールバー**: ヘッダー直下。左から元に戻す/やり直す/操作履歴を見る、
+  右端にfloating panel(盤情報/積算集約/積算明細)の表示トグル(1.7章参照)。
 - **左ペイン(DrawingNavigator)**: 図面一覧。種類別グループ+ページサムネイル。
 - **中央(DrawingViewer)**: 選択中ページの拡大表示 + Detection BBox/盤領域(Panel
-  Overlay)の重畳。左右ペイン幅変更後の残り幅を可変で使用する(固定幅にしない)。
-  右上にfloating panelの表示トグルバー、その下に積算集約・積算明細の
-  floating panel(いずれも個別にON/OFF可能)を重ねて表示する(1.7章参照)。
-- **右ペイン**: 盤情報(PanelInfo)のみ(折りたたみ可能。Issue #6、1.6章参照)。
+  Overlay)の重畳。左ペイン幅変更後の残り幅(=右ペイン廃止後は画面右端まで)を
+  可変で使用する(固定幅にしない)。盤情報・積算集約・積算明細のfloating panel
+  (いずれも個別にON/OFF可能)を重ねて表示する(1.7章参照)。
 - **左ペイン下部**: 積算コードMaster(EstimateMasterPicker)。品目検索・選択。
 
-左ペイン・右ペイン・積算コードMaster領域の境界はマウスドラッグで幅/高さを
-変更できるResize Handle(`PaneSplitter`)。**[2026-09 Issue #19 Phase 2で
-仕様変更]** 右ペインは盤情報のみになったため、右ペイン内部の高さ分割
-splitter(旧: 盤情報↔積算集約)は廃止した。floating panel化した積算集約・
-積算明細自体はドラッグでの移動・リサイズには対応しない(1.7章参照)。
-(下記「左右ペインのリサイズ」参照)。
+左ペイン・積算コードMaster領域の境界はマウスドラッグで幅/高さを変更できる
+Resize Handle(`PaneSplitter`)。**[2026-09 Issue #19 Phase 4で仕様変更]**
+右ペイン自体を廃止したため、右ペイン幅のResize Handle
+(`sekisan-navi:right-pane-width`)は廃止した。floating panel化した盤情報・
+積算集約・積算明細自体はドラッグでの移動・リサイズには対応しない(1.7章参照)。
+(下記「左ペインのリサイズ」参照)。
 
 CSS Flexboxで実装 (`App.css`。以前のCSS Gridから変更): `app-layout`
-(縦方向: Header → Workspace) → `app-workspace` (横方向: MainArea / 右ペイン、
-Resize Handleを挟む) → `app-workspace__main` (縦方向: 上段(図面一覧+Viewer) /
-積算コードMaster)。RightPaneとMainAreaを同階層のflexアイテムにすることで、
-右ペインをoverlay表示でMasterへ被せるのではなく、明確に別のCSSレイアウト領域として
-確保している。コンポーネント分割自体 (ProjectHeader/DrawingNavigator/DrawingViewer/
+(縦方向: Header → 編集ツールバー → Workspace) → `app-workspace` (横方向:
+MainAreaのみ。Phase 4で右ペインを廃止したため単一のflexアイテム) →
+`app-workspace__main` (縦方向: 上段(図面一覧+Viewer) / 積算コードMaster)。
+コンポーネント分割自体 (ProjectHeader/DrawingNavigator/DrawingViewer/
 PanelProperties/EstimateTree/EstimateMasterPicker) は要件15の構成を維持し、変更していない。
-積算集約・積算明細のfloating panel化(Issue #19 Phase 2)は、Viewerを内包する
-`app-workspace__viewer-wrap`(`position: relative`)を新設し、その上へ
+盤情報・積算集約・積算明細のfloating panel化(Issue #19 Phase 2/4)は、Viewerを
+内包する`app-workspace__viewer-wrap`(`position: relative`)を新設し、その上へ
 `position: absolute`で重ねる形で実現しており、既存のCSS構造・コンポーネント分割
 自体は変更していない(1.7章参照)。
 
-### 左右ペインのリサイズ (2026-08 追加修正)
+### 左ペインのリサイズ (2026-08 追加修正、Phase 4で右ペイン分を削除)
 
-- 図面一覧(左ペイン)・右ペインそれぞれの境界にResize Handle (`PaneSplitter`
-  コンポーネント) を配置し、マウスドラッグで幅をリアルタイムに変更できる。
-- 幅の範囲: 左ペイン 140px 〜 30vw (初期値220px)、右ペイン 220px 〜 40vw
-  (初期値300px)。範囲外にはドラッグできず、Drawing Viewerが消えるほど
-  狭くなることはない。
-- 右ペインの幅を変更すると、積算コードMaster (左ペイン+Viewerの幅のみを使用) も
-  親のFlexレイアウトにより自動的に追従する。Master側で右ペイン幅を計算して
-  marginを当てるような実装はしていない。
-- 変更した幅はブラウザの`localStorage`
-  (`sekisan-navi:left-pane-width` / `sekisan-navi:right-pane-width`) に保存し、
-  再読み込み後も復元する。保存値が壊れている・範囲外の場合は初期値へ
+- 図面一覧(左ペイン)の境界にResize Handle (`PaneSplitter`コンポーネント) を
+  配置し、マウスドラッグで幅をリアルタイムに変更できる。
+- 幅の範囲: 140px 〜 30vw (初期値220px)。範囲外にはドラッグできず、
+  Drawing Viewerが消えるほど狭くなることはない。
+- 変更した幅はブラウザの`localStorage`(`sekisan-navi:left-pane-width`) に
+  保存し、再読み込み後も復元する。保存値が壊れている・範囲外の場合は初期値へ
   フォールバックする。Backend DBには保存しない (要件18)。
+- **[2026-09 Issue #19 Phase 4で仕様変更]** 右ペイン幅(`sekisan-navi:right-pane-width`)
+  のResize Handle・localStorageキーは、右ペイン廃止に伴い削除した。
 - 通常時は細い境界線のみを表示し、hover時に強調表示 + `cursor: col-resize` になる
   (太いSplitterにはしていない)。
 - Resize Handleのドラッグ操作は、Drawing Viewer側のPan・Manual BBox追加・
@@ -88,7 +90,7 @@ PanelProperties/EstimateTree/EstimateMasterPicker) は要件15の構成を維持
 - 高さの範囲: 120px 〜 60vh (初期値260px、旧CSSの固定値を踏襲)。Viewerが実質
   見えなくなる高さ・Masterが操作不能になる高さにはならない (指示書25章)。
 - 変更した高さはlocalStorage (`sekisan-navi:master-pane-height`) に保存し、
-  再読み込み後も復元する。左右ペイン幅と同じフック(`usePaneWidth`。
+  再読み込み後も復元する。左ペイン幅と同じフック(`usePaneWidth`。
   `dimension: 'height'`として再利用)を使い、保存の仕組みを統一している
   (指示書26章)。保存値が壊れている・範囲外の場合は初期値へフォールバックする。
 
@@ -127,13 +129,14 @@ Excelのような重い罫線にはせず、「セルは認識できるが罫線
 
 ## 1.6. 盤情報・積算集約・積算明細の折りたたみ + 積算対象Selectの視認性 (Issue #6)
 
-**[2026-09 Issue #19 Phase 2で構成変更]** 本章の折りたたみ機能自体
+**[2026-09 Issue #19 Phase 2/4で構成変更]** 本章の折りたたみ機能自体
 (`CollapsibleSectionHeading`、見出しクリックで本文を隠す)はIssue #6実装当時
-のまま変更していないが、積算集約・積算明細は右ペインからViewer上のfloating
-panelへ移動した(1.7章参照)ため、「右ペイン3領域」という表現・隣接領域との
-高さの分け合いに関する記述は現在は**盤情報にのみ該当する**。積算集約・積算明細
-それぞれの折りたたみは、以後は自分自身が乗っているfloating panelの高さを
-(隣接領域とではなく)自分自身で`auto`に縮めるだけになる。
+のまま変更していない。Phase 2で積算集約・積算明細を、Phase 4で盤情報も
+右ペインからViewer上のfloating panelへ移動した(1.7章参照、右ペイン自体は
+Phase 4で廃止済み)ため、「右ペイン3領域」という表現・隣接領域との高さの
+分け合いに関する記述は**もはやどの領域にも該当しない**。3領域それぞれの
+折りたたみは、いずれも自分自身が乗っているfloating panelの高さを(隣接領域と
+ではなく)自分自身で`auto`に縮めるだけになる。
 
 **積算対象Selectの視認性向上**: `EstimateAggregation`の「対象」`<select>`
 (総合計/製品全体/各盤)は、既存の構造色(濃紺/コバルト/白/灰)の範囲内で
@@ -154,62 +157,72 @@ padding・高さは変更していない。
   (`App.tsx`)のcontrolled stateとして持つが、積算対象選択・図面一覧連動・
   Viewer連動・Undo/Redo等、他のロジックには一切接続しない独立したUI状態
   (リロードで初期状態=全展開に戻る。localStorageへは永続化しない)。
-- **盤情報(右ペイン、唯一の領域)**: 折りたたみ中は`App.tsx`側のwrapper divで
-  `flex: '0 0 auto'`にすることで見出しの高さまで縮む(展開中は`flex: '1 1 auto'`
-  で右ペインの残り高さいっぱいを使う)。**[2026-09 Issue #19 Phase 2で変更]**
-  以前は分け合う相手(積算集約)がいたため高さsplitterを持っていたが、
-  右ペインが盤情報のみになったことで、その高さsplitter(`盤情報の高さを変更`)は
-  廃止した。
-- **積算集約・積算明細(Viewer上のfloating panel、1.7章参照)**: 折りたたみ中は
-  `components/Layout/FloatingPanel.tsx`側で`height: 'auto'`にすることで
-  見出しの高さまで縮む(以前のような「隣接領域への高さの還元」は、Phase 2で
-  それぞれ独立したfloating panelになったことで意味を持たなくなったため無くなった。
-  折りたたんでもfloating panel自体の既定位置・幅は変わらない)。
+- **盤情報・積算集約・積算明細(いずれもViewer上のfloating panel、1.7章参照)**:
+  折りたたみ中は`components/Layout/FloatingPanel.tsx`側で`height: 'auto'`に
+  することで見出しの高さまで縮む。以前(右ペイン常設時代)のような「隣接領域への
+  高さの還元」「盤情報の高さを変更/積算集約の高さを変更」splitterは、3領域とも
+  独立したfloating panelになったことで意味を持たなくなったため、いずれも廃止した
+  (折りたたんでもfloating panel自体の既定位置・幅は変わらない)。
 
-## 1.7. 積算集約・積算明細のfloating panel化 (Issue #19 Phase 2)
+## 1.7. 盤情報・積算集約・積算明細のfloating panel化 (Issue #19 Phase 2/4)
 
 作業者打合せで確認した要望(図面をなるべく大きく見ながら作業したい)を受け、
-右ペイン常設方式だった積算集約・積算明細を、図面Viewer上へ重ねて表示する
-floating panelへ変更した。図面Viewerの表示幅は、以前は右ペインの固定幅
-(220px〜40vw)を常に差し引いていたが、floating panel化後は右ペインが
-盤情報のみになった分、Viewerが使える実効幅が広がる。floating panel自体を
-両方非表示にすると、Viewer上に積算集約・積算明細の矩形が一切乗らない状態
-(図面のみ)になる。
+右ペイン常設方式だった盤情報・積算集約・積算明細を、図面Viewer上へ重ねて表示する
+floating panelへ変更した(Phase 2で積算集約・積算明細、Phase 4で盤情報)。
+Phase 4で**右ペイン自体を廃止**したため、図面Viewerは左ペインの右側全幅を
+使えるようになった。floating panelを3つとも非表示にすると、Viewer上に何も
+乗らない状態(図面のみ)になる。
 
-**対象コンポーネントは一切変更していない**: `EstimateAggregation`/
+**対象コンポーネントは一切変更していない**: `PanelInfo`/`EstimateAggregation`/
 `EstimateDetail`自体のprops・内部ロジック(数量集約・ソート・情報源タブ・
-積算確定操作等)はPhase 1から変更していない。配置場所だけを、新設した
+積算確定操作・盤クリック連動等)はPhase 1から変更していない。配置場所だけを、
 `components/Layout/FloatingPanel.tsx`(表示中のみ描画するシェル)で包む形へ
 変更した(既存componentを極力再利用する方針)。
 
-**表示トグル**: Viewer右上に`components/Layout/FloatingPanelToggleBar.tsx`を
-常設し、「積算集約を表示/隠す」「積算明細を表示/隠す」を個別にON/OFFできる。
-初期状態は両方ON(既存利用性を損なわない設定として、旧来の右ペイン常設と
-同じ見え方から始まる)。このON/OFF状態はセッション内のみのUI状態で、
-localStorageへは永続化しない(リロードのたびに両方ONへ戻る)。
+**表示トグル**: `components/Layout/PanelVisibilityToggles.tsx`が
+「盤情報」「積算集約」「積算明細」(この順)の3つを個別にON/OFFできる。
+**[2026-09 Phase 4で配置変更]** Phase 2ではViewer右上に独立した
+floating toggle barとして浮かせていたが、追加UI修正指示によりUndo/Redoボタンと
+同じ編集ツールバー(`app-layout__edit-toolbar`)の右端へ移動した(左から
+元に戻す/やり直す/操作履歴を見る、区切り線を挟んで盤情報/積算集約/積算明細の
+表示トグル)。初期状態は3つともON(既存利用性を損なわない設定として、旧来の
+右ペイン常設と同じ見え方から始まる)。このON/OFF状態はセッション内のみの
+UI状態で、localStorageへは永続化しない(リロードのたびに3つともONへ戻る)。
 
-**既定配置**: 積算集約はViewer右上寄り(トグルバーの下)、積算明細はViewer
-右下寄りに、既定でそれぞれ固定配置する。両方表示していても重ならないよう、
-積算集約は`top`基準、積算明細は`bottom`基準でCSS配置している
-(`components/Layout/FloatingPanel.css`)。ドラッグによる移動・自由リサイズは
-このPhase 2では対象外(将来の拡張余地として残す)。
+**既定配置**: 盤情報はViewer左上寄り、積算集約はViewer右上寄り、積算明細は
+Viewer右下寄りに、既定でそれぞれ固定配置する。3つとも表示していても重ならないよう、
+盤情報・積算集約は`top`基準(左右で分かれる)、積算明細は`bottom`基準で
+CSS配置している(`components/Layout/FloatingPanel.css`)。ドラッグによる
+移動・自由リサイズはPhase 2/4いずれも対象外(将来の拡張余地として残す)。
+
+**glassmorphism(2026-09 Phase 4で追加)**: floating panel自体の見た目を、
+半透明の白background(`rgba(255, 255, 255, 0.6)`)+
+`backdrop-filter: blur(14px) saturate(160%)`によるガラス調に変更した。
+Viewer上の図面がうっすら透けて見えるが、`PanelInfo`/`EstimateAggregation`/
+`EstimateDetail`内部の見出し・表ヘッダ等が元々持つ不透明に近いbackground
+(`#eff6ff`/`#f1f5f9`等)は変更していないため、表・文字の可読性は損なわれない。
+`backdrop-filter`非対応環境向けに`@supports not (...)`でfallback
+(`rgba(255, 255, 255, 0.94)`、ぼかし無しでも読める不透明度)を用意している。
 
 **Viewer操作との重なり・z-index**: `DrawingViewer`内部のOverlay
 (盤領域/引出線/BBox本体/選択中BBox/Resize Handle/Tooltip、
 `docs/architecture.md` 15章のz-index契約: 0〜50)自体は変更していない。
 floating panelはその外側、Viewerを内包する`app-workspace__viewer-wrap`
 (`position: relative`)へ新たに追加したレイヤーで、内部Overlayの最大値(50)
-より確実に前面へ出るz-index(floating panel: 100、トグルバー: 110)を使う。
+より確実に前面へ出るz-index(floating panel: 100)を使う。
 floating panelは自身の矩形部分のみ操作を受け付け(`DrawingViewer`側のような
 「コンテナ全体`pointer-events:none`+個々の要素のみ`auto`」という全面カバー型の
 契約は使っていない)、それ以外の領域では従来通りPan・BBox追加・BBox編集・
 Zoom/Fitが行える。floating panelの既定位置がBBoxの実際の位置と重なった場合、
 そのBBoxを直接操作するには該当panelを一時的にOFFにする必要がある
-(トグルで即座に切替可能なため、これを許容する設計とした)。
+(トグルで即座に切替可能なため、これを許容する設計とした)。実ブラウザ確認
+(1600px/1280px/1024px幅)では、3つのfloating panelが既定配置のまま重なる
+ことは確認されなかった。
 
-**積算明細のhover→BBox強調は維持**: `EstimateDetail`の`onHoverDetail`は
-変更していないため、行hoverによるViewer上のBBox一時強調(既存の
-`detailHoveredDetectionId`連携)はfloating panel化後も従来通り動作する。
+**積算明細のhover→BBox強調・盤情報のクリック連動は維持**: `EstimateDetail`の
+`onHoverDetail`・`PanelInfo`の`onSelectPanel`は変更していないため、行hoverに
+よるViewer上のBBox一時強調(既存の`detailHoveredDetectionId`連携)・
+盤クリックとPanelInfoカード選択の同期は、floating panel化後も従来通り動作する。
 
 **積算対象の選択状態(`selectedEstimateTargetId`)は`App.tsx`側で一元管理**
 したまま変更していないため、積算集約の対象切替・Viewer盤フォーカス・
@@ -366,17 +379,23 @@ Zoom/Fitが行える。floating panelの既定位置がBBoxの実際の位置と
 - **Fit倍率の計算**: `fitScale = min(viewportWidth/imageWidth, viewportHeight/imageHeight)`
   に安全マージン(`FIT_MARGIN=0.98`)を掛けたものを`applyFit()`で計算・適用する
   (縦横比は維持)。
-- **自動再Fitのトリガー (`viewMode==='fit'`中のみ)**: 右ペイン幅リサイズ・左ペイン幅
-  リサイズ・下部Master領域の高さリサイズ・ブラウザウィンドウのリサイズ、
-  いずれも自動的に再Fitする。**旧仕様(前項「左右ペインのリサイズ」参照)から
-  変更**: 以前は「ペイン幅変更・ウィンドウリサイズに伴う自動再Fitは行わない」
-  だったが、今回`viewMode`概念を導入したことで、fitモード中に限りこれらの
-  レイアウト変化に追従して自動的に最適化されるようになった。
+- **自動再Fitのトリガー (`viewMode==='fit'`中のみ)**: 左ペイン幅リサイズ・
+  下部Master領域の高さリサイズ・ブラウザウィンドウのリサイズ、いずれも自動的に
+  再Fitする。**旧仕様(前項「左ペインのリサイズ」参照)から変更**: 以前は
+  「ペイン幅変更・ウィンドウリサイズに伴う自動再Fitは行わない」だったが、
+  今回`viewMode`概念を導入したことで、fitモード中に限りこれらのレイアウト変化に
+  追従して自動的に最適化されるようになった。
   - 実装は`DrawingCanvas.tsx`の`.drawing-canvas__viewport`要素へ`ResizeObserver`を
-    1つ取り付けるのみ (`useEffect`, mount時に1度だけ)。左右ペイン幅・Master高さ・
+    1つ取り付けるのみ (`useEffect`, mount時に1度だけ)。左ペイン幅・Master高さ・
     ウィンドウ幅のいずれの変更も、最終的にはこの1要素のCSS計算後サイズを
     変えるため、`window.innerWidth`から各ペイン幅を個別に差し引くような
-    脆い計算をせずに、単一のObserverで全パターンを検知できる。
+    脆い計算をせずに、単一のObserverで全パターンを検知できる。**[2026-09
+    Issue #19 Phase 4]** 右ペイン幅リサイズは右ペイン廃止に伴い削除した。
+    floating panel(盤情報/積算集約/積算明細)はViewerの外側に重ねる
+    `position: absolute`の要素であり、その表示/非表示切替自体はこの
+    `.drawing-canvas__viewport`要素自身のサイズを変えないため、自動再Fitの
+    トリガーにはならない(未確認: 意図的な設計かどうかはコードから確認できるが、
+    floating panel切替時に再Fitすべきかどうかの要件は本Phaseでは明示されていない)。
 - **手動操作でfitモードを抜ける**: ツールバーの＋/−ボタン、マウスホイールズーム、
   Pan(ドラッグ量が`MIN_DRAG_PX`(6px)を超えた場合のみ)のいずれかを行うと
   `viewMode`が`'manual'`になり、以後はレイアウト変化があっても自動再Fitしない
@@ -693,7 +712,7 @@ Zoom/Fitが行える。floating panelの既定位置がBBoxの実際の位置と
   再指定する設計を踏襲しており、透明な親OverlayがViewer全体のクリックを
   奪ってしまう不具合 (`implementation-plan.md` 8.7章) を再発させない。
 
-## 5. PanelInfo (右上: 盤情報。Phase 1.14でestcode_df.csv実データ参照へ変更)
+## 5. PanelInfo (Viewer上のfloating panel: 盤情報。Phase 1.14でestcode_df.csv実データ参照へ変更、2026-09 Issue #19 Phase 4で右ペインから移動、1.7章参照)
 
 **[2026-09 Phase 1.14]** 旧`PanelProperties`コンポーネントを廃止し、`PanelInfo`
 コンポーネントへ置き換えた。表示元データを、product_df.csvの盤領域そのもの
@@ -716,8 +735,9 @@ Zoom/Fitが行える。floating panelの既定位置がBBoxの実際の位置と
   ```
   盤高・盤幅・盤奥行(BAN_H/BAN_W/BAN_D)は個別行にせず「H x : W x : D x mm」の
   1行にまとめる。単位はUnicode互換文字の「㎜」ではなく「mm」を使う。面番号
-  (BAN_MENNO)・盤番号(BAN_NO)も1行にまとめ、右ペイン下部(積算集約)の高さ確保を
-  優先する。盤名称が長い場合は右ペイン幅を超えず自然に折り返す。`label`列と
+  (BAN_MENNO)・盤番号(BAN_NO)も1行にまとめ、表示を省スペース化している。
+  盤名称が長い場合はfloating panelの幅(`components/Layout/FloatingPanel.css`、
+  1.7章参照)を超えず自然に折り返す。`label`列と
   `value`列はCSS Grid (`<dl>`の`dt`/`dd`交互配置) で揃えている。
 - **欠損値**: null/undefined/NaN/空文字はそのまま出さず「-」で統一する
   (`PanelInfo.tsx::formatValue`)。盤寸法の一部だけ欠けている場合も
@@ -728,7 +748,7 @@ Zoom/Fitが行える。floating panelの既定位置がBBoxの実際の位置と
   ありません」と表示する (アプリ全体をエラーにしない)。
 - **盤が選択されていない場合**: 「盤が選択されていません」を表示する
   (Phase 1.9以降の仕様通り、ページ切替時に`selectedPanel`が解除されるため、
-  右ペイン上部も自動的にこの表示へ戻る)。
+  盤情報floating panelの表示も自動的にこの状態へ戻る)。
 - **後方互換のフォールバック (回帰確認用に維持)**: `selectedProductPanel`が無く、
   選択中Detectionに紐づく旧来のダミーDB盤(`panel_id`)がある場合のみ、従来通り
   `panel.attributes[]`をそのまま描画する属性テーブル表示にフォールバックする

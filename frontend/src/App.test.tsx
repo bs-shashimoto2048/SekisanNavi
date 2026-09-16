@@ -1037,7 +1037,7 @@ describe('App: product_df盤領域Overlayの表示先 (実画面未反映調査�
   })
 })
 
-describe('App: 左右ペインのリサイズ (UIレイアウト追加修正指示)', () => {
+describe('App: 左ペインのリサイズ・右ペイン廃止 (UIレイアウト追加修正指示、Issue #19 Phase 4で右ペイン廃止)', () => {
   beforeEach(() => {
     window.localStorage.clear()
   })
@@ -1050,20 +1050,24 @@ describe('App: 左右ペインのリサイズ (UIレイアウト追加修正指�
     await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
   }
 
-  it('keeps EstimateMasterPicker inside MainArea as a sibling of (not nested under) the right pane', async () => {
+  it('has no right pane element at all (Issue #19 Phase 4: 盤情報もfloating panel化し、右ペイン自体を廃止した)', async () => {
     await renderApp()
-    const rightPane = document.querySelector('.app-workspace__right') as HTMLElement
+    expect(document.querySelector('.app-workspace__right')).not.toBeInTheDocument()
+    expect(screen.queryByRole('separator', { name: '右ペインの幅を変更' })).not.toBeInTheDocument()
+  })
+
+  it('keeps EstimateMasterPicker inside MainArea, which is now the sole child of .app-workspace', async () => {
+    await renderApp()
+    const workspace = document.querySelector('.app-workspace') as HTMLElement
     const mainArea = document.querySelector('.app-workspace__main') as HTMLElement
     const master = document.querySelector('.master-picker') as HTMLElement
 
-    expect(rightPane).not.toBeNull()
     expect(mainArea).not.toBeNull()
     expect(master).not.toBeNull()
-    // Masterは右ペインの下(DOM上の子孫)ではなく、MainArea側に属する (指示書3章/7章)。
     expect(mainArea.contains(master)).toBe(true)
-    expect(rightPane.contains(master)).toBe(false)
-    // MainAreaとRightPaneは同階層 (overlayで重ねているのではなく別領域)。
-    expect(mainArea.parentElement).toBe(rightPane.parentElement)
+    // 右ペインが無くなったため、.app-workspaceの子要素はMainArea単独になる (指示書3章/7章の考え方をPhase 4でも維持)。
+    expect(workspace.children).toHaveLength(1)
+    expect(workspace.children[0]).toBe(mainArea)
   })
 
   it('resizes the left pane by dragging its splitter, and clamps at the minimum width', async () => {
@@ -1084,59 +1088,29 @@ describe('App: 左右ペインのリサイズ (UIレイアウト追加修正指�
     expect(nav.style.width).toBe('140px')
   })
 
-  it('resizes the right pane by dragging its splitter (drag right = narrower, drag left = wider), clamped at the minimum', async () => {
-    await renderApp()
-    const right = document.querySelector('.app-workspace__right') as HTMLElement
-    expect(right.style.width).toBe('300px')
-
-    const handle = screen.getByRole('separator', { name: '右ペインの幅を変更' })
-    fireEvent.mouseDown(handle, { clientX: 500, button: 0 })
-    fireEvent.mouseMove(window, { clientX: 450 }) // 左へドラッグ -> 右ペインが広くなる
-    fireEvent.mouseUp(window, { clientX: 450 })
-    expect(right.style.width).toBe('350px')
-
-    fireEvent.mouseDown(handle, { clientX: 450, button: 0 })
-    fireEvent.mouseMove(window, { clientX: 10000 }) // 右へ大きくドラッグ -> 最小幅でクランプ
-    fireEvent.mouseUp(window, { clientX: 10000 })
-    expect(right.style.width).toBe('220px')
-  })
-
-  it('does not exceed the maximum width for either pane', async () => {
+  it('does not exceed the maximum width for the left pane', async () => {
     await renderApp()
     const nav = document.querySelector('.app-workspace__nav') as HTMLElement
-    const right = document.querySelector('.app-workspace__right') as HTMLElement
 
     const leftHandle = screen.getByRole('separator', { name: '図面一覧の幅を変更' })
     fireEvent.mouseDown(leftHandle, { clientX: 0, button: 0 })
     fireEvent.mouseMove(window, { clientX: 100000 })
     fireEvent.mouseUp(window, { clientX: 100000 })
     expect(parseFloat(nav.style.width)).toBeCloseTo(window.innerWidth * 0.3, 5)
-
-    const rightHandle = screen.getByRole('separator', { name: '右ペインの幅を変更' })
-    fireEvent.mouseDown(rightHandle, { clientX: 100000, button: 0 })
-    fireEvent.mouseMove(window, { clientX: -100000 }) // 左へ大きく = 右ペイン拡大方向
-    fireEvent.mouseUp(window, { clientX: -100000 })
-    expect(parseFloat(right.style.width)).toBeCloseTo(window.innerWidth * 0.4, 5)
   })
 
-  it('restores previously saved pane widths from localStorage on mount', async () => {
+  it('restores previously saved left pane width from localStorage on mount', async () => {
     window.localStorage.setItem('sekisan-navi:left-pane-width', '260')
-    window.localStorage.setItem('sekisan-navi:right-pane-width', '340')
     await renderApp()
     const nav = document.querySelector('.app-workspace__nav') as HTMLElement
-    const right = document.querySelector('.app-workspace__right') as HTMLElement
     expect(nav.style.width).toBe('260px')
-    expect(right.style.width).toBe('340px')
   })
 
-  it('falls back to the initial widths when a stored value is invalid', async () => {
+  it('falls back to the initial width when a stored value is invalid', async () => {
     window.localStorage.setItem('sekisan-navi:left-pane-width', 'garbage')
-    window.localStorage.setItem('sekisan-navi:right-pane-width', '999999')
     await renderApp()
     const nav = document.querySelector('.app-workspace__nav') as HTMLElement
-    const right = document.querySelector('.app-workspace__right') as HTMLElement
     expect(nav.style.width).toBe('220px')
-    expect(right.style.width).toBe('300px')
   })
 })
 
@@ -1222,57 +1196,81 @@ describe('App: 積算コードMaster領域の高さリサイズ (Phase 1.11 UI�
   })
 })
 
-describe('App: 右ペイン(盤情報のみ) (Issue #19 Phase 2: 積算集約・積算明細をViewer上のfloating panelへ移動)', () => {
+describe('App: 盤情報のfloating panel化・右ペイン廃止 (Issue #19 Phase 4)', () => {
   async function renderApp() {
     render(<App />)
     await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
   }
 
-  it('keeps only 盤情報 in the right pane; 積算集約/積算明細 and their old height splitters are gone', async () => {
+  it('renders PanelInfo inside .floating-panel--panelInfo, not inside a right pane', async () => {
     await renderApp()
-    const right = document.querySelector('.app-workspace__right') as HTMLElement
-    expect(within(right).getByRole('button', { name: /盤情報/ })).toBeInTheDocument()
-    expect(within(right).queryByText('積算集約')).not.toBeInTheDocument()
-    expect(within(right).queryByText('積算明細')).not.toBeInTheDocument()
-    // 盤情報のみになったため、分け合う相手が無くなった旧来の右ペイン内
-    // 高さsplitterは廃止された。
-    expect(screen.queryByRole('separator', { name: '盤情報の高さを変更' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('separator', { name: '積算集約の高さを変更' })).not.toBeInTheDocument()
+    expect(document.querySelector('.app-workspace__right')).not.toBeInTheDocument()
+
+    const panelInfoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    expect(panelInfoFloat).toBeInTheDocument()
+    expect(within(panelInfoFloat).getByRole('button', { name: /盤情報/ })).toBeInTheDocument()
   })
 
-  it('collapsing 盤情報 shrinks its wrap to flex:0 0 auto, and re-expanding restores flex:1 1 auto', async () => {
+  it('shows 盤情報 by default, and can be hidden/shown via its toggle (盤情報を隠す/を表示)', async () => {
     await renderApp()
-    const panelInfoWrap = document.querySelector('.app-workspace__panel-info-wrap') as HTMLElement
-    expect(panelInfoWrap.style.flex).toBe('1 1 auto')
+    expect(screen.getByRole('button', { name: '盤情報を隠す' })).toHaveAttribute('aria-pressed', 'true')
 
-    const toggle = screen.getByRole('button', { name: /盤情報/ })
-    fireEvent.click(toggle) // collapse
-    expect(panelInfoWrap.style.flex).toBe('0 0 auto')
+    fireEvent.click(screen.getByRole('button', { name: '盤情報を隠す' }))
+    expect(document.querySelector('.floating-panel--panelInfo')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '盤情報を表示' })).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(screen.getByRole('button', { name: '盤情報を表示' }))
+    expect(document.querySelector('.floating-panel--panelInfo')).toBeInTheDocument()
+  })
+
+  it('collapsing 盤情報 (内部の見出しクリック) shrinks its floating panel to auto height without hiding the panel itself', async () => {
+    await renderApp()
+    const panelInfoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    // 表示トグル(「盤情報を隠す」)と内部の折りたたみ見出し(「盤情報 ○件」)は
+    // どちらも名前に「盤情報」を含むため、内部見出しの方はpanelInfoFloat内へ
+    // scopeして曖昧さを避ける。
+    const toggle = within(panelInfoFloat).getByRole('button', { name: /盤情報/ })
+
+    fireEvent.click(toggle) // 内部の折りたたみ(見出しクリック。表示トグルとは別)
+    expect(panelInfoFloat.style.height).toBe('auto')
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    // floating panel自体(表示トグル)とは独立しており、パネルはDOM上に残る。
+    expect(document.querySelector('.floating-panel--panelInfo')).toBeInTheDocument()
 
-    fireEvent.click(toggle) // expand
-    expect(panelInfoWrap.style.flex).toBe('1 1 auto')
+    fireEvent.click(toggle) // 再展開
+    expect(panelInfoFloat.style.height).not.toBe('auto')
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
   })
 
-  it('keeps the right pane width resize working (盤情報のみになっても既存挙動を維持する)', async () => {
+  it('keeps panel click → selection sync working while floating (Phase 1.9の既存挙動を維持)', async () => {
     await renderApp()
-    const right = document.querySelector('.app-workspace__right') as HTMLElement
-    expect(right.style.width).toBe('300px')
+    const thumbnail = await screen.findByRole('img', { name: 'P16' })
+    fireEvent.click(thumbnail)
+    await screen.findByTitle(/roof_fan/)
 
-    const handle = screen.getByRole('separator', { name: '右ペインの幅を変更' })
-    fireEvent.mouseDown(handle, { clientX: 500, button: 0 })
-    fireEvent.mouseMove(window, { clientX: 450 })
-    fireEvent.mouseUp(window, { clientX: 450 })
-    expect(right.style.width).toBe('350px')
+    fireEvent.click(getViewerPanelArea('1/1'))
+    await waitFor(() => expect(getPanelInfoCard('高圧受電盤').className).toContain('--selected'))
   })
 })
 
-describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 2)', () => {
+describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 2、Phase 4でトグル位置変更)', () => {
   async function renderApp() {
     render(<App />)
     await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
   }
+
+  it('renders the 3 panel toggles inside the edit toolbar (not as a floating bar over the Viewer), in 盤情報→積算集約→積算明細 order', async () => {
+    await renderApp()
+    const toolbar = document.querySelector('.app-layout__edit-toolbar') as HTMLElement
+    const toggleGroup = document.querySelector('.panel-visibility-toggles') as HTMLElement
+
+    expect(toolbar.contains(toggleGroup)).toBe(true)
+    // Viewer上のfloating toggle bar(Phase 2)は廃止されている。
+    expect(document.querySelector('.floating-panel-toggle-bar')).not.toBeInTheDocument()
+
+    const buttons = within(toggleGroup).getAllByRole('button')
+    expect(buttons.map((b) => b.textContent)).toEqual(['盤情報を隠す', '積算集約を隠す', '積算明細を隠す'])
+  })
 
   it('shows both floating panels from the start (指示: 初期状態は既存利用性を損なわない設定=両方ON)', async () => {
     await renderApp()
@@ -1356,8 +1354,10 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
     expect(undoButton).toBeDisabled()
     expect(redoButton).toBeDisabled()
 
+    fireEvent.click(screen.getByRole('button', { name: '盤情報を隠す' }))
     fireEvent.click(screen.getByRole('button', { name: '積算集約を隠す' }))
     fireEvent.click(screen.getByRole('button', { name: '積算明細を隠す' }))
+    fireEvent.click(screen.getByRole('button', { name: '盤情報を表示' }))
     fireEvent.click(screen.getByRole('button', { name: '積算集約を表示' }))
     fireEvent.click(screen.getByRole('button', { name: '積算明細を表示' }))
     fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
@@ -1368,7 +1368,7 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
   })
 })
 
-describe('App: 盤選択 → 右ペイン連動 (Phase 1.9)', () => {
+describe('App: 盤選択 → 盤情報連動 (Phase 1.9、Issue #19 Phase 4で盤情報はfloating panelへ移動)', () => {
   async function navigateToOutlinePage() {
     const thumbnail = await screen.findByRole('img', { name: 'P16' })
     fireEvent.click(thumbnail)

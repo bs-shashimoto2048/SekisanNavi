@@ -1,9 +1,9 @@
-/* Issue #19 Phase 2: 積算集約・積算明細をViewer上へ重ねるfloating panel。
-   `DrawingViewer`内部のOverlay(0.0〜1.0正規化座標のBBox/盤領域等)とは別の、
-   Viewerの外側(App.tsx側、`.app-workspace__viewer-wrap`基準)に乗る新しい
-   レイヤーとして扱う。DrawingViewer内部のz-index/pointer-events契約
-   (docs/architecture.md 15章、PNG(0)〜Tooltip(50))はこのfloating panel導入で
-   一切変更していない。 */
+/* Issue #19 Phase 2で新設・Phase 4で拡張: 盤情報・積算集約・積算明細をViewer上へ
+   重ねるfloating panel。`DrawingViewer`内部のOverlay(0.0〜1.0正規化座標のBBox/
+   盤領域等)とは別の、Viewerの外側(App.tsx側、`.app-workspace__viewer-wrap`
+   基準)に乗る新しいレイヤーとして扱う。DrawingViewer内部のz-index/
+   pointer-events契約(docs/architecture.md 15章、PNG(0)〜Tooltip(50))はこの
+   floating panel導入で一切変更していない。 */
 .floating-panel {
   position: absolute;
   /* Viewer内部Overlayの最大値(Tooltip: 50)より確実に前面へ出す。floating panel
@@ -12,21 +12,45 @@
   display: flex;
   flex-direction: column;
   width: min(360px, calc(100% - 2rem));
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid var(--border-region);
-  border-radius: 6px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  /* Issue #19 Phase 4: グラス調(glassmorphism)。半透明の白background +
+     backdrop-filterで背後の図面がうっすら透けるようにしつつ、表・文字の
+     可読性を落とさないよう十分な不透明度を残す(完全透明にはしない)。
+     内部の見出し(#eff6ff等)・表ヘッダ(#f1f5f9等)は各componentのCSSで
+     既に不透明に近い背景を持つため、このシェル自体は変更していない。 */
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.22);
   overflow: hidden;
 }
 
-/* 積算集約: トグルバー(top: 3rem)の下、Viewer右上寄りに配置する。高さは
-   `vh`(ブラウザウィンドウ基準)ではなく、position:absoluteの基準である
-   `.app-workspace__viewer-wrap`自身の高さに対する`%`で指定する。Viewer領域は
-   左ペイン/積算コードMaster領域とウィンドウ高さを分け合うため実際の高さは
-   ウィンドウ高さよりかなり小さく、`vh`ベースだと積算明細(下記)と重なって
-   しまうことを実ブラウザ確認で確認した (2026-09)。 */
+/* backdrop-filter非対応環境向けのfallback (指示: Windows/Chromiumで
+   backdrop-filterが効かない場合でも読めるようにする)。ぼかしが効かない前提で、
+   可読性確保のため背景の不透明度を上げる(完全な板になっても崩れない)。 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .floating-panel {
+    background: rgba(255, 255, 255, 0.94);
+  }
+}
+
+/* 盤情報: Viewer左上寄りに配置する(Issue #19 Phase 4で右ペインを廃止し
+   floating panel化)。積算集約(右上)とは左右で分かれるため重ならない。 */
+.floating-panel--panelInfo {
+  top: 3rem;
+  left: 1.25rem;
+  height: 34%;
+}
+
+/* 積算集約: Viewer右上寄りに配置する。高さは`vh`(ブラウザウィンドウ基準)では
+   なく、position:absoluteの基準である`.app-workspace__viewer-wrap`自身の
+   高さに対する`%`で指定する。Viewer領域は左ペイン/積算コードMaster領域と
+   ウィンドウ高さを分け合うため実際の高さはウィンドウ高さよりかなり小さく、
+   `vh`ベースだと積算明細(下記)と重なってしまうことを実ブラウザ確認で
+   確認した (2026-09)。 */
 .floating-panel--aggregation {
-  top: 5.4rem;
+  top: 3rem;
   right: 1.25rem;
   height: 32%;
 }

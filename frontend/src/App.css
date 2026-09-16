@@ -161,26 +161,6 @@
   min-height: 0;
 }
 
-/* 右ペイン: Header直下から画面下端まで1本のペインとして全高表示する。
-   内部は盤パラメータ(可変・上限あり)+積算結果(残り全部)の縦積みで、
-   それぞれが自分自身の内部でスクロールする (指示書15章、画面全体はスクロールしない)。 */
-.app-workspace__right {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  /* UI視覚階層改善 指示8章/23章: Viewer|右ペインの大領域境界(Level1)。
-     画面上で特に大きな役割境界のため、表内部の罫線とは明確に違って見える
-     トーンにする。幅は1pxのまま(太い枠は使わない、指示8章)。 */
-  border-left: 1px solid var(--border-region);
-}
-
-/* Issue #19 Phase 2: 積算集約・積算明細をViewer上のfloating panelへ移動した
-   ため、右ペインは盤情報(PanelInfo)のみになった。盤情報自身がheader固定+
-   内部スクロールを持つため、ここでは高さ(flex)を伝えるだけでよい。展開中は
-   右ペインの残り高さいっぱい(flex:1)、折りたたみ中は見出し分のみ(flex:0 0 auto、
-   `App.tsx`側のinline styleで切り替える)。 */
-.app-workspace__panel-info-wrap {
-  min-height: 0;
-  overflow: hidden;
-}
+/* Issue #19 Phase 4: 盤情報もfloating panel化したことに伴い、右ペイン
+   (`.app-workspace__right`)自体を廃止した。`.app-workspace`は
+   `.app-workspace__main`のみを子に持ち、Viewerが使える幅がその分広がる。 */

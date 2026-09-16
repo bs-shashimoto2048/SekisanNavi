@@ -534,7 +534,7 @@ flowchart TD
     Click["ProductPanelOverlay内の盤領域(button)クリック"]
     State["App.tsx: setSelectedPanel({ key, panel })"]
     Overlay["DrawingViewer → ProductPanelOverlay<br/>選択中: 太枠+濃い塗り / 非選択: opacity 0.55"]
-    Info["PanelInfo(右ペイン)<br/>selectedProductPanelをそのまま表示"]
+    Info["PanelInfo(Viewer上のfloating panel、2026-09 Issue #19 Phase 4)<br/>selectedProductPanelをそのまま表示"]
 
     Click -->|onSelectPanel| State
     State --> Overlay
@@ -898,7 +898,8 @@ Phase 1.9以降に追加した、都度読み込み・DB非永続化の実デー
   DBのDetection.idとは異なるYOLO_INDEX体系)。
 - `app/services/estcode_df.py`(Phase 1.14): `estcode_df.csv`(盤ごとの積算コード
   基本情報)を読み込み、`GET /api/products/{no}/estimate-panels`で返す。
-  `PAGE`列を持たない製番単位のデータで、右ペイン「盤情報」(`PanelInfo.tsx`)の
+  `PAGE`列を持たない製番単位のデータで、盤情報floating panel(`PanelInfo.tsx`、
+  2026-09 Issue #19 Phase 4で右ペインからViewer上へ移動、22章参照)の
   表示元として`product_df.csv`由来の旧盤パラメータ表示より優先される。
 
 ## 19. 盤情報・積算集約・積算明細の折りたたみ・対象Select視認性 (Issue #6)
@@ -912,11 +913,12 @@ divで`flex`/`height`を条件分岐)。積算集約の「対象」Selectは、�
 重要な操作であることが視認できるよう強調している(コバルト系の枠+淡い背景、
 Viewer連動中はさらに一段強い強調)。詳細は`docs/ui-spec.md` 1.6章を参照。
 
-**[2026-09 Issue #19 Phase 2で構成変更]** 実装当時は盤情報・積算集約・
+**[2026-09 Issue #19 Phase 2/4で構成変更]** 実装当時は盤情報・積算集約・
 積算明細が右ペイン内で隣接領域として高さを分け合っていたため「隣接領域へ
-高さを還元する」設計だったが、積算集約・積算明細がViewer上のfloating panelへ
-移動した後は、各領域は隣接領域と高さを分け合わない独立した折りたたみになった
-(20章参照)。
+高さを還元する」設計だったが、Phase 2で積算集約・積算明細が、Phase 4で
+盤情報もViewer上のfloating panelへ移動した後は、3領域とも隣接領域と高さを
+分け合わない独立した折りたたみになった(右ペイン自体もPhase 4で廃止済み。
+20章/22章参照)。
 
 ## 20. 積算集約・積算明細のfloating panel化 (Issue #19 Phase 2)
 
@@ -944,6 +946,14 @@ Viewer連動中はさらに一段強い強調)。詳細は`docs/ui-spec.md` 1.6�
   「盤情報↔積算集約」高さsplitter・`app-workspace__right-lower`/
   `estimate-aggregation-wrap`/`estimate-detail-wrap`のCSS/DOM構造は削除した。
   右ペイン幅のリサイズ(`PaneSplitter`)自体は変更していない。
+
+**[2026-09 Issue #19 Phase 4で訂正]** 上記はPhase 2時点の記述。Phase 4で
+盤情報もfloating panel化し、**右ペイン自体を廃止**したため、「右ペインは
+盤情報のみになった」「右ペイン幅のリサイズ自体は変更していない」は現行mainには
+もはや当てはまらない。また`FloatingPanelToggleBar.tsx`は
+`components/Layout/PanelVisibilityToggles.tsx`へ置き換えられ、Viewer右上の
+独立したfloating toggle barではなく編集ツールバーの右端へ移動した。詳細は
+22章を参照。
 
 ## 21. 積算資料PDF Help (Issue #19 Phase 3)
 
@@ -979,3 +989,50 @@ Viewer連動中はさらに一段強い強調)。詳細は`docs/ui-spec.md` 1.6�
   (`SystemSettings`と同じ設計)。
 - **未確認事項**: 大容量PDF配信のRange Request対応等、高度な配信最適化は
   今回実装していない(`docs/known-limitations.md`参照)。
+
+## 22. 盤情報のfloating panel化・右ペイン廃止・表示トグルの移動・glassmorphism (Issue #19 Phase 4)
+
+作業者レビュー方針を踏まえた追加UI修正。盤情報(`PanelInfo`)もfloating panel化し、
+右ペイン自体を廃止した。floating panelの表示トグルはViewer上の独立した
+floating toggle barから、編集ツールバー(Undo/Redoと同じ行)の右端へ移動した。
+floating panel自体の見た目もglassmorphism(半透明+ぼかし)へ変更した。
+詳細な仕様は`docs/ui-spec.md` 1.7章を参照。実装上のポイントのみ記す:
+
+- **盤情報のfloating panel化**: `App.tsx`側で`PanelInfo`を、既存の
+  `components/Layout/FloatingPanel.tsx`(`position="panelInfo"`を追加)で
+  包む形に変更した。`PanelInfo`自体のprops・内部ロジック(盤クリック連動・
+  estcode_df表示等)は変更していない。表示/非表示state
+  (`panelInfoFloatingVisible`、初期値true)は積算集約・積算明細と同じ設計
+  (セッション内のみ、localStorage永続化なし)。
+- **右ペインの廃止**: 盤情報がfloating panel化されたことで右ペインの存在意義が
+  無くなったため、`app-workspace__right`/`app-workspace__panel-info-wrap`の
+  CSS/DOM構造、右ペイン幅の状態(`rightPaneWidth`)・resize用`PaneSplitter`・
+  `RIGHT_PANE_*`定数・`sekisan-navi:right-pane-width`のlocalStorageキーを
+  いずれも削除した。`.app-workspace`は`.app-workspace__main`のみを子に持つ
+  (`display:flex`の単一アイテム)。左ペイン(`DrawingNavigator`)・
+  `EstimateMasterPicker`の配置・実装は変更していない。
+- **表示トグルの移動**: `components/Layout/FloatingPanelToggleBar.tsx`
+  (Viewer右上の独立したfloating toggle bar、z-index:110)を削除し、
+  `components/Layout/PanelVisibilityToggles.tsx`(通常のflexアイテムとして
+  `app-layout__edit-toolbar`内に置く、絶対配置なし)へ置き換えた。ボタンの
+  表示順は「盤情報」「積算集約」「積算明細」の固定順。ツールバー内で
+  `margin-left: auto`により右寄せし、Undo/Redo/操作履歴ボタンとの間に
+  `border-left`区切り線を入れて視覚的に区別している。
+- **既定配置の見直し**: floating toggle barがViewerの外(編集ツールバー)へ
+  移動したことで、floating panel自身がViewer上部の専有領域を気にする必要が
+  無くなった。盤情報はViewer左上寄り、積算集約はViewer右上寄り、積算明細は
+  Viewer右下寄りに配置し、いずれも`DrawingCanvas`自身のtoolbar(図面名+Zoom/
+  Fit/BBox削除)の下(`top: 3rem`)をクリアする(`components/Layout/FloatingPanel.css`)。
+  実ブラウザ確認(1600px/1280px/1024px幅)では3panelの既定配置が重ならないことを
+  確認した(狭いウィンドウでの自動衝突回避は実装していない)。
+- **glassmorphism**: `.floating-panel`のbackgroundを`rgba(255, 255, 255, 0.6)`+
+  `backdrop-filter: blur(14px) saturate(160%)`(`-webkit-backdrop-filter`も
+  併記)へ変更した。`@supports not ((backdrop-filter: blur(1px)) or
+  (-webkit-backdrop-filter: blur(1px)))`で、非対応環境向けに不透明度を上げた
+  fallback(`rgba(255, 255, 255, 0.94)`)を用意している。`PanelInfo`/
+  `EstimateAggregation`/`EstimateDetail`内部の見出し・表ヘッダ等が持つ既存の
+  背景色(`#eff6ff`/`#f1f5f9`等、不透明に近い)は変更していないため、表・文字の
+  可読性は維持される。
+- **PDF Help標準配置場所の確認**: `HELP_PDF_PATH`(`data/help/estimate-help.pdf`、
+  Issue #19 Phase 3で導入)を、この追加指示により正式な標準配置場所として
+  再確認した。実装・値ともに変更していない(21章参照)。

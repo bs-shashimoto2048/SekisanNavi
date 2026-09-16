@@ -63,7 +63,7 @@ import { HelpPdfModal } from './components/HelpPdf/HelpPdfModal'
 import { DecisionEventHistory } from './components/DecisionEventHistory/DecisionEventHistory'
 import { PaneSplitter } from './components/Layout/PaneSplitter'
 import { FloatingPanel } from './components/Layout/FloatingPanel'
-import { FloatingPanelToggleBar } from './components/Layout/FloatingPanelToggleBar'
+import { PanelVisibilityToggles } from './components/Layout/PanelVisibilityToggles'
 import { usePaneWidth } from './hooks/usePaneWidth'
 import './App.css'
 
@@ -86,16 +86,15 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable
 }
 
-// 左右ペイン幅 (UIレイアウト追加修正指示 10章)。初期値は変更前レイアウトの
-// grid-template-columns (220px / 300px) をそのまま踏襲する。
+// 左ペイン幅 (UIレイアウト追加修正指示 10章)。初期値は変更前レイアウトの
+// grid-template-columns (220px) をそのまま踏襲する。
+// Issue #19 Phase 4: 右ペインは廃止した(盤情報もfloating panel化したため、
+// 右ペイン自体が不要になった)。旧`RIGHT_PANE_*`定数・
+// `sekisan-navi:right-pane-width`のlocalStorageキーは削除済み(残さない)。
 const LEFT_PANE_INITIAL = 220
 const LEFT_PANE_MIN = 140
 const LEFT_PANE_MAX_VW_RATIO = 0.3
-const RIGHT_PANE_INITIAL = 300
-const RIGHT_PANE_MIN = 220
-const RIGHT_PANE_MAX_VW_RATIO = 0.4
 const LEFT_PANE_STORAGE_KEY = 'sekisan-navi:left-pane-width'
-const RIGHT_PANE_STORAGE_KEY = 'sekisan-navi:right-pane-width'
 
 // 下部積算コードMaster領域の高さ (Phase 1.11 指示書24章〜26章)。既存のCSS既定値
 // (260px) を初期値として踏襲する。min/maxは「Viewerが実質見えなくなる」
@@ -253,12 +252,6 @@ function App() {
     LEFT_PANE_MIN,
     LEFT_PANE_MAX_VW_RATIO,
   )
-  const [rightPaneWidth, resizeRightPaneBy] = usePaneWidth(
-    RIGHT_PANE_STORAGE_KEY,
-    RIGHT_PANE_INITIAL,
-    RIGHT_PANE_MIN,
-    RIGHT_PANE_MAX_VW_RATIO,
-  )
   // 下部積算コードMaster領域の高さ (Phase 1.11 指示書24章〜26章)。左右ペイン幅と
   // 同じフックを`dimension: 'height'`で再利用し、保存方式を統一する (指示書26章)。
   const [masterPaneHeight, resizeMasterPaneBy] = usePaneWidth(
@@ -285,6 +278,8 @@ function App() {
   // として両方表示(true)にする(従来の右ペイン常設と同じ見え方から始まる)。
   // セッション内のみのUI状態で、localStorageへは永続化しない(Phase 2指示:
   // レイアウト設定の永続化は今回非対象)。
+  // Issue #19 Phase 4: 盤情報も同じ仕組みでfloating panel化する(初期値true)。
+  const [panelInfoFloatingVisible, setPanelInfoFloatingVisible] = useState(true)
   const [estimateAggregationFloatingVisible, setEstimateAggregationFloatingVisible] = useState(true)
   const [estimateDetailFloatingVisible, setEstimateDetailFloatingVisible] = useState(true)
 
@@ -1203,6 +1198,17 @@ function App() {
             そのものの履歴)ため、積算画面の作業導線を邪魔しないこの編集
             ツールバー側に置く。 */}
         <DecisionEventHistory productNo={activeProductNo} />
+        {/* Issue #19 Phase 4: floating panel(盤情報・積算集約・積算明細)の表示
+            トグルをUndo/Redoと同じツールバーの右端へ移動した(旧: Viewer上部の
+            独立したfloating toggle bar)。 */}
+        <PanelVisibilityToggles
+          panelInfoVisible={panelInfoFloatingVisible}
+          onTogglePanelInfo={() => setPanelInfoFloatingVisible((v) => !v)}
+          aggregationVisible={estimateAggregationFloatingVisible}
+          onToggleAggregation={() => setEstimateAggregationFloatingVisible((v) => !v)}
+          detailVisible={estimateDetailFloatingVisible}
+          onToggleDetail={() => setEstimateDetailFloatingVisible((v) => !v)}
+        />
       </div>
       {/* 指示9章: BBox編集によって積算先(面/盤)が変わった場合の一時通知。 */}
       {targetChangeNotification && (
@@ -1274,12 +1280,21 @@ function App() {
                 detailHoveredDetectionId={detailHoveredDetectionId}
                 focusPanel={viewerFocusPanel}
               />
-              <FloatingPanelToggleBar
-                aggregationVisible={estimateAggregationFloatingVisible}
-                onToggleAggregation={() => setEstimateAggregationFloatingVisible((v) => !v)}
-                detailVisible={estimateDetailFloatingVisible}
-                onToggleDetail={() => setEstimateDetailFloatingVisible((v) => !v)}
-              />
+              <FloatingPanel
+                visible={panelInfoFloatingVisible}
+                position="panelInfo"
+                collapsed={panelInfoCollapsed}
+              >
+                <PanelInfo
+                  panel={panel}
+                  panels={activeProductPage?.panels ?? []}
+                  estimatePanels={estimatePanels}
+                  selectedPanel={selectedPanel}
+                  onSelectPanel={handleSelectPanel}
+                  collapsed={panelInfoCollapsed}
+                  onToggleCollapsed={() => setPanelInfoCollapsed((c) => !c)}
+                />
+              </FloatingPanel>
               <FloatingPanel
                 visible={estimateAggregationFloatingVisible}
                 position="aggregation"
@@ -1328,33 +1343,6 @@ function App() {
             onSelectItem={handleSelectMasterItem}
             height={masterPaneHeight}
           />
-        </div>
-
-        <PaneSplitter
-          onDrag={(delta) => resizeRightPaneBy(-delta)}
-          ariaLabel="右ペインの幅を変更"
-        />
-
-        <div className="app-workspace__right" style={{ width: rightPaneWidth }}>
-          {/* Issue #19 Phase 2: 積算集約・積算明細をViewer上のfloating panelへ
-              移動したため、右ペインは盤情報(PanelInfo)のみになった。盤情報の
-              高さを他領域と分け合う必要が無くなったため、右ペイン内の高さ
-              splitter(旧: 盤情報↔積算集約)は廃止し、右ペインの残り高さを
-              そのまま使う(展開中はflex:1、折りたたみ中は見出し分のみ)。 */}
-          <div
-            className="app-workspace__panel-info-wrap"
-            style={{ flex: panelInfoCollapsed ? '0 0 auto' : '1 1 auto' }}
-          >
-            <PanelInfo
-              panel={panel}
-              panels={activeProductPage?.panels ?? []}
-              estimatePanels={estimatePanels}
-              selectedPanel={selectedPanel}
-              onSelectPanel={handleSelectPanel}
-              collapsed={panelInfoCollapsed}
-              onToggleCollapsed={() => setPanelInfoCollapsed((c) => !c)}
-            />
-          </div>
         </div>
       </div>
 

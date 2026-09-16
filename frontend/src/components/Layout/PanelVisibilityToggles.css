@@ -1,0 +1,35 @@
+/* Issue #19 Phase 4: floating panel(盤情報・積算集約・積算明細)の表示トグル群。
+   編集ツールバー(`app-layout__edit-toolbar`)の右端に置く前提で、絶対配置は
+   使わない(通常のflexアイテムとして並ぶだけ)。ツールバー側で
+   `margin-left: auto`により右寄せし、操作系(元に戻す/やり直す/操作履歴)との
+   間に区切り線+gapを設けて視覚的に区別する。 */
+.panel-visibility-toggles {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+  padding-left: 0.6rem;
+  border-left: 1px solid #d1d5db;
+}
+
+.panel-visibility-toggles__button {
+  font-size: 0.9rem; /* 既存の編集ツールバーボタンと同じサイズ感に揃える */
+  padding: 0.2rem 0.7rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+}
+
+.panel-visibility-toggles__button:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+/* ON(表示中)状態を一目で分かるようにする。既存のViewer連動中強調
+   (estimate-aggregation__target-select--focused)と同じコバルト系の考え方。 */
+.panel-visibility-toggles__button[aria-pressed='true'] {
+  background: #1e3a8a;
+  color: #fff;
+  border-color: #1e3a8a;
+}
