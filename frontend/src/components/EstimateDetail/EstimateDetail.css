@@ -85,10 +85,17 @@
 
 .estimate-detail__table {
   width: 100%;
-  /* 全体フォント拡大 指示1章: フォント拡大に合わせて8列の可読な最小幅も
-     620px→700pxへ引き上げる (文字が窮屈に折り返さないようにするため。
-     右ペインが狭い時は従来通り横スクロールする)。 */
-  min-width: 700px;
+  /* [2026-09 追加修正: 列幅配分の再最適化] 実データ(製番A1GV2421 P23、
+     積算コード44253「入力（主回路銅帯）」)の定格
+     「3Φ 50kVA 200V級　公共建築 (225A)」を実ブラウザで実測したところ、
+     このUIフォント(Yu Gothic UI系, 0.88rem)で約211px必要だった。旧来の
+     700pxのままでは定格列にこれだけの幅を割けず(他列の縮小だけでは
+     不足)、700→730pxへわずかに引き上げたうえで、以下の列幅再配分と
+     組み合わせて定格列に十分な幅(約34%)を確保した。
+     floating panel自体の既定幅(360px)は変更していない。表側の
+     min-widthを超える分は`.estimate-detail__table-scroll`の内部横
+     スクロールに任せる(パネル自体を無理に広げて解決しない指示に対応)。 */
+  min-width: 730px;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 0.88rem; /* 旧0.78rem→引き上げ (表データも本文相当まで拡大) */
@@ -100,48 +107,62 @@
   table-layout: fixed;
 }
 
-/* 追加UI修正指示3章: 文字数が少ない列(面/盤、コード、図面、状態)は
-   必要最小限へ縮小し、余った幅は長い文字列列(品名・型式・定格)へ優先配分。
-   編集順は日時/通し番号の切替(container query)を持つため従来よりは
-   縮小幅を抑える。既存のellipsis省略は使わず(このリポジトリの既存方針:
-   PanelInfo等でも「文字が途中で切れない」ことを優先しているため)、
+/* [2026-09 追加修正: 列幅配分の再最適化] 各列の実測content幅(実ブラウザ、
+   Playwrightで計測した実データ・見出しラベルの自然幅)を基準に再配分した。
+   面/盤・コード・図面・状態は表示に必要な最小限へ、品名・型式は通常の
+   値が1文字単位で折り返さない程度へ抑え、余った幅は最も長い可変長列
+   「定格」へ最優先で配分する。編集順は日時表示(container query full
+   モード、例: "2024-01-01 12:34")が1行で収まる幅を確保する。
+   既存のellipsis省略は使わず(このリポジトリの既存方針: PanelInfo等でも
+   「文字が途中で切れない」ことを優先しているため)、
    overflow-wrap: break-word(既存の`.estimate-detail__table td`ルールで
    全列に適用済み)による折り返しのみで対応する。 */
 .estimate-detail__col-panel {
-  width: 7%;
+  width: 6%;
   white-space: nowrap;
 }
 
 .estimate-detail__col-name {
-  width: 20%;
+  /* 実データ(製番A1GV2421)の最長級の品名「入力（主回路銅帯）」
+     (実測約119px)が1行に収まる幅+余裕を確保する。 */
+  width: 19%;
 }
 
 .estimate-detail__col-code {
-  width: 8%;
+  width: 7%;
   white-space: nowrap;
 }
 
 .estimate-detail__col-model {
-  width: 20%;
+  /* 実データの最長級の型式「3×30　L=2.6m×3本」(実測約107px)が1行に
+     収まる幅+余裕を確保する。旧配分(16%)では実ブラウザ確認でこの値が
+     ちょうど1px未満の差で2行へ折り返しており、余裕を持たせた。 */
+  width: 17%;
 }
 
 .estimate-detail__col-rating {
-  width: 19%;
+  /* 実データの最長級の定格「3Φ 50kVA 200V級　公共建築 (225A)」
+     (実測約211px)が1行に収まる幅を最優先で確保する。他列を必要最小限へ
+     詰めたうえで、余った幅をこの列へ最優先配分している。 */
+  width: 31%;
 }
 
 .estimate-detail__col-page {
-  width: 8%;
+  width: 6%;
   white-space: nowrap;
 }
 
 .estimate-detail__col-status {
-  width: 6%;
+  width: 4%;
   text-align: center;
   white-space: nowrap;
 }
 
 .estimate-detail__col-edit-order {
-  width: 12%;
+  /* 「-」や短い通し番号が主な表示内容のため必要最小限へ。日時フル表示
+     (container query full mode)はコンテナ全体が広い時のみ有効になり、
+     その時は%配分に伴い絶対幅も比例して増えるため実用上問題ない。 */
+  width: 10%;
   white-space: nowrap;
 }
 

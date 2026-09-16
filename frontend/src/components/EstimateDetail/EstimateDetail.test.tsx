@@ -436,3 +436,41 @@ describe('EstimateDetail: 見出し (Issue #19 追加修正で折りたたみ機
     expect(screen.queryByRole('button', { name: /積算明細/ })).not.toBeInTheDocument()
   })
 })
+
+describe('EstimateDetail: 列幅配分 (Issue #19 追加修正: 定格列の折り返し対策)', () => {
+  // 実データ(製番A1GV2421 P23、積算コード44253「入力（主回路銅帯）」)の定格
+  // 「3Φ 50kVA 200V級　公共建築 (225A)」が実ブラウザで1行に収まらなかった
+  // 不具合を受け、列幅配分を再調整した。table-layout: fixedの下では各列の
+  // width指定がそのまま確定値になるため(jsdomでも文字列としてそのまま解決
+  // できる、レイアウト計算そのものは行わない)、意図した配分から後退しないよう
+  // 主要な列の割合をここで固定する。実際の折り返し有無(ピクセル単位の実測)は
+  // 実ブラウザ確認で行う(jsdomは実レイアウトを行わないため確認できない)。
+  it('gives the longest variable-length column (定格) the largest share, ahead of 品名/型式', () => {
+    renderDetail({ detailItems: [makeDetailItem()] })
+    const table = screen.getByRole('table')
+    const widthOf = (cls: string) => {
+      const cell = table.querySelector(`.${cls}`) as HTMLElement
+      return parseFloat(getComputedStyle(cell).width)
+    }
+    const rating = widthOf('estimate-detail__col-rating')
+    const name = widthOf('estimate-detail__col-name')
+    const model = widthOf('estimate-detail__col-model')
+    const panel = widthOf('estimate-detail__col-panel')
+    const code = widthOf('estimate-detail__col-code')
+    const page = widthOf('estimate-detail__col-page')
+    const status = widthOf('estimate-detail__col-status')
+
+    // 定格が最大の可変長列であること (指示: 余った横幅を最優先で割り当てる)。
+    expect(rating).toBeGreaterThan(name)
+    expect(rating).toBeGreaterThan(model)
+    // 文字数の少ない列(面/盤・コード・図面・状態)は、長い文字列列(品名・型式)より
+    // 明確に狭いこと。
+    for (const short of [panel, code, page, status]) {
+      expect(short).toBeLessThan(name)
+      expect(short).toBeLessThan(model)
+      expect(short).toBeLessThan(rating)
+    }
+    // table-layout: fixedが維持されていること(この配分が確定値として機能する前提)。
+    expect(getComputedStyle(table).tableLayout).toBe('fixed')
+  })
+})
