@@ -156,6 +156,43 @@ UPSERTで投入・再取込される。再取込を手動で行いたい場合�
 社内LAN・共有フォルダへ接続できる環境で実行することを前提とする
 (接続できない環境では、実図面を参照する機能のみエラーになるが、アプリ自体は起動する)。
 
+#### 検証用DBへの切替 (Issue #23 Phase 2)
+
+実製番を使った動作確認は、本番用DB (`backend/data/sekisan_navi.db`) を汚さない
+よう、検証専用のDBファイルへ切り替えて行うことを推奨する。環境変数
+`SEKISAN_NAVI_DB_PATH` にDBファイルのパスを指定すると、Backendはそのファイルを
+使う(未指定時は従来どおり `backend/data/sekisan_navi.db`。既存の起動手順・
+挙動は一切変わらない)。
+
+```bash
+# 1. 本番DBを安全なタイミング(書き込み中でない時)でコピーする
+cp backend/data/sekisan_navi.db /path/to/verification/sekisan_navi.db
+
+# 2. 検証用DBを指定してBackendを別ポートで起動する (絶対パスを推奨。
+#    相対パスを指定した場合はBackend起動時のカレントディレクトリ基準で解決される)
+cd backend
+SEKISAN_NAVI_DB_PATH=/path/to/verification/sekisan_navi.db \
+  uvicorn app.main:app --port 8010
+
+# 3. Frontendの接続先を検証用backendへ向ける
+cd frontend
+cp .env.example .env.local   # 未作成の場合
+echo 'VITE_BACKEND_URL=http://127.0.0.1:8010' >> .env.local
+npm run dev
+```
+
+起動時のmigration・ダミーデータ投入・Master Excelインポートは、いずれも
+`SEKISAN_NAVI_DB_PATH`で指定したDBファイルに対してのみ行われる(本番DBには
+一切触れない)。検証が終わったら、検証用DBファイルを破棄するか任意の場所へ
+保管し(Git管理対象に含めないこと)、Frontendの`VITE_BACKEND_URL`を本番backendの
+ポートへ戻す。
+
+この仕組みはDBファイルパスの切替のみが対象で、データ参照ルート
+(`system_settings.data_source_root`、コピーしたDBファイルの中身がそのまま
+使われる)・Frontend側の表示・DBファイルの自動コピー機能はいずれも対象外。
+詳細・設計判断の背景は [Issue #23](https://github.com/bs-shashimoto2048/SekisanNavi/issues/23)
+と [`docs/configuration.md`](docs/configuration.md) を参照。
+
 ### Frontend
 
 ```bash
