@@ -111,7 +111,11 @@ export function EstimateMasterPicker({ selectedItemId, onSelectItem, height }: P
           再取得ロジックはタブ時代のものをそのまま再利用しており、見た目だけを
           変更している。selectの横幅はpanel幅いっぱいまで広げず(下記CSS)、
           長い品名はselect内で省略表示する。ラベル文言は「カテゴリ」から
-          「品名」へ変更した(指示1章)。 */}
+          「品名」へ変更した(指示1章)。
+          [追加修正: 品名ラベルとselectを横並びに] `<label>`自体は
+          `品名`テキスト→`<select>`→(読み込み中はloading表示)の順でDOM構造は
+          変えていない。並び方向(縦積み→横並び)はCSS側(`master-picker__
+          category-label`のflex-direction)のみで切り替えている。 */}
       <label className="master-picker__category-label">
         品名
         <select

@@ -47,15 +47,21 @@
 
 /* [追加修正: 品名選択リストをコンパクト化・他panelとフォーマット統一]
    横一列のカテゴリタブは廃止し、単一の<select>による品名切替へ変更した。
-   ラベル+selectの縦積み構成は`.estimate-aggregation__target-select-label`と
-   同じパターン(小さいグレーのラベル文字の下にselect本体)にし、他panelの
-   上部control UIと統一感を持たせる。selectは`flex:1`で横幅いっぱいに
-   広げていた旧実装をやめ、`max-width`を持たせて必要最小限の幅に留める
-   (指示2章: panel幅いっぱいまで広げない。長い品名は省略表示)。 */
+   selectは`flex:1`で横幅いっぱいに広げていた旧実装をやめ、`max-width`を
+   持たせて必要最小限の幅に留める(指示2章: panel幅いっぱいまで広げない。
+   長い品名は省略表示)。
+   [追加修正: 品名ラベルとselectを横並びに] 当初は
+   `.estimate-aggregation__target-select-label`と同じ縦積み(ラベル文字の下に
+   select本体)にしていたが、指示により「品名」ラベルとselectを同じ行に
+   横並びさせる形へ変更した。ラベル文言自体は変わらないため、幅は必要最小限
+   (`flex-shrink:0`)のままselectとだけ横に並べる。 */
 .master-picker__category-label {
   display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap; /* panelを最小幅付近までリサイズした場合でも、はみ出さず
+                       自然に2行目へ折り返す(指示2章の「無理に広げない」方針)。 */
+  gap: 0.2rem 0.4rem;
   margin-bottom: 0.3rem;
   flex-shrink: 0;
   font-size: 0.85rem;
