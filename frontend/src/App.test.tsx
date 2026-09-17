@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { MockResizeObserver } from './testUtils/mockResizeObserver'
 import type {
   Detection,
   DrawingPage,
@@ -1643,7 +1644,11 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     expect(aggregationFloat.contains(backdrop)).toBe(false)
   })
 
-  it('keeps the moved/resized position after hiding and re-showing the panel (指示: セッション中は状態を保持する)', async () => {
+  it('[Issue #25] re-shows a hidden panel at a freshly computed right端寄せ position, not its last dragged position', async () => {
+    // [Issue #25] 「新たに表示したpanelは…配置する」という指示により、表示ONに
+    // した瞬間は常に右端寄せ+積み重ねの初期配置を計算し直す仕様へ変更した
+    // (以前の「非表示→表示で直前の位置へ戻る」という挙動を置き換えるもの。
+    // `components/Layout/FloatingPanel.tsx`のコメント参照)。
     await renderApp()
     setViewerWrapRect(1200, 700)
     const panel = document.querySelector('.floating-panel--aggregation') as HTMLElement
@@ -1660,8 +1665,16 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
 
     const reshown = document.querySelector('.floating-panel--aggregation') as HTMLElement
-    expect(reshown.style.left).toBe(movedLeft)
-    expect(reshown.style.top).toBe(movedTop)
+    // ドラッグした位置ではなく、右端寄せの新しい位置になっている。
+    expect(reshown.style.left).not.toBe(movedLeft)
+    expect(reshown.style.top).not.toBe(movedTop)
+    // 幅480px(kind別初期幅)・コンテナ1200pxに対し、右端から20pxのマージンで
+    // 右寄せされている(1200 - 20 - 480 = 700)。
+    expect(reshown.style.left).toBe('700px')
+    // 積み重ねの段数は「表示中panelの固定宣言順(盤情報→積算集約→積算明細→
+    // 部品台帳)における自分の順位」で決まる(他panelの表示ON/OFF状況に
+    // かかわらず、積算集約は常に2段目=段数1)。48 + 1 * 40 = 88。
+    expect(reshown.style.top).toBe('88px')
   })
 
   it('does not affect BBox selection/Zoom/Fit when dragging a panel heading', async () => {
@@ -1682,6 +1695,110 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     // floating panelのドラッグはDrawingCanvas側のBBox選択状態に影響しない
     // (パネルとViewerは別要素であり、イベントも競合しない)。
     expect(screen.getAllByRole('button', { name: /BBoxサイズ変更/ }).length).toBeGreaterThan(0)
+  })
+})
+
+describe('App: floating panelの初期配置(右端寄せ・積み重ね)とViewerサイズ変更時の追従 (Issue #25)', () => {
+  async function renderApp() {
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
+  }
+
+  function setViewerWrapRect(width: number, height: number) {
+    const el = document.querySelector('.app-workspace__viewer-wrap') as HTMLElement
+    Object.defineProperty(el, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, right: width, bottom: height, width, height }),
+      configurable: true,
+    })
+  }
+
+  it('places the first shown panel at the top-right, and stacks each subsequently shown panel further down while staying right-aligned', async () => {
+    await renderApp()
+    setViewerWrapRect(1600, 900)
+
+    // 4panelすべてOFFにしてから、1つずつONにして積み重ねを確認する。
+    for (const name of ['盤情報', '積算集約', '積算明細', '部品台帳']) {
+      fireEvent.click(screen.getByRole('button', { name }))
+    }
+    expect(document.querySelectorAll('.floating-panel')).toHaveLength(0)
+
+    fireEvent.click(screen.getByRole('button', { name: '盤情報' }))
+    const panelInfo = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    expect(panelInfo.style.top).toBe('48px') // TOP_CLEARANCE、他に表示中panelが無い(1段目)
+
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
+    const aggregation = document.querySelector('.floating-panel--aggregation') as HTMLElement
+    expect(aggregation.style.top).toBe('88px') // 48 + 1 * 40 (2段目)
+
+    fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
+    const detail = document.querySelector('.floating-panel--detail') as HTMLElement
+    expect(detail.style.top).toBe('128px') // 48 + 2 * 40 (3段目)
+
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
+    const master = document.querySelector('.floating-panel--master') as HTMLElement
+    expect(master.style.top).toBe('168px') // 48 + 3 * 40 (4段目)
+
+    // 4panelとも右端(コンテナ幅 - 20pxマージン)に幅の右端が揃っている
+    // (基本のx位置は右端寄せ、という指示を満たす)。
+    for (const el of [panelInfo, aggregation, detail, master]) {
+      expect(parseFloat(el.style.left) + parseFloat(el.style.width)).toBeCloseTo(1600 - 20, 5)
+    }
+  })
+
+  it('keeps a panel anchored to the nearest edge (right/top) when the Viewer container is resized, instead of leaving it at a stale pixel position', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+
+    // `setViewerWrapRect`はDOM APIを差し替えるだけで、それ自体はReactの
+    // effectを再実行させない(実ブラウザのResizeObserverと異なり、このモックは
+    // 明示的に`trigger()`を呼んだ時のみ発火する)。まず1200x700を基準として
+    // 一度反映させてから「右端寄せの既定配置」を記録する
+    // (`trigger()`はReactのイベントハンドラ経由ではない生のJS呼び出しのため、
+    // 結果のstate更新をDOMへ確実に反映させるには`act()`で明示的に囲む必要がある)。
+    const containerEl = document.querySelector('.app-workspace__viewer-wrap') as HTMLElement
+    const observers = MockResizeObserver.instances.filter((o) => o.observed.includes(containerEl))
+    expect(observers.length).toBeGreaterThan(0)
+    act(() => {
+      for (const o of observers) o.trigger(containerEl, { width: 1200, height: 700 })
+    })
+
+    // 既定配置(積算集約は右上寄り)のまま、右端・上端からの距離を記録する。
+    const aggregation = document.querySelector('.floating-panel--aggregation') as HTMLElement
+    const leftBefore = parseFloat(aggregation.style.left)
+    const topBefore = parseFloat(aggregation.style.top)
+    const widthBefore = parseFloat(aggregation.style.width)
+    const rightGapBefore = 1200 - (leftBefore + widthBefore)
+
+    // Viewerを1200→1600幅へ広げる。
+    Object.defineProperty(containerEl, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, right: 1600, bottom: 700, width: 1600, height: 700 }),
+      configurable: true,
+    })
+    act(() => {
+      for (const o of observers) o.trigger(containerEl, { width: 1600, height: 700 })
+    })
+
+    const leftAfter = parseFloat(aggregation.style.left)
+    const topAfter = parseFloat(aggregation.style.top)
+    const rightGapAfter = 1600 - (leftAfter + widthBefore)
+
+    // 右端からの距離(rightGap)は変わらない(右端に追従して右上のまま)。
+    // 上端からの距離(topGap、上端に近いためこちらを基準にする)も変わらない。
+    expect(rightGapAfter).toBeCloseTo(rightGapBefore, 5)
+    expect(topAfter).toBeCloseTo(topBefore, 5)
+
+    // 1600→1200へ縮めて戻すと、クランプが発生しない範囲では元の位置関係
+    // (右端・上端からの距離)へちょうど復元される。
+    Object.defineProperty(containerEl, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, right: 1200, bottom: 700, width: 1200, height: 700 }),
+      configurable: true,
+    })
+    act(() => {
+      for (const o of observers) o.trigger(containerEl, { width: 1200, height: 700 })
+    })
+
+    expect(parseFloat(aggregation.style.left)).toBeCloseTo(leftBefore, 5)
+    expect(parseFloat(aggregation.style.top)).toBeCloseTo(topBefore, 5)
   })
 })
 
