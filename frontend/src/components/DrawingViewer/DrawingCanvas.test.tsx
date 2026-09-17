@@ -133,6 +133,117 @@ describe('DrawingCanvas', () => {
     })
   })
 
+  describe('[Issue #25 追加修正] 中ボタンダブルクリックでFit', () => {
+    it('a single middle-button click (press+release, no real drag) does NOT trigger Fit', async () => {
+      const { viewport } = await renderCanvas({ bboxAddMode: false })
+      fireEvent.click(screen.getByTitle('拡大'))
+      await screen.findByText('61%') // Fit値(49%)から意図的にズレさせておく
+
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 101, clientY: 100 }) // ほぼ動いていない
+
+      expect(screen.getByText('61%')).toBeInTheDocument() // Fitされていない
+    })
+
+    it('a middle-button double-click (two press+release close in both time and position) triggers Fit, reusing the existing Fit logic', async () => {
+      const { viewport } = await renderCanvas({ bboxAddMode: false })
+      fireEvent.click(screen.getByTitle('拡大'))
+      await screen.findByText('61%')
+
+      const dateSpy = vi.spyOn(Date, 'now')
+      dateSpy.mockReturnValue(1000)
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+
+      dateSpy.mockReturnValue(1150) // 150ms後(既定の判定間隔400ms以内)
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 101, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 101, clientY: 100 })
+
+      await screen.findByText('49%') // Fitボタンと同じ値へ戻る
+    })
+
+    it('two middle-button clicks spaced further apart than the double-click window do NOT trigger Fit', async () => {
+      const { viewport } = await renderCanvas({ bboxAddMode: false })
+      fireEvent.click(screen.getByTitle('拡大'))
+      await screen.findByText('61%')
+
+      const dateSpy = vi.spyOn(Date, 'now')
+      dateSpy.mockReturnValue(1000)
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+
+      dateSpy.mockReturnValue(1000 + 500) // 判定間隔(400ms)を超過
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+
+      expect(screen.getByText('61%')).toBeInTheDocument() // Fitされていない
+    })
+
+    it('a real middle-button drag (Pan) in between does not get mistaken for a double-click candidate afterward', async () => {
+      const { viewport } = await renderCanvas({ bboxAddMode: false })
+      fireEvent.click(screen.getByTitle('拡大'))
+      await screen.findByText('61%')
+
+      const dateSpy = vi.spyOn(Date, 'now')
+      dateSpy.mockReturnValue(1000)
+      // 1回目: 実際にPan(移動あり) -> クリック候補にはならない
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseMove(window, { clientX: 160, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 160, clientY: 100 })
+
+      dateSpy.mockReturnValue(1100)
+      // 2回目: ほぼ動かないクリック -> 直前がPanだったため単独クリック扱いのまま
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 160, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 161, clientY: 100 })
+
+      expect(screen.getByText('61%')).toBeInTheDocument() // Fitされていない
+    })
+
+    it('a middle-button double-click starting on a child element (e.g. an existing BBox) still only Fits, without firing the child\'s own click handler', async () => {
+      const onChildClick = vi.fn()
+      const { viewport: _viewport } = await renderCanvas({
+        bboxAddMode: false,
+        children: (
+          <button type="button" onClick={onChildClick}>
+            既存BBoxまたはリサイズハンドル
+          </button>
+        ),
+      })
+      fireEvent.click(screen.getByTitle('拡大'))
+      await screen.findByText('61%')
+      const childButton = screen.getByText('既存BBoxまたはリサイズハンドル')
+
+      const dateSpy = vi.spyOn(Date, 'now')
+      dateSpy.mockReturnValue(1000)
+      fireEvent.mouseDown(childButton, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+      dateSpy.mockReturnValue(1100)
+      fireEvent.mouseDown(childButton, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+
+      await screen.findByText('49%') // Fitのみ発生
+      expect(onChildClick).not.toHaveBeenCalled() // 子要素自身のclickは発火しない
+    })
+
+    it('a middle-button double-click does not call onBackgroundClick or onCreateBBox (Fitのみで他の副作用が無い)', async () => {
+      const onBackgroundClick = vi.fn()
+      const onCreateBBox = vi.fn()
+      const { viewport } = await renderCanvas({ bboxAddMode: true, onBackgroundClick, onCreateBBox })
+
+      const dateSpy = vi.spyOn(Date, 'now')
+      dateSpy.mockReturnValue(1000)
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+      dateSpy.mockReturnValue(1100)
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+
+      expect(onBackgroundClick).not.toHaveBeenCalled()
+      expect(onCreateBBox).not.toHaveBeenCalled()
+      expect(document.querySelector('.drawing-canvas__draft-rect')).toBeNull()
+    })
+  })
+
   it('creates a normalized BBox from a drag when bboxAddMode is on, independent of zoom', async () => {
     const onCreateBBox = vi.fn()
     const { viewport } = await renderCanvas({ bboxAddMode: true, onCreateBBox })

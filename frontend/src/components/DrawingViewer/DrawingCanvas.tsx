@@ -11,6 +11,10 @@ const FIT_MARGIN = 0.98
 // クリックとドラッグの誤認を防ぐための最小移動量 (画面ピクセル、zoom非依存)。
 // これ未満の移動量ではManual BBoxを作成しない (要件14)。
 const MIN_DRAG_PX = 6
+// [追加修正: 中ボタンダブルクリックでFit] 中ボタンの1回目・2回目のPress+Releaseを
+// 自前で「ダブルクリック」とみなすための最大間隔 (ms)。OS標準のダブルクリック
+// 判定間隔(概ね300〜500ms)を踏まえた値。
+const DBLCLICK_MS = 400
 
 interface NativeSize {
   width: number
@@ -92,12 +96,20 @@ export function DrawingCanvas({
   // [追加修正: Pan操作を中ボタンへ変更] 従来は左ドラッグでPanしていたが、CADライクな
   // 操作性のため中ボタン(マウスホイール押し込み)+dragへ変更した。panRefは中ボタンPan専用、
   // clickCandidateRefは左クリックによる「空白領域クリック=選択解除」判定専用に分離する
-  // (要件26は維持しつつ、左ドラッグではPanしないようにするため)。
-  const panRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(
-    null,
-  )
+  // (要件26は維持しつつ、左ドラッグではPanしないようにするため)。`moved`は、この
+  // Pressで実際にMIN_DRAG_PXを超える移動があったか(=意図的なPanか)を表す
+  // (中ボタンダブルクリックでのFit判定に使う。下記middleClickRef参照)。
+  const panRef = useRef<
+    { x: number; y: number; scrollLeft: number; scrollTop: number; moved: boolean } | null
+  >(null)
   const clickCandidateRef = useRef<{ x: number; y: number } | null>(null)
   const [isPanning, setIsPanning] = useState(false)
+  // [追加修正: 中ボタンダブルクリックでFit] ブラウザ標準の`dblclick`が中ボタンで
+  // 期待どおり発火するかに依存せず、button===1のPress+Release自体の間隔・移動量で
+  // 自前判定する。1回目のPressは(ダブルクリック成立前でも)常にPanとして即座に
+  // 開始してよく(要件)、mouseup時に「実移動の無かったPress」だった場合のみ
+  // ダブルクリック候補として記録し、直前の候補と時間・距離が近ければFitする。
+  const middleClickRef = useRef<{ time: number; x: number; y: number } | null>(null)
   const wheelAnchorRef = useRef<{ nativeX: number; nativeY: number; clientX: number; clientY: number } | null>(
     null,
   )
@@ -364,6 +376,7 @@ export function DrawingCanvas({
         y: e.clientY,
         scrollLeft: viewport.scrollLeft,
         scrollTop: viewport.scrollTop,
+        moved: false,
       }
       setIsPanning(true)
       return
@@ -409,7 +422,10 @@ export function DrawingCanvas({
       // 実際に意味のある移動量に達した時点で明示的なPanとみなし、manualモードへ切り替える
       // (要件27。ほぼ動いていない場合はここを通らず、fitモードのままにする)。
       const movedPx = Math.max(Math.abs(e.clientX - pan.x), Math.abs(e.clientY - pan.y))
-      if (movedPx >= MIN_DRAG_PX) setViewMode('manual')
+      if (movedPx >= MIN_DRAG_PX) {
+        setViewMode('manual')
+        pan.moved = true
+      }
       viewport.scrollLeft = pan.scrollLeft - (e.clientX - pan.x)
       viewport.scrollTop = pan.scrollTop - (e.clientY - pan.y)
     }
@@ -444,8 +460,30 @@ export function DrawingCanvas({
       // 中ボタンPanの終了。クリック相当の副作用(選択解除等)は一切発生させない
       // (Pan終了時にleftover click-like side effectを残さない)。
       if (panRef.current) {
+        const pan = panRef.current
         panRef.current = null
         setIsPanning(false)
+
+        // [追加修正: 中ボタンダブルクリックでFit] 実移動の無かったPress(=クリック
+        // 相当)だった場合のみ、ダブルクリック候補として扱う。実際にPanした
+        // (moved=true)場合は、ダブルクリック判定を混乱させないよう候補をリセットする
+        // (要件: ダブルクリック判定によってPan操作自体が壊れないこと)。
+        if (!pan.moved) {
+          const now = Date.now()
+          const last = middleClickRef.current
+          const distFromLast =
+            last != null ? Math.max(Math.abs(e.clientX - last.x), Math.abs(e.clientY - last.y)) : Infinity
+          if (last != null && now - last.time <= DBLCLICK_MS && distFromLast < MIN_DRAG_PX) {
+            // 2回目のクリックが成立 = ダブルクリック。既存のFitボタンと同じロジックを
+            // そのまま再利用する (Fitロジックの二重実装を避ける)。
+            middleClickRef.current = null
+            handleFitClick()
+          } else {
+            middleClickRef.current = { time: now, x: e.clientX, y: e.clientY }
+          }
+        } else {
+          middleClickRef.current = null
+        }
         return
       }
 
