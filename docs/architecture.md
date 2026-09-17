@@ -15,7 +15,7 @@ flowchart LR
     Backend["Backend<br/>FastAPI + Pydantic<br/>(localhost:8000)"]
     SQLite[("SQLite<br/>backend/data/sekisan_navi.db")]
     Share["社内共有フォルダ (read-only)<br/>PNG / PDF /<br/>product_df.csv / estcode_df.csv / detected_df.csv"]
-    MasterExcel["data/master/estimate_master_a.xlsx<br/>(積算コードMaster、起動時にインポート)"]
+    MasterExcel["data/master/estimate_master_a.xlsx<br/>(部品台帳/積算コードMaster、起動時にインポート)"]
 
     Browser -- "HTTP (fetch)" --> Frontend
     Frontend -- "REST API (JSON)" --> Backend
@@ -40,7 +40,7 @@ sequenceDiagram
     participant B as Backend API
     participant D as SQLite
 
-    U->>F: 積算コードMasterで品目選択 → Viewer上へBBoxをドラッグ配置
+    U->>F: 部品台帳で品目選択 → Viewer上へBBoxをドラッグ配置
     F->>B: POST /api/detections
     B->>D: INSERT detections (source_type='manual')
     B->>D: INSERT decision_events (event_type='create')
@@ -119,17 +119,25 @@ src/
                            詳細は`ui-spec.md` 5.5章)
     EstimateDetail/        積算明細 (1 Detection = 1行の根拠追跡。旧EstimateTreeの後継、
                            `ui-spec.md` 5.6章。Issue #6で折りたたみ対応)
-    EstimateMasterPicker/ 積算コードMaster検索
+    EstimateMasterPicker/ 部品台帳検索(旧称: 積算コードMaster検索)
     SystemSettings/       管理者向けシステム設定 (データ参照ルート変更) (Phase 1.5)
     ProductSelector/       製番検索・切替 (Phase 1.5で`ProductViewer`として追加、
                            Phase 1.8で製番検索UIへ役割変更・改名)
     Layout/
-      PaneSplitter.tsx       左右/上下ペイン境界のResize Handle
-      CollapsibleSectionHeading.tsx  盤情報/積算集約/積算明細の折りたたみ見出し
-                                     (共通化。Issue #6)
-      FloatingPanel.tsx      積算集約・積算明細をViewer上へ重ねるfloating panel
-                             シェル (Issue #19 Phase 2、20章)
-      FloatingPanelToggleBar.tsx  floating panelのON/OFFトグルバー (同上)
+      PaneSplitter.tsx       左ペイン(図面一覧)幅のResize Handle。右ペイン・
+                             部品台帳下段常設時代に使っていた右ペイン幅/
+                             Master高さ用のResize Handleは、右ペイン廃止・
+                             floating panel化(Issue #19 Phase 4、22〜23章)に
+                             伴い廃止済み
+      FloatingPanel.tsx      盤情報・積算集約・積算明細・部品台帳の4種共通の
+                             floating panelシェル(Issue #19 Phase 2/4で
+                             積算集約・積算明細→盤情報の順にfloating panel化、
+                             追加修正で部品台帳も統合。20〜23章、Issue #25で
+                             右端カスケード初期配置・縦anchor復元ロジックを
+                             追加。ui-spec.md 1.7章参照)。表示中のみ描画する
+                             シェルで、drag移動・resize・最前面化を自前実装する
+      PanelVisibilityToggles.tsx  4panelの表示ON/OFFトグル(旧
+                             `FloatingPanelToggleBar.tsx`を置き換え。23章参照)
   domain/                Frontend側の純粋な業務ロジック (Backendを介さない計算)
     estimateAggregationReal.ts  積算集約・積算明細を実データから組み立てる
                                  (対象別/総合計の数量集約、BBox所属判定を含む)
@@ -443,17 +451,49 @@ openpyxlを `values_only=False` (セルオブジェクトを取得するモー�
 ### Pan / BBox追加モード / BBox編集の競合回避
 
 - BBoxのボタン要素・リサイズハンドルへの `mousedown` は、`DrawingCanvas` の
-  Pan開始処理およびManual BBox新規作成処理の**手前**で `e.stopPropagation()` する
-  (`DetectionOverlay.tsx::handleCornerMouseDown`)。
+  Manual BBox新規作成処理の**手前**で `e.stopPropagation()` する
+  (`DetectionOverlay.tsx::handleCornerMouseDown`)。**[2026-09 Issue #25で
+  仕様変更]** 中ボタン(`e.button === 1`)の場合はこの`stopPropagation()`より
+  前に処理を抜けるガード(`if (e.button !== 0) return`)を追加した。BBox本体側
+  (`handleBboxMouseDown`)・引出線ラベル側(`LeaderLineOverlay.tsx::
+  handleLabelMouseDown`)も同様に`e.button !== 0`で中ボタンPressを無視する。
+  これにより中ボタンPressはstopPropagationされずDrawingCanvas側のPan
+  ハンドラへ素通しされ、「対象がBBox/盤overlay/引出線ラベルの上であっても
+  中ボタンは常にPan専用として扱う」という要件を満たす(下記「中ボタンPanと
+  他操作の排他制御」参照)。
 - 加えて `DrawingCanvas` 側にも「dragの起点が `button` 要素 (またはその子孫) だった
   場合はPan/BBox作成のいずれも開始しない」というガードを実装しており
   (`(target as HTMLElement).closest('button')` による判定)、リサイズハンドルは
   意図的に「BBoxボタンの兄弟要素の `<button>`」として実装しているため、
   このガードが自然に適用される (無効なHTMLネスト — button内button — を避けつつ、
-  既存のPan除外ロジックをそのまま再利用できる)。
-- 結果として、積算コードMasterで行を選択中 (`bboxAddMode=true`) であっても、
-  既存BBoxのクリック・リサイズハンドルのドラッグ・削除ボタンの操作は
-  「新規Manual BBox作成」と誤認識されない。
+  既存のPan除外ロジックをそのまま再利用できる)。**この`closest('button')`
+  ガードは左ボタン(`e.button === 0`)経路のみに適用され、中ボタンには適用しない**
+  (中ボタンは対象がbuttonであっても常にPanを開始する)。
+- 結果として、部品台帳(旧称: 積算コードMaster)で行を選択中
+  (`bboxAddMode=true`) であっても、既存BBoxのクリック・リサイズハンドルの
+  ドラッグ・削除ボタンの操作は「新規Manual BBox作成」と誤認識されない。
+
+### 中ボタンPanと他操作の排他制御・中ボタンダブルクリックFit (2026-09 Issue #25)
+
+- **Panのトリガーを左ドラッグから中ボタンdragへ変更した** (`DrawingCanvas.tsx::
+  handleMouseDown`)。中ボタンPressは`preventDefault`/`stopPropagation`のうえ
+  即座にPanRefへ記録し即座にPanを開始する。左ドラッグはPanせず、背景クリック
+  (選択解除)判定のためだけに開始位置を記録する(`clickCandidateRef`)。
+- 中ボタンPanは対象を問わない(BBox本体/リサイズハンドル/盤overlay
+  (`ProductPanelOverlay`)/引出線ラベルのいずれの上で押しても、それらの
+  mousedownハンドラは前掲の`e.button !== 0`ガードで無視して素通しするため、
+  選択・追加・移動・リサイズ・ラベルdragは一切発火しない)。
+- **中ボタンダブルクリックでFit**: ブラウザ標準の`dblclick`には依存せず、
+  中ボタンのmousedown/mouseup自体のbutton・時間間隔(400ms以内)・移動量
+  (`MIN_DRAG_PX`未満)で自前判定する。既存の`handleFitClick`(ツールバーの
+  Fitボタンと同じ関数)をそのまま呼び出し、Fitロジックの二重実装はしていない。
+  実際にPan(移動あり)した直後はダブルクリック候補をリセットするため、通常の
+  中ボタンPan自体はダブルクリック判定によって壊れない。
+- テストは`DrawingCanvas.test.tsx`(中ボタンPan/左drag非Pan/ダブルクリック
+  Fit系)、`DetectionOverlay.test.tsx`・`LeaderLineOverlay.test.tsx`(中ボタン
+  mousedownが選択/移動/リサイズ/ラベルdragを発火させないこと)に追加した。
+  詳細は`docs/ui-spec.md`の「Pan操作の中ボタン化・中ボタンダブルクリックFit」
+  節を参照。
 
 ### 選択状態の解除
 
@@ -631,10 +671,10 @@ migration `0005_leader_line.sql`)を追加した。BBox本体の`bbox_x/y/w/h`�
 (None)場合は既存値を保持する。これにより、BBoxのmove/resize保存 (`leader_label_x/y`
 省略) がラベル位置を巻き込んで変更してしまうことを防いでいる。
 
-Frontend側 (`LeaderLineOverlay.tsx`) は、BBox右上角のアンカー
-(`utils/bbox.ts::topRightCorner`) をBBoxの現在値から都度再計算するため、
-BBoxをmove/resizeすると引出線の矢印先端は自動的に追従する。ラベル帯自体の位置は
-別途保持されたユーザー操作結果であり、アンカーの再計算とは独立している。
+Frontend側 (`LeaderLineOverlay.tsx`) は、BBox側接続点(アンカー)を
+BBoxの現在値から都度再計算するため、BBoxをmove/resizeすると引出線の矢印先端は
+自動的に追従する。ラベル帯自体の位置は別途保持されたユーザー操作結果であり、
+アンカーの再計算とは独立している。
 **[2026-09 追加修正]** 当初はmouseup確定後(=`detections`配列の再取得後)にしか
 追従しなかったが、`DrawingViewer.tsx`から渡される`previewBBox`
 (ドラッグ中の未確定rect。前項「previewBBoxのlift up」参照) が現在のdetectionと
@@ -642,6 +682,17 @@ BBoxをmove/resizeすると引出線の矢印先端は自動的に追従する�
 (ドラッグ中)でもリアルタイムに追従するようにした。ラベル帯自体の位置計算
 (`resolveLabel`)は意図的に`previewBBox`を見ず、常に確定済みBBoxのみから
 計算する (ドラッグ中のラベル位置ジッター防止)。
+**[2026-09 Issue #25で仕様変更]** 以前はアンカーが常に`utils/bbox.ts::
+topRightCorner`(BBox右上角)固定だったが、ラベルの代表位置(中央X)がBBox
+中心Xより左にある場合のみ`topLeftCorner`(BBox左上角)へ切り替える
+`resolveAnchor(rect, label, labelWidthFraction)`へ変更した。それ以外
+(等しい場合を含む)は従来どおり`topRightCorner`のまま。判定に使う`rect`/
+`label`はいずれも上記のリアルタイム追従(`previewBBox`/`dragPreview`)を
+反映済みの値のため、BBox move/resize中・ラベルdrag中でも、この接続点の
+切り替え自体がmouseupを待たずにリアルタイムに反映される。ラベル自体の
+初期配置・BBox追従の計算(`computeInitialLabelPosition`/`shiftLabelWithBBox`/
+`resolveLabel`)は本変更の対象外で、常に`topRightCorner`基準のまま。
+詳細は`docs/ui-spec.md`の「BBox側接続点(anchor)の決定」節を参照。
 
 ### 引出線の形状 (追加修正): 1本のpolyline + SVG marker
 
@@ -1033,7 +1084,11 @@ floating panel自体の見た目もglassmorphism(半透明+ぼかし)へ変更�
   Viewer右下寄りに配置し、いずれも`DrawingCanvas`自身のtoolbar(図面名+Zoom/
   Fit/BBox削除)の下(`top: 3rem`)をクリアする(`components/Layout/FloatingPanel.css`)。
   実ブラウザ確認(1600px/1280px/1024px幅)では3panelの既定配置が重ならないことを
-  確認した(狭いウィンドウでの自動衝突回避は実装していない)。
+  確認した(狭いウィンドウでの自動衝突回避は実装していない)。**[2026-09 Issue #25
+  で仕様変更]** この3panel対角配置(+部品台帳追加後の4panel対角配置、27章参照)は、
+  Issue #25で「4panelとも右端に寄せ、表示順に応じて縦にオフセットして積み重ねる」
+  右端カスケード配置へ置き換えられており、現行mainにはもはや当てはまらない
+  (詳細は`docs/ui-spec.md`の「既定配置(初期表示のみ)」節を参照)。
 - **glassmorphism**: `.floating-panel`のbackgroundを`rgba(255, 255, 255, 0.6)`+
   `backdrop-filter: blur(14px) saturate(160%)`(`-webkit-backdrop-filter`も
   併記)へ変更した。`@supports not ((backdrop-filter: blur(1px)) or

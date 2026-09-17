@@ -15,6 +15,12 @@ AI coding」対応の記録。
 - 3回目の作業(Issue番号なし、ユーザーからの直接指示): 上記merge後の最新main。
   プログラムの知識が無い方でも読める、ユーザー向けの操作ガイド
   `docs/user-guide.md`を新規作成した(12章)。
+- 4回目の作業(Issue #28、2回のPhaseに分割): Issue #19/#23/#25(右ペイン廃止・
+  4 floating panel化・部品台帳再設計・中ボタンPan/ダブルクリックFit・LeaderLine
+  接続点ルール等)を経て、README/user-guide/ui-spec/architectureがこれらの
+  変更を反映しきれていなかったため、Phase 1で棚卸し・Phase 2で実装事実に基づく
+  更新とscreenshot-main.png/screenshot-estimate-confirm.pngの再撮影を行った
+  (14章)。
 
 ## 1. 既存docsの棚卸し(作業開始時点)
 
@@ -442,3 +448,130 @@ PR #14のレビュー指示(「4-1/4-3/4-4/4-5/4-6/4-9/4-11の該当節へ、操
   崩れていないことを目視確認した。
 - README.mdは今回変更していない(既存のuser-guide.mdへの導線は前回追加済みで
   そのまま利用可能なため)。
+
+## 14. 作業者評価前のドキュメント更新 (Issue #28、4回目の作業)
+
+Issue #19(4 floating panel化・部品台帳再設計)・Issue #23(検証用DB切替)・
+Issue #25(floating panel右端カスケード配置・中ボタンPan/ダブルクリックFit・
+LeaderLine接続点ルール)を経て、右ペイン廃止後のUI/操作方法が大きく変わって
+いたにもかかわらず、README・user-guide.md・ui-spec.md・architecture.mdの
+一部がこれらを反映しきれていなかった。作業者評価の前に、実装事実(最新main)を
+根拠として食い違いを解消する。Phase 1(棚卸しのみ)・Phase 2(実際の更新)の
+2段階で実施した。branch: `issue-28/docs-update-phase2`。
+
+### Phase 1: 棚卸し (コード・Docs変更なし)
+
+対象6ファイル(README.md/user-guide.md/ui-spec.md/architecture.md/
+configuration.md/本ファイル)+`docs/assets`を、最新main
+(`73f196cbadda1974ab7f377dcdc7bd52eb7afcc3`、Issue #25 PR #27 squash merge
+直後)の実装コードと突き合わせて確認した。結果はIssue #28へコメントとして
+報告した。要点:
+
+- `docs/user-guide.md`/`ui-spec.md`/`architecture.md`/`configuration.md`は
+  Issue #19本体(`eec51ff`)・Issue #23 Phase 2(`7800791`)の時点では実際に
+  更新されていた。一方、**Issue #25(`28dd7e2`・`73f196c`)はdocsを一切
+  更新していなかった**ため、主な食い違いはIssue #25分の未反映(中ボタンPan/
+  ダブルクリックFit・floating panel右端カスケード配置・LeaderLine接続点
+  ルール)と、Issue #19時点から一部箇所に残っていた古い表現(右ペイン前提・
+  「積算コードMaster」旧称・floating panel対角配置の記述)だった。
+- `docs/configuration.md`は現行実装と完全に一致しており、変更不要と判断した。
+- `docs/assets/screenshot-main.png`を実際に確認し、右ペイン3段固定+
+  「積算コードMaster」下段常設という**旧UIそのもの**であることを視覚的に
+  確認した(2026-09-04撮影、Issue #19の floating panel化より前)。
+
+### Phase 2: 実装事実に基づく更新
+
+Phase 1棚卸し結果・Issue #28からのPhase 2指示(反映必須事項の一覧)に基づき、
+以下を更新した。`docs/configuration.md`はPhase 1判断どおり変更していない。
+コード・DBロジックの変更は行っていない(スクリーンショット撮影のための
+一時的なDB操作は、9章と同じ「撮影前に完全復元する」方式で行い、復元後に
+実データが撮影前と一致することを確認した。下記「screenshot再撮影」節参照)。
+
+#### 更新したファイル
+
+| ファイル | 更新内容 |
+|---|---|
+| `README.md` | 「画面の見方」表を右ペイン前提から4 floating panel(既定は右端カスケード配置)へ全面差し替え。「現在実装済みの主要機能」にfloating panel機構・中ボタンPan/ダブルクリックFit・操作履歴/確定履歴閲覧・Help PDFを追加。「重要な前提・現在の制約」から実装済みの判断履歴/確定履歴閲覧UIを「未実装」リストから除外(認証・actor記録・CIは未実装のまま維持)。テスト件数をBackend 223/Frontend 659(31ファイル)へ更新。「基本操作の流れ」の右ペイン表現を修正。積算コードMaster関連の記述に部品台帳(現在の表示名)を併記。 |
+| `docs/user-guide.md` | 4章の操作ステップを、Issue #28指示の推奨フロー(製番を開く→図面を選ぶ→Zoom/Fit/Pan→部品台帳→BBox操作→Undo/Redo→**floating panel操作(新設)**→盤情報/積算集約/積算明細確認→積算確定→操作履歴/確定履歴→Help PDF)に沿って11ステップへ再構成。4-3節のPan説明を左drag→中ボタンdragへ修正しダブルクリックFitを追記。3章のfloating panel説明から「左上寄り」等の古い個別配置記述を削除し、4panel共通の右端カスケード配置+4-7節への誘導へ統一。システム設定の説明に透過度スライダー(非管理者も使用可)を追記。BBox配置説明にLeaderLine接続点ルールを一言追記。FAQ・用語集にPan関連の項目を追加。screenshot-main.png差し替えを反映。 |
+| `docs/ui-spec.md` | 冒頭のPhase一覧にIssue #19/#25を追記。「既定配置」節を対角分散→右端カスケード配置へ全面差し替え、縦anchor復元ロジックの説明を追加。「ドラッグ移動・リサイズ」節の対象panel一覧に部品台帳を追加。Zoom/Fit節に中ボタンPan・ダブルクリックFitの新規節を追加。Manual BBox追加節のPan関連記述を中ボタン化に合わせて修正。LeaderLine矢印head節・BBox編集追従節のanchor説明を「常に右上」から条件分岐(`topLeftCorner`/`topRightCorner`)へ修正し、新規に「BBox側接続点(anchor)の決定」節を追加。「積算コードMasterで...」等の残存旧称箇所を修正。 |
+| `docs/architecture.md` | ディレクトリ構成のfloating panel関連説明(`FloatingPanel.tsx`の対象範囲、`FloatingPanelToggleBar.tsx`→`PanelVisibilityToggles.tsx`)を現行へ修正。「Pan / BBox追加モード / BBox編集の競合回避」節に中ボタンガードの説明を追加、新規に「中ボタンPanと他操作の排他制御・中ボタンダブルクリックFit」節を追加。「引出線ラベル位置の独立管理」節のanchor説明を条件分岐へ修正。旧・floating panel対角配置節(26章相当)へIssue #25による置き換えの注記を追加。「積算コードMasterで行を選択中」等の残存旧称箇所を修正。 |
+
+新規6件のうち、上記いずれも既存の「historical amendment(過去の記述は残し、
+`[2026-09 Issue #25で仕様変更]`等の注記を追記する)」方式を踏襲しており、
+過去の実装当時の記述そのものを書き換えて履歴を消すことはしていない
+(architecture.mdの旧26章の対角配置節も、記述は残したまま「現行mainには
+もはや当てはまらない」という注記のみを追加した)。
+
+#### screenshot再撮影
+
+`screenshot-main.png`・`screenshot-estimate-confirm.png`の2件を、現行UI
+(floating panel化後)で再撮影して差し替えた。9章の「DEMO0001撮影専用データ」
+方式がfloating panel化後もそのまま再利用できることを確認したうえで踏襲した。
+
+- 撮影前に、`backend/data/sekisan_navi.db`の`system_settings.data_source_root`・
+  `project_info`(id=1)・`drawing_pages`/`detections`/`decision_events`/
+  `estimate_confirmations`/`estimate_confirmation_items`の現状値・最大IDを
+  スクリプトでバックアップした。
+- `data_source_root`を、新たに用意した一時ディレクトリ(製番`DEMO0001`、
+  Pillow生成のプレースホルダ図面`1.png`+架空の盤2件分の`product_df.csv`/
+  `estcode_df.csv`(いずれもcp932エンコード、実データと同じ列構成)、
+  ページ存在確認用の空`1.pdf`)へ一時的に変更した。
+- `project_info`を安全な値(整理番号`DEMO`、製番`DEMO0001`、盤名称
+  「サンプル盤(デモ用データ)」)へ一時変更した。
+- 既存スキーマのまま`drawing_pages`へ製番`DEMO0001`用の1行を追加し、
+  既存のMaster Item(コード`11001`/`11003`、既存の一般カタログコード)を
+  参照するManual BBoxを2件、事前データとして追加した(盤情報・積算集約・
+  積算明細・部品台帳の4 floating panelすべてに内容がある状態を作るため)。
+- 実際にFrontendを起動し(検証専用に一時ポート5180で新規起動。既存の
+  5173番プロセスは触れていない)、Playwrightで実際の操作(floating panelの
+  ドラッグ移動による見やすい配置、「積算確定する」ボタンのクリック→
+  確認ダイアログの許可→完了メッセージの表示)を行いながら撮影した
+  (画像生成による代替はしていない)。
+  - 補足: `frontend/.env.local`の`VITE_BACKEND_URL`が、過去のラウンドで
+    使われた検証用ポート(8010)を指したまま残っていたため、本来の既定
+    ポート(8000、`backend/data/sekisan_navi.db`を使う通常のBackend)へ
+    向け直した(このファイルはGit管理対象外の個人環境設定であり、リポジトリ
+    には含まれない)。
+- 撮影後、追加した`detections`(2件)・`drawing_pages`(1件)・
+  `estimate_confirmations`(撮影中に1件作成された)をすべて削除し、
+  `project_info`・`system_settings.data_source_root`を撮影前の値へ
+  スクリプトで復元した。復元後、各テーブルの最大ID・`project_info`全カラム・
+  `data_source_root`が撮影前のバックアップと完全に一致することを確認した
+  (`ALL_OK: true`)。`/api/project`・`/api/settings/data-source`を直接叩き、
+  復元後のBackend応答が実データ(製番`A1GV2421`、盤名称等)に戻っていることも
+  確認した。通常運用データ(`decision_events`含む)・アプリのソースコード
+  (`db/seed.py`含む)はいずれも変更していない。
+
+##### 撮影データの安全性確認
+
+- 使用した製番(`DEMO0001`)・盤名称(「サンプル盤A」「サンプル盤B」)・
+  図面画像(Pillow生成のプレースホルダ)・積算コード(`11001`/`11003`、
+  既存の一般的な電気設備部材カタログコード)は、9章・13章で確認済みの
+  安全なサンプルデータと同一の枠組みであり、実在企業名・実製番・実図面・
+  個人情報は一切含まれない。
+- 新規に差し替えた画像2件を目視確認し、実在企業名・実製番・秘密情報が
+  写り込んでいないことを確認した。
+
+##### 未更新のスクリーンショット
+
+`screenshot-viewer-toolbar.png`/`screenshot-bbox-add-and-place.png`/
+`screenshot-bbox-selected-handles.png`/`screenshot-panel-overlay.png`/
+`screenshot-product-search.png`の5件は、Phase 1棚卸しの結果、floating panel
+化の影響を受けない領域のクローズアップであり現行UIと矛盾しないと判断したため、
+今回は差し替えていない(画像を増やしすぎない方針、Issue #28指示)。
+
+### 検証
+
+- Frontend/Backendのソースコードは変更していないため、テストの再実行は
+  必須ではない(Phase 1棚卸し時点でBackend 223 passed / Frontend 659 passed
+  (31 files)を最新mainで再確認済み。README.mdへの記載もこの値を使用)。
+- 更新した4ファイル(README.md/user-guide.md/ui-spec.md/architecture.md)を
+  対象に、「右ペイン」「積算コードMaster」(旧称注記を伴わない単独表記)・
+  「左ドラッグ」+「Pan」の組み合わせ・「未実装」等のキーワードをgrepし、
+  historical amendment・旧称注記・現在は未実装のまま正しい項目(認証・
+  actor記録・CI)以外に残っていないことを確認した。
+- Markdownの画像参照(`docs/assets/screenshot-*.png`)がすべて実在する
+  ファイルを指すことを確認した(リンク切れなし)。
+- 内部アンカーリンク(`#4-7-floating-panel...`等)は、GitHubの見出し
+  スラッグ化規則(小文字化・句読点/括弧の除去・空白のハイフン化)に沿う
+  形式で記述した。

@@ -17,15 +17,24 @@ Webシステムのプロトタイプ(PoC)。「AIによる完全自動積算シ�
 
 ### 画面の見方
 
+**[2026-09 Issue #19/#25で仕様変更]** 右ペインは廃止した。盤情報・積算集約・
+積算明細・部品台帳の4つは、いずれも図面Viewer上に重ねて表示する
+**floating panel**(個別にON/OFF・drag移動・resize・最前面化・透過度調整が可能。
+既定では右端に寄せてカスケード状に積み重ねて表示し、ブラウザ幅変更にも追従する)
+として実装されている。
+
 | 領域 | 内容 |
 |---|---|
-| ヘッダー(最上部) | アプリ名・案件情報(整理番号/製番/盤名称)・解析状態・製番検索/システム設定 |
+| ヘッダー(最上部) | アプリ名・案件情報(整理番号/製番/盤名称)・解析状態・製番検索/積算資料(Help PDF)/システム設定 |
 | 図面一覧(左) | 製番配下のページをサムネイル表示。種類別にグループ化 |
-| 図面Viewer(中央) | 選択中ページの拡大表示。盤領域・AI検出結果・Manual BBox・引出線を重畳表示 |
-| 積算コードMaster(左下) | 品目検索・カテゴリタブ。行を選んでViewer上へドラッグするとBBoxとして配置される |
-| 盤情報(右上) | 選択中製番の盤ごとの寸法・型式一覧 |
-| 積算集約(右中) | 対象(総合計/製品全体/個別盤/要確認)ごとの数量・金額集計、積算確定ボタン |
-| 積算明細(右下) | 積算コードが紐づいたBBox1件ずつの根拠一覧(どの図面のどの箇所か) |
+| 図面Viewer(中央) | 選択中ページの拡大表示。盤領域・AI検出結果・Manual BBox・引出線を重畳表示。Zoom/Fitボタン・マウスホイールに加え、**中ボタン(マウスホイール押し込み)+dragでPan**、**中ボタンダブルクリックでFit**ができる(左dragはPanせず、BBox/盤/ラベルの選択・編集に使う) |
+| 盤情報(floating panel) | 選択中製番の盤ごとの寸法・型式一覧 |
+| 積算集約(floating panel) | 対象(総合計/製品全体/個別盤/要確認)ごとの数量・金額集計、積算確定ボタン、確定履歴の閲覧 |
+| 積算明細(floating panel) | 積算コードが紐づいたBBox1件ずつの根拠一覧(どの図面のどの箇所か) |
+| 部品台帳(floating panel、旧称: 積算コードMaster) | 品名selectでカテゴリを切替、コード/型式/定格の3列。行を選んでViewer上をドラッグするとBBoxとして配置される |
+
+floating panelの表示ON/OFFは、Viewer右上のツールバー(元に戻す/やり直すボタンの
+並び)右端にある表示切替ボタン群から行う。
 
 ## 解決する課題
 
@@ -41,22 +50,35 @@ Sekisan Naviは、これらを画面上で完結させ、かつ将来の段階�
 
 ## 現在実装済みの主要機能
 
-- **実図面Viewer**: 製番配下の実PNG/PDFをブラウザ上でzoom/pan/Fit表示し、
-  盤領域・AI検出結果・Manual BBoxを重畳表示する。
+- **実図面Viewer**: 製番配下の実PNG/PDFをブラウザ上でzoom/Fit表示し、
+  盤領域・AI検出結果・Manual BBoxを重畳表示する。Pan(表示位置の移動)は
+  中ボタン(マウスホイール押し込み)+dragで行い、中ボタンダブルクリックで
+  Fit(全体表示)へ戻せる。左dragはPanせず、BBox/盤/引出線ラベルの選択・
+  編集専用として使う。
 - **図面一覧**: 製番配下のページをサムネイル一覧表示し、種類別にグループ化する。
-- **Manual BBox追加・編集**: 積算コードMasterから品目を選び、図面上へBBoxを
-  ドラッグ配置。作成後の移動・リサイズ・削除・Undo/Redoに対応する。
-- **積算コードMaster検索**: 実Excel(`estimate_master_a.xlsx`)を正式参照元とした
-  品目検索・カテゴリタブ切替。
+- **floating panel(盤情報/積算集約/積算明細/部品台帳)**: 4つとも図面Viewer上へ
+  重ねて表示する独立したパネルとして、個別にON/OFF切替・drag移動・resize・
+  最前面化・背景透過度調整(システム設定から一括調整)ができる。既定では
+  右端へ寄せてカスケード状に積み重ねて表示し、ブラウザ幅・高さの変更にも
+  位置関係を保ったまま追従する。
+- **Manual BBox追加・編集**: 部品台帳(旧称: 積算コードMaster)から品目を選び、
+  図面上へBBoxをドラッグ配置。作成後の移動・リサイズ・削除・Undo/Redoに対応する。
+  積算コードに紐づいたBBoxは、通常時はCADライクな引出線(ラベル+矢印)で表示し、
+  ラベルの中心XがBBox中心Xより左にある場合はBBox左上、それ以外はBBox右上を
+  接続点として自動的に切り替える。
+- **部品台帳検索**: 実Excel(`estimate_master_a.xlsx`)を正式参照元とした
+  品名select+コード/型式/定格でのカテゴリ切替。
 - **盤情報**: 実データ(`estcode_df.csv`)由来の盤ごとの寸法・型式等を表示する。
 - **積算集約・積算明細**: 対象(総合計/製品全体/個別盤/要確認)ごとに数量・金額を
   集約表示し、明細1件ずつの根拠(どの図面のどのBBoxか)を追跡できる。
-- **積算確定snapshot**: 製番単位で、その時点の積算結果一式をBackend側で
-  組み立ててDBへ確定保存する(Master価格が後から変わっても確定内容自体は
-  変化しない)。
-- **判断・修正データの最小記録**: Manual BBoxのcreate/delete/move/resizeを
-  `decision_events`として自動的に記録する(通常の操作から自然に蓄積、
-  読み出しUIは未実装)。
+- **積算確定snapshot・確定履歴の閲覧**: 製番単位で、その時点の積算結果一式を
+  Backend側で組み立ててDBへ確定保存する(Master価格が後から変わっても確定内容
+  自体は変化しない)。過去に確定した記録は一覧・詳細で閲覧できる(編集は不可)。
+- **判断・修正データの記録・閲覧**: Manual BBoxのcreate/delete/move/resizeを
+  `decision_events`として自動的に記録し、行った順に一覧表示する操作履歴閲覧UIを
+  備える(編集・取り消しはできない、確認専用)。
+- **積算資料(Help PDF)の参照**: ヘッダーの「積算資料」ボタンから、部品台帳とは
+  別の参考資料PDFを画面遷移なしに閲覧できる。
 - **製番検索・切替、データ参照ルートの管理者設定**。
 
 実装状況の詳細な確定/暫定/未確定の区分は [`docs/implementation-plan.md`](docs/implementation-plan.md)
@@ -65,12 +87,15 @@ Sekisan Naviは、これらを画面上で完結させ、かつ将来の段階�
 ## 基本操作の流れ
 
 1. 画面上部のヘッダーで現在の案件情報を確認し、「製番を開く」から実製番を検索・選択する。
-2. 左ペイン「図面一覧」でページを選び、中央Viewerで図面・盤領域・検出結果を確認する。
-3. 積算コードMaster(画面下部)で品目を選び、Viewer上へドラッグしてBBoxを配置する
+2. 左ペイン「図面一覧」でページを選び、中央Viewerで図面・盤領域・検出結果を確認する
+   (中ボタンdragでPan、中ボタンダブルクリックまたはFitボタンで全体表示に戻せる)。
+3. floating panelの「部品台帳」で品目を選び、Viewer上をドラッグしてBBoxを配置する
    (積算コードとして紐付け)。
-4. 右ペイン「積算集約」で対象ごとの数量・金額を確認し、「積算明細」で個々の
-   根拠(BBox)を追跡する。
-5. 内容を確認できたら「積算確定する」で、その時点の結果をsnapshotとして確定保存する。
+4. floating panelの「積算集約」で対象ごとの数量・金額を確認し、「積算明細」で個々の
+   根拠(BBox)を追跡する。floating panelは邪魔な位置にあれば見出しをドラッグして
+   移動・大きさ変更ができる。
+5. 内容を確認できたら「積算確定する」で、その時点の結果をsnapshotとして確定保存する
+   (過去の確定記録・BBox操作履歴はそれぞれ専用の閲覧UIから振り返れる)。
 
 より詳しい操作方法(初めての方向け、専門知識不要)は
 [`docs/user-guide.md`](docs/user-guide.md)、詳細な画面仕様(開発者向け)は
@@ -132,18 +157,19 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 起動時に自動でSQLiteスキーマのマイグレーションとダミーデータ投入、および
-積算コードMaster (`data/master/estimate_master_a.xlsx`) のインポートが行われる
-(`backend/data/sekisan_navi.db` が生成される)。API仕様は起動後
+部品台帳(積算コードMaster、`data/master/estimate_master_a.xlsx`)のインポートが
+行われる(`backend/data/sekisan_navi.db` が生成される)。API仕様は起動後
 `http://localhost:8000/docs` (Swagger UI) で確認できる(詳細は
 [`docs/api-reference.md`](docs/api-reference.md))。
 
 **`data/master/estimate_master_a.xlsx` は社内業務データのため、このリポジトリには
 含まれていない (`.gitignore`の`/data/`)。** 各自の環境で `SekisanNavi/data/master/`
 配下に実ファイルを配置してから起動すること (配置パスは`backend/app/config.py`の
-`MASTER_EXCEL_PATH`参照。Sheet2を読む)。ファイルが無い場合、積算コードMasterの
-インポートのみエラーになるが、アプリ自体は起動する。
+`MASTER_EXCEL_PATH`参照。Sheet2を読む)。ファイルが無い場合、部品台帳(積算コード
+Master)のインポートのみエラーになるが、アプリ自体は起動する。
 
-積算コードMasterは `data/master/estimate_master_a.xlsx` (Sheet2) を正式な参照元と
+部品台帳(画面上の表示名。Backend/データソース上は積算コードMasterと呼ぶ)は
+`data/master/estimate_master_a.xlsx` (Sheet2) を正式な参照元と
 しており、`estimate_master_items` テーブルへは `code` を一意キーとした
 UPSERTで投入・再取込される。再取込を手動で行いたい場合は
 `python -m app.db.master_importer` を実行する (Manual BBoxの `master_item_id` 参照は
@@ -227,7 +253,7 @@ cd frontend && npm run lint
 cd frontend && npm run build   # 型チェックを兼ねたビルド確認
 ```
 
-2026-09時点のmainで、Backend 175件・Frontend 602件(28ファイル)のテストが
+2026-09時点のmainで、Backend 223件・Frontend 659件(31ファイル)のテストが
 全件成功することを確認済み。
 
 ## 重要な前提・現在の制約
@@ -240,8 +266,9 @@ cd frontend && npm run build   # 型チェックを兼ねたビルド確認
   直接積算コードを決定する実装は行わない (`backend/app/domain/rule_engine.py`)。
 - データ参照ルートの変更・接続確認には管理者パスワード (`SEKISAN_NAVI_ADMIN_PASSWORD`) が
   必須で、その検証は必ずBackend側で行う。通常の製番・図面参照には不要。
-- 認証・actor記録・判断履歴の読み出しUI・確定snapshot履歴閲覧UI・CIはいずれも
-  未実装。詳細は [`docs/known-limitations.md`](docs/known-limitations.md) を参照。
+- 認証・actor記録・CIはいずれも未実装(判断履歴の読み出しUI・確定snapshot履歴
+  閲覧UIは実装済み、上記「現在実装済みの主要機能」参照)。詳細は
+  [`docs/known-limitations.md`](docs/known-limitations.md) を参照。
 
 ## Product Vision
 
