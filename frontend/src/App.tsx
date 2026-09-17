@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import {
   ApiError,
   createManualDetection,
@@ -65,6 +66,7 @@ import { PaneSplitter } from './components/Layout/PaneSplitter'
 import { FloatingPanel, type FloatingPanelRect } from './components/Layout/FloatingPanel'
 import { PanelVisibilityToggles } from './components/Layout/PanelVisibilityToggles'
 import { usePaneWidth } from './hooks/usePaneWidth'
+import { useFloatingPanelBgAlpha } from './hooks/useFloatingPanelBgAlpha'
 import './App.css'
 
 const HIGHLIGHT_DURATION_MS = 1800
@@ -252,6 +254,12 @@ function App() {
     LEFT_PANE_MIN,
     LEFT_PANE_MAX_VW_RATIO,
   )
+  // [PR #22追加仕様: floating panel透過度を設定画面から調整可能にする]
+  // 盤情報/積算集約/積算明細/部品台帳の4panel共通の背景不透明度。
+  // SystemSettingsのスライダーで変更し、CSS custom property
+  // (`--floating-panel-bg-alpha`、直下`<div className="app-layout">`の
+  // inline styleとして設定。下記JSX参照)経由で4panelへ一元反映する。
+  const [floatingPanelBgAlpha, setFloatingPanelBgAlpha] = useFloatingPanelBgAlpha()
   // Issue #19 Phase 2: 積算集約・積算明細をViewer上のfloating panelとして個別に
   // 表示/非表示できるようにする。初期値は「既存利用性を損なわない設定」として
   // 両方表示(true)にする(従来の右ペイン常設と同じ見え方から始まる)。
@@ -1158,7 +1166,14 @@ function App() {
   }, [isSettingsOpen, isProductSelectorOpen, isHelpOpen])
 
   return (
-    <div className="app-layout">
+    <div
+      className="app-layout"
+      // [PR #22追加仕様: floating panel透過度] CSS custom propertyとして
+      // ここ(全floating panelの共通祖先)へ設定することで、
+      // `FloatingPanel.css`側の`background: rgba(255, 255, 255,
+      // var(--floating-panel-bg-alpha, 0.6))`に4panel共通で一元反映される。
+      style={{ '--floating-panel-bg-alpha': floatingPanelBgAlpha } as CSSProperties}
+    >
       <ProjectHeader
         project={project}
         loading={loading}
@@ -1353,7 +1368,13 @@ function App() {
         </div>
       </div>
 
-      {isSettingsOpen && <SystemSettings onClose={() => setSettingsOpen(false)} />}
+      {isSettingsOpen && (
+        <SystemSettings
+          onClose={() => setSettingsOpen(false)}
+          floatingPanelBgAlpha={floatingPanelBgAlpha}
+          onFloatingPanelBgAlphaChange={setFloatingPanelBgAlpha}
+        />
+      )}
       {isProductSelectorOpen && (
         <ProductSelector
           currentProductNo={activeProductNo}

@@ -49,11 +49,42 @@
   color: #374151;
 }
 
-.system-settings__field input {
+.system-settings__field input[type='text'],
+.system-settings__field input[type='password'] {
   padding: 0.45rem 0.55rem;
   border: 1px solid #d1d5db;
   border-radius: 4px;
   font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
+}
+
+/* [PR #22追加仕様: floating panel透過度] データ参照ルート等の管理者設定と
+   視覚的に区別するためのセクション見出し・区切り線。 */
+.system-settings__section {
+  margin-bottom: 0.75rem;
+}
+
+.system-settings__section-heading {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #6b7280;
+  margin: 0 0 0.5rem;
+}
+
+.system-settings__divider {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 0.75rem 0;
+}
+
+.system-settings__value-badge {
+  margin-left: 0.5rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.system-settings__field input[type='range'] {
+  width: 100%;
+  accent-color: #2563eb; /* 既存の選択色(コバルトブルー)と統一 */
 }
 
 .system-settings__badge {

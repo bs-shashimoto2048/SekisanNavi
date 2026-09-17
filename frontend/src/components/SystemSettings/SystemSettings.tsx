@@ -1,9 +1,18 @@
 import { useEffect, useState } from 'react'
 import { ApiError, fetchDataSource, testDataSourceConnection, updateDataSource } from '../../api/client'
+import {
+  FLOATING_PANEL_BG_ALPHA_DEFAULT,
+  FLOATING_PANEL_BG_ALPHA_MAX,
+  FLOATING_PANEL_BG_ALPHA_MIN,
+} from '../../hooks/useFloatingPanelBgAlpha'
 import './SystemSettings.css'
 
 interface Props {
   onClose: () => void
+  /** floating panel(盤情報/積算集約/積算明細/部品台帳)共通の背景不透明度
+   * (PR #22追加仕様)。0.35〜0.90の範囲。 */
+  floatingPanelBgAlpha: number
+  onFloatingPanelBgAlphaChange: (value: number) => void
 }
 
 /**
@@ -13,8 +22,18 @@ interface Props {
  * 設定変更・接続確認はいずれも管理者パスワードが必須であり、その検証は
  * 必ずBackend側 (PUT /api/settings/data-source, POST .../test) で行われる。
  * このコンポーネントはパスワードの正誤を自分で判定しない。
+ *
+ * [PR #22追加仕様: floating panel透過度] 上記とは別に、floating panel
+ * (盤情報/積算集約/積算明細/部品台帳)共通の背景不透明度スライダーもここへ
+ * 追加した。こちらはユーザー個人の表示上の好みであり、Backend側の
+ * データ参照設定とは無関係のため、管理者パスワードを必要としない
+ * (`hooks/useFloatingPanelBgAlpha.ts`がlocalStorageのみで永続化する)。
  */
-export function SystemSettings({ onClose }: Props) {
+export function SystemSettings({
+  onClose,
+  floatingPanelBgAlpha,
+  onFloatingPanelBgAlphaChange,
+}: Props) {
   const [root, setRoot] = useState('')
   const [exists, setExists] = useState<boolean | null>(null)
   const [adminPassword, setAdminPassword] = useState('')
@@ -69,6 +88,38 @@ export function SystemSettings({ onClose }: Props) {
             ×
           </button>
         </div>
+
+        {/* [PR #22追加仕様: floating panel透過度] データ参照ルート設定(管理者
+            パスワード必須)とは独立した、ユーザー個人の表示設定。読込中判定
+            (`loading`、データ参照ルートの取得待ち)の外側に置き、常に操作可能
+            にする。 */}
+        <div className="system-settings__section">
+          <h3 className="system-settings__section-heading">表示設定</h3>
+          <label className="system-settings__field">
+            <span>
+              floating panel透過度
+              <span className="system-settings__value-badge">
+                {Math.round(floatingPanelBgAlpha * 100)}%
+              </span>
+            </span>
+            <input
+              type="range"
+              min={FLOATING_PANEL_BG_ALPHA_MIN}
+              max={FLOATING_PANEL_BG_ALPHA_MAX}
+              step={0.01}
+              value={floatingPanelBgAlpha}
+              onChange={(e) => onFloatingPanelBgAlphaChange(Number(e.target.value))}
+              aria-label="floating panel透過度"
+            />
+          </label>
+          <p className="system-settings__note">
+            盤情報・積算集約・積算明細・部品台帳の4panel共通の背景透過度です。値を下げるほど
+            図面が透けて見えます(枠線・文字・表の配色は変わりません)。既定値は
+            {Math.round(FLOATING_PANEL_BG_ALPHA_DEFAULT * 100)}%です。
+          </p>
+        </div>
+
+        <hr className="system-settings__divider" />
 
         {loading ? (
           <p>読込中...</p>

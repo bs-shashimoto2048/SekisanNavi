@@ -1144,6 +1144,86 @@ describe('App: 左ペインのリサイズ・右ペイン廃止 (UIレイアウ�
   })
 })
 
+describe('App: floating panel透過度をSystemSettingsから調整可能にする (PR #22追加仕様)', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+  afterEach(() => {
+    window.localStorage.clear()
+  })
+
+  async function renderApp() {
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
+  }
+
+  function appLayoutAlpha(): string {
+    const layout = document.querySelector('.app-layout') as HTMLElement
+    return layout.style.getPropertyValue('--floating-panel-bg-alpha')
+  }
+
+  it('defaults the slider to 60% (rgba(255,255,255,0.6)相当) and reflects it as a CSS custom property on .app-layout', async () => {
+    await renderApp()
+    fireEvent.click(screen.getByRole('button', { name: 'システム設定' }))
+
+    const slider = screen.getByRole('slider', { name: 'floating panel透過度' }) as HTMLInputElement
+    expect(slider.value).toBe('0.6')
+    expect(screen.getByText('60%')).toBeInTheDocument()
+    expect(appLayoutAlpha()).toBe('0.6')
+  })
+
+  it('updates the CSS custom property immediately when the slider changes, without applying opacity to the panel shell', async () => {
+    await renderApp()
+    fireEvent.click(screen.getByRole('button', { name: 'システム設定' }))
+
+    const slider = screen.getByRole('slider', { name: 'floating panel透過度' })
+    fireEvent.change(slider, { target: { value: '0.35' } })
+
+    expect(appLayoutAlpha()).toBe('0.35')
+    expect(screen.getByText('35%')).toBeInTheDocument()
+
+    // panel全体へopacityを掛けていないこと (指示: 背景alphaのみを変える)。
+    const panelInfoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    expect(getComputedStyle(panelInfoFloat).opacity).toBe('1')
+  })
+
+  it('persists the slider value to localStorage when changed', async () => {
+    await renderApp()
+    fireEvent.click(screen.getByRole('button', { name: 'システム設定' }))
+    fireEvent.change(screen.getByRole('slider', { name: 'floating panel透過度' }), {
+      target: { value: '0.8' },
+    })
+    expect(window.localStorage.getItem('sekisan-navi:floating-panel-bg-alpha')).toBe('0.8')
+  })
+
+  it('restores a previously saved value from localStorage on mount (reload後の復元に相当。usePaneWidth.tsの既存テストと同じ考え方)', async () => {
+    window.localStorage.setItem('sekisan-navi:floating-panel-bg-alpha', '0.8')
+    await renderApp()
+    fireEvent.click(screen.getByRole('button', { name: 'システム設定' }))
+    const slider = screen.getByRole('slider', { name: 'floating panel透過度' }) as HTMLInputElement
+    expect(slider.value).toBe('0.8')
+    expect(appLayoutAlpha()).toBe('0.8')
+  })
+
+  it('falls back to the default (60%) when a stored value is not a number', async () => {
+    window.localStorage.setItem('sekisan-navi:floating-panel-bg-alpha', 'garbage')
+    await renderApp()
+    fireEvent.click(screen.getByRole('button', { name: 'システム設定' }))
+    expect((screen.getByRole('slider', { name: 'floating panel透過度' }) as HTMLInputElement).value).toBe(
+      '0.6',
+    )
+  })
+
+  it('falls back to the default (60%) when a stored value is out of the allowed range', async () => {
+    window.localStorage.setItem('sekisan-navi:floating-panel-bg-alpha', '5')
+    await renderApp()
+    fireEvent.click(screen.getByRole('button', { name: 'システム設定' }))
+    expect((screen.getByRole('slider', { name: 'floating panel透過度' }) as HTMLInputElement).value).toBe(
+      '0.6',
+    )
+  })
+})
+
 describe('App: 積算コードMasterのfloating panel化 (Issue #19 追加修正)', () => {
   async function renderApp() {
     render(<App />)

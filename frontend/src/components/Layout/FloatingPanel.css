@@ -18,8 +18,15 @@
      backdrop-filterで背後の図面がうっすら透けるようにしつつ、表・文字の
      可読性を落とさないよう十分な不透明度を残す(完全透明にはしない)。
      内部の見出し(#eff6ff等)・表ヘッダ(#f1f5f9等)は各componentのCSSで
-     既に不透明に近い背景を持つため、このシェル自体は変更していない。 */
-  background: rgba(255, 255, 255, 0.6);
+     既に不透明に近い背景を持つため、このシェル自体は変更していない。
+     [PR #22追加仕様: floating panel透過度] 背景alphaをCSS custom property
+     (`--floating-panel-bg-alpha`、`App.tsx`側で`.app-layout`のinline styleとして
+     設定、`SystemSettings`のスライダーで変更・localStorage永続化)経由にした。
+     `var()`の第2引数(0.6)は、custom property未設定時(旧挙動)のフォールバック
+     既定値であり、これまでの固定値と同じ見た目になる。opacityではなくrgba()の
+     alphaのみを変えているため、枠線(border)・box-shadow・子要素の文字色/意味色
+     には一切影響しない。 */
+  background: rgba(255, 255, 255, var(--floating-panel-bg-alpha, 0.6));
   backdrop-filter: blur(14px) saturate(160%);
   -webkit-backdrop-filter: blur(14px) saturate(160%);
   /* 追加UI修正指示4章: 背景図面との境界が曖昧にならないよう、細め(1px)だが
@@ -38,10 +45,16 @@
 
 /* backdrop-filter非対応環境向けのfallback (指示: Windows/Chromiumで
    backdrop-filterが効かない場合でも読めるようにする)。ぼかしが効かない前提で、
-   可読性確保のため背景の不透明度を上げる(完全な板になっても崩れない)。 */
+   可読性確保のため背景の不透明度を上げる(完全な板になっても崩れない)。
+   [PR #22追加仕様: floating panel透過度] ぼかしが無い環境でユーザーが透過度を
+   低く(透明寄りに)設定すると、下の図面が透けて可読性が崩れるおそれがある。
+   `max()`でユーザー設定値と最低不透明度(0.94、従来のfallback既定値)の
+   大きい方を採用し、fallback環境では常に一定以上の不透明度を保証する
+   (通常環境のスライダー挙動には影響しない。この`@supports not`ブロック内
+   でのみ適用される)。 */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .floating-panel {
-    background: rgba(255, 255, 255, 0.94);
+    background: rgba(255, 255, 255, max(var(--floating-panel-bg-alpha, 0.94), 0.94));
   }
 }
 
