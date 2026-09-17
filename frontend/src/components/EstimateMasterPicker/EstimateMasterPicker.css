@@ -55,6 +55,13 @@
    select本体)にしていたが、指示により「品名」ラベルとselectを同じ行に
    横並びさせる形へ変更した。ラベル文言自体は変わらないため、幅は必要最小限
    (`flex-shrink:0`)のままselectとだけ横に並べる。 */
+/* [Issue #25] 品名選択バー(タブ/バー相当の領域)を薄いグレー系背景にし、
+   他3panelの見出し(コバルト系 #eff6ff)・表ヘッダ(#f1f5f9等)とは違う、
+   ツール系control領域であることが一目で分かるようにする。主張しすぎない
+   ニュートラルなグレー(#f3f4f6、slate/blue系トーンを含まない純粋なグレー)を
+   採用し、部品台帳だけの強いカテゴリ色変化は増やさない(select自体の左accent
+   1点のみに留める既存方針は維持)。glassmorphism本体(`.floating-panel`)の
+   透過度設定には触れず、この不透明な帯だけに背景色を追加する。 */
 .master-picker__category-label {
   display: flex;
   flex-direction: row;
@@ -67,6 +74,9 @@
   font-size: 0.85rem;
   color: #6b7280;
   font-weight: 500;
+  background: #f3f4f6;
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
 }
 
 /* [追加修正: カテゴリ色の変化を簡素化] 背景・文字色は常に一定のslate系に

@@ -224,6 +224,35 @@ describe('EstimateMasterPicker: カテゴリ選択リストの配色 (Issue #19 
   })
 })
 
+describe('EstimateMasterPicker: 品名選択バーの配色 (Issue #25)', () => {
+  it('gives the 品名 label/select bar a light gray background, distinct from the cobalt-toned headings used by the other 3 panels', async () => {
+    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    await screen.findByText('11001')
+
+    const bar = document.querySelector('.master-picker__category-label') as HTMLElement
+    const heading = document.querySelector('.master-picker__heading') as HTMLElement
+
+    // 主張しすぎない薄いグレー(#f3f4f6)であり、透明ではない。
+    expect(getComputedStyle(bar).backgroundColor).toBe('rgb(243, 244, 246)')
+    // 見出し(既存のslate系accent、コバルト系ではないが別のトーン)とは異なる
+    // 背景色であること(=一目で領域が区別できる)。
+    expect(getComputedStyle(bar).backgroundColor).not.toBe(getComputedStyle(heading).backgroundColor)
+  })
+
+  it('does not change category-switch behavior: the bar background stays fixed while only the select accent (border-left) varies (指示: 強いカテゴリ色変化は増やさない)', async () => {
+    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    const select = await screen.findByRole('combobox')
+    await screen.findByText('11001')
+    const bar = document.querySelector('.master-picker__category-label') as HTMLElement
+    const bgBefore = getComputedStyle(bar).backgroundColor
+
+    fireEvent.change(select, { target: { value: NAIBU_PANEL.internal } })
+    await screen.findByText('18001')
+
+    expect(getComputedStyle(bar).backgroundColor).toBe(bgBefore)
+  })
+})
+
 describe('EstimateMasterPicker: カテゴリ色の変化の簡素化 (Issue #19 追加修正)', () => {
   // [追加修正] 以前は選択中カテゴリのpresentationを<thead>へ注入し、品名を
   // 切り替えるたびにtable header全体の色が大きく変わる表現にしていたが、

@@ -63,7 +63,7 @@ import { ProductSelector } from './components/ProductSelector/ProductSelector'
 import { HelpPdfModal } from './components/HelpPdf/HelpPdfModal'
 import { DecisionEventHistory } from './components/DecisionEventHistory/DecisionEventHistory'
 import { PaneSplitter } from './components/Layout/PaneSplitter'
-import { FloatingPanel, type FloatingPanelRect } from './components/Layout/FloatingPanel'
+import { FloatingPanel, type FloatingPanelKind, type FloatingPanelRect } from './components/Layout/FloatingPanel'
 import { PanelVisibilityToggles } from './components/Layout/PanelVisibilityToggles'
 import { usePaneWidth } from './hooks/usePaneWidth'
 import { useFloatingPanelBgAlpha } from './hooks/useFloatingPanelBgAlpha'
@@ -293,6 +293,24 @@ function App() {
   const [masterRect, setMasterRect] = useState<FloatingPanelRect | null>(null)
   // floating panelの位置・大きさのクランプ基準となるコンテナ要素。
   const viewerWrapRef = useRef<HTMLDivElement>(null)
+
+  // [Issue #25] 現在表示中のfloating panel種別一覧(固定の宣言順:
+  // 盤情報→積算集約→積算明細→部品台帳)。`FloatingPanel`が「表示ONにした
+  // 瞬間、自分より前に何枚表示中か」を数えて初期配置(右端寄せ+積み重ね)の
+  // 段数を決めるために使う。表示ON/OFFの4state以外には一切依存しない。
+  const visibleFloatingKinds = useMemo<FloatingPanelKind[]>(() => {
+    const kinds: FloatingPanelKind[] = []
+    if (panelInfoFloatingVisible) kinds.push('panelInfo')
+    if (estimateAggregationFloatingVisible) kinds.push('aggregation')
+    if (estimateDetailFloatingVisible) kinds.push('detail')
+    if (estimateMasterFloatingVisible) kinds.push('master')
+    return kinds
+  }, [
+    panelInfoFloatingVisible,
+    estimateAggregationFloatingVisible,
+    estimateDetailFloatingVisible,
+    estimateMasterFloatingVisible,
+  ])
 
   // 初期データ読込 (案件情報 / ダミー図面一覧 / 全ページ分のDetection)。
   // `fetchDetections()`を引数無しで呼ぶとDB全件が返る (Backend側の既存の
@@ -1303,6 +1321,7 @@ function App() {
               <FloatingPanel
                 visible={panelInfoFloatingVisible}
                 kind="panelInfo"
+                visibleKinds={visibleFloatingKinds}
                 containerRef={viewerWrapRef}
                 rect={panelInfoRect}
                 onRectChange={setPanelInfoRect}
@@ -1318,6 +1337,7 @@ function App() {
               <FloatingPanel
                 visible={estimateAggregationFloatingVisible}
                 kind="aggregation"
+                visibleKinds={visibleFloatingKinds}
                 containerRef={viewerWrapRef}
                 rect={aggregationRect}
                 onRectChange={setAggregationRect}
@@ -1334,6 +1354,7 @@ function App() {
               <FloatingPanel
                 visible={estimateDetailFloatingVisible}
                 kind="detail"
+                visibleKinds={visibleFloatingKinds}
                 containerRef={viewerWrapRef}
                 rect={detailRect}
                 onRectChange={setDetailRect}
@@ -1357,6 +1378,7 @@ function App() {
               <FloatingPanel
                 visible={estimateMasterFloatingVisible}
                 kind="master"
+                visibleKinds={visibleFloatingKinds}
                 containerRef={viewerWrapRef}
                 rect={masterRect}
                 onRectChange={setMasterRect}

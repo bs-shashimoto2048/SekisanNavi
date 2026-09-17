@@ -22,6 +22,11 @@ interface Props {
   visible: boolean
   /** 既定配置・drag/resize後の最小サイズを決めるための種別。 */
   kind: FloatingPanelKind
+  /** [Issue #25] 現在表示中の全floating panelの種別一覧(固定の宣言順:
+   * 盤情報→積算集約→積算明細→部品台帳でフィルタ済み)。このpanel自身が
+   * 表示ONになった瞬間の「何番目に表示されたか」(=右端積み重ねの段数)を
+   * 決めるために使う。`App.tsx`が4つの表示ON/OFF stateから毎回導出して渡す。 */
+  visibleKinds: FloatingPanelKind[]
   /** 位置・大きさのクランプ基準にするコンテナ要素(`app-workspace__viewer-wrap`)。 */
   containerRef: React.RefObject<HTMLDivElement | null>
   /** 現在の位置・大きさ (Issue #19 追加修正: 移動/リサイズ後もセッション中は
@@ -50,33 +55,26 @@ const MIN_HEIGHT_BY_KIND: Record<FloatingPanelKind, number> = {
   detail: 150,
   master: 150,
 }
+// panelの「高さの伸びやすさ」の目安(コンテナ高さに対する割合)。指示25章由来の
+// 既存値をそのまま踏襲する(Issue #25は位置ロジックのみが対象で、高さの決め方
+// 自体は変更しない)。
+const HEIGHT_FRACTION_BY_KIND: Record<FloatingPanelKind, number> = {
+  panelInfo: 0.34,
+  aggregation: 0.32,
+  detail: 0.38,
+  master: 0.34,
+}
 // [追加修正: floating panelの初期幅を実ブラウザ実測ベースで再調整]
-// 前回(360/360/440/300px)の値は「それぞれのカラムが見えるサイズ」という
-// 指示に対して未達だった。今回はPlaywrightで実データ(製番A1GV2421 P16)を
-// 使い、各表の列ごとに「隠しnowrap要素へ同じfont-size/family/weightで
-// セル文字列を複製し、実際の自然幅(折り返し無し)をgetBoundingClientRect()で
-// 測る」手法(既存の他panelでも使ってきた手法)で、ヘッダ文言・実データの
+// Playwrightで実データ(製番A1GV2421 P16)を使い、各表の列ごとに「隠しnowrap
+// 要素へ同じfont-size/family/weightでセル文字列を複製し、実際の自然幅
+// (折り返し無し)をgetBoundingClientRect()で測る」手法で、ヘッダ文言・実データの
 // うち最長のセルの自然幅を列ごとに測定し、そこへcell paddingや外周
 // padding・縦スクロールバー分の余白を積み上げてpanel全体の必要幅を算出した
 // (詳細な実測値・計算根拠はIssue #19への報告コメント参照)。
-// - panelInfo: カード1行の主要項目(バッジ+盤名称+型式)の自然幅は約250px
-//   程度で、以前の360pxには十分すぎる余裕があった。「最小限」の指示に
-//   合わせて300pxへ縮小しても主要項目は1行に収まる(寸法・接続情報は
-//   意図的に2行目へ折り返す設計のまま)。
-// - aggregation: 5列(コード/内容/単価/数量/金額)の自然幅合計+パディング+
-//   縦スクロールバー分で約456px必要だったため、360pxでは常に窮屈だった。
-//   480pxへ拡大した(列幅配分も実測比率に合わせてCSS側を再配分)。
-// - detail: 8列(min-width 730pxは維持、列配分もP23実データの定格実測に
-//   基づく既存値を維持)全体が収まるにはpanel幅として約770px必要。ただし
-//   下段で部品台帳と横に並ぶため、後述の「同じ行の相方panel幅を考慮した
-//   動的な上限」で実際の初期幅はコンテナ幅に応じて変わる(1600pxでは
-//   ほぼ全列、1024/1280pxでは一部を内部横スクロールに任せる。物理的な
-//   幅の制約であり、指示の「パネル自体を無理に広げて解決しない」方針とも
-//   整合する)。
-// - master(部品台帳): 3列(コード/型式/定格)の自然幅合計+パディング+
-//   縦スクロールバー分で約299px。旧300pxはほぼこの必要量ちょうどだったが
-//   バッファが薄かったため320pxへ微増した(列幅配分比率も実測に合わせて
-//   再配分し、定格列の不足を解消)。
+// [Issue #25] 初期配置が全kind右端寄せの縦積みへ変わったことに伴い、以前
+// あった「同じ行に並ぶ相方panelの幅を考慮して初期幅を控えめにする」ロジック
+// (ROW_GAP)は不要になった(縦に積むだけで、同じ行に並ぶ2panelという概念自体が
+// 無くなったため)。kind別の初期幅の値そのものは変更していない。
 const DEFAULT_WIDTH_BY_KIND: Record<FloatingPanelKind, number> = {
   panelInfo: 300,
   aggregation: 480,
@@ -84,13 +82,14 @@ const DEFAULT_WIDTH_BY_KIND: Record<FloatingPanelKind, number> = {
   master: 320,
 }
 const SIDE_MARGIN = 20
-// 同じ行に並ぶ2panel(盤情報+積算集約、部品台帳+積算明細)が初期表示で
-// 重ならないよう最低限確保する隙間。
-const ROW_GAP = 12
 // DrawingCanvas自身のtoolbar(図面名+Zoom/Fit/BBox削除、Viewer上端いっぱいの1行)を
 // クリアするための既定オフセット。
 const TOP_CLEARANCE = 48
 const BOTTOM_MARGIN = 12
+// [Issue #25] 新たに表示したpanelを、既に表示中のpanel群より少し下へずらす際の
+// 1段あたりのオフセット。完全に重ならず、かつ見出し(h2、ドラッグハンドルを兼ねる)
+// が確実に見える程度の量として、実ブラウザ確認のうえ採用した値。
+const STACK_OFFSET = 40
 
 // 4つのfloating panelインスタンス間で共有する、単調増加のz-indexカウンタ
 // (Issue #19 追加修正: 操作したパネルが前面へ来る)。永続化不要のセッション内
@@ -119,61 +118,79 @@ function clampSize(rect: FloatingPanelRect, container: Size, kind: FloatingPanel
   }
 }
 
-/** kind単体の既定幅(相方panelを考慮しない、コンテナ幅によるクランプのみ)。 */
-function baseWidthFor(kind: FloatingPanelKind, container: Size): number {
-  return Math.max(MIN_WIDTH, Math.min(DEFAULT_WIDTH_BY_KIND[kind], container.width - SIDE_MARGIN * 2))
+/**
+ * [Issue #25] 新規表示時の既定配置を計算する。
+ *
+ * 配置ルール(指示1章):
+ * - 基本的にViewer右端寄せ(`left`は常に`container.width - SIDE_MARGIN - width`)。
+ * - その時点で表示中のfloating panelが他に無ければ右上(`stackIndex===0`)。
+ * - 既に表示中のpanelがあれば、その分だけ`STACK_OFFSET`ずつ下へずらす
+ *   (`stackIndex`は「自分より前に表示されている他panelの数」。呼び出し側
+ *   (`FloatingPanel`本体)が`visibleKinds`から算出して渡す)。
+ * - Viewer下端を超える場合は、最低でも`MIN_HEIGHT_BY_KIND`分は収まる位置まで
+ *   `top`をclampする(指示: 「Viewer下端を超える場合はclamp」)。
+ *
+ * kind別の初期幅(`DEFAULT_WIDTH_BY_KIND`)・高さの伸び方(`HEIGHT_FRACTION_BY_KIND`)
+ * 自体は既存の値を維持する(指示: 「kindごとの初期幅は維持する」)。
+ */
+function computeInitialRect(kind: FloatingPanelKind, container: Size, stackIndex: number): FloatingPanelRect {
+  const minHeight = MIN_HEIGHT_BY_KIND[kind]
+  const width = Math.max(MIN_WIDTH, Math.min(DEFAULT_WIDTH_BY_KIND[kind], container.width - SIDE_MARGIN * 2))
+  const left = Math.max(0, container.width - SIDE_MARGIN - width)
+
+  const maxTop = Math.max(TOP_CLEARANCE, container.height - BOTTOM_MARGIN - minHeight)
+  const top = Math.min(TOP_CLEARANCE + Math.max(0, stackIndex) * STACK_OFFSET, maxTop)
+
+  const desiredHeight = Math.max(minHeight, container.height * HEIGHT_FRACTION_BY_KIND[kind])
+  const height = Math.min(desiredHeight, Math.max(minHeight, container.height - BOTTOM_MARGIN - top))
+
+  return clampPosition(clampSize({ top, left, width, height }, container, kind), container)
 }
 
-/** 初期配置(既定位置)を計算する。盤情報=左上寄り、積算集約=右上寄り、
- * 積算明細=右下寄り(Issue #19 Phase 2/4から踏襲)。積算コードMaster([追加修正]
- * floating化)は左下寄りとし、4panelが対角に分散する既定レイアウトにする。 */
-function defaultRectFor(kind: FloatingPanelKind, container: Size): FloatingPanelRect {
-  const minHeight = MIN_HEIGHT_BY_KIND[kind]
-  let width = baseWidthFor(kind, container)
-  // [追加修正: floating panelの初期幅を実ブラウザ実測ベースで再調整]
-  // 積算集約(右上)は盤情報(左上)と、積算明細(右下)は部品台帳(左下)と
-  // それぞれ同じ行に並ぶ。両者の既定幅をそのまま合計するとコンテナ幅が
-  // 狭い(1024px等)場合に重なってしまうため、「左側panel(盤情報/部品台帳)は
-  // 自身の既定幅を優先確保し、右側panel(積算集約/積算明細)はコンテナの
-  // 残り幅に収まる範囲まで初期幅を控えめにする」形で、重なりを避けつつ
-  // 可能な限り実測に基づく幅に近づける(指示: 初期幅変更で4panel同時表示時に
-  // 不自然な重なりが増えないよう、必要なら初期位置も最小限調整する)。
-  if (kind === 'aggregation') {
-    const partnerWidth = baseWidthFor('panelInfo', container)
-    width = Math.min(width, Math.max(MIN_WIDTH, container.width - SIDE_MARGIN * 2 - partnerWidth - ROW_GAP))
-  }
-  if (kind === 'detail') {
-    const partnerWidth = baseWidthFor('master', container)
-    width = Math.min(width, Math.max(MIN_WIDTH, container.width - SIDE_MARGIN * 2 - partnerWidth - ROW_GAP))
-  }
-  const availableHeight = Math.max(minHeight, container.height - TOP_CLEARANCE - BOTTOM_MARGIN)
+/**
+ * [Issue #25] Viewerサイズ変更時に、pixel座標をそのまま据え置く(＝相対位置が
+ * 崩れる)のではなく、直前のコンテナサイズを基準にした「最も近い辺からの距離」を
+ * 保ったまま新しいコンテナサイズへ位置を追従させる。
+ *
+ * 実装方針(指示2章で例示された3案のうち、「右端/左端/上端/下端への距離
+ * (anchor offset)を保持する」を採用): X軸は左端距離と右端距離のうち小さい方、
+ * Y軸は上端距離と下端距離のうち小さい方を「その時点でより近い辺」とみなし、
+ * その辺からの距離を新しいコンテナサイズに対しても維持する。
+ *
+ * - 右上に置いたpanel(右端距離・上端距離とも小さい)は、コンテナが広がっても
+ *   右端距離・上端距離が変わらないため、見た目上「右上のまま」になる。
+ * - 幅・高さ(サイズ)自体はここでは変更しない(ユーザーが行ったdrag/resizeの
+ *   結果はそのまま)。最終的な`clampPosition`/`clampSize`で、万一新しい
+ *   コンテナに収まりきらない場合のみ最小限補正する。
+ * - 縮小时にclampで位置が動いた場合、次に拡大したときはその「clamp後の距離」を
+ *   基準に戻すため、クランプが発生しない範囲であれば拡大時に元の相対位置へ
+ *   ちょうど復元される(指示: 「可能な範囲で元の位置関係へ戻す」)。
+ */
+function reflowForResize(
+  rect: FloatingPanelRect,
+  prevContainer: Size,
+  nextContainer: Size,
+  kind: FloatingPanelKind,
+): FloatingPanelRect {
+  const leftGap = rect.left
+  const rightGap = prevContainer.width - (rect.left + rect.width)
+  const topGap = rect.top
+  const bottomGap = prevContainer.height - (rect.top + rect.height)
 
-  if (kind === 'panelInfo') {
-    const height = Math.min(availableHeight, Math.max(minHeight, container.height * 0.34))
-    return clampPosition({ top: TOP_CLEARANCE, left: SIDE_MARGIN, width, height }, container)
-  }
-  if (kind === 'aggregation') {
-    const height = Math.min(availableHeight, Math.max(minHeight, container.height * 0.32))
-    return clampPosition({ top: TOP_CLEARANCE, left: container.width - SIDE_MARGIN - width, width, height }, container)
-  }
-  if (kind === 'master') {
-    const height = Math.min(availableHeight, Math.max(minHeight, container.height * 0.34))
-    return clampPosition(
-      { top: container.height - BOTTOM_MARGIN - height, left: SIDE_MARGIN, width, height },
-      container,
-    )
-  }
-  const height = Math.min(availableHeight, Math.max(minHeight, container.height * 0.38))
-  return clampPosition(
-    { top: container.height - BOTTOM_MARGIN - height, left: container.width - SIDE_MARGIN - width, width, height },
-    container,
-  )
+  const anchorRight = rightGap <= leftGap
+  const anchorBottom = bottomGap <= topGap
+
+  const left = anchorRight ? nextContainer.width - rightGap - rect.width : leftGap
+  const top = anchorBottom ? nextContainer.height - bottomGap - rect.height : topGap
+
+  return clampPosition(clampSize({ ...rect, left, top }, nextContainer, kind), nextContainer)
 }
 
 /**
  * 盤情報・積算集約・積算明細・積算コードMasterをViewer上へ重ねて表示するための
  * floating panelシェル (Issue #19 Phase 2/4で新設・拡張、追加修正でドラッグ移動・
- * リサイズに対応、さらなる追加修正で積算コードMasterも対象に追加)。
+ * リサイズに対応、さらなる追加修正で積算コードMasterも対象に追加、Issue #25で
+ * 初期配置(右端寄せの積み重ね)・Viewerサイズ変更時の相対位置追従を追加)。
  *
  * `PanelInfo`/`EstimateAggregation`/`EstimateDetail`/`EstimateMasterPicker`自体は
  * 一切変更していない(前3コンポーネント自身の折りたたみ機能はPhase 4追加修正で
@@ -188,9 +205,18 @@ function defaultRectFor(kind: FloatingPanelKind, container: Size): FloatingPanel
  * **リサイズ**: 右下角の専用ハンドル(`.floating-panel__resize-handle`)のみで
  * 対応する(複数辺からのリサイズは今回対象外)。
  *
+ * **初期配置(Issue #25)**: panelを表示ONにした瞬間、その時点で他に表示中の
+ * floating panelが無ければViewer右上、既にあれば右端寄せを保ったまま
+ * `STACK_OFFSET`ずつ下へずらして配置する(`computeInitialRect`)。この
+ * 「表示ONにした瞬間の再配置」は、以前の「非表示→表示で直前の位置へ戻る」
+ * という挙動を置き換えるものである(指示1章の「新たに表示したpanelは…
+ * 配置する」を、表示ON操作のたびに評価する形で実装した)。表示中のdrag/resize
+ * 自体・表示中のままのViewerサイズ変更時の追従(`reflowForResize`)は、
+ * 従来どおりrectをそのまま保持・追従する。
+ *
  * **位置・サイズの保持**: `rect`はこのcomponent自身のstateではなく`App.tsx`側で
- * 保持するcontrolled値。非表示(`visible=false`)でunmountされても値は消えず、
- * 再表示時に直前の位置・サイズへ戻る(セッション内のみ、localStorage永続化はしない)。
+ * 保持するcontrolled値。非表示(`visible=false`)でunmountされても値は消えない
+ * (セッション内のみ、localStorage永続化はしない)。
  *
  * **前面化(z-index)**: 以下いずれの操作でも、このpanelを他panelより確実に
  * 前面へ出す(モジュール共有の単調増加カウンタ`zCounter`を使う、[追加修正]で
@@ -202,7 +228,7 @@ function defaultRectFor(kind: FloatingPanelKind, container: Size): FloatingPanel
  *   このcomponentインスタンス自体は`visible=false`の間も内部で`return null`
  *   しているだけでunmountはされないため、明示的な検知が必要)
  */
-export function FloatingPanel({ visible, kind, containerRef, rect, onRectChange, children }: Props) {
+export function FloatingPanel({ visible, kind, visibleKinds, containerRef, rect, onRectChange, children }: Props) {
   const [zIndex, setZIndex] = useState(100)
   const [interacting, setInteracting] = useState(false)
   const dragRef = useRef<{
@@ -220,37 +246,74 @@ export function FloatingPanel({ visible, kind, containerRef, rect, onRectChange,
     startHeight: number
   } | null>(null)
 
-  // 初期配置の計算 + コンテナ(Viewer)のサイズ変化に追従した再クランプ
-  // (指示: 画面サイズ変更時も、少なくとも見出しが操作可能な範囲に残るよう補正する)。
+  // Viewerサイズ変更時の相対位置追従(reflowForResize)の基準にする、直前に
+  // 測定したコンテナサイズ。表示ONで新規配置した直後にも更新する。
+  const prevContainerSizeRef = useRef<Size | null>(null)
+  // 直前レンダー時点の`visible`値。falseからtrueへ変わった瞬間(表示ONにした
+  // 瞬間、初回マウント時を含む)を検知するためだけに使う。
+  const wasVisibleRef = useRef(false)
+
+  // コンテナ(Viewer)のサイズ変化に追従した再配置 (指示2章: 相対位置を保って
+  // 追従する)。表示中(`visible`)の間だけ動かす(非表示中のpanelはどのみち
+  // 描画されないため、コンテナ変化を追う必要が無い)。
   //
-  // useLayoutEffectではなくuseEffect(passive)を使う: `containerRef`はこの
-  // componentの「親」(App.tsx側の`.app-workspace__viewer-wrap`)が持つrefのため、
-  // Reactのcommit順序(子のlayout effectは親自身のref付与より先に走る)により、
-  // useLayoutEffectだと初回マウント時に`containerRef.current`がまだnullのままになる
-  // (実際にfloating panelが一切描画されない不具合として顕在化した)。useEffectは
-  // ツリー全体のref付与・layout effectが完了した後にまとめて発火するため、
-  // ここでは`containerRef.current`が確実に取得できる。
+  // useLayoutEffectではなくuseEffect(passive)を使う理由は既存どおり:
+  // `containerRef`は親(`App.tsx`側の`.app-workspace__viewer-wrap`)が持つrefの
+  // ため、Reactのcommit順序上、useLayoutEffectだと初回マウント時に
+  // `containerRef.current`がまだnullのままになる(floating panelが一切
+  // 描画されない不具合として顕在化した実績がある)。
   useEffect(() => {
     const container = containerRef.current
-    if (!container) return
+    if (!container || !visible) return
 
-    function reclamp() {
+    function reflow() {
       const { width, height } = container!.getBoundingClientRect()
-      onRectChange((prev) =>
-        prev == null
-          ? defaultRectFor(kind, { width, height })
-          : clampPosition(clampSize(prev, { width, height }, kind), { width, height }),
-      )
+      const nextContainer = { width, height }
+      const prevContainer = prevContainerSizeRef.current
+      onRectChange((prev) => {
+        if (prev == null) return prev // 初期配置は表示ON検知用のeffectが担当する
+        if (prevContainer == null) return clampPosition(clampSize(prev, nextContainer, kind), nextContainer)
+        return reflowForResize(prev, prevContainer, nextContainer, kind)
+      })
+      prevContainerSizeRef.current = nextContainer
     }
 
-    reclamp()
-    const observer = new ResizeObserver(reclamp)
+    reflow()
+    const observer = new ResizeObserver(reflow)
     observer.observe(container)
     return () => observer.disconnect()
     // containerRef自体・kindが変わらない限り再計測の仕組み自体は張り直さなくてよい
     // (onRectChangeは`App.tsx`のuseStateセッターで安定した参照のため依存に含めない)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [containerRef, kind])
+  }, [containerRef, kind, visible])
+
+  // [Issue #25] 表示ONにした瞬間(初回マウント時を含む)、既存panel群を踏まえた
+  // 右端寄せ+積み重ねの初期配置を計算し直す。`visibleKinds`(他panelの表示
+  // ON/OFFで変化する)自体が変わっただけではこの効果を再実行しない
+  // (`wasVisibleRef`によるガードで、自分自身が「非表示→表示」に変わった
+  // 瞬間だけに限定している)。
+  useEffect(() => {
+    const container = containerRef.current
+    const justShown = visible && !wasVisibleRef.current
+    wasVisibleRef.current = visible
+    if (!justShown || !container) return
+
+    const { width, height } = container.getBoundingClientRect()
+    const nextContainer = { width, height }
+    // `visibleKinds`は固定の宣言順(盤情報→積算集約→積算明細→部品台帳)で
+    // フィルタ済みのため、そのリスト内での自分の位置(0始まり)がそのまま
+    // 積み重ねの段数になる。「自分を除いた表示中の他panelの数」を数える方式
+    // だと、4panelが同時にvisible=trueへ変わる既定の初回表示時に全kindが
+    // 同じ値(3)を返してしまい、4枚とも同じ位置へ重なってしまう不具合が
+    // あったため、この宣言順ベースの方式を採用している(実ブラウザで発見・
+    // 修正)。個別に順番どおりON/OFFする場合も、この宣言順は
+    // `PanelVisibilityToggles`のボタン表示順と一致しているため、
+    // 「表示した順に下へ積み重なる」という見た目と結果的に一致する。
+    const stackIndex = Math.max(0, visibleKinds.indexOf(kind))
+    onRectChange(computeInitialRect(kind, nextContainer, stackIndex))
+    prevContainerSizeRef.current = nextContainer
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, visibleKinds])
 
   function bringToFront() {
     zCounter += 1
