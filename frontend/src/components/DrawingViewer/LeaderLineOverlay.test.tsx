@@ -408,7 +408,7 @@ describe('LeaderLineOverlay (Phase 1.11 UI改修指示5章〜16章)', () => {
         bbox_x: 0.6,
         bbox_y: 0.3,
         bbox_w: 0.1,
-        bbox_h: 0.1, // anchor = (0.7, 0.3)
+        bbox_h: 0.1, // 右上 = (0.7, 0.3)、中心X = 0.65
         leader_label_x: 0.1,
         leader_label_y: 0.1,
       })
@@ -429,7 +429,10 @@ describe('LeaderLineOverlay (Phase 1.11 UI改修指示5章〜16章)', () => {
       expect(elbow.x).toBeGreaterThan(end.x) // 水平線は右(アンカー側)の端で折れる
       expect(elbow.y).toBeCloseTo(end.y)
       expect(elbow.x).toBeLessThanOrEqual(anchor.x + 1e-6) // 折れ点はアンカーより左〜同程度
-      expect(anchor.x).toBeCloseTo(0.7)
+      // [Issue #25 追加修正] ラベル中央X(≒0.1台)はBBox中心X(0.65)より大きく左に
+      // あるため、BBox側接続点はBBox左上(0.6, 0.3)へ切り替わる(以前は常に右上
+      // (0.7, 0.3)固定だった)。
+      expect(anchor.x).toBeCloseTo(0.6)
       expect(anchor.y).toBeCloseTo(0.3)
     })
   })
@@ -848,6 +851,300 @@ describe('LeaderLineOverlay (Phase 1.11 UI改修指示5章〜16章)', () => {
       const anchorPoint = points[points.length - 1]
       expect(anchorPoint.x).toBeCloseTo(0.6)
       expect(anchorPoint.y).toBeCloseTo(0.1)
+    })
+  })
+
+  describe('BBox側接続点(anchor)をラベル位置に応じて切り替える (Issue #25 追加修正)', () => {
+    // デフォルトのラベル文字列「11001 OS2-816」(13文字)。jsdomにはcanvasが無く
+    // 実測(measureText)にフォールバックできないため、コンテナ幅未設定
+    // (containerWidthPx=0)時は`estimateLabelWidthFraction`(文字数ベースの概算:
+    // 13 * 0.0075 = 0.0975)が使われる。以下のテストはこの概算値を前提にする
+    // (既存の「label to the LEFT/RIGHT of the anchor」テストと同じ前提)。
+    const LABEL_WIDTH_FRACTION_FALLBACK = 0.0975
+
+    it('switches the BBox-side anchor to the BBox top-left corner when the label center X is to the left of the BBox center X', () => {
+      const detection = makeDetection({
+        bbox_x: 0.4,
+        bbox_y: 0.3,
+        bbox_w: 0.2,
+        bbox_h: 0.1, // 中心X = 0.5、右上=(0.6,0.3)、左上=(0.4,0.3)
+        leader_label_x: 0.1, // labelCenterX ≈ 0.1 + 0.04875 = 0.14875 < 0.5
+        leader_label_y: 0.1,
+      })
+      const { container } = render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      const anchor = parsePathPoints(getVisiblePathD(container)).pop()!
+      expect(anchor.x).toBeCloseTo(0.4) // BBox左上のx (=bbox_x)
+      expect(anchor.y).toBeCloseTo(0.3)
+    })
+
+    it('keeps the existing BBox top-right corner when the label center X is to the right of the BBox center X (既存挙動を維持)', () => {
+      const detection = makeDetection({
+        bbox_x: 0.4,
+        bbox_y: 0.3,
+        bbox_w: 0.2,
+        bbox_h: 0.1, // 中心X = 0.5
+        leader_label_x: 0.7, // labelCenterX ≈ 0.7 + 0.04875 = 0.74875 > 0.5
+        leader_label_y: 0.1,
+      })
+      const { container } = render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      const anchor = parsePathPoints(getVisiblePathD(container)).pop()!
+      expect(anchor.x).toBeCloseTo(0.6) // BBox右上のx (=bbox_x+bbox_w)、既存どおり変わらない
+      expect(anchor.y).toBeCloseTo(0.3)
+    })
+
+    it('does NOT switch when the label center X exactly equals the BBox center X (厳密に左の場合のみ切り替える)', () => {
+      const centerX = 0.5
+      const labelX = centerX - LABEL_WIDTH_FRACTION_FALLBACK / 2 // labelCenterXがちょうどcenterXと一致
+      const detection = makeDetection({
+        bbox_x: 0.4,
+        bbox_y: 0.3,
+        bbox_w: 0.2, // 中心X = 0.5
+        bbox_h: 0.1,
+        leader_label_x: labelX,
+        leader_label_y: 0.1,
+      })
+      const { container } = render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      const anchor = parsePathPoints(getVisiblePathD(container)).pop()!
+      expect(anchor.x).toBeCloseTo(0.6) // 等しい場合は「左にある」に該当しないため右上のまま
+    })
+
+    it('switches back to the BBox top-right corner once the label is moved back to the right of the BBox center (再び右へ戻すと既存の接続位置へ戻る)', () => {
+      const baseDetection = makeDetection({ bbox_x: 0.4, bbox_y: 0.3, bbox_w: 0.2, bbox_h: 0.1 })
+      const rightLabel = { ...baseDetection, leader_label_x: 0.7, leader_label_y: 0.1 }
+      const leftLabel = { ...baseDetection, leader_label_x: 0.1, leader_label_y: 0.1 }
+
+      const { container, rerender } = render(
+        <LeaderLineOverlay
+          detections={[rightLabel]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      expect(parsePathPoints(getVisiblePathD(container)).pop()!.x).toBeCloseTo(0.6) // 右上
+
+      rerender(
+        <LeaderLineOverlay
+          detections={[leftLabel]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      expect(parsePathPoints(getVisiblePathD(container)).pop()!.x).toBeCloseTo(0.4) // 左上へ切替
+
+      rerender(
+        <LeaderLineOverlay
+          detections={[rightLabel]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      expect(parsePathPoints(getVisiblePathD(container)).pop()!.x).toBeCloseTo(0.6) // 右上へ復帰
+    })
+
+    it('re-evaluates using the BBox\'s NEW center after the BBox is moved (persisted move), with the label position unchanged', () => {
+      // 移動前: bbox中心=0.65、label(固定)=0.5 -> labelCenterX≈0.549 < 0.65 -> 左上
+      const before = makeDetection({
+        bbox_x: 0.6,
+        bbox_y: 0.3,
+        bbox_w: 0.1,
+        bbox_h: 0.1,
+        leader_label_x: 0.5,
+        leader_label_y: 0.1,
+      })
+      const { container, rerender } = render(
+        <LeaderLineOverlay
+          detections={[before]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      expect(parsePathPoints(getVisiblePathD(container)).pop()!.x).toBeCloseTo(0.6) // 左上 (=bbox_x)
+
+      // 移動後: BBoxを左へ移動(bbox_x: 0.2)。中心=0.25、labelは同じ0.5のまま
+      // -> labelCenterX≈0.549 > 0.25 -> 右上へ切り替わる
+      const after = { ...before, bbox_x: 0.2 }
+      rerender(
+        <LeaderLineOverlay
+          detections={[after]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      expect(parsePathPoints(getVisiblePathD(container)).pop()!.x).toBeCloseTo(0.3) // 右上 (=0.2+0.1)
+    })
+
+    it('re-evaluates using the BBox\'s NEW center after the BBox is resized (width change), with the label position unchanged', () => {
+      // resize前: bbox_x=0.2, w=0.1 -> 中心=0.25、label=0.5 -> labelCenterX≈0.549 > 0.25 -> 右上
+      const before = makeDetection({
+        bbox_x: 0.2,
+        bbox_y: 0.3,
+        bbox_w: 0.1,
+        bbox_h: 0.1,
+        leader_label_x: 0.5,
+        leader_label_y: 0.1,
+      })
+      const { container, rerender } = render(
+        <LeaderLineOverlay
+          detections={[before]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      expect(parsePathPoints(getVisiblePathD(container)).pop()!.x).toBeCloseTo(0.3) // 右上 (=0.2+0.1)
+
+      // resize後: 幅を0.7へ拡張(x基点は同じ0.2) -> 中心=0.55、labelは同じ0.5のまま
+      // -> labelCenterX≈0.549 < 0.55 -> 左上へ切り替わる
+      const after = { ...before, bbox_w: 0.7 }
+      rerender(
+        <LeaderLineOverlay
+          detections={[after]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      expect(parsePathPoints(getVisiblePathD(container)).pop()!.x).toBeCloseTo(0.2) // 左上 (=bbox_x)
+    })
+
+    it('recomputes in real time from previewBBox (before mouseup) during an active BBox resize drag, including the label\'s real-time shift', () => {
+      // 確定済み: bbox_x=0.3, w=0.4 -> anchor(右上)=(0.7,0.3)、中心=0.5
+      // label(保存済み)=0.62 -> labelCenterX≈0.669 > 0.5 -> 右上のまま(初期状態)
+      const detection = makeDetection({
+        bbox_x: 0.3,
+        bbox_y: 0.3,
+        bbox_w: 0.4,
+        bbox_h: 0.1,
+        leader_label_x: 0.62,
+        leader_label_y: 0.1,
+      })
+      const { container, rerender } = render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={1}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+          previewBBox={null}
+        />,
+      )
+      expect(parsePathPoints(getVisiblePathD(container)).pop()!.x).toBeCloseTo(0.7) // 右上
+
+      // ドラッグ中(未確定): 幅を0.05まで大きく縮める(x基点は同じ0.3のまま)。
+      // 新anchor(右上)=(0.35,0.3)、新中心=0.325。ラベルは元anchor(0.7)からの
+      // 移動量ぶんリアルタイムに追従する: delta = 0.35 - 0.7 = -0.35 ->
+      // liveLabel = 0.62 - 0.35 = 0.27。labelCenterX≈0.319 < 0.325 -> 左上へ
+      // 切り替わる(mouseupを待たずリアルタイムに反映される)。
+      rerender(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={1}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+          previewBBox={{ detectionId: 1, rect: { x: 0.3, y: 0.3, w: 0.05, h: 0.1 } }}
+        />,
+      )
+      const anchor = parsePathPoints(getVisiblePathD(container)).pop()!
+      expect(anchor.x).toBeCloseTo(0.3) // 新BBoxの左上 (=rect.x)
+      expect(anchor.y).toBeCloseTo(0.3)
+    })
+
+    it('while actively dragging the label itself (before mouseup), the anchor switches in real time as soon as the label crosses the BBox center X', () => {
+      const onMoveLabel = vi.fn()
+      const detection = makeDetection({
+        bbox_x: 0.4,
+        bbox_y: 0.3,
+        bbox_w: 0.2,
+        bbox_h: 0.1, // 中心X = 0.5、右上=(0.6,0.3)、左上=(0.4,0.3)
+        leader_label_x: 0.7,
+        leader_label_y: 0.1,
+      })
+      const { container, rerender } = render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={1}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={onMoveLabel}
+        />,
+      )
+      setOverlayRect(1000, 1000) // 1px = 0.001 正規化
+      // stub(コンテナ幅1000px)を反映させるため、同じpropsで一度再描画する。
+      rerender(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={1}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={onMoveLabel}
+        />,
+      )
+      const anchorBefore = parsePathPoints(getVisiblePathD(container)).pop()!
+      expect(anchorBefore.x).toBeCloseTo(0.6) // ドラッグ前: ラベルは中心より右 -> 右上のまま
+
+      const label = screen.getByText('11001 OS2-816')
+      fireEvent.mouseDown(label, { clientX: 700, clientY: 100 }) // label.x=0.7 -> 700px
+      fireEvent.mouseMove(window, { clientX: 100, clientY: 100 }) // 大きく左へ (-0.6)
+
+      const anchorDuringDrag = parsePathPoints(getVisiblePathD(container)).pop()!
+      // ドラッグ中(mouseup前)でも、ラベルが中心より左へ移ったことでBBox左上へ
+      // リアルタイムに切り替わる (mouseupを待たない)。
+      expect(anchorDuringDrag.x).toBeCloseTo(0.4)
+      expect(anchorDuringDrag.y).toBeCloseTo(0.3)
+
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+      expect(onMoveLabel).toHaveBeenCalledTimes(1)
     })
   })
 

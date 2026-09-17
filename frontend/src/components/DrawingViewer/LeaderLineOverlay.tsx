@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Detection, EstimateMasterItem } from '../../types/domain'
 import type { NormalizedRect, Point } from '../../utils/bbox'
-import { clamp01, computeInitialLabelPosition, topRightCorner } from '../../utils/bbox'
+import { clamp01, computeInitialLabelPosition, topLeftCorner, topRightCorner } from '../../utils/bbox'
 import { getCategoryPresentation, toCssVars } from '../../domain/masterCategoryPresentation'
 import type { PreviewBBox } from './DetectionOverlay'
 
@@ -421,11 +421,23 @@ export function LeaderLineOverlay({
 
   const masterLinked = detections.filter((d) => d.master_item_id != null)
 
-  /** 引出線の「アンカー」= BBox右上角。ドラッグ中(未確定)のプレビューがあれば
-   * そちらをリアルタイムに使い、なければ確定済み(persisted)のBBoxを使う
-   * (Phase 1.11 追加修正11章〜13章: move/resize中も引出線が追従する)。 */
-  function resolveAnchor(detection: Detection): Point {
-    const rect = previewBBox?.detectionId === detection.id ? previewBBox.rect : bboxOf(detection)
+  /** ドラッグ中(未確定)のプレビューがあればそちらをリアルタイムに使い、なければ
+   * 確定済み(persisted)のBBoxを使う (Phase 1.11 追加修正11章〜13章:
+   * move/resize中も引出線が追従する)。 */
+  function resolveRect(detection: Detection): NormalizedRect {
+    return previewBBox?.detectionId === detection.id ? previewBBox.rect : bboxOf(detection)
+  }
+
+  /** 引出線の「アンカー」(BBox側接続点)。既定はBBox右上角だが、Issue #25
+   * 追加修正により、ラベルの代表位置(中央X)がBBox中心Xより左にある場合のみ
+   * BBox左上角へ切り替える。それ以外(ラベルが中心以上に右寄り)は既存どおり
+   * 右上のまま変えない。判定はラベル/BBoxの現在位置(drag中はリアルタイムの
+   * プレビュー値)を都度使うため、BBox move/resize・ラベルdrag・Zoom/Fit/Pan
+   * いずれの後も追従する。 */
+  function resolveAnchor(rect: NormalizedRect, label: Point, labelWidthFraction: number): Point {
+    const labelCenterX = label.x + labelWidthFraction / 2
+    const bboxCenterX = rect.x + rect.w / 2
+    if (labelCenterX < bboxCenterX) return topLeftCorner(rect)
     return topRightCorner(rect)
   }
 
@@ -465,14 +477,17 @@ export function LeaderLineOverlay({
     <div className="leader-line-overlay" ref={overlayRef}>
       <svg className="leader-line-overlay__svg" preserveAspectRatio="none" viewBox="0 0 1 1">
         {masterLinked.map((detection) => {
-          // ラベル自身の位置は常に確定済みBBoxのアンカーから計算する(drag中の
-          // ジッター防止。要件16)。引出線(anchor)はresolveAnchorで別途、
-          // ドラッグ中ならpreviewBBoxを使ってリアルタイムに追従させる。
+          // ラベル自身の位置は常に確定済みBBoxのアンカー(右上角固定)から計算する
+          // (drag中のジッター防止。要件16)。BBox側接続点(anchor)は、ラベルの
+          // 実際の位置(中央X)とBBox中心Xの比較で右上/左上を切り替えるため、
+          // ラベル位置・ラベル幅を先に求めてから決定する。ドラッグ中は
+          // previewBBox/dragPreviewを使ってリアルタイムに追従させる。
           const persistedAnchor = topRightCorner(bboxOf(detection))
-          const anchor = resolveAnchor(detection)
           const label = resolveLabel(detection, persistedAnchor)
           const text = buildLabelText(detection)
           const widthFraction = computeLabelWidthFraction(text, containerWidthPx)
+          const rect = resolveRect(detection)
+          const anchor = resolveAnchor(rect, label, widthFraction)
           const geometry = computeLeaderGeometry(anchor, label, widthFraction)
           const d = pathD(geometry)
           const colors = getCategoryPresentation(detection.master_item_category).colors
