@@ -2,7 +2,9 @@
 
 提供された画面構成案(要件8)を土台に、Phase 1以降(Phase 1.5の実データViewer化、
 Issue #4のPhase B積算確定UI、Issue #6の折りたたみ・視認性改善、Issue #9のヘッダー/
-配色調整までを含む、2026-09時点のmain)で実装した内容を記述する。章立ては
+配色調整、Issue #19の4 floating panel化・部品台帳再設計、Issue #25の
+floating panel右端カスケード配置・中ボタンPan/ダブルクリックFit・LeaderLine
+接続点ルールまでを含む、2026-09時点のmain)で実装した内容を記述する。章立ては
 実装順の追記形式のため、章番号と機能追加時期は必ずしも一致しない。レイアウト・
 項目とも暫定であり、実機操作後の変更を前提とする(要件2)。
 
@@ -228,21 +230,34 @@ Undo/Redoボタンと同じ編集ツールバー(`app-layout__edit-toolbar`)の�
 `:not(.panel-visibility-toggles__button)`を追加し、表示切替3ボタンを明示的に
 除外することで対応した。
 
-**既定配置(初期表示のみ)**: 盤情報はViewer左上寄り、積算集約はViewer右上寄り、
-積算明細はViewer右下寄りに、既定でそれぞれ配置する。**[2026-09 追加修正]**
-部品台帳はViewer左下寄りに配置し、4panelが対角に分散するようにした。
-4つとも表示していても重ならないよう、盤情報・積算集約は`top`基準(左右で
-分かれる)、積算明細・部品台帳は`bottom`基準(左右で分かれる)で
-初期位置を計算する(`components/Layout/FloatingPanel.tsx`の`defaultRectFor`)。
-部品台帳は価格列を複数持つ横長の表のため、既定幅を他3panelより
-やや広め(480px、他は360px)にしている。ユーザーが移動/リサイズした後は、
-そのセッション中は変更後の位置・大きさを保持する(下記「ドラッグ移動・
-リサイズ」参照)。
+**既定配置(初期表示のみ)**: 4panel(盤情報・積算集約・積算明細・部品台帳)とも
+Viewerの**右端に寄せて**配置する(`left = container.width - SIDE_MARGIN - width`、
+`SIDE_MARGIN`は左右共通の余白)。**[2026-09 Issue #25で仕様変更]** 以前は
+盤情報=左上寄り・積算集約=右上寄り・積算明細=右下寄り・部品台帳=左下寄りという
+対角分散配置だったが、右端カスケード配置(4つとも右端揃え、表示順に応じて
+縦方向へ`STACK_OFFSET`ずつオフセットして積み重ねる)へ統一した。表示順は
+「盤情報→積算集約→積算明細→部品台帳」の固定順で、新たに表示ONにしたpanelほど
+下段に積まれる(`components/Layout/FloatingPanel.tsx`の`computeInitialRect`、
+`stackIndex = visibleKinds.indexOf(kind)`)。既定幅はkindごとに異なる
+(`DEFAULT_WIDTH_BY_KIND`: 盤情報300px・積算集約480px・積算明細770px・
+部品台帳320px。積算明細は列数が多い表のため他panelより広め)。ユーザーが
+移動/リサイズした後は、そのセッション中は変更後の位置・大きさを保持する
+(下記「ドラッグ移動・リサイズ」参照)。
+
+**[2026-09 Issue #25で追加: 縦方向の「底辺への吸着」修正]** Viewerのブラウザ
+リサイズに追従する際、位置は「表示ON直後・drag終了時・resize終了時にのみ
+確定するanchor」(`confirmedAnchorRef`、`deriveAnchor`がその時点のrectと
+コンテナサイズから「より近い方の辺」を算出)からの距離を保ったまま追従する
+(`reflowForResize`)。縦方向に大きく縮小してViewer下端へ一時的にclampされた
+場合でも、そのclamp結果を確定済みanchorとして上書きすることはなく、再拡大
+すればclamp前の相対位置へ正しく復元される(以前は毎回のresizeでanchorを
+rectから再算出していたため、一時的なclampが「下端に確定配置した」かのように
+扱われてしまう不具合があった)。
 
 ### ドラッグ移動・リサイズ (2026-09 Issue #19 追加修正)
 
 作業者が図面上の邪魔にならない位置・大きさへfloating panel(盤情報・積算集約・
-積算明細)を自由に調整できるようにした。実装は既存依存を増やさず、Pointer
+積算明細・部品台帳)を自由に調整できるようにした。実装は既存依存を増やさず、Pointer
 Events (`onPointerDown`/`onPointerMove`/`onPointerUp`、`setPointerCapture`)の
 自前実装のみで行っている(新規DnD/resizeライブラリは導入していない)。
 
@@ -535,9 +550,15 @@ z-indexを押し上げた状態でもmodalが前面に出ることを確認済�
   `viewMode`が`'manual'`になり、以後はレイアウト変化があっても自動再Fitしない
   (ユーザーが意図して特定領域を見ている状態を尊重する)。単純な背景クリック
   (Detection選択解除)は`MIN_DRAG_PX`未満の移動として扱われるため、
-  誤ってfitモードを抜けることはない。
+  誤ってfitモードを抜けることはない。**[2026-09 Issue #25で仕様変更]** Panの
+  トリガーは左ドラッグから**中ボタン(`e.button === 1`)drag**へ変更した。
+  左ドラッグはPanせず、BBox/盤/引出線ラベルの選択・編集専用のまま維持する
+  (詳細は本章末尾「Pan操作の中ボタン化・中ボタンダブルクリックFit
+  (2026-09 Issue #25)」参照)。
 - **Fitボタン**: クリックすると`viewMode`を明示的に`'fit'`へ戻し、その時点の
-  Viewer実効領域へ即座に再Fitする。
+  Viewer実効領域へ即座に再Fitする。**[2026-09 Issue #25で追加]** 中ボタンの
+  ダブルクリックでも同じ`handleFitClick`を呼び出し、同じ効果を得られる
+  (詳細は同上の節参照)。
 - **初期表示**: ページを開いた直後・ブラウザリロード後の復元時は、常に
   `viewMode='fit'`から始まる (zoom値自体はリロード間で永続化しない)。
 - **Overlay整合性**: PNGとProductPanelOverlay/DetectionOverlay/LeaderLineOverlay/
@@ -550,6 +571,33 @@ z-indexを押し上げた状態でもmodalが前面に出ることを確認済�
   `DrawingCanvas.test.tsx`に本ステートマシンの単体テストを12件追加した
   (初期fit倍率計算・スクロール位置リセット・各種リサイズでの再Fit・手動zoom/pan後の
   再Fit抑止・Fitボタンでの復帰・Overlay位置の非影響、等)。
+
+#### Pan操作の中ボタン化・中ボタンダブルクリックFit (2026-09 Issue #25)
+
+- **Panのトリガーを左ドラッグから中ボタン(`e.button === 1`)dragへ変更した**。
+  `DrawingCanvas.tsx::handleMouseDown`で中ボタンの場合は`preventDefault`/
+  `stopPropagation`のうえ即座にPanを開始する(対象がBBox/盤overlay/引出線
+  ラベルの上であっても常にPan専用として扱う。個別Overlay側のmousedown
+  ハンドラ(`DetectionOverlay.tsx::handleCornerMouseDown`/`handleBboxMouseDown`、
+  `LeaderLineOverlay.tsx::handleLabelMouseDown`)はいずれも`e.button !== 0`で
+  中ボタンPressを無視して素通しするため、他の操作(選択・追加・移動・
+  リサイズ・ラベルdrag)を一切発火させない)。左ドラッグはPanしなくなり、
+  背景クリック(選択解除)判定のためだけに開始位置を記録する
+  (`clickCandidateRef`)。
+- **中ボタンダブルクリックでFit**: ブラウザ標準の`dblclick`イベントには
+  依存せず、中ボタンのmousedown/mouseup自体のbutton・時間間隔(400ms以内)・
+  移動量(`MIN_DRAG_PX`未満)を自前判定する。中ボタンPressは(ダブルクリック
+  成立前でも)常に即座にPanとして開始してよく、mouseup時に「実移動の無かった
+  Press」だった場合のみダブルクリック候補として記録する。既存の
+  `handleFitClick`(Fitボタンと同じ関数)をそのまま呼び出し、Fitロジックの
+  二重実装はしていない。実際にPan(移動あり)した直後はダブルクリック候補を
+  リセットするため、通常の中ボタンPan自体はダブルクリック判定によって
+  壊れない。
+- テストは`DrawingCanvas.test.tsx`に追加(中ボタンdragでPan、左dragは
+  Panしない、中ボタンsingle clickではFitしない、中ボタンダブルクリックで
+  Fit、判定間隔超過では非Fit、Pan直後の誤判定防止、子要素(BBox等)上での
+  ダブルクリックでも子要素自身のclickが発火しないこと、等)。
+
 - **`DetectionOverlay`とBBox/引出線の役割分離 (Phase 1.11 指示書冒頭)**: 積算コードに
   紐づくBBoxについて、「BBox=対象範囲を保持する内部・編集情報」「引出線=通常時に
   図面上へ表示する積算情報」として分離した。
@@ -667,11 +715,18 @@ z-indexを押し上げた状態でもmodalが前面に出ることを確認済�
 
 ### Manual BBox追加 (Phase 1.6, 要件9-16)
 
-- 下部の部品台帳で行を選択すると、Viewerが「BBox追加モード」になる
-  (ツールバーに「✎ BBox追加モード」バッジを表示、カーソルがcrosshairに変化)。
-- この状態でViewer上をドラッグすると、Pan操作の代わりにManual BBoxの矩形選択になる
+- 部品台帳(floating panel化済み、7章参照)で行を選択すると、Viewerが
+  「BBox追加モード」になる(ツールバーに「✎ BBox追加モード」バッジを表示、
+  カーソルがcrosshairに変化)。
+- この状態でViewer上を**左**ドラッグすると、Manual BBoxの矩形選択になる
   (ドラッグ中は紫の破線でプレビュー表示、マウスを離した時点で確定)。
-- 未選択時のドラッグは従来通りPan操作のまま (要件13)。
+  **[2026-09 Issue #25で仕様変更]** Panはこの左ドラッグとは独立した中ボタン
+  drag専用になったため、「Pan操作の代わりに」ではなく、bboxAddMode中の
+  左ドラッグは元々Panしていた経路とは別処理として矩形選択のみを行う
+  (前掲「Pan操作の中ボタン化」参照)。
+- 未選択時の左ドラッグはPanせず、何も起きない(要件13時点では「従来通り
+  Pan操作のまま」だったが、Issue #25でPan自体が中ボタン専用になったため、
+  この記述は現行仕様には当てはまらない)。
 - 一定未満 (画面上6px未満) の移動量はクリックとみなし、BBoxを作成しない (要件14)。
 - 確定したBBoxはBackendへ登録され (`POST /api/detections`)、即座に図面上へ表示される。
 - Manual BBoxはAI検出結果と視覚的に区別できる: 紫系の破線枠・背景、ラベルに
@@ -755,9 +810,12 @@ z-indexを押し上げた状態でもmodalが前面に出ることを確認済�
   残している。
 - **矢印head (追加修正6章〜8章。2026-09 追加修正1章〜4章でサイズ変更)**: SVGの
   `<marker>` (`orient="auto"`) を経路の終点(anchor)に取り付け、経路の進行方向
-  (elbow→anchor)から矢印の向きを自動計算させる。矢印の先端は常にBBox右上角
-  (anchor)を指す。一般的なCAD引出線と同様の三角形の矢印headとした
-  (線端の単純な処理ではない)。
+  (elbow→anchor)から矢印の向きを自動計算させる。矢印の先端はBBox側接続点
+  (anchor)を指す。**[2026-09 Issue #25で仕様変更]** 以前はanchorが常にBBox右上角
+  固定だったが、ラベルの代表位置(中央X)がBBox中心Xより左にある場合のみ
+  BBox左上角へ切り替わるようになった(それ以外は従来どおり右上角のまま。
+  次項「BBox側接続点(anchor)の決定」参照)。一般的なCAD引出線と同様の
+  三角形の矢印headとした(線端の単純な処理ではない)。
   **[2026-09 追加修正]** 実画面ではBBox四隅のResize Handle(10px, CSS固定)より
   矢印の方が大きく見え、図面の文字に重なりやすかったため、`markerWidth`/
   `markerHeight`を`0.018`→`0.010`(正規化座標。約56%に縮小、指示の50〜65%の
@@ -766,6 +824,21 @@ z-indexを押し上げた状態でもmodalが前面に出ることを確認済�
   予測しやすくするため)。実データ(page16, Detection id=16)でのPillow合成
   検証では、旧11.4px相当→新6.4px相当(想定Viewer幅900pxの場合)で、
   Resize Handle(10px)より明確に小さくなることを確認した。
+- **BBox側接続点(anchor)の決定 (2026-09 Issue #25追加修正)**: `resolveAnchor(rect,
+  label, labelWidthFraction)`(`LeaderLineOverlay.tsx`)が、ラベルの代表位置
+  (中央X = `label.x + labelWidthFraction / 2`)と対象BBoxの中心X
+  (`rect.x + rect.w / 2`)を比較する。**ラベル中央XがBBox中心Xより厳密に
+  左にある場合のみ**、接続点を`utils/bbox.ts::topLeftCorner(rect)`
+  (BBoxの`x, y`そのもの、オフセット無し)へ切り替える。それ以外(等しい場合を
+  含む)は既存どおり`topRightCorner(rect)`のまま変更しない。ラベル位置自体の
+  計算(`resolveLabel`、直上の「ラベル帯の独立した位置管理」参照)とは独立した
+  ロジックであり、ラベルの初期配置・BBox move時の追従計算にはこの新ロジックは
+  影響しない(常に`topRightCorner`基準のまま)。判定に使う`rect`は
+  `previewBBox`(BBoxドラッグ中の未確定rect)を優先するため、BBox move/resize・
+  ラベルdrag(`dragPreview`)いずれの最中でもmouseupを待たずにリアルタイムに
+  切り替わる。`LeaderLineOverlay.test.tsx`に8件のテスト(左移動で切替/右のまま
+  維持/境界値は非切替/右へ戻すと復帰/BBox move後に追従/BBox resize後に追従/
+  previewBBoxによるリアルタイム追従/dragPreviewによるリアルタイム追従)を追加した。
 - **表示文字列の取得元 (追加修正11章〜14章)**: 「コード 型式」の型式部分は
   `Detection.master_item_model`(Backendが`master_item_id`から都度JOINして返す
   Master Itemの現在の型式)を使う。コード部分も同様に、可能な限り
@@ -813,9 +886,11 @@ z-indexを押し上げた状態でもmodalが前面に出ることを確認済�
   ドラッグ中は古い位置のまま表示されていた。`DrawingViewer.tsx`が
   `previewBBox: {detectionId, rect} | null` stateを保持し、`DetectionOverlay`
   (ドラッグ操作の主体)が`onPreviewBBoxChange`経由でmousemove毎に都度これを更新、
-  `LeaderLineOverlay`は同じstateを読んでアンカー計算(`topRightCorner`)に
-  `previewBBox ?? persistedBBox`を使うことで、mouseup前(未確定)でもアンカー・
-  斜線・矢印がリアルタイムに追従するようにした。Backendへの保存(PATCH)は
+  `LeaderLineOverlay`は同じstateを読んで接続点計算(`resolveAnchor`。
+  2026-09 Issue #25追加修正で`topRightCorner`/`topLeftCorner`の条件分岐化、
+  前掲「BBox側接続点(anchor)の決定」参照)に`previewBBox ?? persistedBBox`を
+  使うことで、mouseup前(未確定)でもアンカー・斜線・矢印がリアルタイムに
+  追従するようにした。Backendへの保存(PATCH)は
   従来通りmouseup時のみで、mousemove毎には送らない (要件14。既存の
   「mousemove→Frontend previewのみ更新、mouseup→Backend PATCH」という
   アーキテクチャは変更していない)。**ラベル自体の位置(`leader_label_x/y`)は
