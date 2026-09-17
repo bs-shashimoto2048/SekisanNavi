@@ -221,6 +221,10 @@ export function DetectionOverlay({
   }, [])
 
   function handleCornerMouseDown(e: React.MouseEvent, detection: Detection, corner: Corner) {
+    // [追加修正: 中ボタンPan中は他操作を発火させない] 中ボタン(や右ボタン)押下は
+    // ここで無視して伝播させ、DrawingCanvas側のPanハンドラへ渡す (要件: 中ボタンが
+    // BBoxのresize handle上にあってもPanのみが開始されること)。
+    if (e.button !== 0) return
     e.preventDefault()
     e.stopPropagation()
     const original: NormalizedRect = {

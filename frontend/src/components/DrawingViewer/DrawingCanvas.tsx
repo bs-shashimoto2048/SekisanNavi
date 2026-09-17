@@ -89,9 +89,15 @@ export function DrawingCanvas({
   const viewportRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const renderTaskRef = useRef<ReturnType<PDFPageProxy['render']> | null>(null)
-  const dragRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(
+  // [追加修正: Pan操作を中ボタンへ変更] 従来は左ドラッグでPanしていたが、CADライクな
+  // 操作性のため中ボタン(マウスホイール押し込み)+dragへ変更した。panRefは中ボタンPan専用、
+  // clickCandidateRefは左クリックによる「空白領域クリック=選択解除」判定専用に分離する
+  // (要件26は維持しつつ、左ドラッグではPanしないようにするため)。
+  const panRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(
     null,
   )
+  const clickCandidateRef = useRef<{ x: number; y: number } | null>(null)
+  const [isPanning, setIsPanning] = useState(false)
   const wheelAnchorRef = useRef<{ nativeX: number; nativeY: number; clientX: number; clientY: number } | null>(
     null,
   )
@@ -342,6 +348,27 @@ export function DrawingCanvas({
   }
 
   function handleMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    // [追加修正: CADライクな中ボタンPan] 中ボタン押下は、対象がBBox/盤overlay/
+    // 引出線ラベル等の上であっても常にPan専用として扱い、他の一切の操作(BBox選択・
+    // 追加・移動・リサイズ、盤クリック、hover選択等)を発火させない。個別Overlay側の
+    // mousedownハンドラ(handleCornerMouseDown等)は`e.button !== 0`で自らガードして
+    // おり、ここへバブリングしてくる前提。preventDefault/stopPropagationで
+    // ブラウザ標準のmiddle-click auto-scroll等との競合も防ぐ。
+    if (e.button === 1) {
+      e.preventDefault()
+      e.stopPropagation()
+      const viewport = viewportRef.current
+      if (!viewport) return
+      panRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+        scrollLeft: viewport.scrollLeft,
+        scrollTop: viewport.scrollTop,
+      }
+      setIsPanning(true)
+      return
+    }
+
     if (e.button !== 0) return
     if ((e.target as HTMLElement).closest('button')) return
 
@@ -358,14 +385,9 @@ export function DrawingCanvas({
       return
     }
 
-    const viewport = viewportRef.current
-    if (!viewport) return
-    dragRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      scrollLeft: viewport.scrollLeft,
-      scrollTop: viewport.scrollTop,
-    }
+    // 左ドラッグはPanしない(要件変更)。空白領域の単純クリック(移動なし)による
+    // 選択解除(要件26)判定のためだけに開始位置を記録する。
+    clickCandidateRef.current = { x: e.clientX, y: e.clientY }
   }
 
   useEffect(() => {
@@ -381,15 +403,15 @@ export function DrawingCanvas({
         })
         return
       }
-      const drag = dragRef.current
+      const pan = panRef.current
       const viewport = viewportRef.current
-      if (!drag || !viewport) return
+      if (!pan || !viewport) return
       // 実際に意味のある移動量に達した時点で明示的なPanとみなし、manualモードへ切り替える
-      // (要件27。空白クリック=ほぼ動いていない場合はここを通らず、fitモードのままにする)。
-      const movedPx = Math.max(Math.abs(e.clientX - drag.x), Math.abs(e.clientY - drag.y))
+      // (要件27。ほぼ動いていない場合はここを通らず、fitモードのままにする)。
+      const movedPx = Math.max(Math.abs(e.clientX - pan.x), Math.abs(e.clientY - pan.y))
       if (movedPx >= MIN_DRAG_PX) setViewMode('manual')
-      viewport.scrollLeft = drag.scrollLeft - (e.clientX - drag.x)
-      viewport.scrollTop = drag.scrollTop - (e.clientY - drag.y)
+      viewport.scrollLeft = pan.scrollLeft - (e.clientX - pan.x)
+      viewport.scrollTop = pan.scrollTop - (e.clientY - pan.y)
     }
 
     function handleMouseUp(e: MouseEvent) {
@@ -419,10 +441,18 @@ export function DrawingCanvas({
         onCreateBBoxRef.current?.(rect)
         return
       }
-      const drag = dragRef.current
-      dragRef.current = null
-      if (drag) {
-        const movedPx = Math.max(Math.abs(e.clientX - drag.x), Math.abs(e.clientY - drag.y))
+      // 中ボタンPanの終了。クリック相当の副作用(選択解除等)は一切発生させない
+      // (Pan終了時にleftover click-like side effectを残さない)。
+      if (panRef.current) {
+        panRef.current = null
+        setIsPanning(false)
+        return
+      }
+
+      const click = clickCandidateRef.current
+      clickCandidateRef.current = null
+      if (click) {
+        const movedPx = Math.max(Math.abs(e.clientX - click.x), Math.abs(e.clientY - click.y))
         // ほぼ動いていない = 空白領域のクリックとみなし、選択解除を通知する (要件26)。
         if (movedPx < MIN_DRAG_PX) {
           onBackgroundClickRef.current?.()
@@ -504,7 +534,9 @@ export function DrawingCanvas({
       <div
         ref={viewportRef}
         className={
-          'drawing-canvas__viewport' + (bboxAddMode ? ' drawing-canvas__viewport--draw' : '')
+          'drawing-canvas__viewport' +
+          (bboxAddMode ? ' drawing-canvas__viewport--draw' : '') +
+          (isPanning ? ' drawing-canvas__viewport--panning' : '')
         }
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}

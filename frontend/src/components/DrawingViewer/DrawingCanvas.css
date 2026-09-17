@@ -149,11 +149,13 @@
   overflow: auto;
   background: #e5e7eb;
   border: 1px solid #d1d5db;
-  cursor: grab;
   position: relative;
 }
 
-.drawing-canvas__viewport:active {
+/* [追加修正: Pan操作を中ボタンへ変更] Panは左ドラッグではなく中ボタンドラッグに
+   なったため、常時grabカーソルを表示すると「左ドラッグでPanできる」という
+   誤解を招く。中ボタンPan中(isPanning)のみgrabbingカーソルに切り替える。 */
+.drawing-canvas__viewport--panning {
   cursor: grabbing;
 }
 

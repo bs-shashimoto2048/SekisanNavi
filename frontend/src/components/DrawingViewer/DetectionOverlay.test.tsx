@@ -295,6 +295,28 @@ describe('DetectionOverlay: 四隅リサイズハンドル (Phase 1.7)', () => {
     expect(rect.h).toBeCloseTo(0.001, 3)
   })
 
+  it('[Issue #25 追加修正] ignores a middle-button mousedown on a resize handle, so it does not start a resize (bubbles up to the Viewer for middle-button Pan instead)', () => {
+    const onResizeDetection = vi.fn()
+    const detection = makeDetection({ id: 1, bbox_x: 0.2, bbox_y: 0.2, bbox_w: 0.2, bbox_h: 0.1 })
+    render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={1}
+        highlightedDetectionId={null}
+        onSelectDetection={() => {}}
+        onResizeDetection={onResizeDetection}
+      />,
+    )
+    setOverlayRect(1000, 1000)
+
+    const handle = screen.getByRole('button', { name: 'BBoxサイズ変更 (bottom-right)' })
+    fireEvent.mouseDown(handle, { button: 1, clientX: 400, clientY: 300 })
+    fireEvent.mouseMove(window, { clientX: 500, clientY: 400 })
+    fireEvent.mouseUp(window, { clientX: 500, clientY: 400 })
+
+    expect(onResizeDetection).not.toHaveBeenCalled()
+  })
+
   it('reports the live in-progress rect via onPreviewBBoxChange on every mousemove, BEFORE mouseup, and still commits correctly on mouseup (Phase 1.11 追加修正11章〜17章: LeaderLineOverlayが同じ値をリアルタイム追従するために必要)', () => {
     const onResizeDetection = vi.fn()
     const detection = makeDetection({ id: 1, bbox_x: 0.2, bbox_y: 0.2, bbox_w: 0.2, bbox_h: 0.1 })
@@ -360,6 +382,28 @@ describe('DetectionOverlay: BBox内部dragによる移動 (Phase 1.11 UI改修�
     expect(rect.y).toBeCloseTo(0.25)
     expect(rect.w).toBeCloseTo(0.2) // 幅は不変
     expect(rect.h).toBeCloseTo(0.1) // 高さは不変
+  })
+
+  it('[Issue #25 追加修正] ignores a middle-button mousedown on the selected BBox body, so it does not start a move (bubbles up to the Viewer for middle-button Pan instead)', () => {
+    const onResizeDetection = vi.fn()
+    const detection = makeDetection({ id: 1, bbox_x: 0.2, bbox_y: 0.2, bbox_w: 0.2, bbox_h: 0.1 })
+    render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={1}
+        highlightedDetectionId={null}
+        onSelectDetection={() => {}}
+        onResizeDetection={onResizeDetection}
+      />,
+    )
+    setOverlayRect(1000, 1000)
+
+    const bbox = screen.getByTitle(/roof_fan/)
+    fireEvent.mouseDown(bbox, { button: 1, clientX: 300, clientY: 300 })
+    fireEvent.mouseMove(window, { clientX: 400, clientY: 350 })
+    fireEvent.mouseUp(window, { clientX: 400, clientY: 350 })
+
+    expect(onResizeDetection).not.toHaveBeenCalled()
   })
 
   it('does not treat a plain click (movement below the threshold) as a move', () => {

@@ -56,7 +56,7 @@ describe('DrawingCanvas', () => {
     vi.restoreAllMocks()
   })
 
-  it('does not start drawing / does not call onCreateBBox when bboxAddMode is off (Pan mode instead)', async () => {
+  it('does not start drawing / does not call onCreateBBox when bboxAddMode is off (left-drag mode instead)', async () => {
     const onCreateBBox = vi.fn()
     const { viewport } = await renderCanvas({ bboxAddMode: false, onCreateBBox })
 
@@ -65,8 +65,72 @@ describe('DrawingCanvas', () => {
     fireEvent.mouseUp(window, { clientX: 150, clientY: 150 })
 
     expect(onCreateBBox).not.toHaveBeenCalled()
-    // Pan操作時にプレビュー矩形が描画されないこと
+    // BBox追加モードOFF時の左drag操作時にプレビュー矩形が描画されないこと
     expect(document.querySelector('.drawing-canvas__draft-rect')).toBeNull()
+  })
+
+  describe('[Issue #25 追加修正] Pan操作を左ドラッグから中ボタン(マウスホイール押し込み)+dragへ変更', () => {
+    it('left-button drag does NOT pan (viewport scroll position stays unchanged)', async () => {
+      const { viewport } = await renderCanvas({ bboxAddMode: false })
+      viewport.scrollLeft = 10
+      viewport.scrollTop = 20
+
+      fireEvent.mouseDown(viewport, { button: 0, clientX: 100, clientY: 100 })
+      fireEvent.mouseMove(window, { clientX: 250, clientY: 220 })
+      fireEvent.mouseUp(window, { clientX: 250, clientY: 220 })
+
+      expect(viewport.scrollLeft).toBe(10)
+      expect(viewport.scrollTop).toBe(20)
+      expect(viewport.className).not.toContain('drawing-canvas__viewport--panning')
+    })
+
+    it('middle-button (button: 1) drag DOES pan (viewport scrolls by the drag delta) and toggles the panning class', async () => {
+      const { viewport } = await renderCanvas({ bboxAddMode: false })
+      viewport.scrollLeft = 10
+      viewport.scrollTop = 20
+
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      expect(viewport.className).toContain('drawing-canvas__viewport--panning')
+      fireEvent.mouseMove(window, { clientX: 60, clientY: 90 }) // -40, -10
+      expect(viewport.scrollLeft).toBe(50) // 10 - (60-100)
+      expect(viewport.scrollTop).toBe(30) // 20 - (90-100)
+
+      fireEvent.mouseUp(window, { clientX: 60, clientY: 90 })
+      expect(viewport.className).not.toContain('drawing-canvas__viewport--panning')
+    })
+
+    it('a middle-button drag starting on a child button (e.g. a BBox or resize handle) still Pans, unlike left-button which is blocked there', async () => {
+      const { viewport } = await renderCanvas({
+        bboxAddMode: false,
+        children: <button type="button">既存BBoxまたはリサイズハンドル</button>,
+      })
+      const childButton = screen.getByText('既存BBoxまたはリサイズハンドル')
+      viewport.scrollLeft = 0
+      viewport.scrollTop = 0
+
+      fireEvent.mouseDown(childButton, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseMove(window, { clientX: 150, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 150, clientY: 100 })
+
+      expect(viewport.scrollLeft).toBe(-50) // 0 - (150-100) : Panが発生している
+    })
+
+    it('does not call onBackgroundClick after a middle-button Pan ends (no leftover click-like side effect)', async () => {
+      const onBackgroundClick = vi.fn()
+      const { viewport } = await renderCanvas({ bboxAddMode: false, onBackgroundClick })
+
+      // ほぼ動かさない中ボタンpress+release(クリック相当の動き)であっても、
+      // 中ボタンでは選択解除通知を発生させない。
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 101, clientY: 100 })
+      expect(onBackgroundClick).not.toHaveBeenCalled()
+
+      // 実際にPanした場合も同様。
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseMove(window, { clientX: 200, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 200, clientY: 100 })
+      expect(onBackgroundClick).not.toHaveBeenCalled()
+    })
   })
 
   it('creates a normalized BBox from a drag when bboxAddMode is on, independent of zoom', async () => {
@@ -356,10 +420,10 @@ describe('DrawingCanvas: Viewer自動Fit (実画面未達 追加修正指示18�
     expect(screen.queryByText('25%')).not.toBeInTheDocument()
   })
 
-  it('does NOT auto re-fit after a real manual Pan drag (movement past the click/drag threshold)', async () => {
+  it('does NOT auto re-fit after a real manual Pan drag (middle-button, movement past the click/drag threshold)', async () => {
     const { viewport } = await renderPngCanvasForFit()
 
-    fireEvent.mouseDown(viewport, { button: 0, clientX: 100, clientY: 100 })
+    fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
     fireEvent.mouseMove(window, { clientX: 150, clientY: 100 }) // 6px超の実移動
     fireEvent.mouseUp(window, { clientX: 150, clientY: 100 })
 

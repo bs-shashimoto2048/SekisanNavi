@@ -574,6 +574,29 @@ describe('LeaderLineOverlay (Phase 1.11 UI改修指示5章〜16章)', () => {
       expect(onMoveLabel).not.toHaveBeenCalled()
     })
 
+    it('[Issue #25 追加修正] ignores a middle-button mousedown on the label, so it does not start a label move (bubbles up to the Viewer for middle-button Pan instead)', () => {
+      const onMoveLabel = vi.fn()
+      const detection = makeDetection({ leader_label_x: 0.4, leader_label_y: 0.1 })
+      render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={1}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={onMoveLabel}
+        />,
+      )
+      setOverlayRect(1000, 1000)
+
+      const label = screen.getByText('11001 OS2-816')
+      fireEvent.mouseDown(label, { button: 1, clientX: 400, clientY: 100 })
+      fireEvent.mouseMove(window, { clientX: 500, clientY: 150 })
+      fireEvent.mouseUp(window, { clientX: 500, clientY: 150 })
+
+      expect(onMoveLabel).not.toHaveBeenCalled()
+    })
+
     it('does not treat a plain click (movement below threshold) as a label move', () => {
       const onMoveLabel = vi.fn()
       const detection = makeDetection({ leader_label_x: 0.4, leader_label_y: 0.1 })
