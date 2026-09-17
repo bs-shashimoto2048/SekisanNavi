@@ -74,7 +74,14 @@
   flex-shrink: 0;
 }
 
-.app-layout__edit-toolbar button {
+/* 追加UI修正指示2章: `.panel-visibility-toggles__button`(盤情報/積算集約/
+   積算明細の表示切替)はこのツールバーの中に置かれる<button>だが、
+   Undo/Redo等と混同しない専用配色(PanelVisibilityToggles.css)を持つため、
+   ここでは`:not(.panel-visibility-toggles__button)`により明示的に除外する。
+   除外しない場合、この汎用ルールの詳細度(class+element)が
+   `.panel-visibility-toggles__button`単体の詳細度(class 1つ)を上回ってしまい、
+   専用配色が意図せず上書きされてしまう(実ブラウザ確認で発覚)。 */
+.app-layout__edit-toolbar button:not(.panel-visibility-toggles__button) {
   font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ */
   padding: 0.2rem 0.7rem;
   border: 1px solid #d1d5db;
@@ -84,12 +91,12 @@
   cursor: pointer;
 }
 
-.app-layout__edit-toolbar button:hover:not(:disabled) {
+.app-layout__edit-toolbar button:hover:not(:disabled):not(.panel-visibility-toggles__button) {
   border-color: #93c5fd;
   background: #eff6ff;
 }
 
-.app-layout__edit-toolbar button:disabled {
+.app-layout__edit-toolbar button:disabled:not(.panel-visibility-toggles__button) {
   color: #9ca3af;
   cursor: not-allowed;
   background: #f9fafb;
@@ -161,26 +168,6 @@
   min-height: 0;
 }
 
-/* 右ペイン: Header直下から画面下端まで1本のペインとして全高表示する。
-   内部は盤パラメータ(可変・上限あり)+積算結果(残り全部)の縦積みで、
-   それぞれが自分自身の内部でスクロールする (指示書15章、画面全体はスクロールしない)。 */
-.app-workspace__right {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  /* UI視覚階層改善 指示8章/23章: Viewer|右ペインの大領域境界(Level1)。
-     画面上で特に大きな役割境界のため、表内部の罫線とは明確に違って見える
-     トーンにする。幅は1pxのまま(太い枠は使わない、指示8章)。 */
-  border-left: 1px solid var(--border-region);
-}
-
-/* Issue #19 Phase 2: 積算集約・積算明細をViewer上のfloating panelへ移動した
-   ため、右ペインは盤情報(PanelInfo)のみになった。盤情報自身がheader固定+
-   内部スクロールを持つため、ここでは高さ(flex)を伝えるだけでよい。展開中は
-   右ペインの残り高さいっぱい(flex:1)、折りたたみ中は見出し分のみ(flex:0 0 auto、
-   `App.tsx`側のinline styleで切り替える)。 */
-.app-workspace__panel-info-wrap {
-  min-height: 0;
-  overflow: hidden;
-}
+/* Issue #19 Phase 4: 盤情報もfloating panel化したことに伴い、右ペイン
+   (`.app-workspace__right`)自体を廃止した。`.app-workspace`は
+   `.app-workspace__main`のみを子に持ち、Viewerが使える幅がその分広がる。 */

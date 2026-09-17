@@ -8,7 +8,9 @@
   display: flex;
   flex-direction: column;
   border-bottom: 1px solid #e5e7eb;
-  padding: 0.5rem;
+  /* [追加修正: 積算集約上部の余白削減] floating panelの最小高さをさらに
+     縮めるため、上下paddingを引き締める(左右は表の可読性のため維持)。 */
+  padding: 0.35rem 0.5rem;
 }
 
 .estimate-aggregation__fixed-top {
@@ -16,12 +18,13 @@
 }
 
 /* Issue #4 Phase B-4: 積算確定ボタンと確定履歴ボタンを横並びにする
-   ラッパー(見た目上は2つの独立ボタンのまま、配置だけをまとめる)。 */
+   ラッパー(見た目上は2つの独立ボタンのまま、配置だけをまとめる)。
+   [追加修正] gapを詰め、確定操作群自体もコンパクトにする。 */
 .estimate-aggregation__confirmation-row {
   display: flex;
   align-items: flex-start;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 0.3rem;
 }
 
 /* 3領域(盤情報・積算集約・積算明細)の見出しを統一する (指示9章/10章)。
@@ -39,8 +42,11 @@
   background: #eff6ff;
   border-left: 3px solid var(--accent-section);
   box-shadow: inset 0 -1px 0 0 #93c5fd;
-  margin: 0 0 0.4rem;
-  padding: 0.3rem 0.5rem;
+  /* [追加修正: floating panelの最小高さをさらに縮める] 見出し自体の
+     上下padding/margin-bottomを引き締める(font-size/weight/背景色は
+     変更しない)。 */
+  margin: 0 0 0.3rem;
+  padding: 0.2rem 0.5rem;
   border-radius: 0 4px 4px 0;
 }
 
@@ -50,7 +56,12 @@
   margin: 0.3rem 0;
 }
 
-/* 製番合計は常に最上部付近に固定し、明細をスクロールしても見失わないようにする。 */
+/* 製番合計は常に最上部付近に固定し、明細をスクロールしても見失わないようにする。
+   [追加修正: 積算集約上部の余白削減・再配置] 従来はこのブロックを単独で
+   縦に配置していたが、積算コード件数・対象selectと同じ行(下記
+   `.estimate-aggregation__summary-row`)へ並べる形に変更したため、
+   自身の margin-bottom は行側のgapに委ねて0にする(見た目・文言・
+   赤系強調は変更しない)。 */
 .estimate-aggregation__grand-total {
   font-size: 1.05rem; /* 全体フォント拡大 指示1章 */
   font-weight: 700;
@@ -58,7 +69,6 @@
   background: #f3f4f6;
   border-radius: 4px;
   padding: 0.3rem 0.5rem;
-  margin-bottom: 0.3rem;
 }
 
 /* Issue #9: 「製番合計」の金額文字だけを赤系で強調する。旧来は単価暫定表示と
@@ -77,18 +87,31 @@
   margin-left: 0.3rem;
 }
 
-.estimate-aggregation__summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
+/* [追加修正: 積算集約上部の余白削減・再配置] 「積算コードN件」は独立した
+   ブロックではなく、`.estimate-aggregation__summary-row`内の1要素として
+   製番合計・対象selectと横並びにする。 */
+.estimate-aggregation__code-count {
   font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ */
   color: #4b5563;
-  margin-bottom: 0.4rem;
+  white-space: nowrap;
 }
 
-.estimate-aggregation__summary strong {
+.estimate-aggregation__code-count strong {
   color: #1f2937;
   font-weight: 700;
+}
+
+/* [追加修正: 積算集約上部の余白削減・再配置] 製番合計・積算コード件数・
+   対象selectを縦に3ブロック積んでいた旧来のレイアウトを、1つの
+   flex-wrap行へまとめる。パネル幅が十分な場合は横一列に収まり、
+   狭い場合のみ自然に折り返す(縦の固定コストを増やさない)。 */
+.estimate-aggregation__summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 0.75rem;
+  row-gap: 0.3rem;
+  margin-bottom: 0.3rem;
 }
 
 /* 単価未設定等、金額の一部を合計に含められなかった旨の注記
@@ -109,7 +132,8 @@
   margin: 0 0 0.4rem;
 }
 
-/* 対象セレクト。 */
+/* 対象セレクト。 [追加修正] summary-row内の1要素になったため、自身の
+   margin-bottomは行側のgapに委ねて0にする。 */
 .estimate-aggregation__target-select-label {
   display: flex;
   flex-direction: column;
@@ -117,7 +141,6 @@
   font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.75rem→引き上げ */
   color: #6b7280;
   font-weight: 500;
-  margin-bottom: 0.45rem;
 }
 
 /* Issue #6 追加修正(色変更が実画面へ反映されていない件): 初回実装は
@@ -182,26 +205,34 @@
   table-layout: fixed;
 }
 
+/* [追加修正: floating panel初期幅の実測ベース再調整] 各列の実測自然幅
+   (隠しnowrap要素による計測。ヘッダ文言・実データのうち最長セル基準)は
+   コード≈39px/内容≈198px/単価≈59px/数量≈26px/金額≈57pxで、
+   これにcell padding等を加えた必要量の比率へ列幅配分を合わせ直した
+   (詳細はIssue #19への報告コメント参照)。floating panelの既定幅自体も
+   360→480pxへ拡大している(`FloatingPanel.tsx`の`DEFAULT_WIDTH_BY_KIND`)。 */
 .estimate-aggregation__col-code {
-  width: 18%;
+  width: 11%;
+  white-space: nowrap; /* 短い列はヘッダ・値とも折り返させない */
 }
 
 .estimate-aggregation__col-content {
-  width: 34%;
+  width: 49%;
   text-align: left;
+  min-width: 0;
   overflow-wrap: break-word; /* 内容は必要に応じて2段表示を許容する */
 }
 
 .estimate-aggregation__col-price {
-  width: 20%;
+  width: 16%;
 }
 
 .estimate-aggregation__col-qty {
-  width: 10%;
+  width: 8%;
 }
 
 .estimate-aggregation__col-amount {
-  width: 18%;
+  width: 16%;
 }
 
 /* 単価・金額は右寄せ、常に1行で収まる幅を確保する。 */
@@ -213,6 +244,7 @@
 
 .estimate-aggregation__col-qty {
   text-align: right;
+  white-space: nowrap; /* 数量も短い列として折り返させない */
 }
 
 /* 表ヘッダは常に見える (position:sticky。指示5章)。表ヘッダの背景は

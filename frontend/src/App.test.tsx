@@ -344,6 +344,31 @@ vi.mock('./api/client', () => ({
   // 個別にmockResolvedValueOnce等で上書きする。
   fetchHelpPdfStatus: vi.fn(async () => ({ available: false })),
   helpPdfFileUrl: vi.fn(() => 'http://localhost:8000/api/help/estimate-pdf/file'),
+  // Issue #4 Phase B-3/B-4: 積算確定・確定履歴。App.test.tsx側では確定操作
+  // そのものを検証するテストは無い(専用のEstimateConfirmationAction.test.tsx/
+  // EstimateConfirmationHistory.test.tsxが担う)ため、既定では空の履歴を返す
+  // だけの最小スタブにする([追加修正] 確定履歴modalがfloating panelより前面に
+  // 出ることを確認するApp.test.tsxのテストで、このAPIが呼ばれるようになったため追加)。
+  createEstimateConfirmation: vi.fn(
+    async (): Promise<import('./types/domain').EstimateConfirmation> => ({
+      id: 1,
+      product_no: 'A1GV2421',
+      confirmed_at: '2024-01-01T00:00:00',
+      item_count: 0,
+      items: [],
+    }),
+  ),
+  listEstimateConfirmations: vi.fn(async () => []),
+  getEstimateConfirmation: vi.fn(
+    async (): Promise<import('./types/domain').EstimateConfirmationDetail> => ({
+      id: 1,
+      product_no: 'A1GV2421',
+      confirmed_at: '2024-01-01T00:00:00',
+      item_count: 0,
+      total_amount: 0,
+      items: [],
+    }),
+  ),
   // 積算明細強化・Undo/Redo・要確認警告・編集追従 指示8章: BBox本体はidで特定した
   // 元のDetectionを基準に更新する (実Backendの既存仕様と同じく、bbox_x/y/w/h以外の
   // 項目(master_item_id/source_type等)は変更しない。以前は常に`detectionOnOutline`を
@@ -934,16 +959,21 @@ describe('App: BBox削除 (Phase 1.7)', () => {
     await waitFor(() => expect(deleteDetection).toHaveBeenCalledWith(100))
   })
 
-  it('does not delete when the Delete key is pressed while a text input is focused (master picker search box)', async () => {
+  it('does not delete when the Delete key is pressed while a text input is focused (部品台帳のカテゴリ選択select)', async () => {
+    // [追加修正: 部品台帳への再設計] 旧来はMaster picker検索欄(text input)を
+    // 使っていたが検索欄自体を廃止したため、同じガード(INPUT/TEXTAREA/SELECT/
+    // contentEditableへフォーカス中はDeleteキーでのBBox削除を無視する。
+    // `App.tsx`のisEditableTarget相当ロジック参照)を検証できる代替として、
+    // 部品台帳のカテゴリ選択select(SELECT要素、ガード対象に含まれる)を使う。
     const { deleteDetection } = await import('./api/client')
     render(<App />)
     await navigateToOutlinePage()
     fireEvent.click(screen.getByTitle(/roof_fan/))
     await waitFor(() => expect(screen.getByRole('button', { name: 'BBox削除' })).not.toBeDisabled())
 
-    const searchBox = screen.getByPlaceholderText('コード・型式で検索 (現在のタブ内)')
-    searchBox.focus()
-    fireEvent.keyDown(searchBox, { key: 'Delete' })
+    const categorySelect = screen.getByRole('combobox', { name: '品名' })
+    categorySelect.focus()
+    fireEvent.keyDown(categorySelect, { key: 'Delete' })
 
     expect(deleteDetection).not.toHaveBeenCalled()
     // 選択状態・BBoxも消えていないこと
@@ -1037,7 +1067,7 @@ describe('App: product_df盤領域Overlayの表示先 (実画面未反映調査�
   })
 })
 
-describe('App: 左右ペインのリサイズ (UIレイアウト追加修正指示)', () => {
+describe('App: 左ペインのリサイズ・右ペイン廃止 (UIレイアウト追加修正指示、Issue #19 Phase 4で右ペイン廃止)', () => {
   beforeEach(() => {
     window.localStorage.clear()
   })
@@ -1050,20 +1080,24 @@ describe('App: 左右ペインのリサイズ (UIレイアウト追加修正指�
     await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
   }
 
-  it('keeps EstimateMasterPicker inside MainArea as a sibling of (not nested under) the right pane', async () => {
+  it('has no right pane element at all (Issue #19 Phase 4: 盤情報もfloating panel化し、右ペイン自体を廃止した)', async () => {
     await renderApp()
-    const rightPane = document.querySelector('.app-workspace__right') as HTMLElement
+    expect(document.querySelector('.app-workspace__right')).not.toBeInTheDocument()
+    expect(screen.queryByRole('separator', { name: '右ペインの幅を変更' })).not.toBeInTheDocument()
+  })
+
+  it('keeps EstimateMasterPicker inside MainArea, which is now the sole child of .app-workspace', async () => {
+    await renderApp()
+    const workspace = document.querySelector('.app-workspace') as HTMLElement
     const mainArea = document.querySelector('.app-workspace__main') as HTMLElement
     const master = document.querySelector('.master-picker') as HTMLElement
 
-    expect(rightPane).not.toBeNull()
     expect(mainArea).not.toBeNull()
     expect(master).not.toBeNull()
-    // Masterは右ペインの下(DOM上の子孫)ではなく、MainArea側に属する (指示書3章/7章)。
     expect(mainArea.contains(master)).toBe(true)
-    expect(rightPane.contains(master)).toBe(false)
-    // MainAreaとRightPaneは同階層 (overlayで重ねているのではなく別領域)。
-    expect(mainArea.parentElement).toBe(rightPane.parentElement)
+    // 右ペインが無くなったため、.app-workspaceの子要素はMainArea単独になる (指示書3章/7章の考え方をPhase 4でも維持)。
+    expect(workspace.children).toHaveLength(1)
+    expect(workspace.children[0]).toBe(mainArea)
   })
 
   it('resizes the left pane by dragging its splitter, and clamps at the minimum width', async () => {
@@ -1084,63 +1118,33 @@ describe('App: 左右ペインのリサイズ (UIレイアウト追加修正指�
     expect(nav.style.width).toBe('140px')
   })
 
-  it('resizes the right pane by dragging its splitter (drag right = narrower, drag left = wider), clamped at the minimum', async () => {
-    await renderApp()
-    const right = document.querySelector('.app-workspace__right') as HTMLElement
-    expect(right.style.width).toBe('300px')
-
-    const handle = screen.getByRole('separator', { name: '右ペインの幅を変更' })
-    fireEvent.mouseDown(handle, { clientX: 500, button: 0 })
-    fireEvent.mouseMove(window, { clientX: 450 }) // 左へドラッグ -> 右ペインが広くなる
-    fireEvent.mouseUp(window, { clientX: 450 })
-    expect(right.style.width).toBe('350px')
-
-    fireEvent.mouseDown(handle, { clientX: 450, button: 0 })
-    fireEvent.mouseMove(window, { clientX: 10000 }) // 右へ大きくドラッグ -> 最小幅でクランプ
-    fireEvent.mouseUp(window, { clientX: 10000 })
-    expect(right.style.width).toBe('220px')
-  })
-
-  it('does not exceed the maximum width for either pane', async () => {
+  it('does not exceed the maximum width for the left pane', async () => {
     await renderApp()
     const nav = document.querySelector('.app-workspace__nav') as HTMLElement
-    const right = document.querySelector('.app-workspace__right') as HTMLElement
 
     const leftHandle = screen.getByRole('separator', { name: '図面一覧の幅を変更' })
     fireEvent.mouseDown(leftHandle, { clientX: 0, button: 0 })
     fireEvent.mouseMove(window, { clientX: 100000 })
     fireEvent.mouseUp(window, { clientX: 100000 })
     expect(parseFloat(nav.style.width)).toBeCloseTo(window.innerWidth * 0.3, 5)
-
-    const rightHandle = screen.getByRole('separator', { name: '右ペインの幅を変更' })
-    fireEvent.mouseDown(rightHandle, { clientX: 100000, button: 0 })
-    fireEvent.mouseMove(window, { clientX: -100000 }) // 左へ大きく = 右ペイン拡大方向
-    fireEvent.mouseUp(window, { clientX: -100000 })
-    expect(parseFloat(right.style.width)).toBeCloseTo(window.innerWidth * 0.4, 5)
   })
 
-  it('restores previously saved pane widths from localStorage on mount', async () => {
+  it('restores previously saved left pane width from localStorage on mount', async () => {
     window.localStorage.setItem('sekisan-navi:left-pane-width', '260')
-    window.localStorage.setItem('sekisan-navi:right-pane-width', '340')
     await renderApp()
     const nav = document.querySelector('.app-workspace__nav') as HTMLElement
-    const right = document.querySelector('.app-workspace__right') as HTMLElement
     expect(nav.style.width).toBe('260px')
-    expect(right.style.width).toBe('340px')
   })
 
-  it('falls back to the initial widths when a stored value is invalid', async () => {
+  it('falls back to the initial width when a stored value is invalid', async () => {
     window.localStorage.setItem('sekisan-navi:left-pane-width', 'garbage')
-    window.localStorage.setItem('sekisan-navi:right-pane-width', '999999')
     await renderApp()
     const nav = document.querySelector('.app-workspace__nav') as HTMLElement
-    const right = document.querySelector('.app-workspace__right') as HTMLElement
     expect(nav.style.width).toBe('220px')
-    expect(right.style.width).toBe('300px')
   })
 })
 
-describe('App: 積算コードMaster領域の高さリサイズ (Phase 1.11 UI改修指示24章〜26章)', () => {
+describe('App: floating panel透過度をSystemSettingsから調整可能にする (PR #22追加仕様)', () => {
   beforeEach(() => {
     window.localStorage.clear()
   })
@@ -1153,150 +1157,265 @@ describe('App: 積算コードMaster領域の高さリサイズ (Phase 1.11 UI�
     await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
   }
 
-  it('renders a horizontal Resize Handle between the Viewer area and the Master area, at the initial height', async () => {
-    await renderApp()
-    const master = document.querySelector('.master-picker') as HTMLElement
-    expect(master.style.height).toBe('260px')
+  function appLayoutAlpha(): string {
+    const layout = document.querySelector('.app-layout') as HTMLElement
+    return layout.style.getPropertyValue('--floating-panel-bg-alpha')
+  }
 
-    const handle = screen.getByRole('separator', { name: '積算コードMasterの高さを変更' })
-    expect(handle.getAttribute('aria-orientation')).toBe('horizontal')
+  it('defaults the slider to 60% (rgba(255,255,255,0.6)相当) and reflects it as a CSS custom property on .app-layout', async () => {
+    await renderApp()
+    fireEvent.click(screen.getByRole('button', { name: 'システム設定' }))
+
+    const slider = screen.getByRole('slider', { name: 'floating panel透過度' }) as HTMLInputElement
+    expect(slider.value).toBe('0.6')
+    expect(screen.getByText('60%')).toBeInTheDocument()
+    expect(appLayoutAlpha()).toBe('0.6')
   })
 
-  it('dragging the handle up increases the Master area height', async () => {
+  it('updates the CSS custom property immediately when the slider changes, without applying opacity to the panel shell', async () => {
     await renderApp()
-    const master = document.querySelector('.master-picker') as HTMLElement
-    const handle = screen.getByRole('separator', { name: '積算コードMasterの高さを変更' })
+    fireEvent.click(screen.getByRole('button', { name: 'システム設定' }))
 
-    fireEvent.mouseDown(handle, { clientY: 500, button: 0 })
-    fireEvent.mouseMove(window, { clientY: 460 }) // 上へ40px
-    fireEvent.mouseUp(window, { clientY: 460 })
+    const slider = screen.getByRole('slider', { name: 'floating panel透過度' })
+    fireEvent.change(slider, { target: { value: '0.35' } })
 
-    expect(master.style.height).toBe('300px')
+    expect(appLayoutAlpha()).toBe('0.35')
+    expect(screen.getByText('35%')).toBeInTheDocument()
+
+    // panel全体へopacityを掛けていないこと (指示: 背景alphaのみを変える)。
+    const panelInfoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    expect(getComputedStyle(panelInfoFloat).opacity).toBe('1')
   })
 
-  it('dragging the handle down decreases the Master area height, clamped at the minimum', async () => {
+  it('persists the slider value to localStorage when changed', async () => {
     await renderApp()
-    const master = document.querySelector('.master-picker') as HTMLElement
-    const handle = screen.getByRole('separator', { name: '積算コードMasterの高さを変更' })
-
-    fireEvent.mouseDown(handle, { clientY: 300, button: 0 })
-    fireEvent.mouseMove(window, { clientY: 10000 }) // 大きく下へ
-    fireEvent.mouseUp(window, { clientY: 10000 })
-
-    expect(master.style.height).toBe('120px') // MASTER_PANE_HEIGHT_MIN
+    fireEvent.click(screen.getByRole('button', { name: 'システム設定' }))
+    fireEvent.change(screen.getByRole('slider', { name: 'floating panel透過度' }), {
+      target: { value: '0.8' },
+    })
+    expect(window.localStorage.getItem('sekisan-navi:floating-panel-bg-alpha')).toBe('0.8')
   })
 
-  it('does not exceed the maximum height (viewport-relative, so the Viewer stays usable)', async () => {
+  it('restores a previously saved value from localStorage on mount (reload後の復元に相当。usePaneWidth.tsの既存テストと同じ考え方)', async () => {
+    window.localStorage.setItem('sekisan-navi:floating-panel-bg-alpha', '0.8')
     await renderApp()
-    const master = document.querySelector('.master-picker') as HTMLElement
-    const handle = screen.getByRole('separator', { name: '積算コードMasterの高さを変更' })
-
-    fireEvent.mouseDown(handle, { clientY: 10000, button: 0 })
-    fireEvent.mouseMove(window, { clientY: -100000 }) // 大きく上へ
-    fireEvent.mouseUp(window, { clientY: -100000 })
-
-    expect(parseFloat(master.style.height)).toBeCloseTo(window.innerHeight * 0.6, 5)
+    fireEvent.click(screen.getByRole('button', { name: 'システム設定' }))
+    const slider = screen.getByRole('slider', { name: 'floating panel透過度' }) as HTMLInputElement
+    expect(slider.value).toBe('0.8')
+    expect(appLayoutAlpha()).toBe('0.8')
   })
 
-  it('restores a previously saved Master height from localStorage on mount (指示書26章)', async () => {
-    window.localStorage.setItem('sekisan-navi:master-pane-height', '340')
+  it('falls back to the default (60%) when a stored value is not a number', async () => {
+    window.localStorage.setItem('sekisan-navi:floating-panel-bg-alpha', 'garbage')
     await renderApp()
-    const master = document.querySelector('.master-picker') as HTMLElement
-    expect(master.style.height).toBe('340px')
+    fireEvent.click(screen.getByRole('button', { name: 'システム設定' }))
+    expect((screen.getByRole('slider', { name: 'floating panel透過度' }) as HTMLInputElement).value).toBe(
+      '0.6',
+    )
   })
 
-  it('falls back to the initial height when a stored value is invalid', async () => {
-    window.localStorage.setItem('sekisan-navi:master-pane-height', 'garbage')
+  it('falls back to the default (60%) when a stored value is out of the allowed range', async () => {
+    window.localStorage.setItem('sekisan-navi:floating-panel-bg-alpha', '5')
     await renderApp()
-    const master = document.querySelector('.master-picker') as HTMLElement
-    expect(master.style.height).toBe('260px')
-  })
-
-  it('uses its own storage key, independent of the left/right pane width keys (指示書26章: 保存方式は統一しつつ、値自体は別管理)', async () => {
-    window.localStorage.setItem('sekisan-navi:left-pane-width', '999')
-    await renderApp()
-    const master = document.querySelector('.master-picker') as HTMLElement
-    const nav = document.querySelector('.app-workspace__nav') as HTMLElement
-    expect(master.style.height).toBe('260px')
-    expect(nav.style.width).not.toBe('260px')
+    fireEvent.click(screen.getByRole('button', { name: 'システム設定' }))
+    expect((screen.getByRole('slider', { name: 'floating panel透過度' }) as HTMLInputElement).value).toBe(
+      '0.6',
+    )
   })
 })
 
-describe('App: 右ペイン(盤情報のみ) (Issue #19 Phase 2: 積算集約・積算明細をViewer上のfloating panelへ移動)', () => {
+describe('App: 積算コードMasterのfloating panel化 (Issue #19 追加修正)', () => {
   async function renderApp() {
     render(<App />)
     await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
   }
 
-  it('keeps only 盤情報 in the right pane; 積算集約/積算明細 and their old height splitters are gone', async () => {
+  // [追加修正] 従来のPaneSplitterによる高さ手動リサイズ(旧: 「App: 積算コード
+  // Master領域の高さリサイズ」describe、`sekisan-navi:master-pane-height`
+  // localStorageキー)は、他3panelと同じfloating panel(ドラッグ移動・
+  // リサイズ、セッション内保持のみ)へ移行したことに伴い廃止した。
+
+  it('renders EstimateMasterPicker inside .floating-panel--master, not as a fixed bottom row', async () => {
     await renderApp()
-    const right = document.querySelector('.app-workspace__right') as HTMLElement
-    expect(within(right).getByRole('button', { name: /盤情報/ })).toBeInTheDocument()
-    expect(within(right).queryByText('積算集約')).not.toBeInTheDocument()
-    expect(within(right).queryByText('積算明細')).not.toBeInTheDocument()
-    // 盤情報のみになったため、分け合う相手が無くなった旧来の右ペイン内
-    // 高さsplitterは廃止された。
-    expect(screen.queryByRole('separator', { name: '盤情報の高さを変更' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('separator', { name: '積算集約の高さを変更' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('separator', { name: '積算コードMasterの高さを変更' })).not.toBeInTheDocument()
+
+    const masterFloat = document.querySelector('.floating-panel--master') as HTMLElement
+    expect(masterFloat).toBeInTheDocument()
+    // [追加修正: UI名称変更] floating panelタイトルは「部品台帳」(指示1章)。
+    // [追加修正: 他panelとのフォーマット統一] 盤情報と同様、見出しに件数
+    // (例:「部品台帳　5件」)を埋め込むため、部分一致で確認する。
+    expect(within(masterFloat).getByRole('heading', { name: /部品台帳/ })).toBeInTheDocument()
+    expect(await within(masterFloat).findByText('11001')).toBeInTheDocument()
   })
 
-  it('collapsing 盤情報 shrinks its wrap to flex:0 0 auto, and re-expanding restores flex:1 1 auto', async () => {
+  it('shows 部品台帳 by default, and can be hidden/shown via its toggle', async () => {
     await renderApp()
-    const panelInfoWrap = document.querySelector('.app-workspace__panel-info-wrap') as HTMLElement
-    expect(panelInfoWrap.style.flex).toBe('1 1 auto')
+    const toggle = screen.getByRole('button', { name: '部品台帳' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
 
-    const toggle = screen.getByRole('button', { name: /盤情報/ })
-    fireEvent.click(toggle) // collapse
-    expect(panelInfoWrap.style.flex).toBe('0 0 auto')
-    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+    expect(document.querySelector('.floating-panel--master')).not.toBeInTheDocument()
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
 
-    fireEvent.click(toggle) // expand
-    expect(panelInfoWrap.style.flex).toBe('1 1 auto')
-    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(toggle)
+    expect(document.querySelector('.floating-panel--master')).toBeInTheDocument()
   })
 
-  it('keeps the right pane width resize working (盤情報のみになっても既存挙動を維持する)', async () => {
+  it('does not affect Master item selection / BBox add mode wiring (既存連携にregressionがない)', async () => {
     await renderApp()
-    const right = document.querySelector('.app-workspace__right') as HTMLElement
-    expect(right.style.width).toBe('300px')
+    const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
+    fireEvent.click(row11001)
+    await waitFor(() => expect(row11001.className).toContain('master-picker__row--selected'))
+  })
 
-    const handle = screen.getByRole('separator', { name: '右ペインの幅を変更' })
-    fireEvent.mouseDown(handle, { clientX: 500, button: 0 })
-    fireEvent.mouseMove(window, { clientX: 450 })
-    fireEvent.mouseUp(window, { clientX: 450 })
-    expect(right.style.width).toBe('350px')
+  it('groups the Master toggle visually apart from the 3 info-panel toggles, with a distinct (non-violet) color', async () => {
+    await renderApp()
+    const toggleGroup = document.querySelector('.panel-visibility-toggles') as HTMLElement
+    expect(within(toggleGroup).getByRole('button', { name: '部品台帳' })).toBeInTheDocument()
+    expect(toggleGroup.querySelector('.panel-visibility-toggles__divider')).toBeInTheDocument()
+
+    const infoToggle = screen.getByRole('button', { name: '積算集約' })
+    const masterToggle = screen.getByRole('button', { name: '部品台帳' })
+    expect(getComputedStyle(masterToggle).backgroundColor).not.toBe(getComputedStyle(infoToggle).backgroundColor)
+  })
+
+  it('gives the master floating panel a distinct-but-subtle heading accent, while sharing the same shell format as the 3 info panels (追加修正: フォーマット統一・控えめなaccent)', async () => {
+    await renderApp()
+    const masterFloat = document.querySelector('.floating-panel--master') as HTMLElement
+    const infoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+
+    // floating panel shell自体(枠線・角丸・glassmorphism)は他panelと共通のもの
+    // を使う(専用の太いaccentバーは追加修正で廃止した)。
+    expect(getComputedStyle(masterFloat).borderTopColor).toBe(getComputedStyle(infoFloat).borderTopColor)
+    expect(getComputedStyle(masterFloat).borderRadius).toBe(getComputedStyle(infoFloat).borderRadius)
+
+    // 差別化は見出し(h2)のaccent色のみに限定する(構造は同じ、色だけ違う)。
+    const masterHeading = within(masterFloat).getByRole('heading', { name: /部品台帳/ })
+    const infoHeading = within(infoFloat).getByRole('heading', { name: /盤情報/ })
+    expect(getComputedStyle(masterHeading).borderLeftColor).not.toBe(getComputedStyle(infoHeading).borderLeftColor)
+    // ただし見出しの構造(padding/font-size等)は統一されている。
+    // 注記: `border-left-width`はpanel-info側が`border-left: 3px solid
+    // var(--accent-section)`のようにvar()を含むshorthandで指定しているため、
+    // jsdom(cssstyle)がこの値を確実に解決できず(このリポジトリの既存の
+    // 注記と同じ制約)、比較には使わない。実際の描画(3px相当)は実ブラウザで
+    // 確認する。
+    expect(getComputedStyle(masterHeading).padding).toBe(getComputedStyle(infoHeading).padding)
+    expect(getComputedStyle(masterHeading).fontSize).toBe(getComputedStyle(infoHeading).fontSize)
   })
 })
 
-describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 2)', () => {
+describe('App: 盤情報のfloating panel化・右ペイン廃止 (Issue #19 Phase 4)', () => {
   async function renderApp() {
     render(<App />)
     await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
   }
+
+  it('renders PanelInfo inside .floating-panel--panelInfo, not inside a right pane, with no collapse chevron (指示: 折りたたみ廃止)', async () => {
+    await renderApp()
+    expect(document.querySelector('.app-workspace__right')).not.toBeInTheDocument()
+
+    const panelInfoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    expect(panelInfoFloat).toBeInTheDocument()
+    expect(within(panelInfoFloat).getByRole('heading', { name: /盤情報/ })).toBeInTheDocument()
+    // 折りたたみ用のchevronトグルボタンは無い(見出しはプレーンな<h2>)。
+    expect(within(panelInfoFloat).queryByRole('button', { name: /盤情報/ })).not.toBeInTheDocument()
+  })
+
+  it('shows 盤情報 by default, and can be hidden/shown via its toggle (追加UI修正: ボタン文言は常に固定「盤情報」、ON/OFFはaria-pressedと配色のみで表現)', async () => {
+    await renderApp()
+    const toggle = screen.getByRole('button', { name: '盤情報' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(toggle)
+    expect(document.querySelector('.floating-panel--panelInfo')).not.toBeInTheDocument()
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    // 文言自体はON/OFFで変化しない(旧「盤情報を隠す/を表示」の出し分けは廃止)。
+    expect(toggle).toHaveTextContent('盤情報')
+
+    fireEvent.click(toggle)
+    expect(document.querySelector('.floating-panel--panelInfo')).toBeInTheDocument()
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('keeps panel click → selection sync working while floating (Phase 1.9の既存挙動を維持)', async () => {
+    await renderApp()
+    const thumbnail = await screen.findByRole('img', { name: 'P16' })
+    fireEvent.click(thumbnail)
+    await screen.findByTitle(/roof_fan/)
+
+    fireEvent.click(getViewerPanelArea('1/1'))
+    await waitFor(() => expect(getPanelInfoCard('高圧受電盤').className).toContain('--selected'))
+  })
+})
+
+describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 2、Phase 4でトグル位置変更)', () => {
+  async function renderApp() {
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
+  }
+
+  it('renders the 3 panel toggles inside the edit toolbar (not as a floating bar over the Viewer), in 盤情報→積算集約→積算明細 order', async () => {
+    await renderApp()
+    const toolbar = document.querySelector('.app-layout__edit-toolbar') as HTMLElement
+    const toggleGroup = document.querySelector('.panel-visibility-toggles') as HTMLElement
+
+    expect(toolbar.contains(toggleGroup)).toBe(true)
+    // Viewer上のfloating toggle bar(Phase 2)は廃止されている。
+    expect(document.querySelector('.floating-panel-toggle-bar')).not.toBeInTheDocument()
+
+    const buttons = within(toggleGroup).getAllByRole('button')
+    // 追加UI修正指示1章: ボタン表示文字はON/OFFに関わらず常に固定ラベル。
+    // [追加修正] 積算コードMasterのfloating panel化に伴い、区切り線を挟んで
+    // 4つ目のトグルが末尾へ追加された。UI名称は「部品台帳」(指示1章)。
+    expect(buttons.map((b) => b.textContent)).toEqual(['盤情報', '積算集約', '積算明細', '部品台帳'])
+    expect(buttons.every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true)
+  })
+
+  it('gives the panel-visibility toggles a color distinct from Undo/Redo, and a filled ON vs. muted OFF look (追加UI修正指示2章)', async () => {
+    await renderApp()
+    const undoButton = screen.getByRole('button', { name: /元に戻す/ })
+    const toggle = screen.getByRole('button', { name: '積算集約' })
+
+    // ON(表示中): 塗りつぶし系。Undo/Redo等の通常操作ボタン(白背景)とは
+    // 明確に異なる背景色にする。
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    const onStyle = getComputedStyle(toggle)
+    const undoStyle = getComputedStyle(undoButton)
+    expect(onStyle.backgroundColor).not.toBe(undoStyle.backgroundColor)
+    expect(onStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)')
+    expect(onStyle.color).toBe('rgb(255, 255, 255)')
+
+    // OFF(非表示中): 控えめな背景+境界線だが、Undo/Redoの白背景とは異なる色相を保つ。
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    const offStyle = getComputedStyle(toggle)
+    expect(offStyle.backgroundColor).not.toBe(undoStyle.backgroundColor)
+    expect(offStyle.backgroundColor).not.toBe(onStyle.backgroundColor)
+  })
 
   it('shows both floating panels from the start (指示: 初期状態は既存利用性を損なわない設定=両方ON)', async () => {
     await renderApp()
     expect(document.querySelector('.floating-panel--aggregation')).toBeInTheDocument()
     expect(document.querySelector('.floating-panel--detail')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '積算集約を隠す' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: '積算明細を隠す' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '積算集約' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '積算明細' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('toggles the 積算集約 floating panel independently of 積算明細', async () => {
     await renderApp()
-    fireEvent.click(screen.getByRole('button', { name: '積算集約を隠す' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
 
     expect(document.querySelector('.floating-panel--aggregation')).not.toBeInTheDocument()
     expect(document.querySelector('.floating-panel--detail')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '積算集約を表示' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: '積算集約' })).toHaveAttribute('aria-pressed', 'false')
 
-    fireEvent.click(screen.getByRole('button', { name: '積算集約を表示' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
     expect(document.querySelector('.floating-panel--aggregation')).toBeInTheDocument()
   })
 
   it('toggles the 積算明細 floating panel independently of 積算集約', async () => {
     await renderApp()
-    fireEvent.click(screen.getByRole('button', { name: '積算明細を隠す' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
 
     expect(document.querySelector('.floating-panel--detail')).not.toBeInTheDocument()
     expect(document.querySelector('.floating-panel--aggregation')).toBeInTheDocument()
@@ -1304,35 +1423,30 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
 
   it('hides both floating panels when both toggles are turned off, and restores both', async () => {
     await renderApp()
-    fireEvent.click(screen.getByRole('button', { name: '積算集約を隠す' }))
-    fireEvent.click(screen.getByRole('button', { name: '積算明細を隠す' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
 
     expect(document.querySelector('.floating-panel--aggregation')).not.toBeInTheDocument()
     expect(document.querySelector('.floating-panel--detail')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '積算集約を表示' }))
-    fireEvent.click(screen.getByRole('button', { name: '積算明細を表示' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
 
     expect(document.querySelector('.floating-panel--aggregation')).toBeInTheDocument()
     expect(document.querySelector('.floating-panel--detail')).toBeInTheDocument()
   })
 
-  it('starts with 積算集約/積算明細 bodies expanded, independent of the floating visibility toggle (Issue #6の既存折りたたみ機能を維持)', async () => {
+  it('shows 積算集約/積算明細 headings with no collapse chevron (指示: 折りたたみ廃止)', async () => {
     await renderApp()
-    expect(screen.getByRole('button', { name: '積算集約' })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('button', { name: '積算明細' })).toHaveAttribute('aria-expanded', 'true')
-  })
-
-  it('collapsing the 積算集約 body shrinks its floating panel to auto height without hiding the panel itself', async () => {
-    await renderApp()
+    expect(screen.getByRole('heading', { name: '積算集約' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '積算明細' })).toBeInTheDocument()
+    // 追加UI修正でトグルボタン自体の文言も「積算集約」「積算明細」固定になったため、
+    // ここでは各floating panelの内部に限定して「chevron的な折りたたみボタンが
+    // 無いこと」を確認する(表示切替トグル自体はツールバー側にあり対象外)。
     const aggregationPanel = document.querySelector('.floating-panel--aggregation') as HTMLElement
-
-    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
-
-    expect(aggregationPanel.style.height).toBe('auto')
-    expect(screen.getByRole('button', { name: '積算集約' })).toHaveAttribute('aria-expanded', 'false')
-    // floating panel自体の表示/非表示(トグルバー)とは独立しており、パネルはDOM上に残る。
-    expect(document.querySelector('.floating-panel--aggregation')).toBeInTheDocument()
+    const detailPanel = document.querySelector('.floating-panel--detail') as HTMLElement
+    expect(within(aggregationPanel).queryByRole('button', { name: '積算集約' })).not.toBeInTheDocument()
+    expect(within(detailPanel).queryByRole('button', { name: '積算明細' })).not.toBeInTheDocument()
   })
 
   it('does not change selectedEstimateTargetId or aggregation data when a floating panel is hidden/shown (指示: floating panelの表示/非表示だけで積算ロジックやデータは変化しないこと)', async () => {
@@ -1341,25 +1455,25 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
     fireEvent.change(select, { target: { value: 'panel:1:1' } })
     await waitFor(() => expect(select.value).toBe('panel:1:1'))
 
-    fireEvent.click(screen.getByRole('button', { name: '積算明細を隠す' }))
-    fireEvent.click(screen.getByRole('button', { name: '積算明細を表示' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
 
     expect((document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement).value).toBe(
       'panel:1:1',
     )
   })
 
-  it('does not affect Undo/Redo button state when floating panels are toggled or collapsed', async () => {
+  it('does not affect Undo/Redo button state when floating panels are toggled', async () => {
     await renderApp()
     const undoButton = screen.getByRole('button', { name: /元に戻す/ })
     const redoButton = screen.getByRole('button', { name: /やり直す/ })
     expect(undoButton).toBeDisabled()
     expect(redoButton).toBeDisabled()
 
-    fireEvent.click(screen.getByRole('button', { name: '積算集約を隠す' }))
-    fireEvent.click(screen.getByRole('button', { name: '積算明細を隠す' }))
-    fireEvent.click(screen.getByRole('button', { name: '積算集約を表示' }))
-    fireEvent.click(screen.getByRole('button', { name: '積算明細を表示' }))
+    fireEvent.click(screen.getByRole('button', { name: '盤情報' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
+    fireEvent.click(screen.getByRole('button', { name: '盤情報' }))
     fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
     fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
 
@@ -1368,7 +1482,234 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
   })
 })
 
-describe('App: 盤選択 → 右ペイン連動 (Phase 1.9)', () => {
+describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追加修正)', () => {
+  async function renderApp() {
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
+  }
+
+  // Viewerコンテナ(`.app-workspace__viewer-wrap`)のサイズをテストごとに指定する。
+  // jsdomは実レイアウトを行わないため、既定では`getBoundingClientRect()`が
+  // 常に0を返す(積算明細強化・Undo/Redo・要確認警告・編集追従 指示8章のテストで
+  // 使っている`setOverlayRect`と同じ手法)。
+  function setViewerWrapRect(width: number, height: number) {
+    const el = document.querySelector('.app-workspace__viewer-wrap') as HTMLElement
+    Object.defineProperty(el, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, right: width, bottom: height, width, height }),
+      configurable: true,
+    })
+  }
+
+  it('drags 盤情報 by its heading to a new position, clamped within the Viewer container', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+    const panel = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    const heading = within(panel).getByRole('heading', { name: /盤情報/ })
+    const startLeft = parseFloat(panel.style.left)
+    const startTop = parseFloat(panel.style.top)
+
+    fireEvent.pointerDown(heading, { pointerId: 1, clientX: 100, clientY: 100, button: 0 })
+    fireEvent.pointerMove(heading, { pointerId: 1, clientX: 160, clientY: 140 })
+    fireEvent.pointerUp(heading, { pointerId: 1, clientX: 160, clientY: 140 })
+
+    expect(parseFloat(panel.style.left)).toBe(startLeft + 60)
+    expect(parseFloat(panel.style.top)).toBe(startTop + 40)
+  })
+
+  it('does not start a drag when pointerdown originates outside the heading (e.g. the 対象 select)', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+    const panel = document.querySelector('.floating-panel--aggregation') as HTMLElement
+    const select = within(panel).getByRole('combobox')
+    const startLeft = panel.style.left
+    const startTop = panel.style.top
+
+    fireEvent.pointerDown(select, { pointerId: 1, clientX: 100, clientY: 100, button: 0 })
+    fireEvent.pointerMove(select, { pointerId: 1, clientX: 300, clientY: 300 })
+    fireEvent.pointerUp(select, { pointerId: 1, clientX: 300, clientY: 300 })
+
+    expect(panel.style.left).toBe(startLeft)
+    expect(panel.style.top).toBe(startTop)
+  })
+
+  it('does not allow dragging completely outside the Viewer container (clamped, not fully escaping)', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+    const panel = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    const heading = within(panel).getByRole('heading', { name: /盤情報/ })
+
+    fireEvent.pointerDown(heading, { pointerId: 1, clientX: 0, clientY: 0, button: 0 })
+    fireEvent.pointerMove(heading, { pointerId: 1, clientX: -100000, clientY: -100000 })
+    fireEvent.pointerUp(heading, { pointerId: 1, clientX: -100000, clientY: -100000 })
+    expect(parseFloat(panel.style.left)).toBe(0)
+    expect(parseFloat(panel.style.top)).toBe(0)
+
+    fireEvent.pointerDown(heading, { pointerId: 2, clientX: 0, clientY: 0, button: 0 })
+    fireEvent.pointerMove(heading, { pointerId: 2, clientX: 100000, clientY: 100000 })
+    fireEvent.pointerUp(heading, { pointerId: 2, clientX: 100000, clientY: 100000 })
+    // コンテナ(1200x700)からpanel自身の幅・高さを差し引いた範囲内に収まる。
+    expect(parseFloat(panel.style.left)).toBeLessThanOrEqual(1200)
+    expect(parseFloat(panel.style.top)).toBeLessThanOrEqual(700)
+    expect(parseFloat(panel.style.left) + parseFloat(panel.style.width)).toBeLessThanOrEqual(1200 + 0.01)
+    expect(parseFloat(panel.style.top) + parseFloat(panel.style.height)).toBeLessThanOrEqual(700 + 0.01)
+  })
+
+  it('resizes 積算明細 via its bottom-right handle, respecting the minimum size', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+    const panel = document.querySelector('.floating-panel--detail') as HTMLElement
+    const handle = panel.querySelector('.floating-panel__resize-handle') as HTMLElement
+    const startWidth = parseFloat(panel.style.width)
+    const startHeight = parseFloat(panel.style.height)
+
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 500, clientY: 500, button: 0 })
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 560, clientY: 540 })
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 560, clientY: 540 })
+    expect(parseFloat(panel.style.width)).toBe(startWidth + 60)
+    expect(parseFloat(panel.style.height)).toBe(startHeight + 40)
+
+    // 最小サイズ (幅260 / 積算明細の高さ下限150。[追加修正] kind別min-heightへ
+    // 変更したため、旧来の全kind共通180から積算明細は150へ縮んだ) を下回らない。
+    fireEvent.pointerDown(handle, { pointerId: 2, clientX: 500, clientY: 500, button: 0 })
+    fireEvent.pointerMove(handle, { pointerId: 2, clientX: -100000, clientY: -100000 })
+    fireEvent.pointerUp(handle, { pointerId: 2, clientX: -100000, clientY: -100000 })
+    expect(parseFloat(panel.style.width)).toBe(260)
+    expect(parseFloat(panel.style.height)).toBe(150)
+  })
+
+  it('brings a panel to the front (raises its z-index) when interacted with, without touching Undo/Redo/積算対象 state', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+    const panelInfoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    const aggregationFloat = document.querySelector('.floating-panel--aggregation') as HTMLElement
+    const zBefore = parseInt(panelInfoFloat.style.zIndex, 10)
+
+    fireEvent.pointerDown(within(panelInfoFloat).getByRole('heading', { name: /盤情報/ }), {
+      pointerId: 1,
+      clientX: 50,
+      clientY: 50,
+      button: 0,
+    })
+    fireEvent.pointerUp(within(panelInfoFloat).getByRole('heading', { name: /盤情報/ }), {
+      pointerId: 1,
+      clientX: 50,
+      clientY: 50,
+    })
+
+    expect(parseInt(panelInfoFloat.style.zIndex, 10)).toBeGreaterThan(zBefore)
+    expect(parseInt(panelInfoFloat.style.zIndex, 10)).toBeGreaterThan(parseInt(aggregationFloat.style.zIndex, 10))
+  })
+
+  it('brings a panel to the front when its visibility toggle is switched ON (追加修正: 表示ONにした瞬間も最前面へ)', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+    const panelInfoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    const aggregationFloat = document.querySelector('.floating-panel--aggregation') as HTMLElement
+
+    // 積算集約(後からONにする方)を意図的に前面化しておく。
+    fireEvent.pointerDown(within(aggregationFloat).getByRole('heading', { name: '積算集約' }), {
+      pointerId: 1,
+      clientX: 50,
+      clientY: 50,
+      button: 0,
+    })
+    fireEvent.pointerUp(within(aggregationFloat).getByRole('heading', { name: '積算集約' }), {
+      pointerId: 1,
+      clientX: 50,
+      clientY: 50,
+    })
+    expect(parseInt(aggregationFloat.style.zIndex, 10)).toBeGreaterThan(parseInt(panelInfoFloat.style.zIndex, 10))
+
+    // 盤情報をOFF→ONにすると、クリック等の操作をしていなくても最前面へ来る。
+    const toggle = screen.getByRole('button', { name: '盤情報' })
+    fireEvent.click(toggle) // OFF
+    fireEvent.click(toggle) // ON
+    const panelInfoFloatAfter = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    expect(parseInt(panelInfoFloatAfter.style.zIndex, 10)).toBeGreaterThan(parseInt(aggregationFloat.style.zIndex, 10))
+  })
+
+  it('lets the floating panel body scroll vertically so hidden content stays reachable when squeezed to the minimum height (指示: panel内部scrollを使う)', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+    const body = document.querySelector('.floating-panel--aggregation .floating-panel__body') as HTMLElement
+    expect(getComputedStyle(body).overflowY).toBe('auto')
+  })
+
+  it('renders the 確定履歴 modal outside the aggregation floating panel (追加修正: stacking contextに埋もれないようdocument.bodyへportalする)', async () => {
+    await renderApp()
+    fireEvent.click(screen.getByRole('button', { name: '確定履歴を見る' }))
+    const backdrop = await screen.findByText(/確定履歴\(製番/)
+    const aggregationFloat = document.querySelector('.floating-panel--aggregation') as HTMLElement
+    expect(aggregationFloat.contains(backdrop)).toBe(false)
+  })
+
+  it('keeps the moved/resized position after hiding and re-showing the panel (指示: セッション中は状態を保持する)', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+    const panel = document.querySelector('.floating-panel--aggregation') as HTMLElement
+    const heading = within(panel).getByRole('heading', { name: '積算集約' })
+
+    fireEvent.pointerDown(heading, { pointerId: 1, clientX: 100, clientY: 100, button: 0 })
+    fireEvent.pointerMove(heading, { pointerId: 1, clientX: 180, clientY: 160 })
+    fireEvent.pointerUp(heading, { pointerId: 1, clientX: 180, clientY: 160 })
+    const movedLeft = panel.style.left
+    const movedTop = panel.style.top
+
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
+    expect(document.querySelector('.floating-panel--aggregation')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
+
+    const reshown = document.querySelector('.floating-panel--aggregation') as HTMLElement
+    expect(reshown.style.left).toBe(movedLeft)
+    expect(reshown.style.top).toBe(movedTop)
+  })
+
+  it('does not affect BBox selection/Zoom/Fit when dragging a panel heading', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+    const thumbnail = await screen.findByRole('img', { name: 'P16' })
+    fireEvent.click(thumbnail)
+    await screen.findByTitle(/roof_fan/)
+    fireEvent.click(screen.getByTitle(/roof_fan/))
+    await screen.findAllByRole('button', { name: /BBoxサイズ変更/ })
+
+    const panel = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    const heading = within(panel).getByRole('heading', { name: /盤情報/ })
+    fireEvent.pointerDown(heading, { pointerId: 1, clientX: 100, clientY: 100, button: 0 })
+    fireEvent.pointerMove(heading, { pointerId: 1, clientX: 130, clientY: 120 })
+    fireEvent.pointerUp(heading, { pointerId: 1, clientX: 130, clientY: 120 })
+
+    // floating panelのドラッグはDrawingCanvas側のBBox選択状態に影響しない
+    // (パネルとViewerは別要素であり、イベントも競合しない)。
+    expect(screen.getAllByRole('button', { name: /BBoxサイズ変更/ }).length).toBeGreaterThan(0)
+  })
+})
+
+describe('App: floating panelの枠線強化 (Issue #19 追加UI修正指示4章)', () => {
+  async function renderApp() {
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
+  }
+
+  it('gives all 3 floating panels a visible, non-transparent-white border (背景図面との境界を明確にする)', async () => {
+    await renderApp()
+    const panels = [
+      document.querySelector('.floating-panel--panelInfo'),
+      document.querySelector('.floating-panel--aggregation'),
+      document.querySelector('.floating-panel--detail'),
+    ] as HTMLElement[]
+
+    const borderColors = panels.map((p) => getComputedStyle(p).borderTopColor)
+    // 旧来のrgba(255,255,255,0.55)(白系、明るい図面上でほぼ見えない)ではないこと。
+    for (const color of borderColors) {
+      expect(color).not.toBe('rgba(255, 255, 255, 0.55)')
+    }
+    // 3パネルとも同じ枠線ルールを使う(指示: 盤情報・積算集約・積算明細で同じ枠線ルール)。
+    expect(new Set(borderColors).size).toBe(1)
+  })
+})
+
+describe('App: 盤選択 → 盤情報連動 (Phase 1.9、Issue #19 Phase 4で盤情報はfloating panelへ移動)', () => {
   async function navigateToOutlinePage() {
     const thumbnail = await screen.findByRole('img', { name: 'P16' })
     fireEvent.click(thumbnail)
@@ -1621,14 +1962,17 @@ describe('App: Escキーによる編集モード解除 (Phase 1.11 UI改修指�
   })
 
   it('Escは検索欄等にフォーカスがあっても機能する (Deleteキーの除外ガードとは異なる。指示書3章)', async () => {
+    // [追加修正: 部品台帳への再設計] 検索欄(text input)自体は廃止したため、
+    // 同じ「入力要素にフォーカスがあってもEscは効く」ことを、部品台帳の
+    // カテゴリ選択select(SELECT要素)で検証する。
     render(<App />)
     const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
     fireEvent.click(row11001)
     await waitFor(() => expect(row11001.className).toContain('master-picker__row--selected'))
 
-    const searchBox = screen.getByPlaceholderText('コード・型式で検索 (現在のタブ内)')
-    searchBox.focus()
-    fireEvent.keyDown(searchBox, { key: 'Escape' })
+    const categorySelect = screen.getByRole('combobox', { name: '品名' })
+    categorySelect.focus()
+    fireEvent.keyDown(categorySelect, { key: 'Escape' })
 
     await waitFor(() => expect(row11001.className).not.toContain('master-picker__row--selected'))
   })

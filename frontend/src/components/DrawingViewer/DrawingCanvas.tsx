@@ -483,7 +483,7 @@ export function DrawingCanvas({
             Fit
           </button>
           {bboxAddMode && (
-            <span className="drawing-canvas__mode-badge" title="積算コードMasterで選択中の行がManual BBoxの追加対象になります">
+            <span className="drawing-canvas__mode-badge" title="部品台帳で選択中の行がManual BBoxの追加対象になります">
               ✎ BBox追加モード
             </span>
           )}

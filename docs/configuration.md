@@ -26,7 +26,7 @@ Sekisan Naviが参照する設定値の一覧。secretの実値は記載しな�
 | `PRODUCT_NO_PATTERN` | `^[A-Za-z0-9]{4,20}$` | 製番として許可する文字列パターン(パストラバーサル対策)。 |
 | `MASTER_EXCEL_PATH` | `<repo root>/data/master/estimate_master_a.xlsx` | 積算コードMasterの正式参照元(gitignore対象、各自配置)。 |
 | `MASTER_EXCEL_SHEET` | `"Sheet2"` | 上記Excelの読み込み対象シート名。 |
-| `HELP_PDF_PATH` | `<repo root>/data/help/estimate-help.pdf` | 積算資料PDF(Help)の配置先(Issue #19 Phase 3。gitignore対象、各自配置)。積算コードMasterを置き換えるものではなく、あくまでHelp/参考資料。 |
+| `HELP_PDF_PATH` | `<repo root>/data/help/estimate-help.pdf` | 積算資料PDF(Help)の**標準配置場所**(Issue #19 Phase 3で導入、Phase 4で正式な標準配置場所として再確認。gitignore対象、各自配置)。積算コードMasterを置き換えるものではなく、あくまでHelp/参考資料。 |
 
 `HELP_PDF_PATH`にファイルが無くてもアプリ自体・Backend起動は妨げない(`MASTER_EXCEL_PATH`と
 同じ方針)。Frontendの「積算資料」ボタン→modalから軽量な存在確認API

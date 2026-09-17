@@ -1,0 +1,91 @@
+/* Issue #19 Phase 4: floating panel(盤情報・積算集約・積算明細・積算コード
+   Master)の表示トグル群。編集ツールバー(`app-layout__edit-toolbar`)の右端に
+   置く前提で、絶対配置は使わない(通常のflexアイテムとして並ぶだけ)。
+   ツールバー側で`margin-left: auto`により右寄せし、操作系(元に戻す/やり直す/
+   操作履歴)との間に区切り線+gapを設けて視覚的に区別する。 */
+.panel-visibility-toggles {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+  padding-left: 0.6rem;
+  border-left: 1px solid #d1d5db;
+}
+
+/* 追加UI修正指示: 表示ON/OFFボタンはUndo/Redo等の通常操作ボタン
+   (`.app-layout__edit-toolbar button`、グレー系: 枠#d1d5db/背景白、
+   hoverでコバルト系#93c5fd/#eff6ffに変化)と混同しないよう、専用のviolet系
+   配色にする。既存の構造色(コバルト/紺、見出しやtarget-select等で使用中)・
+   状態色(--status-success緑/--status-warning-accent琥珀/--status-error赤)
+   のいずれとも異なる色相を採用し、意味の衝突を避ける。3ボタンとも同じ配色
+   体系を使う(盤情報だけ別色、等はしない)。 */
+.panel-visibility-toggles__button {
+  font-size: 0.9rem; /* 既存の編集ツールバーボタンと同じサイズ感に揃える */
+  font-weight: 600;
+  padding: 0.2rem 0.7rem;
+  border: 1.5px solid #a78bfa; /* violet-400 */
+  border-radius: 4px;
+  background: #f5f3ff; /* violet-50: OFF(非表示中)は控えめな塗り+境界線で表現 */
+  color: #5b21b6; /* violet-800: グレー文字にせず、OFFでも色相自体は判別できるようにする */
+  cursor: pointer;
+}
+
+.panel-visibility-toggles__button:hover {
+  border-color: #8b5cf6; /* violet-500 */
+  background: #ede9fe; /* violet-100 */
+}
+
+.panel-visibility-toggles__button:focus-visible {
+  outline: 2px solid #7c3aed; /* violet-600: キーボード操作時の可視性を確保 */
+  outline-offset: 1px;
+}
+
+/* ON(表示中)状態は塗りつぶし系にして一目で分かるようにする。 */
+.panel-visibility-toggles__button[aria-pressed='true'] {
+  background: #6d28d9; /* violet-700 */
+  color: #fff;
+  border-color: #6d28d9;
+}
+
+.panel-visibility-toggles__button[aria-pressed='true']:hover {
+  background: #5b21b6; /* violet-800 */
+  border-color: #5b21b6;
+}
+
+/* [追加修正: 積算コードMasterのfloating panel化] 情報系3panel(盤情報/
+   積算集約/積算明細)のトグルと視覚的に1段区切るための縦線。 */
+.panel-visibility-toggles__divider {
+  width: 1px;
+  align-self: stretch;
+  background: #d1d5db;
+  margin: 0 0.1rem;
+}
+
+/* 積算コードMasterは「表示情報」ではなく「作業ツール」であるため、violet系
+   (情報系3panel)とは異なるslate系(寒色〜中性色、既存のFloatingPanel--master
+   の枠線アクセントと同系統)の配色にする。既存のMasterカテゴリ色・状態色とは
+   重ならない、落ち着いたトーン(派手な警告色にはしない)。 */
+.panel-visibility-toggles__button--tool {
+  border-color: #64748b; /* slate-500 */
+  background: #f1f5f9; /* slate-100: OFF(非表示中)は控えめな塗り+境界線 */
+  color: #334155; /* slate-700 */
+}
+
+.panel-visibility-toggles__button--tool:hover {
+  border-color: #475569; /* slate-600 */
+  background: #e2e8f0; /* slate-200 */
+}
+
+.panel-visibility-toggles__button--tool:focus-visible {
+  outline-color: #334155; /* slate-700: violet系とは別トーンのfocusリング */
+}
+
+.panel-visibility-toggles__button--tool[aria-pressed='true'] {
+  background: #334155; /* slate-700: ON(表示中)は塗りつぶし */
+  color: #fff;
+  border-color: #334155;
+}
+
+.panel-visibility-toggles__button--tool[aria-pressed='true']:hover {
+  background: #1e293b; /* slate-800 */
+  border-color: #1e293b;
+}

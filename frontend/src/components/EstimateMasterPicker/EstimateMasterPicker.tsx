@@ -4,26 +4,20 @@ import type { EstimateMasterItem } from '../../types/domain'
 import { getCategoryPresentation, toCssVars } from '../../domain/masterCategoryPresentation'
 import './EstimateMasterPicker.css'
 
-// 表示列の定義 (要件: コード/型式/定格/総合価格A/箱・部品価格/塗装価格/設A/板金/組立/検査の
-// この順序)。Excelの列構成をそのままFrontendへ固定しない (要件14) ため、
-// 列を増減・変更したい場合はこの配列のみを変更すればよい。
-const COLUMNS: { key: keyof EstimateMasterItem; label: string; numeric?: boolean }[] = [
-  { key: 'code', label: 'コード' },
-  { key: 'model', label: '型式' },
-  { key: 'rating', label: '定格' },
-  { key: 'total_price_a', label: '総合価格A', numeric: true },
-  { key: 'box_parts_price', label: '箱・部品価格', numeric: true },
-  { key: 'painting_price', label: '塗装価格', numeric: true },
-  { key: 'setup_a', label: '設A', numeric: true },
-  { key: 'sheet_metal_price', label: '板金', numeric: true },
-  { key: 'assembly_price', label: '組立', numeric: true },
-  { key: 'inspection_price', label: '検査', numeric: true },
+// [追加修正: 部品台帳への再設計] 表示列を コード/型式/定格 の3列のみへ限定した
+// (指示3章: その他の価格・工数・検査等の列はこのfloating panelでは表示しない。
+// 元データ・`EstimateMasterItem`型・`fetchMasterItems`が返す全項目・
+// `onSelectItem`で渡すitemId経由のMaster item全体参照はいずれも変更していない。
+// あくまで表示上の列を絞るだけで、Backend/domain側は一切変更しない)。
+// 数値列(総合価格A等)が無くなったため、numeric区分自体も不要になった。
+const COLUMNS: { key: keyof EstimateMasterItem; label: string; className: string }[] = [
+  { key: 'code', label: 'コード', className: 'master-picker__col-code' },
+  { key: 'model', label: '型式', className: 'master-picker__col-model' },
+  { key: 'rating', label: '定格', className: 'master-picker__col-rating' },
 ]
 
-// 表示用の3桁区切りフォーマット。元データ(数値)そのものは変更しない、表示のみの整形。
-function formatCell(value: EstimateMasterItem[keyof EstimateMasterItem], numeric?: boolean): string {
+function formatCell(value: EstimateMasterItem[keyof EstimateMasterItem]): string {
   if (value === null || value === undefined) return ''
-  if (numeric && typeof value === 'number') return value.toLocaleString('ja-JP')
   return String(value)
 }
 
@@ -58,7 +52,6 @@ interface Props {
 export function EstimateMasterPicker({ selectedItemId, onSelectItem, height }: Props) {
   const [allItems, setAllItems] = useState<EstimateMasterItem[]>([])
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
   const [items, setItems] = useState<EstimateMasterItem[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -75,79 +68,79 @@ export function EstimateMasterPicker({ selectedItemId, onSelectItem, height }: P
 
   const categoryTabs = useMemo(() => extractCategoryTabs(allItems), [allItems])
 
-  // UI視覚階層改善 追加修正第3ラウンド 1章/2章/11章/12章: 選択中タブと同じ
-  // category presentation(`--cat-tab-bg`/`--cat-tab-fg`/`--cat-tab-border`)を
-  // table headerへも注入し、「active tab → header → data」の視覚階層をつなげる。
-  // 新しいpresentation値(tabHeaderBg等)は追加せず、既存のtab用の値をそのまま
-  // 再利用する(指示3章のheaderBg≒tabBg方針。tabBgは既にtabActiveBgより淡いため
-  // 「header <  active tab」の濃淡関係が自然に保たれる)。activeCategoryがまだ
-  // 無い場合(初回読み込み前)はスタイル自体を注入せず、CSS側の既定値
-  // (#f9fafb等)へ委ねる。
-  const activeHeaderStyle = useMemo(() => {
+  // [追加修正: カテゴリ色の変化を簡素化] 以前はtable header全体の背景/文字色を
+  // 選択中カテゴリごとに大きく切り替えていたが(旧「選択中タブ→header→data」の
+  // 視覚階層)、部品台帳では品名を切り替えるたびにpanel全体やtable headerの色が
+  // 大きく変わる表現がくどく見えるため廃止した(table headerは他3panelと同じ
+  // 固定の配色に統一。下記CSS参照)。カテゴリの配色情報自体
+  // (`getCategoryPresentation`/`toCssVars`)は、下記の品名select自身への
+  // ごく控えめな左accent(`--cat-tab-border`のみ)としてのみ限定的に利用する。
+  const selectAccentStyle = useMemo(() => {
     if (activeCategory == null) return undefined
     return toCssVars(getCategoryPresentation(activeCategory).colors)
   }, [activeCategory])
 
-  // タブ切替・検索文字列変更時に、選択中の品名 + 検索語でMasterを再取得する。
+  // [追加修正: 検索欄廃止] カテゴリ切替時のみMasterを再取得する(旧: 検索文字列も
+  // 依存に含めデバウンスしていたが、テキスト入力自体が無くなったため不要になった)。
   useEffect(() => {
     if (activeCategory == null) return
-    const timer = setTimeout(() => {
-      setLoading(true)
-      const q = query.trim()
-      fetchMasterItems({ category: activeCategory, q: q || undefined })
-        .then(setItems)
-        .finally(() => setLoading(false))
-    }, 200)
-    return () => clearTimeout(timer)
-  }, [activeCategory, query])
+    setLoading(true)
+    fetchMasterItems({ category: activeCategory })
+      .then(setItems)
+      .finally(() => setLoading(false))
+  }, [activeCategory])
+
+  // [追加修正: UI名称変更] ユーザー向け表示名を「積算コードMaster」から
+  // 「部品台帳」へ変更した(内部のcomponent名・class名・domain名は変更して
+  // いない。指示1章: 大規模リファクタリングは行わない)。
+  // [追加修正: 他floating panelとのフォーマット統一] 盤情報(PanelInfo)の
+  // 見出しが`盤情報　{件数}件`のように件数を見出しテキスト自体へ埋め込む
+  // 形式のため、部品台帳もこれに揃える(旧: 見出しと件数を別要素に分けた
+  // 濃色ツールバー行だったものを廃止)。
+  const heading = activeCategory != null ? `部品台帳　${items.length}件` : '部品台帳'
 
   return (
     <section className="master-picker" style={height != null ? { height } : undefined}>
-      <div className="master-picker__toolbar">
-        <h2 className="master-picker__heading">積算コードMaster</h2>
-        <input
-          className="master-picker__search"
-          type="text"
-          placeholder="コード・型式で検索 (現在のタブ内)"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        {loading && <span className="master-picker__loading">検索中...</span>}
-        <span className="master-picker__count">{items.length}件</span>
-      </div>
+      <h2 className="master-picker__heading">{heading}</h2>
 
-      <div className="master-picker__tabs" role="tablist">
-        {categoryTabs.map((c) => {
-          // 内部値(半角カナ・半角中点混在)はDB/APIの値のまま保持し、UI表示名・配色の
-          // 変換は`masterCategoryPresentation.ts`へ一元化している (Phase 1.10 指示書9章)。
-          // Phase 1.11: 13カテゴリすべて固有色になったため、CSS側に色ごとの
-          // モディファイアクラスを増やすのではなく、CSSカスタムプロパティを
-          // styleへ注入する方式にした (HEX/RGB値をCSSへ重複記述しない。指示書30章)。
-          const presentation = getCategoryPresentation(c)
-          return (
-            <button
-              key={c}
-              type="button"
-              role="tab"
-              aria-selected={c === activeCategory}
-              className={
-                'master-picker__tab' + (c === activeCategory ? ' master-picker__tab--active' : '')
-              }
-              style={toCssVars(presentation.colors)}
-              onClick={() => setActiveCategory(c)}
-            >
-              {presentation.label}
-            </button>
-          )
-        })}
-      </div>
+      {/* [追加修正: 検索欄を廃止し品名選択リストへ変更、追加修正でさらに
+          コンパクト化] 横一列のタブ表示は横幅を浪費し、floating panel化
+          (幅を絞りたい)と相性が悪いため、単一の<select>による品名切替へ
+          置き換えた。品名の定義・並び順・表示ラベル
+          (`masterCategoryPresentation.ts`)・`activeCategory` state・切替時の
+          再取得ロジックはタブ時代のものをそのまま再利用しており、見た目だけを
+          変更している。selectの横幅はpanel幅いっぱいまで広げず(下記CSS)、
+          長い品名はselect内で省略表示する。ラベル文言は「カテゴリ」から
+          「品名」へ変更した(指示1章)。
+          [追加修正: 品名ラベルとselectを横並びに] `<label>`自体は
+          `品名`テキスト→`<select>`→(読み込み中はloading表示)の順でDOM構造は
+          変えていない。並び方向(縦積み→横並び)はCSS側(`master-picker__
+          category-label`のflex-direction)のみで切り替えている。 */}
+      <label className="master-picker__category-label">
+        品名
+        <select
+          className="master-picker__category-select"
+          value={activeCategory ?? ''}
+          style={selectAccentStyle}
+          onChange={(e) => setActiveCategory(e.target.value)}
+        >
+          {categoryTabs.map((c) => (
+            <option key={c} value={c}>
+              {getCategoryPresentation(c).label}
+            </option>
+          ))}
+        </select>
+        {loading && <span className="master-picker__loading">読み込み中...</span>}
+      </label>
 
       <div className="master-picker__table-wrap">
         <table className="master-picker__table">
-          <thead style={activeHeaderStyle}>
+          <thead>
             <tr>
               {COLUMNS.map((col) => (
-                <th key={col.key}>{col.label}</th>
+                <th key={col.key} className={col.className}>
+                  {col.label}
+                </th>
               ))}
             </tr>
           </thead>
@@ -163,8 +156,8 @@ export function EstimateMasterPicker({ selectedItemId, onSelectItem, height }: P
                 title="クリックしてManual BBox追加対象として選択/解除"
               >
                 {COLUMNS.map((col) => (
-                  <td key={col.key} className={col.numeric ? 'master-picker__cell--numeric' : ''}>
-                    {formatCell(item[col.key], col.numeric)}
+                  <td key={col.key} className={col.className}>
+                    {formatCell(item[col.key])}
                   </td>
                 ))}
               </tr>

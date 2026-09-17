@@ -79,6 +79,9 @@ const ALL_ITEMS: EstimateMasterItem[] = [
 let mockDataset: EstimateMasterItem[] = ALL_ITEMS
 
 vi.mock('../../api/client', () => ({
+  // [追加修正: 部品台帳への再設計 指示2章] Frontend側の検索欄は廃止したが、
+  // `fetchMasterItems`自体の`q`引数(Backend API)は変更していない。この
+  // componentが`category`のみを渡すようになったことをモック経由で確認する。
   fetchMasterItems: vi.fn((params: { q?: string; category?: string }) => {
     let items = mockDataset
     if (params.category) items = items.filter((i) => i.category === params.category)
@@ -95,76 +98,77 @@ beforeEach(() => {
   vi.mocked(fetchMasterItems).mockClear()
 })
 
-describe('EstimateMasterPicker', () => {
-  it('generates tabs from the categories actually present in Master data (no hardcoding), displayed with the full-width label (Phase 1.10 指示書8章)', async () => {
+describe('EstimateMasterPicker: 部品台帳への再設計 (Issue #19 追加修正)', () => {
+  it('shows the UI heading as 部品台帳, not 積算コードMaster (指示1章: ユーザー向け名称変更)', async () => {
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    expect(await screen.findByRole('heading', { name: '部品台帳' })).toBeInTheDocument()
+    expect(screen.queryByText('積算コードMaster')).not.toBeInTheDocument()
+  })
 
-    const tabs = await screen.findAllByRole('tab')
-    expect(tabs.map((t) => t.textContent)).toEqual([
-      BOX_TANDOKU.label,
-      NAIBU_PANEL.label,
-      FUZOKUHIN.label,
-    ])
-    // 内部値(半角混在)がそのまま画面に出ていないこと。
+  it('has no search input (指示2章: 検索欄を廃止)', async () => {
+    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    await screen.findByText('11001')
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  it('labels the selection list as 品名, not カテゴリ (追加修正指示1章: ユーザー向け表記の変更)', async () => {
+    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    await screen.findByText('11001')
+    expect(screen.getByText('品名')).toBeInTheDocument()
+    expect(screen.queryByText('カテゴリ')).not.toBeInTheDocument()
+    // ネイティブ<label>のラップによる暗黙のaccessible name。
+    expect(screen.getByRole('combobox', { name: '品名' })).toBeInTheDocument()
+  })
+
+  it('generates category select options from the categories actually present in Master data (no hardcoding), using the full-width label', async () => {
+    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    await screen.findByText('11001')
+
+    const select = screen.getByRole('combobox') as HTMLSelectElement
+    const options = within(select).getAllByRole('option')
+    expect(options.map((o) => o.textContent)).toEqual([BOX_TANDOKU.label, NAIBU_PANEL.label, FUZOKUHIN.label])
+    // 内部値(半角混在)がそのままoption textに出ていないこと。
     expect(screen.queryByText(BOX_TANDOKU.internal)).not.toBeInTheDocument()
     expect(screen.queryByText(NAIBU_PANEL.internal)).not.toBeInTheDocument()
   })
 
-  it('shows only the active tab category, and switching tabs changes the displayed rows', async () => {
+  it('shows only the selected category rows, and changing the category select switches the displayed rows', async () => {
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
 
     expect(await screen.findByText('11001')).toBeInTheDocument()
     expect(screen.getByText('11002')).toBeInTheDocument()
     expect(screen.queryByText('18001')).not.toBeInTheDocument()
 
-    fireEvent.click(await screen.findByRole('tab', { name: NAIBU_PANEL.label }))
+    const select = screen.getByRole('combobox')
+    fireEvent.change(select, { target: { value: NAIBU_PANEL.internal } })
 
     expect(await screen.findByText('18001')).toBeInTheDocument()
     expect(screen.queryByText('11001')).not.toBeInTheDocument()
   })
 
-  it('renders exactly the specified 10 columns in order', async () => {
+  it('renders exactly the 3 specified columns in order (指示3章: コード/型式/定格のみ)', async () => {
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
     await screen.findByText('11001')
 
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent)
-    expect(headers).toEqual([
-      'コード',
-      '型式',
-      '定格',
-      '総合価格A',
-      '箱・部品価格',
-      '塗装価格',
-      '設A',
-      '板金',
-      '組立',
-      '検査',
-    ])
+    expect(headers).toEqual(['コード', '型式', '定格'])
+    // 廃止した価格・工数列は表示されない(元データ自体は取得したまま、表示のみ絞る)。
+    expect(screen.queryByText('総合価格A')).not.toBeInTheDocument()
+    expect(screen.queryByText('315,300')).not.toBeInTheDocument()
   })
 
-  it('formats numeric values with thousands separators and leaves missing values blank (no fabricated data)', async () => {
+  it('leaves missing values blank (no fabricated data)', async () => {
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    expect(await screen.findByText('315,300')).toBeInTheDocument()
+    const select = screen.getByRole('combobox')
+    fireEvent.change(select, { target: { value: FUZOKUHIN.internal } })
 
-    fireEvent.click(await screen.findByRole('tab', { name: FUZOKUHIN.label }))
     const row = (await screen.findByText('18311')).closest('tr') as HTMLElement
     const cells = within(row).getAllByRole('cell')
-    // コード, 型式, 定格, 総合価格A, 箱・部品価格, 塗装価格, 設A, 板金, 組立, 検査
-    expect(cells.map((c) => c.textContent)).toEqual([
-      '18311',
-      '',
-      '天井のみ1面に付',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-    ])
+    // コード, 型式(null→空欄), 定格
+    expect(cells.map((c) => c.textContent)).toEqual(['18311', '', '天井のみ1面に付'])
   })
 
-  it('calls onSelectItem with the row id when a row is clicked', async () => {
+  it('calls onSelectItem with the row id when a row is clicked (BBox追加モードへの既存連携を維持)', async () => {
     const onSelectItem = vi.fn()
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={onSelectItem} />)
     const row = (await screen.findByText('11002')).closest('tr') as HTMLElement
@@ -184,54 +188,96 @@ describe('EstimateMasterPicker', () => {
   })
 })
 
-describe('EstimateMasterPicker: タブの全角表記・色分け (Phase 1.10 UI改修指示8章〜13章、Phase 1.11で固有色化)', () => {
-  it('injects each tab with its own unique color via CSS custom properties (Phase 1.11 指示書1章/30章)', async () => {
+describe('EstimateMasterPicker: カテゴリ選択リストの配色 (Issue #19 追加修正)', () => {
+  it('injects the selected category color onto the <select> itself, so the current category is clearly visible (指示2章)', async () => {
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const tabs = await screen.findAllByRole('tab')
-    const byLabel = new Map(tabs.map((t) => [t.textContent, t]))
+    const select = await screen.findByRole('combobox')
+    await screen.findByText('11001')
 
-    const boxTab = byLabel.get(BOX_TANDOKU.label)!
-    const naibuTab = byLabel.get(NAIBU_PANEL.label)!
-    const fuzokuTab = byLabel.get(FUZOKUHIN.label)!
-
-    expect(boxTab.style.getPropertyValue('--cat-tab-border')).toBe(BOX_TANDOKU.colors.tabBorder)
-    expect(naibuTab.style.getPropertyValue('--cat-tab-border')).toBe(
-      NAIBU_PANEL.colors.tabBorder,
-    )
-    expect(fuzokuTab.style.getPropertyValue('--cat-tab-border')).toBe(
-      FUZOKUHIN.colors.tabBorder,
-    )
-    // 13カテゴリすべて固有色のため、どの2カテゴリを取っても同じ色にはならない。
-    expect(BOX_TANDOKU.colors.tabBorder).not.toBe(NAIBU_PANEL.colors.tabBorder)
-    expect(NAIBU_PANEL.colors.tabBorder).not.toBe(FUZOKUHIN.colors.tabBorder)
-    expect(BOX_TANDOKU.colors.tabBorder).not.toBe(FUZOKUHIN.colors.tabBorder)
+    expect(select.style.getPropertyValue('--cat-tab-border')).toBe(BOX_TANDOKU.colors.tabBorder)
+    expect(select.style.getPropertyValue('--cat-tab-active-bg')).toBe(BOX_TANDOKU.colors.tabActiveBg)
+    expect(select.style.getPropertyValue('--cat-tab-active-fg')).toBe(BOX_TANDOKU.colors.tabActiveFg)
   })
 
-  it('marks the active tab distinctly, separate from the row-selected highlight color (指示書13章/14章)', async () => {
+  it('switches the injected color immediately when a different category is selected', async () => {
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const activeTab = await screen.findByRole('tab', { name: BOX_TANDOKU.label })
-    const inactiveTab = await screen.findByRole('tab', { name: NAIBU_PANEL.label })
+    const select = await screen.findByRole('combobox')
+    await screen.findByText('11001')
+    expect(select.style.getPropertyValue('--cat-tab-border')).toBe(BOX_TANDOKU.colors.tabBorder)
 
-    expect(activeTab.className).toContain('master-picker__tab--active')
-    expect(inactiveTab.className).not.toContain('master-picker__tab--active')
+    fireEvent.change(select, { target: { value: NAIBU_PANEL.internal } })
+    await screen.findByText('18001')
+
+    expect(select.style.getPropertyValue('--cat-tab-border')).toBe(NAIBU_PANEL.colors.tabBorder)
+    expect(select.style.getPropertyValue('--cat-tab-border')).not.toBe(BOX_TANDOKU.colors.tabBorder)
   })
 
-  it('keeps the tab color class distinct from the row-selection class name (no naming/CSS collision, 指示書14章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={2} onSelectItem={() => {}} />)
-    const tab = await screen.findByRole('tab', { name: BOX_TANDOKU.label })
-    const selectedRow = (await screen.findByText('11002')).closest('tr') as HTMLElement
+  it('reflects the current category as the select value (native select shows the selected option, 指示2章「現在選択中カテゴリが明確に分かる」)', async () => {
+    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    const select = (await screen.findByRole('combobox')) as HTMLSelectElement
+    await screen.findByText('11001')
+    expect(select.value).toBe(BOX_TANDOKU.internal)
 
-    expect(tab.className).not.toContain('master-picker__row--selected')
-    expect(selectedRow.className).not.toMatch(/master-picker__tab--/)
+    fireEvent.change(select, { target: { value: FUZOKUHIN.internal } })
+    await screen.findByText('18311')
+    expect(select.value).toBe(FUZOKUHIN.internal)
   })
 })
 
-describe('EstimateMasterPicker: 選択中行の視覚表現 (UI視覚階層改善 追加修正指示 7章〜13章)', () => {
+describe('EstimateMasterPicker: カテゴリ色の変化の簡素化 (Issue #19 追加修正)', () => {
+  // [追加修正] 以前は選択中カテゴリのpresentationを<thead>へ注入し、品名を
+  // 切り替えるたびにtable header全体の色が大きく変わる表現にしていたが、
+  // 「品名を切り替えるたびにpanel全体やtable headerの色が大きく変わる表現は
+  // やめる」との指示を受け廃止した。table headerは他panelと同じ固定配色になり、
+  // カテゴリの配色情報は品名selectの左accent(--cat-tab-border)のみに限定される
+  // (直上の「カテゴリ選択リストの配色」describe参照)。
+  it('does not inject any category presentation onto <thead> (table headerはpanel種別によらず固定配色)', async () => {
+    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    await screen.findByText('11001')
+    const thead = document.querySelector('.master-picker__table thead') as HTMLElement
+
+    expect(thead.style.getPropertyValue('--cat-tab-bg')).toBe('')
+    expect(thead.getAttribute('style')).toBeNull()
+  })
+
+  it('keeps the table header background/color the same across different categories (品名を切り替えても変化しない)', async () => {
+    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    await screen.findByText('11001')
+    const th = screen.getAllByRole('columnheader')[0]
+    const bgBefore = getComputedStyle(th).backgroundColor
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: NAIBU_PANEL.internal } })
+    await screen.findByText('18001')
+
+    expect(getComputedStyle(th).backgroundColor).toBe(bgBefore)
+  })
+
+  it('does not apply any category presentation to data rows (tbody) either', async () => {
+    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
+    const row = (await screen.findByText('11001')).closest('tr') as HTMLElement
+    expect(row.style.getPropertyValue('--cat-tab-bg')).toBe('')
+  })
+
+  it('assigns every one of the 13 categories a unique tabBorder (used only as the select accent, no duplicates)', () => {
+    const tabBorders = MASTER_CATEGORY_PRESENTATION.map((p) => p.colors.tabBorder)
+    expect(new Set(tabBorders).size).toBe(13)
+  })
+
+  it('leaves selected-row cobalt styling and bbox/leader colors untouched (指示8章/12章、指示5章: BBox追加モードの部品選択フローは維持)', async () => {
+    render(<EstimateMasterPicker selectedItemId={2} onSelectItem={() => {}} />)
+    const selectedRow = (await screen.findByText('11002')).closest('tr') as HTMLElement
+    expect(getComputedStyle(selectedRow).boxShadow.toLowerCase()).toContain('#2563eb')
+    // BBox/引出線が参照するbboxBorder等は今回も無変更。
+    expect(BOX_TANDOKU.colors.bboxBorder).toBe('#2a73bb')
+    expect(BOX_TANDOKU.colors.leaderTextColor).toBe('#184c81')
+  })
+})
+
+describe('EstimateMasterPicker: 選択中行の視覚表現 (UI視覚階層改善 追加修正指示から維持)', () => {
   it('renders the selected row with a cobalt-blue accent, not the old amber "edit-follow"-like color', async () => {
     render(<EstimateMasterPicker selectedItemId={2} onSelectItem={() => {}} />)
     const selectedRow = (await screen.findByText('11002')).closest('tr') as HTMLElement
     const style = getComputedStyle(selectedRow)
-    // #fef3c7(旧amber, 要確認/編集直後と同じ意味色)ではなく、コバルトブルー系。
     expect(style.backgroundColor).not.toBe('rgb(254, 243, 199)')
     expect(style.boxShadow.toLowerCase()).toContain('#2563eb')
     expect(style.fontWeight).toBe('600')
@@ -244,7 +290,7 @@ describe('EstimateMasterPicker: 選択中行の視覚表現 (UI視覚階層改�
     expect(style.boxShadow === 'none' || style.boxShadow === '').toBe(true)
   })
 
-  it('does not change row height when a row becomes selected (指示25章: 情報密度を変えない)', async () => {
+  it('does not change row height when a row becomes selected (情報密度を変えない)', async () => {
     const { rerender } = render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
     const row = (await screen.findByText('11002')).closest('tr') as HTMLElement
     const heightBefore = getComputedStyle(row).height
@@ -252,256 +298,49 @@ describe('EstimateMasterPicker: 選択中行の視覚表現 (UI視覚階層改�
     const heightAfter = getComputedStyle(row).height
     expect(heightAfter).toBe(heightBefore)
   })
-
-  it('marks the active tab with a background distinct from row-selection styling (no box-shadow-based marker; box-shadow stays reserved for row selection)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const activeTab = await screen.findByRole('tab', { name: BOX_TANDOKU.label })
-    const style = getComputedStyle(activeTab)
-    // Master行選択のコバルトブルー(#2563eb)をactiveタブ側では使わない(指示14章)。
-    expect(style.backgroundColor.toLowerCase()).not.toContain('37, 99, 235')
-  })
 })
 
-describe('EstimateMasterPicker: 選択中タブとMaster表の一体化 (UI視覚階層改善 追加修正第2ラウンド)', () => {
-  it('gives the active tab a background distinct from (and stronger than) the unselected tabBg (指示5章/9章/25章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const activeTab = await screen.findByRole('tab', { name: BOX_TANDOKU.label })
-    const inactiveTab = await screen.findByRole('tab', { name: NAIBU_PANEL.label })
-
-    expect(activeTab.style.getPropertyValue('--cat-tab-active-bg')).toBe(BOX_TANDOKU.colors.tabActiveBg)
-    expect(BOX_TANDOKU.colors.tabActiveBg).not.toBe(BOX_TANDOKU.colors.tabBg)
-    // 各タブは自分自身のカテゴリ色のみを注入する(他タブの値と混ざらない)。
-    expect(activeTab.style.getPropertyValue('--cat-tab-active-bg')).not.toBe(
-      inactiveTab.style.getPropertyValue('--cat-tab-active-bg'),
-    )
-  })
-
-  it('removes the bottom border on the active tab so it visually merges with the table below (指示3章/4章/7章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const activeTab = await screen.findByRole('tab', { name: BOX_TANDOKU.label })
-    const style = getComputedStyle(activeTab)
-    expect(style.borderBottomStyle === 'none' || style.borderBottomWidth === '0px').toBe(true)
-  })
-
-  it('keeps the active tab border colors tied to its own category (--cat-tab-border), not a fixed/shared color (指示7章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const activeTab = await screen.findByRole('tab', { name: BOX_TANDOKU.label })
-    expect(activeTab.style.getPropertyValue('--cat-tab-border')).toBe(BOX_TANDOKU.colors.tabBorder)
-  })
-
-  it('lifts the active tab above the table boundary via position/z-index (not by adding padding/margin/height, 指示11章/12章/21章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const activeTab = await screen.findByRole('tab', { name: BOX_TANDOKU.label })
-    const style = getComputedStyle(activeTab)
-    expect(style.position).toBe('relative')
-    expect(Number(style.zIndex)).toBeGreaterThan(0)
-  })
-
-  it('moves the --active class to the newly clicked tab and off the previous one immediately (指示17章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const boxTab = await screen.findByRole('tab', { name: BOX_TANDOKU.label })
-    expect(boxTab.className).toContain('master-picker__tab--active')
-
-    const naibuTab = await screen.findByRole('tab', { name: NAIBU_PANEL.label })
-    fireEvent.click(naibuTab)
-
-    expect(boxTab.className).not.toContain('master-picker__tab--active')
-    expect(naibuTab.className).toContain('master-picker__tab--active')
-  })
-
-  it('does not change tab padding/font-size when a tab becomes active (指示12章/20章: 情報密度を変えない)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const activeTab = await screen.findByRole('tab', { name: BOX_TANDOKU.label })
-    const inactiveTab = await screen.findByRole('tab', { name: NAIBU_PANEL.label })
-    const activeStyle = getComputedStyle(activeTab)
-    const inactiveStyle = getComputedStyle(inactiveTab)
-    // active/inactiveどちらもbase(`.master-picker__tab`)のpadding/font-sizeを
-    // 共有しており、`--active`修飾ルール側でこれらを一切上書きしていないことを確認する。
-    expect(activeStyle.padding).toBe(inactiveStyle.padding)
-    expect(activeStyle.fontSize).toBe(inactiveStyle.fontSize)
-    expect(activeStyle.lineHeight).toBe(inactiveStyle.lineHeight)
-  })
-})
-
-describe('EstimateMasterPicker: 選択カテゴリ色のtable header連動 (UI視覚階層改善 追加修正第3ラウンド)', () => {
-  it('injects the active category presentation onto <thead>, matching the active tab (指示1章/2章/11章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const activeTab = await screen.findByRole('tab', { name: BOX_TANDOKU.label })
-    await screen.findByText('11001')
-    const thead = document.querySelector('.master-picker__table thead') as HTMLElement
-
-    expect(thead.style.getPropertyValue('--cat-tab-bg')).toBe(
-      activeTab.style.getPropertyValue('--cat-tab-bg'),
-    )
-    expect(thead.style.getPropertyValue('--cat-tab-bg')).toBe(BOX_TANDOKU.colors.tabBg)
-    expect(thead.style.getPropertyValue('--cat-tab-fg')).toBe(BOX_TANDOKU.colors.tabFg)
-    expect(thead.style.getPropertyValue('--cat-tab-border')).toBe(BOX_TANDOKU.colors.tabBorder)
-  })
-
-  it('switches the header presentation immediately when the category tab changes (指示9章/10章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    await screen.findByText('11001')
-    const thead = document.querySelector('.master-picker__table thead') as HTMLElement
-    expect(thead.style.getPropertyValue('--cat-tab-bg')).toBe(BOX_TANDOKU.colors.tabBg)
-
-    fireEvent.click(await screen.findByRole('tab', { name: NAIBU_PANEL.label }))
-    await screen.findByText('18001')
-
-    expect(thead.style.getPropertyValue('--cat-tab-bg')).toBe(NAIBU_PANEL.colors.tabBg)
-    expect(thead.style.getPropertyValue('--cat-tab-bg')).not.toBe(BOX_TANDOKU.colors.tabBg)
-  })
-
-  it('keeps the header presentation while searching within the current category (指示9章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    await screen.findByText('11001')
-    const thead = document.querySelector('.master-picker__table thead') as HTMLElement
-    const bgBeforeSearch = thead.style.getPropertyValue('--cat-tab-bg')
-
-    fireEvent.change(screen.getByPlaceholderText('コード・型式で検索 (現在のタブ内)'), {
-      target: { value: '11001' },
-    })
-    await screen.findByText('11001')
-
-    expect(thead.style.getPropertyValue('--cat-tab-bg')).toBe(bgBeforeSearch)
-  })
-
-  it('does not apply the category presentation to data rows (tbody), only to the header (指示7章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const row = (await screen.findByText('11001')).closest('tr') as HTMLElement
-    expect(row.style.getPropertyValue('--cat-tab-bg')).toBe('')
-  })
-
-  it('does not change header height/padding/font-size when the category presentation is applied (指示13章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const th = (await screen.findAllByRole('columnheader'))[0]
-    const style = getComputedStyle(th)
-    expect(style.padding).toBe('0.3rem 0.5rem')
-    expect(style.fontSize).not.toBe('')
-  })
-
-  it('assigns every one of the 13 categories a header presentation reusing the already-unique tabBg (no duplicates, 指示18章)', () => {
-    const tabBgs = MASTER_CATEGORY_PRESENTATION.map((p) => p.colors.tabBg)
-    expect(new Set(tabBgs).size).toBe(13)
-  })
-
-  it('leaves selected-row cobalt styling and bbox/leader colors untouched by the header change (指示8章/12章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={2} onSelectItem={() => {}} />)
-    const selectedRow = (await screen.findByText('11002')).closest('tr') as HTMLElement
-    expect(getComputedStyle(selectedRow).boxShadow.toLowerCase()).toContain('#2563eb')
-    // BBox/引出線が参照するbboxBorder等は今回も無変更。
-    expect(BOX_TANDOKU.colors.bboxBorder).toBe('#2a73bb')
-    expect(BOX_TANDOKU.colors.leaderTextColor).toBe('#184c81')
-  })
-})
-
-describe('EstimateMasterPicker: 濃色+白抜きによる選択カテゴリ強調 (UI視覚階層改善 追加修正第4ラウンド)', () => {
-  // 注記: jsdom(cssstyle)は`color`/`background-color`のようなプロパティに対する
-  // `var(...)`の解決を確実には行わないため(box-shadowとは異なり、そのまま
-  // 未評価の文字列を返すことがある)、実際に注入されたCSSカスタムプロパティの
-  // 値そのものをアサーションする。値の対応関係(--cat-tab-active-fgがCSSの
-  // `color`として、--cat-tab-active-bgが`background`として使われること)は
-  // EstimateMasterPicker.cssのルール定義で担保し、実描画色は本文末尾の
-  // 実ブラウザ確認(スクリーンショット・getComputedStyle実測)で検証している。
-  it('injects white (#fff) as --cat-tab-active-fg on the active tab, matching tabActiveFg (指示2章/18章/19章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const activeTab = await screen.findByRole('tab', { name: BOX_TANDOKU.label })
-    expect(activeTab.style.getPropertyValue('--cat-tab-active-fg')).toBe('#fff')
-    expect(BOX_TANDOKU.colors.tabActiveFg).toBe('#fff')
-  })
-
-  it('carries a --cat-tab-active-bg distinct from --cat-tab-bg on every tab, so the active-state CSS rule renders a different (darker) color than the unselected rule (指示2章/5章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const activeTab = await screen.findByRole('tab', { name: BOX_TANDOKU.label })
-    expect(activeTab.style.getPropertyValue('--cat-tab-active-bg')).toBe(BOX_TANDOKU.colors.tabActiveBg)
-    expect(activeTab.style.getPropertyValue('--cat-tab-bg')).toBe(BOX_TANDOKU.colors.tabBg)
-    expect(BOX_TANDOKU.colors.tabActiveBg).not.toBe(BOX_TANDOKU.colors.tabBg)
-    // 未選択タブは base(`.master-picker__tab`)ルールにより`--cat-tab-bg`(淡色)
-    // だけを参照する(`master-picker__tab--active`クラスを持たない、指示5章)。
-    const inactiveTab = await screen.findByRole('tab', { name: NAIBU_PANEL.label })
-    expect(inactiveTab.className).not.toContain('master-picker__tab--active')
-  })
-
-  it('injects the active category presentation (bg/fg) onto <thead>, for use by the header CSS rule (指示3章/9章/19章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    await screen.findByText('11001')
-    const thead = document.querySelector('.master-picker__table thead') as HTMLElement
-    expect(thead.style.getPropertyValue('--cat-tab-active-bg')).toBe(BOX_TANDOKU.colors.tabActiveBg)
-    expect(thead.style.getPropertyValue('--cat-tab-active-fg')).toBe('#fff')
-  })
-
-  it('injects the same --cat-tab-active-bg/--cat-tab-active-fg onto <thead> as the active tab (header and tab form one color band, 指示3章/9章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const activeTab = await screen.findByRole('tab', { name: BOX_TANDOKU.label })
-    await screen.findByText('11001')
-    const thead = document.querySelector('.master-picker__table thead') as HTMLElement
-
-    expect(thead.style.getPropertyValue('--cat-tab-active-bg')).toBe(
-      activeTab.style.getPropertyValue('--cat-tab-active-bg'),
-    )
-    expect(thead.style.getPropertyValue('--cat-tab-active-fg')).toBe('#fff')
-  })
-
-  it('keeps data rows white, not the category color, even for the active category (指示11章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const row = (await screen.findByText('11001')).closest('tr') as HTMLElement
-    const style = getComputedStyle(row)
-    expect(style.backgroundColor === '' || style.backgroundColor === 'rgba(0, 0, 0, 0)').toBe(true)
-  })
-
-  it('does not dim or weaken the active tab on hover (selected > hover, 指示13章)', async () => {
-    render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
-    const activeTab = await screen.findByRole('tab', { name: BOX_TANDOKU.label })
-    expect(getComputedStyle(activeTab).filter).toBe('none')
-  })
-})
-
-describe('EstimateMasterPicker: 使用品名の限定 (追加指示)', () => {
-  it('does not render a tab for a null-category row (Importer側で既に除外されている前提の防御的確認)', async () => {
+describe('EstimateMasterPicker: 使用品名の限定 (追加指示から維持)', () => {
+  it('does not render a select option for a null-category row (Importer側で既に除外されている前提の防御的確認)', async () => {
     // Master Importer側で対象13品名・取り消し線行は既に除外されているため、
     // Frontendが受け取るデータにcategory:nullの行が混ざることは想定していない。
-    // それでも万一混入した場合にタブが壊れたり例外を投げたりしないことだけ確認する
-    // (「未分類」タブは廃止した)。
+    // それでも万一混入した場合に選択リストが壊れたり例外を投げたりしないことだけ確認する
+    // (「未分類」選択肢は追加しない)。
     mockDataset = [
       ...ALL_ITEMS,
       makeItem({ id: 99, code: '99999', category: null, model: '想定外行', rating: null }),
     ]
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
 
-    const tabs = await screen.findAllByRole('tab')
-    expect(tabs.map((t) => t.textContent)).toEqual([
-      BOX_TANDOKU.label,
-      NAIBU_PANEL.label,
-      FUZOKUHIN.label,
-    ])
-    expect(screen.queryByRole('tab', { name: '未分類' })).not.toBeInTheDocument()
+    const select = await screen.findByRole('combobox')
+    const options = within(select).getAllByRole('option')
+    expect(options.map((o) => o.textContent)).toEqual([BOX_TANDOKU.label, NAIBU_PANEL.label, FUZOKUHIN.label])
+    expect(screen.queryByText('未分類')).not.toBeInTheDocument()
     expect(screen.queryByText('99999')).not.toBeInTheDocument()
   })
 })
 
-describe('EstimateMasterPicker: 表セル境界の統一・ヘッダ左寄せ/数値セル右寄せ (Sekisan Navi 追加UI修正指示)', () => {
-  it('left-aligns every column header, including the numeric price/工数 columns (5章: 既存仕様のまま左寄せを維持)', async () => {
+describe('EstimateMasterPicker: 表セル境界の統一・ヘッダ左寄せ (Sekisan Navi 追加UI修正指示から維持、3列化に合わせて更新)', () => {
+  it('left-aligns every column header (コード/型式/定格の3列とも)', async () => {
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
     const headers = await screen.findAllByRole('columnheader')
-    expect(headers).toHaveLength(10)
+    expect(headers).toHaveLength(3)
     for (const th of headers) {
       expect(getComputedStyle(th).textAlign).toBe('left')
     }
   })
 
-  it('right-aligns numeric value cells (総合価格A/箱・部品価格/塗装価格/設A/板金/組立/検査), left-aligns code/model/rating (6章)', async () => {
+  it('left-aligns code/model/rating value cells (指示3章: 3列とも文字列列のため右寄せの対象は無い)', async () => {
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
     const row = (await screen.findByText('11001')).closest('tr') as HTMLElement
     const cells = within(row).getAllByRole('cell')
-    // コード, 型式, 定格, 総合価格A, 箱・部品価格, 塗装価格, 設A, 板金, 組立, 検査
-    expect(getComputedStyle(cells[0]).textAlign).not.toBe('right') // コード
-    expect(getComputedStyle(cells[1]).textAlign).not.toBe('right') // 型式
-    expect(getComputedStyle(cells[2]).textAlign).not.toBe('right') // 定格
-    for (const numericCell of cells.slice(3)) {
-      expect(getComputedStyle(numericCell).textAlign).toBe('right')
+    expect(cells).toHaveLength(3)
+    for (const cell of cells) {
+      expect(getComputedStyle(cell).textAlign).not.toBe('right')
     }
   })
 
-  it('does not change header/cell padding (row/header height不変, 指示18章: 情報密度を変えない)', async () => {
+  it('does not change header/cell padding (情報密度を変えない)', async () => {
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
     await screen.findByText('11001')
     const th = screen.getAllByRole('columnheader')[0]
@@ -510,7 +349,7 @@ describe('EstimateMasterPicker: 表セル境界の統一・ヘッダ左寄せ/�
     expect(getComputedStyle(td).padding).toBe('0.3rem 0.5rem')
   })
 
-  it('leaves the selected-row cobalt accent unchanged after adding the cell grid (Master selected row style不変)', async () => {
+  it('leaves the selected-row cobalt accent unchanged after the column reduction', async () => {
     render(<EstimateMasterPicker selectedItemId={2} onSelectItem={() => {}} />)
     const selectedRow = (await screen.findByText('11002')).closest('tr') as HTMLElement
     const style = getComputedStyle(selectedRow)
@@ -518,18 +357,18 @@ describe('EstimateMasterPicker: 表セル境界の統一・ヘッダ左寄せ/�
     expect(style.fontWeight).toBe('600')
   })
 
-  it('keeps the sticky header positioning unaffected by the new cell border (17章)', async () => {
+  it('keeps the sticky header positioning unaffected by the column reduction', async () => {
     render(<EstimateMasterPicker selectedItemId={null} onSelectItem={() => {}} />)
     const th = (await screen.findAllByRole('columnheader'))[0]
     expect(getComputedStyle(th).position).toBe('sticky')
   })
 
-  // 注記: jsdom(cssstyle)はborder-right(var(...)使用)の解決を確実には行わないため
-  // (本ファイル既存の397行目以降のコメント参照)、--border-cell/active header用の
-  // rgba(255,255,255,0.18)の実際の描画は実ブラウザ確認で行う。
+  // 注記: jsdom(cssstyle)はborder-right(var(...)使用)の解決を確実には行わないため、
+  // --border-cell/active header用のrgba(255,255,255,0.18)の実際の描画は
+  // 実ブラウザ確認で行う。
 })
 
-describe('EstimateMasterPicker: 大量データ表示 (全件表示であることの確認)', () => {
+describe('EstimateMasterPicker: 大量データ表示 (全件表示であることの確認、維持)', () => {
   it('renders every row of a large category without truncating (no arbitrary page-size limit)', async () => {
     mockDataset = Array.from({ length: 230 }, (_, i) =>
       makeItem({ id: 1000 + i, code: `9${String(i).padStart(4, '0')}`, category: BOX_TANDOKU.internal }),

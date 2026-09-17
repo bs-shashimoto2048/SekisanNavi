@@ -5,7 +5,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  /* [追加修正: floating panel追加分の前面化との衝突回避] floating panel
+     (`components/Layout/FloatingPanel.css`)は表示ON/クリック/ドラッグ/リサイズの
+     たびに前面化用のz-indexカウンタを100から単調増加させる。旧来この
+     backdropもz-index:100だったため、floating panelを一度でも操作すると
+     modalより前面に来てしまう(実ブラウザ確認で発覚)。modalは常にfloating
+     panelより前面である必要があるため、floating panelのカウンタが現実的に
+     到達しない大きさ(1000)へ引き上げた。 */
+  z-index: 1000;
 }
 
 .product-selector {

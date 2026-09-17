@@ -1,40 +1,131 @@
-/* Issue #19 Phase 2: 積算集約・積算明細をViewer上へ重ねるfloating panel。
-   `DrawingViewer`内部のOverlay(0.0〜1.0正規化座標のBBox/盤領域等)とは別の、
-   Viewerの外側(App.tsx側、`.app-workspace__viewer-wrap`基準)に乗る新しい
-   レイヤーとして扱う。DrawingViewer内部のz-index/pointer-events契約
-   (docs/architecture.md 15章、PNG(0)〜Tooltip(50))はこのfloating panel導入で
-   一切変更していない。 */
+/* Issue #19 Phase 2で新設・Phase 4で拡張・追加修正でドラッグ移動/リサイズに対応:
+   盤情報・積算集約・積算明細をViewer上へ重ねるfloating panel。`DrawingViewer`
+   内部のOverlay(0.0〜1.0正規化座標のBBox/盤領域等)とは別の、Viewerの外側
+   (App.tsx側、`.app-workspace__viewer-wrap`基準)に乗る新しいレイヤーとして扱う。
+   DrawingViewer内部のz-index/pointer-events契約(docs/architecture.md 15章、
+   PNG(0)〜Tooltip(50))はこのfloating panel導入で一切変更していない。
+   位置・大きさ(top/left/width/height)は`FloatingPanel.tsx`側でinline styleとして
+   都度計算するため、ここではCSSで固定値を持たない。 */
 .floating-panel {
   position: absolute;
-  /* Viewer内部Overlayの最大値(Tooltip: 50)より確実に前面へ出す。floating panel
-     同士の重なり順を明示する必要は無い(既定配置で重ならないため)。 */
+  /* Viewer内部Overlayの最大値(Tooltip: 50)より確実に前面へ出す。実際の重なり順は
+     `FloatingPanel.tsx`側でパネルごとにz-indexを個別採番する(操作したパネルが
+     前面に来る)。 */
   z-index: 100;
   display: flex;
   flex-direction: column;
-  width: min(360px, calc(100% - 2rem));
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid var(--border-region);
-  border-radius: 6px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  /* Issue #19 Phase 4: グラス調(glassmorphism)。半透明の白background +
+     backdrop-filterで背後の図面がうっすら透けるようにしつつ、表・文字の
+     可読性を落とさないよう十分な不透明度を残す(完全透明にはしない)。
+     内部の見出し(#eff6ff等)・表ヘッダ(#f1f5f9等)は各componentのCSSで
+     既に不透明に近い背景を持つため、このシェル自体は変更していない。
+     [PR #22追加仕様: floating panel透過度] 背景alphaをCSS custom property
+     (`--floating-panel-bg-alpha`、`App.tsx`側で`.app-layout`のinline styleとして
+     設定、`SystemSettings`のスライダーで変更・localStorage永続化)経由にした。
+     `var()`の第2引数(0.6)は、custom property未設定時(旧挙動)のフォールバック
+     既定値であり、これまでの固定値と同じ見た目になる。opacityではなくrgba()の
+     alphaのみを変えているため、枠線(border)・box-shadow・子要素の文字色/意味色
+     には一切影響しない。 */
+  background: rgba(255, 255, 255, var(--floating-panel-bg-alpha, 0.6));
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  /* 追加UI修正指示4章: 背景図面との境界が曖昧にならないよう、細め(1px)だが
+     明確に認識できる境界線にする。従来の半透明白(rgba(255,255,255,0.55))は
+     明るい背景図面上でほぼ見えなくなってしまうため、glassmorphismと調和する
+     寒色〜中性色系(slate系、青系構造色・状態色とは別トーン)へ変更する。
+     内側にごく薄い白のハイライトリング(inset box-shadow)を重ね、
+     「フロストガラスの縁」らしい見た目を保ちつつ外周の視認性を確保する。 */
+  border: 1px solid rgba(51, 65, 85, 0.45);
+  border-radius: 10px;
+  box-shadow:
+    0 8px 28px rgba(15, 23, 42, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35);
   overflow: hidden;
 }
 
-/* 積算集約: トグルバー(top: 3rem)の下、Viewer右上寄りに配置する。高さは
-   `vh`(ブラウザウィンドウ基準)ではなく、position:absoluteの基準である
-   `.app-workspace__viewer-wrap`自身の高さに対する`%`で指定する。Viewer領域は
-   左ペイン/積算コードMaster領域とウィンドウ高さを分け合うため実際の高さは
-   ウィンドウ高さよりかなり小さく、`vh`ベースだと積算明細(下記)と重なって
-   しまうことを実ブラウザ確認で確認した (2026-09)。 */
-.floating-panel--aggregation {
-  top: 5.4rem;
-  right: 1.25rem;
-  height: 32%;
+/* backdrop-filter非対応環境向けのfallback (指示: Windows/Chromiumで
+   backdrop-filterが効かない場合でも読めるようにする)。ぼかしが効かない前提で、
+   可読性確保のため背景の不透明度を上げる(完全な板になっても崩れない)。
+   [PR #22追加仕様: floating panel透過度] ぼかしが無い環境でユーザーが透過度を
+   低く(透明寄りに)設定すると、下の図面が透けて可読性が崩れるおそれがある。
+   `max()`でユーザー設定値と最低不透明度(0.94、従来のfallback既定値)の
+   大きい方を採用し、fallback環境では常に一定以上の不透明度を保証する
+   (通常環境のスライダー挙動には影響しない。この`@supports not`ブロック内
+   でのみ適用される)。 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .floating-panel {
+    background: rgba(255, 255, 255, max(var(--floating-panel-bg-alpha, 0.94), 0.94));
+  }
 }
 
-/* 積算明細: Viewer右下寄りに配置する。積算集約と縦方向で重ならないよう、
-   上(top固定)ではなく下(bottom固定)を基準にする。 */
-.floating-panel--detail {
-  bottom: 0.75rem;
-  right: 1.25rem;
-  height: 38%;
+/* ドラッグ中/リサイズ中の軽い強調 (指示5章「active/frontmost時の軽い強調」)。
+   frontmost自体は実際のz-index(前面に来る)で視覚的に表現できているため、
+   ここでは「今まさに操作している」ことだけを控えめに強調する。 */
+.floating-panel--interacting {
+  box-shadow:
+    0 14px 36px rgba(15, 23, 42, 0.32),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  /* 追加UI修正指示4章: active時はfocus/frontmostの目印として境界色をわずかに
+     強める(色相・太さは変えず、濃さのみ上げる)。 */
+  border-color: rgba(30, 41, 59, 0.65);
+}
+
+/* [追加修正: 部品台帳UIを他panelと統一] 以前は`.floating-panel--master`の
+   shell自体にも上端3px太のslate accentバーを追加していたが、他3panelとの
+   統一感を優先し廃止した(指示3章: タイトル見出し・padding・表ヘッダ等を
+   既存3panelと統一感のある見た目にする。ツール系としての差別化は控えめな
+   accentに留める)。「ツール系panelである」ことは、`EstimateMasterPicker.css`
+   側の見出し(`master-picker__heading`)のaccent色(slate系、他panelの
+   コバルト系と区別)のみで表現する。既存のMasterカテゴリ色(--cat-tab-*)・
+   glassmorphismの背景/backdrop-filter/枠線(直上の共通ルール)は変更していない。 */
+
+/* childrenの内容(PanelInfo/EstimateAggregation/EstimateDetail/
+   EstimateMasterPicker)は元々「親から高さ100%で受け取る」設計のため、この
+   1枚を挟んで高さの基準を作る。
+   [追加修正: floating panelの最小高さをさらに縮める] 各childrenは見出し等の
+   固定領域(flex-shrink:0)+内部表のみがスクロールする(overflow-y:auto)構造
+   だが、panelを最小高さまで縮めると固定領域自体がpanelの高さを超える場合が
+   ある。以前は`overflow: hidden`だったため、その場合は固定領域の下側が
+   単純に見えなくなり(スクロールもできず)操作不能になっていた。
+   `overflow-y: auto`にすることで、その場合でもpanel全体を縦スクロールして
+   隠れた内容(製番合計・対象select・表等)へ到達できるようにする(指示:
+   「内容が入りきらない場合はpanel内部scrollを使う」)。横方向は各component
+   自身の内部スクロール領域(表のoverflow-x等)に任せ、ここではhiddenのままにする。 */
+.floating-panel__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ドラッグハンドル (指示: 見出し領域をドラッグハンドルとして使う)。
+   PanelInfo/EstimateAggregation/EstimateDetailそれぞれが描画する`<h2>`見出しに
+   対して、子コンポーネント側を変更せずcursor/選択不可を当てる
+   (`FloatingPanel.tsx`側はpointerdownのevent delegationで`closest('h2')`判定)。 */
+.floating-panel h2 {
+  cursor: grab;
+  user-select: none;
+}
+
+.floating-panel--interacting h2 {
+  cursor: grabbing;
+}
+
+/* リサイズハンドル (指示: 右下角のみ、視認性を確保する)。 */
+.floating-panel__resize-handle {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(71, 85, 105, 0.55) 0,
+    rgba(71, 85, 105, 0.55) 1.5px,
+    transparent 1.5px,
+    transparent 4px
+  );
 }

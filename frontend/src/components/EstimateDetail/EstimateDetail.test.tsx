@@ -426,74 +426,51 @@ describe('EstimateDetail: 表セル境界の統一・ヘッダ左寄せ/数値�
   // 実ブラウザ確認で行う(EstimateMasterPicker.test.tsx既存の注記と同じ制約)。
 })
 
-describe('EstimateDetail: 折りたたみ (Issue #6: Improve estimation target visibility and collapsible right pane sections)', () => {
-  it('defaults to expanded (collapsed prop omitted) and shows the source tabs/table', () => {
+describe('EstimateDetail: 見出し (Issue #19 追加修正で折りたたみ機能は廃止、常に本文を表示する)', () => {
+  it('always shows the source tabs/table (no collapse feature)', () => {
     renderDetail({ detailItems: [makeDetailItem()] })
     expect(screen.getByRole('table')).toBeInTheDocument()
     expect(screen.getByRole('tablist', { name: '情報源' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /積算明細/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('heading', { name: '積算明細' })).toBeInTheDocument()
+    // 折りたたみ用のchevronトグルボタンは存在しない (見出しは<h2>のプレーンテキスト)。
+    expect(screen.queryByRole('button', { name: /積算明細/ })).not.toBeInTheDocument()
   })
+})
 
-  it('hides the body (source tabs/table/legend) but keeps the heading when collapsed=true, without touching sourceFilter/sort logic', () => {
-    const onSourceFilterChange = vi.fn()
-    renderDetail({
-      detailItems: [makeDetailItem()],
-      collapsed: true,
-      onToggleCollapsed: () => {},
-      onSourceFilterChange,
-    })
-    expect(screen.queryByRole('table')).not.toBeInTheDocument()
-    expect(screen.queryByRole('tablist', { name: '情報源' })).not.toBeInTheDocument()
-    expect(screen.getByText('積算明細')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /積算明細/ })).toHaveAttribute('aria-expanded', 'false')
-    expect(onSourceFilterChange).not.toHaveBeenCalled()
-  })
+describe('EstimateDetail: 列幅配分 (Issue #19 追加修正: 定格列の折り返し対策)', () => {
+  // 実データ(製番A1GV2421 P23、積算コード44253「入力（主回路銅帯）」)の定格
+  // 「3Φ 50kVA 200V級　公共建築 (225A)」が実ブラウザで1行に収まらなかった
+  // 不具合を受け、列幅配分を再調整した。table-layout: fixedの下では各列の
+  // width指定がそのまま確定値になるため(jsdomでも文字列としてそのまま解決
+  // できる、レイアウト計算そのものは行わない)、意図した配分から後退しないよう
+  // 主要な列の割合をここで固定する。実際の折り返し有無(ピクセル単位の実測)は
+  // 実ブラウザ確認で行う(jsdomは実レイアウトを行わないため確認できない)。
+  it('gives the longest variable-length column (定格) the largest share, ahead of 品名/型式', () => {
+    renderDetail({ detailItems: [makeDetailItem()] })
+    const table = screen.getByRole('table')
+    const widthOf = (cls: string) => {
+      const cell = table.querySelector(`.${cls}`) as HTMLElement
+      return parseFloat(getComputedStyle(cell).width)
+    }
+    const rating = widthOf('estimate-detail__col-rating')
+    const name = widthOf('estimate-detail__col-name')
+    const model = widthOf('estimate-detail__col-model')
+    const panel = widthOf('estimate-detail__col-panel')
+    const code = widthOf('estimate-detail__col-code')
+    const page = widthOf('estimate-detail__col-page')
+    const status = widthOf('estimate-detail__col-status')
 
-  it('calls onToggleCollapsed when the heading is clicked, independent of source tab/sort column buttons', () => {
-    const onToggleCollapsed = vi.fn()
-    renderDetail({ detailItems: [makeDetailItem()], collapsed: false, onToggleCollapsed })
-    fireEvent.click(screen.getByRole('button', { name: /積算明細/ }))
-    expect(onToggleCollapsed).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('button', { name: '編集順でソート' })).toBeInTheDocument()
-  })
-
-  it('keeps sort state and source filter intact across collapse/expand', () => {
-    const { rerender } = renderDetail({
-      detailItems: [makeDetailItem({ id: '1', code: '11001' })],
-      collapsed: false,
-      onToggleCollapsed: () => {},
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'コードでソート' }))
-    expect(screen.getByRole('button', { name: 'コードでソート' }).textContent).toContain('▲')
-
-    rerender(
-      <EstimateDetail
-        detailItems={[makeDetailItem({ id: '1', code: '11001' })]}
-        targets={DEFAULT_TARGETS}
-        selectedTargetId={null}
-        currentPageNo={null}
-        onNavigateReference={() => {}}
-        onHoverDetail={() => {}}
-        sourceFilter="all"
-        onSourceFilterChange={() => {}}
-        collapsed={true}
-        onToggleCollapsed={() => {}}
-      />,
-    )
-    rerender(
-      <EstimateDetail
-        detailItems={[makeDetailItem({ id: '1', code: '11001' })]}
-        targets={DEFAULT_TARGETS}
-        selectedTargetId={null}
-        currentPageNo={null}
-        onNavigateReference={() => {}}
-        onHoverDetail={() => {}}
-        sourceFilter="all"
-        onSourceFilterChange={() => {}}
-        collapsed={false}
-        onToggleCollapsed={() => {}}
-      />,
-    )
-    expect(screen.getByRole('button', { name: 'コードでソート' }).textContent).toContain('▲')
+    // 定格が最大の可変長列であること (指示: 余った横幅を最優先で割り当てる)。
+    expect(rating).toBeGreaterThan(name)
+    expect(rating).toBeGreaterThan(model)
+    // 文字数の少ない列(面/盤・コード・図面・状態)は、長い文字列列(品名・型式)より
+    // 明確に狭いこと。
+    for (const short of [panel, code, page, status]) {
+      expect(short).toBeLessThan(name)
+      expect(short).toBeLessThan(model)
+      expect(short).toBeLessThan(rating)
+    }
+    // table-layout: fixedが維持されていること(この配分が確定値として機能する前提)。
+    expect(getComputedStyle(table).tableLayout).toBe('fixed')
   })
 })

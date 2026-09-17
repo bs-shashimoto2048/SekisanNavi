@@ -1,3 +1,5 @@
+/* [追加修正: 積算集約上部の余白削減] 親(.estimate-aggregation__confirmation-row)
+   側のgapで間隔を確保するため、自身の上下marginは最小限にする。 */
 .estimate-confirmation-history__trigger {
   font-size: 0.82rem;
   padding: 0.25rem 0.6rem;
@@ -6,14 +8,19 @@
   background: #fff;
   color: #374151;
   cursor: pointer;
-  margin: 0.2rem 0 0.4rem;
+  margin: 0.1rem 0;
 }
 
 .estimate-confirmation-history__trigger:hover {
   background: #f3f4f6;
 }
 
-/* モーダル(ProductSelectorと同じ構造・z-indexの考え方に揃える) */
+/* モーダル(ProductSelectorと同じ構造・z-indexの考え方に揃える)。
+   [追加修正] このmodalはfloating panel化された`EstimateAggregation`の中で
+   開くため、`EstimateConfirmationHistory.tsx`側で`document.body`へportalし、
+   floating panel(`components/Layout/FloatingPanel.css`)が作るstacking context
+   から抜け出させている。z-indexもfloating panelのカウンタ(100から単調増加)
+   より確実に前面になるよう1000にする(ProductSelector.css等と同じ考え方)。 */
 
 .estimate-confirmation-history__backdrop {
   position: fixed;
@@ -22,7 +29,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 1000;
 }
 
 .estimate-confirmation-history {

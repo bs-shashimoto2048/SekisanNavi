@@ -205,12 +205,15 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
 
   it('closes the modal when the backdrop is clicked, and re-fetches on reopen', async () => {
     vi.mocked(listEstimateConfirmations).mockResolvedValue([])
-    const { container } = render(<EstimateConfirmationHistory productNo="A1GV2421" />)
+    render(<EstimateConfirmationHistory productNo="A1GV2421" />)
 
     fireEvent.click(screen.getByRole('button', { name: '確定履歴を見る' }))
     await waitFor(() => expect(listEstimateConfirmations).toHaveBeenCalledTimes(1))
 
-    const backdrop = container.querySelector('.estimate-confirmation-history__backdrop')
+    // [追加修正] modalはfloating panelのstacking contextに埋もれないよう
+    // document.bodyへportalするようになったため、render()の`container`
+    // (コンポーネント自身のDOM位置)ではなくdocument全体から探す。
+    const backdrop = document.body.querySelector('.estimate-confirmation-history__backdrop')
     expect(backdrop).not.toBeNull()
     fireEvent.click(backdrop as Element)
 

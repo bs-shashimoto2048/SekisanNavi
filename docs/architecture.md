@@ -534,7 +534,7 @@ flowchart TD
     Click["ProductPanelOverlay内の盤領域(button)クリック"]
     State["App.tsx: setSelectedPanel({ key, panel })"]
     Overlay["DrawingViewer → ProductPanelOverlay<br/>選択中: 太枠+濃い塗り / 非選択: opacity 0.55"]
-    Info["PanelInfo(右ペイン)<br/>selectedProductPanelをそのまま表示"]
+    Info["PanelInfo(Viewer上のfloating panel、2026-09 Issue #19 Phase 4)<br/>selectedProductPanelをそのまま表示"]
 
     Click -->|onSelectPanel| State
     State --> Overlay
@@ -898,7 +898,8 @@ Phase 1.9以降に追加した、都度読み込み・DB非永続化の実デー
   DBのDetection.idとは異なるYOLO_INDEX体系)。
 - `app/services/estcode_df.py`(Phase 1.14): `estcode_df.csv`(盤ごとの積算コード
   基本情報)を読み込み、`GET /api/products/{no}/estimate-panels`で返す。
-  `PAGE`列を持たない製番単位のデータで、右ペイン「盤情報」(`PanelInfo.tsx`)の
+  `PAGE`列を持たない製番単位のデータで、盤情報floating panel(`PanelInfo.tsx`、
+  2026-09 Issue #19 Phase 4で右ペインからViewer上へ移動、22章参照)の
   表示元として`product_df.csv`由来の旧盤パラメータ表示より優先される。
 
 ## 19. 盤情報・積算集約・積算明細の折りたたみ・対象Select視認性 (Issue #6)
@@ -912,11 +913,16 @@ divで`flex`/`height`を条件分岐)。積算集約の「対象」Selectは、�
 重要な操作であることが視認できるよう強調している(コバルト系の枠+淡い背景、
 Viewer連動中はさらに一段強い強調)。詳細は`docs/ui-spec.md` 1.6章を参照。
 
-**[2026-09 Issue #19 Phase 2で構成変更]** 実装当時は盤情報・積算集約・
-積算明細が右ペイン内で隣接領域として高さを分け合っていたため「隣接領域へ
-高さを還元する」設計だったが、積算集約・積算明細がViewer上のfloating panelへ
-移動した後は、各領域は隣接領域と高さを分け合わない独立した折りたたみになった
-(20章参照)。
+**[2026-09 Issue #19 Phase 2/4で構成変更、追加修正で機能自体を廃止]**
+実装当時は盤情報・積算集約・積算明細が右ペイン内で隣接領域として高さを
+分け合っていたため「隣接領域へ高さを還元する」設計だったが、Phase 2で積算集約・
+積算明細が、Phase 4で盤情報もViewer上のfloating panelへ移動した後は、3領域とも
+隣接領域と高さを分け合わない独立した折りたたみになった(右ペイン自体も
+Phase 4で廃止済み。20章/22章参照)。**さらに追加修正で、この折りたたみ機能
+自体を完全に廃止した**(`CollapsibleSectionHeading`は他に利用箇所が無かった
+ため削除済み。表示/非表示は`PanelVisibilityToggles`のON/OFFのみで行う。
+23章参照)。本章の「折りたたみ/展開できるようにした」という記述は
+**現行mainにはもはや当てはまらない**(歴史的経緯としてのみ残す)。
 
 ## 20. 積算集約・積算明細のfloating panel化 (Issue #19 Phase 2)
 
@@ -944,6 +950,19 @@ Viewer連動中はさらに一段強い強調)。詳細は`docs/ui-spec.md` 1.6�
   「盤情報↔積算集約」高さsplitter・`app-workspace__right-lower`/
   `estimate-aggregation-wrap`/`estimate-detail-wrap`のCSS/DOM構造は削除した。
   右ペイン幅のリサイズ(`PaneSplitter`)自体は変更していない。
+
+**[2026-09 Issue #19 Phase 4で訂正]** 上記はPhase 2時点の記述。Phase 4で
+盤情報もfloating panel化し、**右ペイン自体を廃止**したため、「右ペインは
+盤情報のみになった」「右ペイン幅のリサイズ自体は変更していない」は現行mainには
+もはや当てはまらない。また`FloatingPanelToggleBar.tsx`は
+`components/Layout/PanelVisibilityToggles.tsx`へ置き換えられ、Viewer右上の
+独立したfloating toggle barではなく編集ツールバーの右端へ移動した。詳細は
+22章を参照。
+
+**[2026-09 Issue #19 追加修正で訂正]** 「各panel内部の折りたたみ(Issue #6の
+既存`collapsed` state)はそのまま独立して機能する」は現行mainにはもはや
+当てはまらない。この追加修正で折りたたみ機能自体を完全に廃止し、`FloatingPanel`
+の`collapsed` propも削除した。詳細は23章を参照。
 
 ## 21. 積算資料PDF Help (Issue #19 Phase 3)
 
@@ -979,3 +998,341 @@ Viewer連動中はさらに一段強い強調)。詳細は`docs/ui-spec.md` 1.6�
   (`SystemSettings`と同じ設計)。
 - **未確認事項**: 大容量PDF配信のRange Request対応等、高度な配信最適化は
   今回実装していない(`docs/known-limitations.md`参照)。
+
+## 22. 盤情報のfloating panel化・右ペイン廃止・表示トグルの移動・glassmorphism (Issue #19 Phase 4)
+
+作業者レビュー方針を踏まえた追加UI修正。盤情報(`PanelInfo`)もfloating panel化し、
+右ペイン自体を廃止した。floating panelの表示トグルはViewer上の独立した
+floating toggle barから、編集ツールバー(Undo/Redoと同じ行)の右端へ移動した。
+floating panel自体の見た目もglassmorphism(半透明+ぼかし)へ変更した。
+詳細な仕様は`docs/ui-spec.md` 1.7章を参照。実装上のポイントのみ記す:
+
+- **盤情報のfloating panel化**: `App.tsx`側で`PanelInfo`を、既存の
+  `components/Layout/FloatingPanel.tsx`(`position="panelInfo"`を追加)で
+  包む形に変更した。`PanelInfo`自体のprops・内部ロジック(盤クリック連動・
+  estcode_df表示等)は変更していない。表示/非表示state
+  (`panelInfoFloatingVisible`、初期値true)は積算集約・積算明細と同じ設計
+  (セッション内のみ、localStorage永続化なし)。
+- **右ペインの廃止**: 盤情報がfloating panel化されたことで右ペインの存在意義が
+  無くなったため、`app-workspace__right`/`app-workspace__panel-info-wrap`の
+  CSS/DOM構造、右ペイン幅の状態(`rightPaneWidth`)・resize用`PaneSplitter`・
+  `RIGHT_PANE_*`定数・`sekisan-navi:right-pane-width`のlocalStorageキーを
+  いずれも削除した。`.app-workspace`は`.app-workspace__main`のみを子に持つ
+  (`display:flex`の単一アイテム)。左ペイン(`DrawingNavigator`)・
+  `EstimateMasterPicker`の配置・実装は変更していない。
+- **表示トグルの移動**: `components/Layout/FloatingPanelToggleBar.tsx`
+  (Viewer右上の独立したfloating toggle bar、z-index:110)を削除し、
+  `components/Layout/PanelVisibilityToggles.tsx`(通常のflexアイテムとして
+  `app-layout__edit-toolbar`内に置く、絶対配置なし)へ置き換えた。ボタンの
+  表示順は「盤情報」「積算集約」「積算明細」の固定順。ツールバー内で
+  `margin-left: auto`により右寄せし、Undo/Redo/操作履歴ボタンとの間に
+  `border-left`区切り線を入れて視覚的に区別している。
+- **既定配置の見直し**: floating toggle barがViewerの外(編集ツールバー)へ
+  移動したことで、floating panel自身がViewer上部の専有領域を気にする必要が
+  無くなった。盤情報はViewer左上寄り、積算集約はViewer右上寄り、積算明細は
+  Viewer右下寄りに配置し、いずれも`DrawingCanvas`自身のtoolbar(図面名+Zoom/
+  Fit/BBox削除)の下(`top: 3rem`)をクリアする(`components/Layout/FloatingPanel.css`)。
+  実ブラウザ確認(1600px/1280px/1024px幅)では3panelの既定配置が重ならないことを
+  確認した(狭いウィンドウでの自動衝突回避は実装していない)。
+- **glassmorphism**: `.floating-panel`のbackgroundを`rgba(255, 255, 255, 0.6)`+
+  `backdrop-filter: blur(14px) saturate(160%)`(`-webkit-backdrop-filter`も
+  併記)へ変更した。`@supports not ((backdrop-filter: blur(1px)) or
+  (-webkit-backdrop-filter: blur(1px)))`で、非対応環境向けに不透明度を上げた
+  fallback(`rgba(255, 255, 255, 0.94)`)を用意している。`PanelInfo`/
+  `EstimateAggregation`/`EstimateDetail`内部の見出し・表ヘッダ等が持つ既存の
+  背景色(`#eff6ff`/`#f1f5f9`等、不透明に近い)は変更していないため、表・文字の
+  可読性は維持される。
+- **PDF Help標準配置場所の確認**: `HELP_PDF_PATH`(`data/help/estimate-help.pdf`、
+  Issue #19 Phase 3で導入)を、この追加指示により正式な標準配置場所として
+  再確認した。実装・値ともに変更していない(21章参照)。
+
+**[2026-09 Issue #19 追加修正で訂正]** 上記「既定配置の見直し」に記載した
+`top: 3rem`等のCSS固定位置(`components/Layout/FloatingPanel.css`の
+`.floating-panel--panelInfo`等)は、追加修正でドラッグ移動・リサイズに対応した
+ことに伴い、**初期表示時のみ使う既定値をJS側(`FloatingPanel.tsx`の
+`defaultRectFor`)で計算する方式へ変更した**(CSS側に固定の位置ルールはもはや
+無い)。位置・大きさ自体は`App.tsx`側のstateへ持ち上げてある。詳細は23章を参照。
+
+## 23. floating panelのドラッグ移動・リサイズ、折りたたみ機能の廃止 (Issue #19 追加修正)
+
+作業者が図面上の邪魔にならない位置・大きさへfloating panel(盤情報・積算集約・
+積算明細)を自由に調整できるようにする追加修正。詳細な仕様は`docs/ui-spec.md`
+1.6章/1.7章を参照。実装上のポイントのみ記す:
+
+- **折りたたみ機能の廃止**: `PanelInfo`/`EstimateAggregation`/`EstimateDetail`
+  それぞれから`collapsed`/`onToggleCollapsed` propsと`CollapsibleSectionHeading`
+  の利用を削除し、見出しをプレーンな`<h2>`(`panel-info__heading`等、既存の
+  className・見た目はそのまま)に置き換えた。`CollapsibleSectionHeading.tsx`/
+  `.css`は他に利用箇所が無かったため削除した(削除前にgrepで利用箇所を確認済み)。
+  表示/非表示は`PanelVisibilityToggles`のON/OFFのみで行う。
+- **ドラッグ移動**: `FloatingPanel.tsx`は自身のルート要素へ`onPointerDown`を
+  event delegationとして仕込み、`e.target.closest('h2')`が見つかった場合のみ
+  ドラッグを開始する。各component自身が描画する見出し`<h2>`をそのまま
+  ドラッグハンドルとして再利用しており、`FloatingPanel`側は見出しのDOM構造
+  そのものを知らない(component間の結合を増やさない)。表・Select・button等は
+  `<h2>`の外側にあるため、それらの操作は誤ってドラッグを開始しない。
+  `Element.setPointerCapture`はjsdom(テスト環境)が未実装のため
+  `?.()`(オプショナル呼び出し)で存在確認してから呼ぶ(実ブラウザでは
+  通常通り動作する)。
+- **リサイズ**: 右下角の専用ハンドル(`.floating-panel__resize-handle`)のみに
+  対応する。最小サイズ(幅260px・高さ180px)、コンテナ
+  (`app-workspace__viewer-wrap`)の幅・高さを超えないサイズ上限をそれぞれ
+  `clampSize`で適用する。
+- **範囲のクランプ・追従**: `containerRef`(`viewerWrapRef`、`App.tsx`が
+  `.app-workspace__viewer-wrap`へ設定)を基準に、位置は`clampPosition`で
+  常にコンテナ範囲内に収める。`ResizeObserver`でコンテナ自身のサイズ変化も
+  検知し、既存panelの位置・大きさを再クランプする(ウィンドウリサイズ後も
+  見出しが操作可能な範囲に残る)。
+  - **実装上の注意 (Reactのcommit順序)**: 初期配置の計測は当初
+    `useLayoutEffect`で実装していたが、`containerRef`は`FloatingPanel`から見て
+    「親」(`App.tsx`側の`.app-workspace__viewer-wrap`)が持つrefであり、
+    Reactのcommit順序(子のlayout effectは親自身のref付与より先に走る)により
+    初回マウント時に`containerRef.current`が常にnullのままになり、floating
+    panelが一切描画されない不具合が実際に発生した。`useEffect`(passive)へ
+    変更することで、ツリー全体のref付与・layout effectが完了した後に発火する
+    ようになり解消した。
+- **前面化(z-index)**: `FloatingPanel.tsx`モジュールスコープの単調増加カウンタ
+  (`zCounter`)を3つのpanelインスタンスで共有し、pointerdown時
+  (`onPointerDownCapture`、bubbling途中のstopPropagationの影響を受けない)に
+  そのpanelのz-indexを引き上げる。
+- **位置・大きさの永続化(セッション内)**: `rect`は`FloatingPanel`自身のuseState
+  ではなく、`App.tsx`側のstate(`panelInfoRect`/`aggregationRect`/`detailRect`、
+  型は`FloatingPanel.tsx`がexportする`FloatingPanelRect`)として持ち上げてある。
+  表示ON/OFFで`FloatingPanel`がunmount/remountされても値は消えない(指示:
+  「ユーザーが移動/リサイズした後は、そのセッション中は状態を保持する」)。
+  localStorageへの永続化は今回の対象外。
+- **既存ロジックへの非干渉**: `EstimateMasterPicker`・`DrawingNavigator`・
+  BBox所属判定・Undo/Redoロジック・積算ロジック・`decision_events`・
+  `estimate_confirmations`・Phase C・PDF Help Backendのいずれも変更していない。
+
+## 24. 表示切替ボタンの文言・配色/表カラム幅最適化/floating panel枠線強化 (Issue #19 追加UI修正)
+
+23章に続く、PR #22への追加UI修正。詳細な仕様は`docs/ui-spec.md`
+1.7章(表示トグル・枠線)、5章/5.5章/5.6章(カラム幅)を参照。実装上のポイント
+のみ記す:
+
+- **ボタン文言の固定化**: `PanelVisibilityToggles.tsx`のボタン表示文字を、
+  ON/OFFで出し分けていた「盤情報を隠す/盤情報を表示」形式から、常に固定
+  ラベル(「盤情報」「積算集約」「積算明細」)へ変更した。旧文言は`title`
+  属性(hoverツールチップ)としてのみ残している。ON/OFF自体は`aria-pressed`と
+  配色で表現する(アクセシビリティツリー上のname自体は変わらないため、
+  `App.test.tsx`側の`getByRole('button', { name: ... })`によるテストは
+  ON/OFF問わず同じ要素を指すよう簡略化できた)。
+- **配色とCSS詳細度の罠**: 表示切替3ボタンにUndo/Redo等とは異なる専用配色
+  (violet系、`PanelVisibilityToggles.css`)を与えたところ、実ブラウザ確認で
+  「OFF時の背景色・hover時の背景色が意図した値にならない」不具合が見つかった。
+  原因は、この3ボタンが`.app-layout__edit-toolbar`の内側に配置される
+  `<button>`であるため、ツールバー側の汎用ルール
+  `.app-layout__edit-toolbar button`(詳細度`(0,1,1)`: class+element)や
+  `.app-layout__edit-toolbar button:hover:not(:disabled)`(詳細度`(0,3,1)`)が、
+  コンポーネント自身の単一classセレクタ(`.panel-visibility-toggles__button`
+  単体では詳細度`(0,1,0)`〜hover込みでも`(0,2,0)`)を**詳細度の比較で
+  上回ってしまい**、意図した専用配色を静かに上書きしていたこと。
+  `App.css`側のツールバー汎用ルールに`:not(.panel-visibility-toggles__button)`
+  を追加し、表示切替3ボタンを明示的に除外することで解決した(このボタン自身の
+  font-size/padding/border-radius/cursor等は元々`PanelVisibilityToggles.css`側
+  で自己完結して指定済みのため、除外による見た目のサイズ変化は無い)。
+  **教訓**: 特定コンポーネント配下に置かれるだけの`<button>`へ専用スタイルを
+  与える場合、親コンテナ側の汎用ルールの詳細度を必ず確認すること
+  (class+elementの組み合わせは単一classより詳細度が高い)。
+- **floating panelの枠線強化**: `FloatingPanel.css`の`.floating-panel`の
+  `border`を、半透明白(`rgba(255, 255, 255, 0.55)`、明るい図面上でほぼ不可視)
+  から寒色系(`rgba(51, 65, 85, 0.45)`、slate系)へ変更し、内側にごく薄い
+  白のハイライト(`inset box-shadow`)を追加した。ドラッグ/リサイズ中
+  (`.floating-panel--interacting`)はさらに一段濃くする。3panelとも
+  `.floating-panel`の共通ルールのみで実現しており、component側で個別に
+  上書きしていない。
+- **表カラム幅の再配分**: `EstimateAggregation.css`/`EstimateDetail.css`/
+  `PanelInfo.css`(フォールバック属性表)それぞれで、文字数の少ない列
+  (コード・数量・面/盤・図面・状態)の`width`を縮小し、長い文字列列
+  (内容・品名・型式・定格)へ優先配分した。特に`EstimateDetail.css`は
+  従来`table-layout`を指定しておらず(既定の`auto`)、`width`指定が
+  実質「弱いヒント」に留まっていた点を新たに`table-layout: fixed`へ変更し、
+  積算集約表と同じ「列幅指定が確定値として機能する」状態に揃えた
+  (実ブラウザでヘッダの`scrollHeight`/`clientHeight`が一致すること、
+  `scrollWidth`が`clientWidth`を超えないことを1024/1280/1600px幅で確認済み)。
+  短い列には`white-space: nowrap`を追加している。この一覧は既存方針として
+  文字を途中で切らない(省略記号を使わない)ため、長い列は
+  `overflow-wrap: break-word`による折り返しのみで対応する。
+- **既存ロジックへの非干渉**: 23章と同様、BBox所属判定・Undo/Redoロジック・
+  積算ロジック・`decision_events`・`estimate_confirmations`・Phase C・
+  PDF Help Backendのいずれも変更していない。
+
+## 25. 積算明細テーブルの列幅配分の再調整 (Issue #19 追加修正)
+
+24章で導入した積算明細(`EstimateDetail`)の列幅配分(品名20%・型式20%・
+定格19%等)について、実データ(製番A1GV2421 P23、積算コード44253
+「入力（主回路銅帯）」)の定格「3Φ 50kVA 200V級　公共建築 (225A)」が実際には
+**定格列自体**で2行へ折り返してしまう不具合が実ブラウザ確認で見つかり、
+その修正を行った。
+
+- **原因**: 実ブラウザで`getComputedStyle`とダミー`<span>`による実測を行った
+  ところ、この定格文字列の描画に約211px必要だったのに対し、旧配分では
+  定格列に約133px(19%×700px)しか割り当てられておらず、大幅に不足していた。
+- **列幅の再配分**: 定格列を最優先の可変長列とし19%→31%へ大幅に引き上げ、
+  品名(20%→19%)・型式(20%→17%)は実データの最長級の値が1行に収まる幅+
+  若干の余裕を残しつつ縮小、面/盤・コード・図面・状態・編集順はさらに縮小
+  した(詳細は`docs/ui-spec.md` 5.6章)。table全体の`min-width`も700→730px
+  へわずかに引き上げたが、**floating panel自体の既定幅(360px)は変更して
+  いない**(パネルを広げることでの解決は指示で明示的に避けるべきとされて
+  いたため)。
+- **検証方法上の教訓**: 当初、行内の特定の`<td>`が折り返しているかを
+  `td.scrollHeight`/`td.clientHeight`で確認しようとしたが、**同じ`<tr>`内の
+  すべての`<td>`はscrollHeightとして同一の値(そのrow全体の高さ)を返す**ため、
+  「どのセルが折り返しているか」を個別に切り分ける用途には使えないことが
+  判明した。最終的に、同じ表内の「通常行(1行で収まっている行)の高さ」と
+  「対象行の高さ」を比較する方法(一致すれば1行表示、より大きければ複数行に
+  なっている)で検証した。また、`Range.getClientRects()`によるY座標の重複排除
+  で行数を数える方法も試したが、`white-space: nowrap`が指定された単一文字の
+  セル(状態列の記号等、本来1行のはず)でも誤って複数行と判定されることが
+  あり、この方法はcell内部の要素構造(button/span等)によって信頼性が変わる
+  ため採用しなかった。実データの文字列を直接DOM上から取得して測定する
+  (JS側で手入力し直さない)ことも、全角スペース等の表記揺れによる測定誤差を
+  避けるうえで重要だった。
+- **既存ロジックへの非干渉**: 24章と同様、BBox所属判定・Undo/Redoロジック・
+  積算ロジック・`decision_events`・`estimate_confirmations`・Phase C・
+  PDF Help Backend・sort機能・図面リンク・hover強調のいずれも変更していない
+  (実ブラウザで回帰が無いことを確認済み)。
+
+## 26. 積算コードMasterのfloating panel化・前面化ルール拡張・最小高さ縮小・積算集約上部の再配置 (Issue #19 追加修正)
+
+24〜25章に続く、PR #22への追加修正。詳細な仕様は`docs/ui-spec.md` 1.7章
+(floating panel全般)・5.5章(積算集約上部再配置)・7章(積算コードMaster)を
+参照。実装上のポイントのみ記す:
+
+- **積算コードMasterのfloating panel化**: `App.tsx`のMainArea下段に
+  `PaneSplitter`+`EstimateMasterPicker`(inline style `height`指定)として
+  常設していた構造を廃止し、他3panelと同じ`<FloatingPanel kind="master">`
+  で包む形へ変更した。`usePaneWidth`による高さ手動リサイズ+
+  `sekisan-navi:master-pane-height`localStorageキーも併せて削除した。
+  `EstimateMasterPicker`自体の業務ロジック・選択状態・BBox追加モードとの
+  連携コードは一切変更していない(`height` propは後方互換のため残しているが
+  App.tsxからは渡さない。CSS側で`height: 100%`にして`floating-panel__body`
+  からflexで受け取る)。
+- **ツール系panelとしての配色区別**: `FloatingPanel.tsx`の
+  `FloatingPanelKind`に`'master'`を追加し、`.floating-panel--master`へ
+  上端3px太のslate系(`#334155`)アクセントバーを追加した。
+  `EstimateMasterPicker.css`側は`.master-picker__toolbar`(見出し+検索欄+
+  件数)を白背景から濃色(slate)の帯へ変更している。`PanelVisibilityToggles`
+  にも4つ目のボタン(`--tool`修飾classでslate系配色)を区切り線
+  (`.panel-visibility-toggles__divider`)を挟んで追加した。いずれも
+  既存のMasterカテゴリ色(`--cat-tab-*`)・選択行の意味色(コバルトブルー)は
+  変更していない。
+- **前面化条件の拡張**: 従来は`onPointerDownCapture={bringToFront}`
+  (キャプチャフェーズ、本体クリック・ドラッグ開始・リサイズ開始をこれ1つで
+  カバー)のみだったが、「表示ONボタンを押したときも最前面へ」という要件を
+  満たすため、`visible`の変化を検知する`useEffect(() => { if (visible)
+  bringToFront() }, [visible])`を追加した。`FloatingPanel`自身は
+  `visible=false`の間もunmountされず(内部で`return null`するだけ)、
+  React stateのzIndexはそのまま保持され続けるため、この検知が無いと
+  「表示ONにしても以前のz-indexのまま(他panelより背面)」という不具合になる
+  (実ブラウザ確認で発覚)。
+- **kind別min-height**: 従来の全kind共通`MIN_HEIGHT`(180px)を
+  `MIN_HEIGHT_BY_KIND`(`Record<FloatingPanelKind, number>`)へ変更し、
+  `clampSize`/`defaultRectFor`双方がkindを受け取って参照する形にした。
+  値は実ブラウザ確認のうえ決定(盤情報120/積算明細150/積算コードMaster150/
+  積算集約160)。
+- **`.floating-panel__body`のoverflow修正**: 各panelを最小高さまで縮めると、
+  中の`flex-shrink:0`な固定領域(見出し・確定操作群・製番合計等)自体が
+  panelの高さを超える場合がある。従来`overflow: hidden`だったため、その
+  場合は固定領域の下側が単純に見えなくなり操作不能になっていた
+  (積算集約で実際に発生を確認)。`overflow-y: auto`(横は`hidden`のまま)へ
+  変更し、panel全体を縦スクロールして到達できるようにした。
+- **`EstimateConfirmationHistory`のmodal portal化(CSS stacking contextの罠)**:
+  このmodalは`EstimateAggregation`(floating panel化されたcomponent)の中で
+  開くため、対策なしでは`.floating-panel`(`position: absolute`+動的
+  z-index)が作るstacking contextの内側に閉じ込められる。z-indexは
+  「どれだけ大きくしても祖先の`.floating-panel`単位でしか比較されない」ため、
+  他のfloating panelの方が現在z-indexが高い場合はそちらの後ろへ回り込んで
+  しまう(実ブラウザ確認で発覚。表示ONにした瞬間の前面化を追加した結果、
+  すべてのpanelが初期状態で既にz-index:100を超えるようになり、旧来
+  z-index:100だった各modalのbackdropが常に露呈する状態になっていた)。
+  `EstimateConfirmationHistory.tsx`を`ReactDOM.createPortal(..., document.body)`
+  でdocument.body直下へ描画するよう変更し、floating panelのstacking
+  contextから完全に抜け出させた。あわせてProductSelector/SystemSettings/
+  HelpPdfModal/EstimateConfirmationHistoryの各backdrop z-indexを100→1000へ
+  引き上げた(HelpPdfModal等はApp.tsxのトップレベルJSXに直接置かれておりportal
+  化は不要だが、floating panelのz-indexカウンタが100から単調増加し続ける
+  以上、数値そのものも余裕を持って引き上げておく必要がある)。
+  **教訓**: `position: fixed`の要素は、祖先に`position:absolute`等+
+  z-index指定の要素(stacking contextを作る要素)があると、その祖先の
+  中に押し込められる。floating panel等「動的にz-indexが変わる要素」の
+  内側でmodalを開く設計にする場合は、`createPortal`で確実に外へ出すか、
+  そもそもmodalをfloating panelの外側(App.tsxのトップレベル)で管理する
+  設計にすることを検討する。
+  テスト側もこの変更に合わせ、`EstimateConfirmationHistory.test.tsx`の
+  backdrop取得を`render()`の`container`(コンポーネント自身のDOM位置)から
+  `document.body`基準へ変更した。
+- **既存ロジックへの非干渉**: 前章までと同様、BBox所属判定・Undo/Redoロジック・
+  積算ロジック・`decision_events`・`estimate_confirmations`・Phase C・
+  PDF Help Backend・sort機能・図面リンク・hover強調・Master選択→BBox追加
+  モード連携のいずれも変更していない(実ブラウザで回帰が無いことを確認済み)。
+
+## 27. 部品台帳への再設計(旧称: 積算コードMaster)・floating panel初期幅のkind別調整 (Issue #19 追加修正)
+
+26章に続く、PR #22への追加修正。詳細な仕様は`docs/ui-spec.md` 7章
+(部品台帳への再設計)・1.7章(floating panelの既定幅)を参照。実装上の
+ポイントのみ記す:
+
+- **UI名称の変更**: `EstimateMasterPicker`のfloating panelタイトル
+  (`<h2>`)・`PanelVisibilityToggles`の表示切替ボタンを「積算コードMaster」
+  から**「部品台帳」**へ変更した。あわせて、ユーザーに見える他の文言
+  (`App.tsx`のMaster取得失敗エラーメッセージ、`DrawingCanvas.tsx`の
+  BBox追加モードバッジの`title`、`EstimateAggregation.tsx`の単価注記、
+  `EstimateConfirmationAction.tsx`の積算確定確認ダイアログ)も同様に
+  統一した。component名(`EstimateMasterPicker`)・CSSクラス名
+  (`master-picker__*`)・domain名(`estimate_master_items`等)・
+  `FloatingPanelKind`の`'master'`は変更していない(指示1章「大規模
+  リファクタリングは行わない」)。
+- **検索欄の廃止・カテゴリ選択listへの変更**: `EstimateMasterPicker.tsx`の
+  `query`/`setQuery` state・検索用`<input>`・デバウンス付き再取得effectを
+  削除し、`fetchMasterItems({ category })`のみを呼ぶ単純なeffectへ変更した。
+  カテゴリタブ(`role="tab"`のbutton群)は単一の`<select>`へ置き換えたが、
+  `activeCategory` state・`extractCategoryTabs`・
+  `getCategoryPresentation`/`toCssVars`(カテゴリごとの配色)はそのまま
+  再利用しており、見た目の実装だけを差し替えている。選択中カテゴリの
+  配色は、旧「選択中タブ」用の`--cat-tab-active-bg`/`--cat-tab-active-fg`を
+  そのままselect自身の背景/文字色として注入し、「現在選択中カテゴリが
+  明確に分かる」ようにした。
+- **表示カラムを3列(コード/型式/定格)へ限定**: `COLUMNS`定数配列から
+  総合価格A以降の7列を削除しただけで、`fetchMasterItems`が返すデータ・
+  `EstimateMasterItem`型・`onSelectItem`で渡す`itemId`経由のMaster item
+  全体参照はいずれも変更していない(Manual BBox追加時に必要な全項目は
+  `App.tsx`側の`masterItemById`から従来通り参照される)。テーブルは
+  `table-layout: fixed`とし、コード24%・型式34%・定格42%へ配分した
+  (積算明細・積算集約と同じ「短い列を詰め、長い列へ優先配分」方針)。
+  数値列(旧: 総合価格A等)が無くなったため、`formatCell`の`numeric`引数・
+  `.master-picker__cell--numeric`(旧: 詳細度の罠の教訓を含むCSS)は
+  削除した。
+- **floating panel初期幅のkind別調整**: 全kind共通360pxだった
+  `DEFAULT_WIDTH`を`DEFAULT_WIDTH_BY_KIND`(panelInfo/aggregation=360、
+  detail=440、master=300)へ変更した。実ブラウザで各panelの内容
+  (盤情報のカード・積算集約の5列表・積算明細の8列表・部品台帳の3列表)を
+  確認し、以下の方針で決定した。
+  - detail: 表自体のmin-width(730px)には広げず、360px→440pxへ拡大して
+    以前より多くの列が横スクロール無しで見えるようにした。
+  - master: 検索欄廃止+3列化により、旧480pxでは全列に大きな余白が
+    残ることを実測で確認したため、300pxへ大幅に縮小した。
+  - 1024px幅では積算明細(440px)・部品台帳(300px)がともに画面下段
+    (bottom基準)で左右に分かれる既定配置のため、両者の合計幅+左右
+    マージンがViewerコンテナ幅(1024px幅で実測798px)に収まるかを
+    実ブラウザで確認し、重なりが無いことを確認した。
+- **実ブラウザ確認で判明した検証手法上の限界**: Manual BBox追加そのもの
+  (Viewer上でのドラッグによる新規BBox描画)をPlaywrightの合成マウス
+  イベントで再現しようと試みたが、複数の開始位置・タイミングを試しても
+  新規BBoxが作成されなかった。一方で、部品台帳の行クリックによる
+  「BBox追加モード」への遷移(行の`--selected`クラス付与・
+  `.drawing-canvas__mode-badge`「✎ BBox追加モード」表示)は実ブラウザで
+  確認できており、この部分の連携(今回変更した部分)は問題なく機能して
+  いる。実際のBBox新規作成コールバック(`handleCreateManualBBox`)自体は
+  今回変更しておらず、この経路は`App.test.tsx`の既存自動テスト
+  (「積算コードMaster行選択 → Manual BBox追加モード」describe、
+  `fireEvent`ベースでコールバックを直接検証する既存の確立された手法)で
+  引き続き検証されている。実ブラウザでの生ドラッグ再現ができなかったのは
+  検証スクリプト側(Playwrightの合成マウスイベントとcanvas/PDF描画面との
+  相性)の制約であり、製品側の回帰ではないと判断した。
+- **既存ロジックへの非干渉**: 26章までと同様、BBox所属判定・Undo/Redoロジック・
+  積算ロジック・`decision_events`・`estimate_confirmations`・Phase C・
+  PDF Help Backend・前面化ルール・drag/resize・最小高さ・glassmorphism/枠線の
+  いずれも変更していない(実ブラウザ・自動テストの両方で回帰が無いことを
+  確認済み)。
