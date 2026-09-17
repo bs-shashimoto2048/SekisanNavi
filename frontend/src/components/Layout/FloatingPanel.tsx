@@ -147,41 +147,71 @@ function computeInitialRect(kind: FloatingPanelKind, container: Size, stackIndex
   return clampPosition(clampSize({ top, left, width, height }, container, kind), container)
 }
 
+/** [Issue #25 追加修正] panelが「どちらの辺から測った距離を基準に追従するか」を
+ * 表す、確定済みのanchor情報。`xGap`/`yGap`は常にpxの絶対値(その時点の
+ * コンテナサイズに対する相対値ではない)で保持し、Viewerサイズが変わるたびに
+ * この値自体を上書きしない(下記`reflowForResize`のコメント参照)。 */
+interface Anchor {
+  xAnchor: 'left' | 'right'
+  xGap: number
+  yAnchor: 'top' | 'bottom'
+  yGap: number
+}
+
+/** rectとその時点のコンテナサイズから、「より近い方の辺」を基準にしたanchorを
+ * 算出する。表示ONにした瞬間(初期配置直後)・drag終了時・resize終了時、
+ * すなわち「ユーザー操作/初期配置によって位置が確定したタイミング」でのみ
+ * 呼び出し、確定済みanchor(`confirmedAnchorRef`)を更新する。 */
+function deriveAnchor(rect: FloatingPanelRect, container: Size): Anchor {
+  const leftGap = rect.left
+  const rightGap = container.width - (rect.left + rect.width)
+  const topGap = rect.top
+  const bottomGap = container.height - (rect.top + rect.height)
+
+  return {
+    xAnchor: rightGap <= leftGap ? 'right' : 'left',
+    xGap: rightGap <= leftGap ? rightGap : leftGap,
+    yAnchor: bottomGap <= topGap ? 'bottom' : 'top',
+    yGap: bottomGap <= topGap ? bottomGap : topGap,
+  }
+}
+
 /**
- * [Issue #25] Viewerサイズ変更時に、pixel座標をそのまま据え置く(＝相対位置が
- * 崩れる)のではなく、直前のコンテナサイズを基準にした「最も近い辺からの距離」を
- * 保ったまま新しいコンテナサイズへ位置を追従させる。
+ * [Issue #25、追加修正で確定済みanchor方式へ変更] Viewerサイズ変更時に、
+ * pixel座標をそのまま据え置く(＝相対位置が崩れる)のではなく、「確定済みの
+ * anchor(`deriveAnchor`で算出し、表示ON直後・drag終了時・resize終了時にのみ
+ * 更新される)」からの距離を保ったまま新しいコンテナサイズへ位置を追従させる。
  *
- * 実装方針(指示2章で例示された3案のうち、「右端/左端/上端/下端への距離
- * (anchor offset)を保持する」を採用): X軸は左端距離と右端距離のうち小さい方、
- * Y軸は上端距離と下端距離のうち小さい方を「その時点でより近い辺」とみなし、
- * その辺からの距離を新しいコンテナサイズに対しても維持する。
- *
- * - 右上に置いたpanel(右端距離・上端距離とも小さい)は、コンテナが広がっても
- *   右端距離・上端距離が変わらないため、見た目上「右上のまま」になる。
+ * - 右上に置いたpanel(右端距離・上端距離とも小さいanchor)は、コンテナが
+ *   広がっても右端距離・上端距離が変わらないため、見た目上「右上のまま」になる。
  * - 幅・高さ(サイズ)自体はここでは変更しない(ユーザーが行ったdrag/resizeの
  *   結果はそのまま)。最終的な`clampPosition`/`clampSize`で、万一新しい
  *   コンテナに収まりきらない場合のみ最小限補正する。
- * - 縮小时にclampで位置が動いた場合、次に拡大したときはその「clamp後の距離」を
- *   基準に戻すため、クランプが発生しない範囲であれば拡大時に元の相対位置へ
- *   ちょうど復元される(指示: 「可能な範囲で元の位置関係へ戻す」)。
+ *
+ * **追加修正: 縦方向の「底辺への吸着」不具合の修正**。以前の実装は、直前の
+ * コンテナサイズ・直前のrect(＝前回の`clampPosition`が既に底辺へ強制的に
+ * 移動させた結果を含みうる)からその都度anchorを算出し直していた。そのため、
+ * 「中央付近に置いたpanelが、縦方向の縮小でViewer下端へclampされた」場合、
+ * そのclamp後の位置(下端にほぼ密着した状態)を次の算出の基準にしてしまい、
+ * 以後は「下端anchor」として扱われ続けてしまっていた(縮小で一時的に生じた
+ * clampの結果が、あたかもユーザーが確定させたanchorであるかのように
+ * 上書きされてしまっていた)。
+ *
+ * 修正後は、`confirmedAnchorRef`(表示ON直後・drag終了時・resize終了時にのみ
+ * 更新される、「ユーザー操作/初期配置で確定した」anchor)を渡してもらい、
+ * **clampによって一時的にずれた位置からanchorを再算出することはしない**。
+ * clampはこの関数の戻り値(見た目の位置)にのみ影響し、`confirmedAnchorRef`
+ * 自体は書き換わらないため、縮小でclampされた後に再拡大すれば、
+ * clamp前の(ユーザーが確定させた)相対位置へちょうど復元される。
  */
 function reflowForResize(
   rect: FloatingPanelRect,
-  prevContainer: Size,
+  anchor: Anchor,
   nextContainer: Size,
   kind: FloatingPanelKind,
 ): FloatingPanelRect {
-  const leftGap = rect.left
-  const rightGap = prevContainer.width - (rect.left + rect.width)
-  const topGap = rect.top
-  const bottomGap = prevContainer.height - (rect.top + rect.height)
-
-  const anchorRight = rightGap <= leftGap
-  const anchorBottom = bottomGap <= topGap
-
-  const left = anchorRight ? nextContainer.width - rightGap - rect.width : leftGap
-  const top = anchorBottom ? nextContainer.height - bottomGap - rect.height : topGap
+  const left = anchor.xAnchor === 'right' ? nextContainer.width - anchor.xGap - rect.width : anchor.xGap
+  const top = anchor.yAnchor === 'bottom' ? nextContainer.height - anchor.yGap - rect.height : anchor.yGap
 
   return clampPosition(clampSize({ ...rect, left, top }, nextContainer, kind), nextContainer)
 }
@@ -246,9 +276,11 @@ export function FloatingPanel({ visible, kind, visibleKinds, containerRef, rect,
     startHeight: number
   } | null>(null)
 
-  // Viewerサイズ変更時の相対位置追従(reflowForResize)の基準にする、直前に
-  // 測定したコンテナサイズ。表示ONで新規配置した直後にも更新する。
-  const prevContainerSizeRef = useRef<Size | null>(null)
+  // [Issue #25 追加修正] Viewerサイズ変更時の相対位置追従(reflowForResize)の
+  // 基準にする、「ユーザー操作/初期配置によって確定した」anchor。表示ON直後・
+  // drag終了時・resize終了時にのみ更新する(container resizeによる一時的な
+  // clampでは更新しない。上記`reflowForResize`のコメント参照)。
+  const confirmedAnchorRef = useRef<Anchor | null>(null)
   // 直前レンダー時点の`visible`値。falseからtrueへ変わった瞬間(表示ONにした
   // 瞬間、初回マウント時を含む)を検知するためだけに使う。
   const wasVisibleRef = useRef(false)
@@ -269,13 +301,12 @@ export function FloatingPanel({ visible, kind, visibleKinds, containerRef, rect,
     function reflow() {
       const { width, height } = container!.getBoundingClientRect()
       const nextContainer = { width, height }
-      const prevContainer = prevContainerSizeRef.current
+      const anchor = confirmedAnchorRef.current
       onRectChange((prev) => {
         if (prev == null) return prev // 初期配置は表示ON検知用のeffectが担当する
-        if (prevContainer == null) return clampPosition(clampSize(prev, nextContainer, kind), nextContainer)
-        return reflowForResize(prev, prevContainer, nextContainer, kind)
+        if (anchor == null) return clampPosition(clampSize(prev, nextContainer, kind), nextContainer)
+        return reflowForResize(prev, anchor, nextContainer, kind)
       })
-      prevContainerSizeRef.current = nextContainer
     }
 
     reflow()
@@ -310,8 +341,11 @@ export function FloatingPanel({ visible, kind, visibleKinds, containerRef, rect,
     // `PanelVisibilityToggles`のボタン表示順と一致しているため、
     // 「表示した順に下へ積み重なる」という見た目と結果的に一致する。
     const stackIndex = Math.max(0, visibleKinds.indexOf(kind))
-    onRectChange(computeInitialRect(kind, nextContainer, stackIndex))
-    prevContainerSizeRef.current = nextContainer
+    const initialRect = computeInitialRect(kind, nextContainer, stackIndex)
+    onRectChange(initialRect)
+    // [Issue #25 追加修正] 初期配置が確定した時点のanchorを記録する
+    // (以後のcontainer resizeはこのanchorからの距離を保つ)。
+    confirmedAnchorRef.current = deriveAnchor(initialRect, nextContainer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, visibleKinds])
 
@@ -368,6 +402,13 @@ export function FloatingPanel({ visible, kind, visibleKinds, containerRef, rect,
     if (dragRef.current?.pointerId !== e.pointerId) return
     dragRef.current = null
     setInteracting(false)
+    // [Issue #25 追加修正] ドラッグで確定した位置を新しいanchorとして記録する
+    // (container resizeによる一時的なclampではこのanchorを更新しないため、
+    // ユーザーが自分で置いた位置だけが「確定済みのanchor」として扱われる)。
+    const container = containerRef.current
+    if (container && rect != null) {
+      confirmedAnchorRef.current = deriveAnchor(rect, container.getBoundingClientRect())
+    }
   }
 
   function handleResizePointerDown(e: React.PointerEvent<HTMLDivElement>) {
@@ -410,6 +451,12 @@ export function FloatingPanel({ visible, kind, visibleKinds, containerRef, rect,
     resizeRef.current = null
     setInteracting(false)
     e.stopPropagation()
+    // [Issue #25 追加修正] リサイズで確定したサイズ・位置を新しいanchorとして
+    // 記録する(幅/高さが変わると、右端/下端からの距離も変わるため)。
+    const container = containerRef.current
+    if (container && rect != null) {
+      confirmedAnchorRef.current = deriveAnchor(rect, container.getBoundingClientRect())
+    }
   }
 
   if (!visible || rect == null) return null

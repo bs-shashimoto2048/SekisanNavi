@@ -99,6 +99,14 @@ export function topRightCorner(rect: NormalizedRect): Point {
   return { x: rect.x + rect.w, y: rect.y }
 }
 
+/**
+ * BBox左上角の正規化座標 (Issue #25 追加修正: 引出線ラベルがBBox中心より左に
+ * ある場合の接続点)。`topRightCorner`と対になる、オフセット無しの厳密な角の点。
+ */
+export function topLeftCorner(rect: NormalizedRect): Point {
+  return { x: rect.x, y: rect.y }
+}
+
 export function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v))
 }

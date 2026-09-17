@@ -56,7 +56,7 @@ describe('DrawingCanvas', () => {
     vi.restoreAllMocks()
   })
 
-  it('does not start drawing / does not call onCreateBBox when bboxAddMode is off (Pan mode instead)', async () => {
+  it('does not start drawing / does not call onCreateBBox when bboxAddMode is off (left-drag mode instead)', async () => {
     const onCreateBBox = vi.fn()
     const { viewport } = await renderCanvas({ bboxAddMode: false, onCreateBBox })
 
@@ -65,8 +65,183 @@ describe('DrawingCanvas', () => {
     fireEvent.mouseUp(window, { clientX: 150, clientY: 150 })
 
     expect(onCreateBBox).not.toHaveBeenCalled()
-    // Pan操作時にプレビュー矩形が描画されないこと
+    // BBox追加モードOFF時の左drag操作時にプレビュー矩形が描画されないこと
     expect(document.querySelector('.drawing-canvas__draft-rect')).toBeNull()
+  })
+
+  describe('[Issue #25 追加修正] Pan操作を左ドラッグから中ボタン(マウスホイール押し込み)+dragへ変更', () => {
+    it('left-button drag does NOT pan (viewport scroll position stays unchanged)', async () => {
+      const { viewport } = await renderCanvas({ bboxAddMode: false })
+      viewport.scrollLeft = 10
+      viewport.scrollTop = 20
+
+      fireEvent.mouseDown(viewport, { button: 0, clientX: 100, clientY: 100 })
+      fireEvent.mouseMove(window, { clientX: 250, clientY: 220 })
+      fireEvent.mouseUp(window, { clientX: 250, clientY: 220 })
+
+      expect(viewport.scrollLeft).toBe(10)
+      expect(viewport.scrollTop).toBe(20)
+      expect(viewport.className).not.toContain('drawing-canvas__viewport--panning')
+    })
+
+    it('middle-button (button: 1) drag DOES pan (viewport scrolls by the drag delta) and toggles the panning class', async () => {
+      const { viewport } = await renderCanvas({ bboxAddMode: false })
+      viewport.scrollLeft = 10
+      viewport.scrollTop = 20
+
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      expect(viewport.className).toContain('drawing-canvas__viewport--panning')
+      fireEvent.mouseMove(window, { clientX: 60, clientY: 90 }) // -40, -10
+      expect(viewport.scrollLeft).toBe(50) // 10 - (60-100)
+      expect(viewport.scrollTop).toBe(30) // 20 - (90-100)
+
+      fireEvent.mouseUp(window, { clientX: 60, clientY: 90 })
+      expect(viewport.className).not.toContain('drawing-canvas__viewport--panning')
+    })
+
+    it('a middle-button drag starting on a child button (e.g. a BBox or resize handle) still Pans, unlike left-button which is blocked there', async () => {
+      const { viewport } = await renderCanvas({
+        bboxAddMode: false,
+        children: <button type="button">既存BBoxまたはリサイズハンドル</button>,
+      })
+      const childButton = screen.getByText('既存BBoxまたはリサイズハンドル')
+      viewport.scrollLeft = 0
+      viewport.scrollTop = 0
+
+      fireEvent.mouseDown(childButton, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseMove(window, { clientX: 150, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 150, clientY: 100 })
+
+      expect(viewport.scrollLeft).toBe(-50) // 0 - (150-100) : Panが発生している
+    })
+
+    it('does not call onBackgroundClick after a middle-button Pan ends (no leftover click-like side effect)', async () => {
+      const onBackgroundClick = vi.fn()
+      const { viewport } = await renderCanvas({ bboxAddMode: false, onBackgroundClick })
+
+      // ほぼ動かさない中ボタンpress+release(クリック相当の動き)であっても、
+      // 中ボタンでは選択解除通知を発生させない。
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 101, clientY: 100 })
+      expect(onBackgroundClick).not.toHaveBeenCalled()
+
+      // 実際にPanした場合も同様。
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseMove(window, { clientX: 200, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 200, clientY: 100 })
+      expect(onBackgroundClick).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('[Issue #25 追加修正] 中ボタンダブルクリックでFit', () => {
+    it('a single middle-button click (press+release, no real drag) does NOT trigger Fit', async () => {
+      const { viewport } = await renderCanvas({ bboxAddMode: false })
+      fireEvent.click(screen.getByTitle('拡大'))
+      await screen.findByText('61%') // Fit値(49%)から意図的にズレさせておく
+
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 101, clientY: 100 }) // ほぼ動いていない
+
+      expect(screen.getByText('61%')).toBeInTheDocument() // Fitされていない
+    })
+
+    it('a middle-button double-click (two press+release close in both time and position) triggers Fit, reusing the existing Fit logic', async () => {
+      const { viewport } = await renderCanvas({ bboxAddMode: false })
+      fireEvent.click(screen.getByTitle('拡大'))
+      await screen.findByText('61%')
+
+      const dateSpy = vi.spyOn(Date, 'now')
+      dateSpy.mockReturnValue(1000)
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+
+      dateSpy.mockReturnValue(1150) // 150ms後(既定の判定間隔400ms以内)
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 101, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 101, clientY: 100 })
+
+      await screen.findByText('49%') // Fitボタンと同じ値へ戻る
+    })
+
+    it('two middle-button clicks spaced further apart than the double-click window do NOT trigger Fit', async () => {
+      const { viewport } = await renderCanvas({ bboxAddMode: false })
+      fireEvent.click(screen.getByTitle('拡大'))
+      await screen.findByText('61%')
+
+      const dateSpy = vi.spyOn(Date, 'now')
+      dateSpy.mockReturnValue(1000)
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+
+      dateSpy.mockReturnValue(1000 + 500) // 判定間隔(400ms)を超過
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+
+      expect(screen.getByText('61%')).toBeInTheDocument() // Fitされていない
+    })
+
+    it('a real middle-button drag (Pan) in between does not get mistaken for a double-click candidate afterward', async () => {
+      const { viewport } = await renderCanvas({ bboxAddMode: false })
+      fireEvent.click(screen.getByTitle('拡大'))
+      await screen.findByText('61%')
+
+      const dateSpy = vi.spyOn(Date, 'now')
+      dateSpy.mockReturnValue(1000)
+      // 1回目: 実際にPan(移動あり) -> クリック候補にはならない
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseMove(window, { clientX: 160, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 160, clientY: 100 })
+
+      dateSpy.mockReturnValue(1100)
+      // 2回目: ほぼ動かないクリック -> 直前がPanだったため単独クリック扱いのまま
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 160, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 161, clientY: 100 })
+
+      expect(screen.getByText('61%')).toBeInTheDocument() // Fitされていない
+    })
+
+    it('a middle-button double-click starting on a child element (e.g. an existing BBox) still only Fits, without firing the child\'s own click handler', async () => {
+      const onChildClick = vi.fn()
+      const { viewport: _viewport } = await renderCanvas({
+        bboxAddMode: false,
+        children: (
+          <button type="button" onClick={onChildClick}>
+            既存BBoxまたはリサイズハンドル
+          </button>
+        ),
+      })
+      fireEvent.click(screen.getByTitle('拡大'))
+      await screen.findByText('61%')
+      const childButton = screen.getByText('既存BBoxまたはリサイズハンドル')
+
+      const dateSpy = vi.spyOn(Date, 'now')
+      dateSpy.mockReturnValue(1000)
+      fireEvent.mouseDown(childButton, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+      dateSpy.mockReturnValue(1100)
+      fireEvent.mouseDown(childButton, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+
+      await screen.findByText('49%') // Fitのみ発生
+      expect(onChildClick).not.toHaveBeenCalled() // 子要素自身のclickは発火しない
+    })
+
+    it('a middle-button double-click does not call onBackgroundClick or onCreateBBox (Fitのみで他の副作用が無い)', async () => {
+      const onBackgroundClick = vi.fn()
+      const onCreateBBox = vi.fn()
+      const { viewport } = await renderCanvas({ bboxAddMode: true, onBackgroundClick, onCreateBBox })
+
+      const dateSpy = vi.spyOn(Date, 'now')
+      dateSpy.mockReturnValue(1000)
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+      dateSpy.mockReturnValue(1100)
+      fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 })
+
+      expect(onBackgroundClick).not.toHaveBeenCalled()
+      expect(onCreateBBox).not.toHaveBeenCalled()
+      expect(document.querySelector('.drawing-canvas__draft-rect')).toBeNull()
+    })
   })
 
   it('creates a normalized BBox from a drag when bboxAddMode is on, independent of zoom', async () => {
@@ -356,10 +531,10 @@ describe('DrawingCanvas: Viewer自動Fit (実画面未達 追加修正指示18�
     expect(screen.queryByText('25%')).not.toBeInTheDocument()
   })
 
-  it('does NOT auto re-fit after a real manual Pan drag (movement past the click/drag threshold)', async () => {
+  it('does NOT auto re-fit after a real manual Pan drag (middle-button, movement past the click/drag threshold)', async () => {
     const { viewport } = await renderPngCanvasForFit()
 
-    fireEvent.mouseDown(viewport, { button: 0, clientX: 100, clientY: 100 })
+    fireEvent.mouseDown(viewport, { button: 1, clientX: 100, clientY: 100 })
     fireEvent.mouseMove(window, { clientX: 150, clientY: 100 }) // 6px超の実移動
     fireEvent.mouseUp(window, { clientX: 150, clientY: 100 })
 

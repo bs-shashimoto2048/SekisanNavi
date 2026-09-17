@@ -1800,6 +1800,65 @@ describe('App: floating panelの初期配置(右端寄せ・積み重ね)とView
     expect(parseFloat(aggregation.style.left)).toBeCloseTo(leftBefore, 5)
     expect(parseFloat(aggregation.style.top)).toBeCloseTo(topBefore, 5)
   })
+
+  it('[追加修正] does not stick to the bottom edge after a vertical shrink forces a clamp: growing back restores the drag-confirmed position, not the clamped one', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+    const containerEl = document.querySelector('.app-workspace__viewer-wrap') as HTMLElement
+    const observers = MockResizeObserver.instances.filter((o) => o.observed.includes(containerEl))
+    act(() => {
+      for (const o of observers) o.trigger(containerEl, { width: 1200, height: 700 })
+    })
+
+    const panel = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    const heading = within(panel).getByRole('heading', { name: /盤情報/ })
+    const heightBefore = parseFloat(panel.style.height)
+
+    // 上端からの距離(topGap=200)の方が下端からの距離より小さくなる位置へ
+    // ドラッグして確定させる(この位置がconfirmed anchorとして記録される)。
+    const targetTop = 200
+    const startTop = parseFloat(panel.style.top)
+    const dy = targetTop - startTop
+    fireEvent.pointerDown(heading, { pointerId: 1, clientX: 100, clientY: 100, button: 0 })
+    fireEvent.pointerMove(heading, { pointerId: 1, clientX: 100, clientY: 100 + dy })
+    fireEvent.pointerUp(heading, { pointerId: 1, clientX: 100, clientY: 100 + dy })
+    expect(parseFloat(panel.style.top)).toBeCloseTo(targetTop, 5)
+
+    // topGap(200) < bottomGap であることを前提とする(top anchorになる前提の確認)。
+    const bottomGapBefore = 700 - targetTop - heightBefore
+    expect(targetTop).toBeLessThan(bottomGapBefore)
+
+    // Viewerの高さを大きく縮め、topGap(200)を維持できないほど窮屈にする。
+    const shrunkHeight = targetTop + 50
+    Object.defineProperty(containerEl, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, right: 1200, bottom: shrunkHeight, width: 1200, height: shrunkHeight }),
+      configurable: true,
+    })
+    act(() => {
+      for (const o of observers) o.trigger(containerEl, { width: 1200, height: shrunkHeight })
+    })
+    const topAfterShrink = parseFloat(panel.style.top)
+    const heightAfterShrink = parseFloat(panel.style.height)
+    // clampにより、パネルの下端がViewerの下端ちょうどに押し付けられている
+    // (＝一時的な「下端への吸着」)。
+    expect(topAfterShrink + heightAfterShrink).toBeCloseTo(shrunkHeight, 5)
+    expect(topAfterShrink).toBeLessThan(targetTop)
+
+    // 高さを元(700px)へ戻す。
+    Object.defineProperty(containerEl, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, right: 1200, bottom: 700, width: 1200, height: 700 }),
+      configurable: true,
+    })
+    act(() => {
+      for (const o of observers) o.trigger(containerEl, { width: 1200, height: 700 })
+    })
+
+    // 修正前は、縮小時のclamp結果(下端吸着)からanchorを再算出してしまい、
+    // 再拡大しても下端へ張り付いたままだった。修正後は、drag時に確定した
+    // top=200へちょうど復元される(高さ自体は既存のresize仕様どおり、縮んだ
+    // ままでも自動では戻らない。今回のIssueは位置の復元のみが対象)。
+    expect(parseFloat(panel.style.top)).toBeCloseTo(targetTop, 5)
+  })
 })
 
 describe('App: floating panelの枠線強化 (Issue #19 追加UI修正指示4章)', () => {
