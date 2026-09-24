@@ -1368,8 +1368,12 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
     // 追加UI修正指示1章: ボタン表示文字はON/OFFに関わらず常に固定ラベル。
     // [追加修正] 積算コードMasterのfloating panel化に伴い、区切り線を挟んで
     // 4つ目のトグルが末尾へ追加された。UI名称は「部品台帳」(指示1章)。
-    expect(buttons.map((b) => b.textContent)).toEqual(['盤情報', '積算集約', '積算明細', '部品台帳'])
-    expect(buttons.every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true)
+    // [Issue #31] Viewer内「操作ガイド」トグルが先頭(盤情報の手前)へ
+    // 区切り線付きで追加された。操作ガイドは既定非表示のため、他4panelとは
+    // 別にaria-pressedを検証する。
+    expect(buttons.map((b) => b.textContent)).toEqual(['操作ガイド', '盤情報', '積算集約', '積算明細', '部品台帳'])
+    expect(buttons[0].getAttribute('aria-pressed')).toBe('false')
+    expect(buttons.slice(1).every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true)
   })
 
   it('gives the panel-visibility toggles a color distinct from Undo/Redo, and a filled ON vs. muted OFF look (追加UI修正指示2章)', async () => {
@@ -1858,6 +1862,152 @@ describe('App: floating panelの初期配置(右端寄せ・積み重ね)とView
     // top=200へちょうど復元される(高さ自体は既存のresize仕様どおり、縮んだ
     // ままでも自動では戻らない。今回のIssueは位置の復元のみが対象)。
     expect(parseFloat(panel.style.top)).toBeCloseTo(targetTop, 5)
+  })
+})
+
+describe('App: Viewer内「操作ガイド」floating panel (Issue #31)', () => {
+  async function renderApp() {
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
+  }
+
+  function setViewerWrapRect(width: number, height: number) {
+    const el = document.querySelector('.app-workspace__viewer-wrap') as HTMLElement
+    Object.defineProperty(el, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, right: width, bottom: height, width, height }),
+      configurable: true,
+    })
+  }
+
+  it('does not render the "操作ガイド" floating panel by default (guide starts hidden)', async () => {
+    await renderApp()
+    expect(document.querySelector('.floating-panel--guide')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '操作ガイド' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('shows/hides the "操作ガイド" floating panel via its toolbar toggle', async () => {
+    await renderApp()
+    const toggle = screen.getByRole('button', { name: '操作ガイド' })
+
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    expect(document.querySelector('.floating-panel--guide')).toBeInTheDocument()
+
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    expect(document.querySelector('.floating-panel--guide')).not.toBeInTheDocument()
+  })
+
+  it('places the guide panel at the Viewer left edge (not the right-edge cascade used by the other 4 panels), independent of their stacking order', async () => {
+    await renderApp()
+    setViewerWrapRect(1600, 900)
+
+    // 既存4panelは既定でON。積み重ね順(盤情報=1段目)を先に記録する。
+    const panelInfoTopBefore = (document.querySelector('.floating-panel--panelInfo') as HTMLElement).style.top
+
+    fireEvent.click(screen.getByRole('button', { name: '操作ガイド' }))
+    const guide = document.querySelector('.floating-panel--guide') as HTMLElement
+    expect(parseFloat(guide.style.left)).toBeCloseTo(20, 5) // SIDE_MARGIN、左端寄せ(右端カスケードに混ざらない)
+    expect(guide.style.top).toBe('48px') // TOP_CLEARANCE、既存4panelの段数計算とは無関係に単独配置
+
+    // 操作ガイドを表示しても、既存4panel(盤情報)の積み重ね位置は変わらない。
+    expect((document.querySelector('.floating-panel--panelInfo') as HTMLElement).style.top).toBe(panelInfoTopBefore)
+  })
+
+  it('does not disturb the existing 4-panel right-edge cascade stacking when the guide panel is also shown', async () => {
+    await renderApp()
+    setViewerWrapRect(1600, 900)
+
+    // 既存4panelは初期mount時(コンテナ実寸0x0)に一度だけ配置計算されているため、
+    // stub適用後の値で検証するには一度OFF→ONにして「表示された瞬間」の計算を
+    // 作り直す必要がある(既存のIssue #25テストと同じ手順)。操作ガイドは
+    // この4panelとは無関係にstackIndexが常に0になる設計なので、先にON/OFFを
+    // 済ませてから最後に操作ガイドを表示しても、検証したい「既存4panelの
+    // 積み重ねが乱れないこと」自体には影響しない。
+    for (const name of ['盤情報', '積算集約', '積算明細', '部品台帳']) {
+      fireEvent.click(screen.getByRole('button', { name }))
+    }
+    for (const name of ['盤情報', '積算集約']) {
+      fireEvent.click(screen.getByRole('button', { name }))
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: '操作ガイド' }))
+
+    const panelInfo = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    const aggregation = document.querySelector('.floating-panel--aggregation') as HTMLElement
+    expect(panelInfo.style.top).toBe('48px')
+    expect(aggregation.style.top).toBe('88px') // 48 + 1 * 40 (2段目、既存どおり)
+    for (const el of [panelInfo, aggregation]) {
+      expect(parseFloat(el.style.left) + parseFloat(el.style.width)).toBeCloseTo(1600 - 20, 5)
+    }
+  })
+
+  it('keeps the guide panel anchored to the left edge (position unchanged) when the Viewer container is resized', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+    const containerEl = document.querySelector('.app-workspace__viewer-wrap') as HTMLElement
+    const observers = MockResizeObserver.instances.filter((o) => o.observed.includes(containerEl))
+    act(() => {
+      for (const o of observers) o.trigger(containerEl, { width: 1200, height: 700 })
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '操作ガイド' }))
+    const guide = document.querySelector('.floating-panel--guide') as HTMLElement
+    const leftBefore = parseFloat(guide.style.left)
+    const topBefore = parseFloat(guide.style.top)
+
+    Object.defineProperty(containerEl, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, right: 1600, bottom: 900, width: 1600, height: 900 }),
+      configurable: true,
+    })
+    act(() => {
+      for (const o of observers) o.trigger(containerEl, { width: 1600, height: 900 })
+    })
+
+    // 左端・上端からの距離を保つ(右端panelが右端からの距離を保つのと対称の追従)。
+    expect(parseFloat(guide.style.left)).toBeCloseTo(leftBefore, 5)
+    expect(parseFloat(guide.style.top)).toBeCloseTo(topBefore, 5)
+  })
+
+  it('can be dragged via its heading and resized via its handle, the same generic mechanism as the other floating panels', async () => {
+    await renderApp()
+    setViewerWrapRect(1600, 900)
+    fireEvent.click(screen.getByRole('button', { name: '操作ガイド' }))
+    const panel = document.querySelector('.floating-panel--guide') as HTMLElement
+    const heading = within(panel).getByRole('heading', { name: '操作ガイド' })
+
+    const topBefore = parseFloat(panel.style.top)
+    const leftBefore = parseFloat(panel.style.left)
+    fireEvent.pointerDown(heading, { pointerId: 1, clientX: 100, clientY: 100, button: 0 })
+    fireEvent.pointerMove(heading, { pointerId: 1, clientX: 130, clientY: 150 })
+    fireEvent.pointerUp(heading, { pointerId: 1, clientX: 130, clientY: 150 })
+    expect(parseFloat(panel.style.left)).toBeCloseTo(leftBefore + 30, 5)
+    expect(parseFloat(panel.style.top)).toBeCloseTo(topBefore + 50, 5)
+
+    const widthBefore = parseFloat(panel.style.width)
+    const heightBefore = parseFloat(panel.style.height)
+    const handle = panel.querySelector('.floating-panel__resize-handle') as HTMLElement
+    fireEvent.pointerDown(handle, { pointerId: 2, clientX: 200, clientY: 200, button: 0 })
+    fireEvent.pointerMove(handle, { pointerId: 2, clientX: 230, clientY: 220 })
+    fireEvent.pointerUp(handle, { pointerId: 2, clientX: 230, clientY: 220 })
+    expect(parseFloat(panel.style.width)).toBeCloseTo(widthBefore + 30, 5)
+    expect(parseFloat(panel.style.height)).toBeCloseTo(heightBefore + 20, 5)
+  })
+
+  it('gets brought to front (highest z-index) when clicked, the same as the other floating panels', async () => {
+    await renderApp()
+    setViewerWrapRect(1600, 900)
+    fireEvent.click(screen.getByRole('button', { name: '操作ガイド' }))
+    const guide = document.querySelector('.floating-panel--guide') as HTMLElement
+    const panelInfo = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+
+    const guideZBefore = parseInt(guide.style.zIndex, 10)
+    const panelInfoZ = parseInt(panelInfo.style.zIndex, 10)
+    // 表示ONにした瞬間に前面化されるため、既にpanelInfoより手前にある。
+    expect(guideZBefore).toBeGreaterThan(panelInfoZ)
+
+    fireEvent.pointerDown(panelInfo, { pointerId: 3, clientX: 10, clientY: 10, button: 0 })
+    expect(parseInt(panelInfo.style.zIndex, 10)).toBeGreaterThan(guideZBefore)
   })
 })
 

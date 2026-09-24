@@ -120,6 +120,8 @@ src/
     EstimateDetail/        積算明細 (1 Detection = 1行の根拠追跡。旧EstimateTreeの後継、
                            `ui-spec.md` 5.6章。Issue #6で折りたたみ対応)
     EstimateMasterPicker/ 部品台帳検索(旧称: 積算コードMaster検索)
+    ViewerGuide/           Viewer内「操作ガイド」floating panel、要点のみの
+                           クイックリファレンス(Issue #31、28章参照)
     SystemSettings/       管理者向けシステム設定 (データ参照ルート変更) (Phase 1.5)
     ProductSelector/       製番検索・切替 (Phase 1.5で`ProductViewer`として追加、
                            Phase 1.8で製番検索UIへ役割変更・改名)
@@ -129,15 +131,16 @@ src/
                              Master高さ用のResize Handleは、右ペイン廃止・
                              floating panel化(Issue #19 Phase 4、22〜23章)に
                              伴い廃止済み
-      FloatingPanel.tsx      盤情報・積算集約・積算明細・部品台帳の4種共通の
-                             floating panelシェル(Issue #19 Phase 2/4で
+      FloatingPanel.tsx      盤情報・積算集約・積算明細・部品台帳・操作ガイドの
+                             5種共通のfloating panelシェル(Issue #19 Phase 2/4で
                              積算集約・積算明細→盤情報の順にfloating panel化、
-                             追加修正で部品台帳も統合。20〜23章、Issue #25で
-                             右端カスケード初期配置・縦anchor復元ロジックを
-                             追加。ui-spec.md 1.7章参照)。表示中のみ描画する
-                             シェルで、drag移動・resize・最前面化を自前実装する
-      PanelVisibilityToggles.tsx  4panelの表示ON/OFFトグル(旧
-                             `FloatingPanelToggleBar.tsx`を置き換え。23章参照)
+                             追加修正で部品台帳、Issue #31で操作ガイドも統合。
+                             20〜23章・28章、Issue #25で右端カスケード初期配置・
+                             縦anchor復元ロジックを追加。ui-spec.md 1.7/1.8章参照)。
+                             表示中のみ描画するシェルで、drag移動・resize・
+                             最前面化を自前実装する
+      PanelVisibilityToggles.tsx  5panelの表示ON/OFFトグル(旧
+                             `FloatingPanelToggleBar.tsx`を置き換え。23章・28章参照)
   domain/                Frontend側の純粋な業務ロジック (Backendを介さない計算)
     estimateAggregationReal.ts  積算集約・積算明細を実データから組み立てる
                                  (対象別/総合計の数量集約、BBox所属判定を含む)
@@ -1391,3 +1394,60 @@ floating panel自体の見た目もglassmorphism(半透明+ぼかし)へ変更�
   PDF Help Backend・前面化ルール・drag/resize・最小高さ・glassmorphism/枠線の
   いずれも変更していない(実ブラウザ・自動テストの両方で回帰が無いことを
   確認済み)。
+
+## 28. 社内LAN共有起動とViewer内「操作ガイド」の追加 (Issue #31)
+
+作業者評価(Issue #30)実施の準備として、(a) 社内LAN上の他端末から画面を
+確認できる導線の明文化、(b) Viewer内でマウス操作・floating panelの役割を
+その場で確認できる簡易なクイックリファレンスの追加、の2点に対応した。
+詳細な調査結果はIssue #31本文・コメント参照。
+
+- **社内LAN共有はdocsの明文化のみ**: `frontend/vite.config.ts`の
+  `server.host = true`は本Issue着手前から既に設定済みで、追加のコード変更は
+  不要と判明した(Vite開発サーバー標準の`Network:`表示がそのまま社内LAN共有の
+  導線になる)。実機(Windows)で`npm run dev`を実行し、`Local:`に加えて
+  ネットワークアダプタの数だけ`Network:`行が表示されること、複数アダプタ
+  (物理LAN・WSL仮想アダプタ等)がある場合はどのURLが実際にLAN到達可能かの
+  判断が必要になることを確認した。`README.md`「社内LAN上の他端末から画面を
+  確認する」・`docs/configuration.md`「社内LAN共有」・
+  `docs/known-limitations.md`「認証・actor」へ反映した(認証未実装のため、
+  URLへ到達できる端末は誰でも同じ権限でアクセスできる点を明記)。
+- **新規component**: `components/ViewerGuide/ViewerGuide.tsx`
+  (+`ViewerGuide.css`)。props無し・内部stateも無い単純な表示専用component。
+  詳細な内容・技術仕様は`docs/ui-spec.md` 1.8章参照。
+- **`FloatingPanelKind`の拡張**: 既存の4種(`'panelInfo' | 'aggregation' |
+  'detail' | 'master'`)へ`'guide'`を追加した。`MIN_HEIGHT_BY_KIND`/
+  `HEIGHT_FRACTION_BY_KIND`/`DEFAULT_WIDTH_BY_KIND`(いずれも
+  `Record<FloatingPanelKind, number>`のため、TypeScriptのコンパイルエラーに
+  よって全kind分の値追加が強制される)へ`guide`用の値を追加した。
+- **初期配置のみの最小差分**: `FloatingPanel.tsx`の`computeInitialRect`の
+  `left`計算1行のみ`kind === 'guide'`で分岐させ、Viewer左上(`SIDE_MARGIN`)に
+  配置する。`top`・confirmed anchorによる復元・`ResizeObserver`によるresize
+  追従・`clampPosition`/`clampSize`は既存4panelと完全に共通のロジックを
+  そのまま使う(kindを区別する変更は一切していない)。既存4panelの
+  右端カスケード用`stackIndex`計算(`visibleKinds.indexOf(kind)`)は、
+  `App.tsx`が操作ガイド自身の`FloatingPanel`インスタンスへ渡す
+  `visibleKinds`から`'guide'`を意図的に除外することで、常に`-1`
+  (→`Math.max(0, -1) = 0`)に解決されるようにし、既存4panelの段数計算と
+  完全に独立させている。
+- **表示トグルの追加**: `PanelVisibilityToggles.tsx`の一覧先頭に、区切り線を
+  挟んで「操作ガイド」ボタンを追加した(既定OFF)。配色は既存のviolet系
+  (情報系3panel)・slate系(部品台帳)のいずれとも異なるニュートラルな
+  グレー系(`.panel-visibility-toggles__button--guide`)にした。
+  `SystemSettings.tsx`の透過度スライダー説明文言も、対象panelの列挙へ
+  「操作ガイド」を追加する形で更新した(透過度自体のロジックは
+  `.floating-panel`基底クラスへのCSS変数注入のみで元から汎用的なため、
+  ロジック変更は無い)。
+- **`App.tsx`への統合**: `viewerGuideVisible`(既定`false`)・
+  `viewerGuideRect`のstateを追加し、`PanelVisibilityToggles`へトグル用の
+  props、`<FloatingPanel kind="guide">`インスタンスを既存4panelと並べて
+  追加しただけで、既存4panelのstate・props・レンダリング順序は変更していない。
+- **テスト**: `App.test.tsx`へ新規describe
+  `'App: Viewer内「操作ガイド」floating panel (Issue #31)'`(既定非表示・
+  表示トグル・左上配置(既存4panelのカスケードとは独立)・既存4panelの
+  積み重ねが乱れないこと・resize追従・drag/resize・前面化、計7件)を追加し、
+  `components/ViewerGuide/ViewerGuide.test.tsx`(新規、クイックリファレンスの
+  主要文言が表示されることを検証)を追加した。既存の表示切替ボタン一覧を
+  検証する既存テスト(操作ガイドボタン追加に伴うボタン数・`aria-pressed`
+  初期値の変化)も追従修正した。Frontend全体で666件(32ファイル)が
+  成功することを確認済み。

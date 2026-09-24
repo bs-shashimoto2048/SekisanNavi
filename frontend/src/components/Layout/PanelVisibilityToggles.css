@@ -89,3 +89,35 @@
   background: #1e293b; /* slate-800 */
   border-color: #1e293b;
 }
+
+/* [Issue #31] Viewer内「操作ガイド」は、業務情報3panel(violet系)・部品台帳
+   (slate系、作業ツール)のいずれとも異なる役割(操作方法のクイックリファレンス)
+   であるため、どちらとも重ならないニュートラルなグレー系にする。編集ツールバーの
+   通常ボタン(白背景+枠#d1d5db、`.app-layout__edit-toolbar button`)とも
+   OFF/ON状態を色だけで判別できるよう、あえてグレーの濃淡をはっきり付ける
+   (通常ボタンにはON/OFF状態という概念自体が無いため、混同を避ける)。 */
+.panel-visibility-toggles__button--guide {
+  border-color: #9ca3af; /* gray-400 */
+  background: #f3f4f6; /* gray-100: OFF(非表示中)は控えめな塗り+境界線 */
+  color: #374151; /* gray-700 */
+}
+
+.panel-visibility-toggles__button--guide:hover {
+  border-color: #6b7280; /* gray-500 */
+  background: #e5e7eb; /* gray-200 */
+}
+
+.panel-visibility-toggles__button--guide:focus-visible {
+  outline-color: #374151; /* gray-700: violet/slate系とは別トーンのfocusリング */
+}
+
+.panel-visibility-toggles__button--guide[aria-pressed='true'] {
+  background: #4b5563; /* gray-600: ON(表示中)は塗りつぶし */
+  color: #fff;
+  border-color: #4b5563;
+}
+
+.panel-visibility-toggles__button--guide[aria-pressed='true']:hover {
+  background: #374151; /* gray-700 */
+  border-color: #374151;
+}

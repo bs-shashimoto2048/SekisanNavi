@@ -380,6 +380,55 @@ z-indexを押し上げた状態でもmodalが前面に出ることを確認済�
 移動・リサイズはいずれも、積算ロジックやデータ(積算集約の集計・積算明細の
 明細一覧)を一切変更しない(単に画面上の見た目だけを切り替える)。
 
+## 1.8. Viewer内「操作ガイド」floating panel (Issue #31)
+
+作業者評価前の準備として、マウス操作・floating panelの役割をViewer内で
+その場で確認できる簡易なクイックリファレンス「操作ガイド」を追加した。
+`docs/user-guide.md`(正式な詳細マニュアル)を置き換えるものではなく、
+全文Markdown埋め込みは対象外(要点のみの表・箇条書き)。
+
+**新規component**: `components/ViewerGuide/ViewerGuide.tsx`。他4panel
+(`PanelInfo`/`EstimateAggregation`/`EstimateDetail`/`EstimateMasterPicker`)と
+同じく`FloatingPanel`のシェルに包まれて表示される、単純な表示専用
+component(props無し、自身のstateも持たない)。見出し(`<h2>`)は
+他panelと同じくドラッグハンドルを兼ねる。内容は「基本操作」(拡大縮小・
+Pan・Fit・BBox選択/移動/リサイズ/追加・ラベル移動・元に戻す/やり直す)の
+表と、「画面を見る」(盤情報・積算集約・積算明細・部品台帳が何を表示する
+場所か)の一覧のみで、ユーザーガイドへの参照文言で締める。
+
+**`FloatingPanelKind`の拡張**: 既存の`'panelInfo' | 'aggregation' | 'detail' |
+'master'`へ`'guide'`を追加した。`MIN_HEIGHT_BY_KIND`/`HEIGHT_FRACTION_BY_KIND`/
+`DEFAULT_WIDTH_BY_KIND`(いずれも`Record<FloatingPanelKind, number>`で
+全kindの値をTypeScriptが強制する)へもそれぞれ値(最小高さ120px・
+高さ比率0.3・既定幅300px、既存panelでもっとも軽量な盤情報と同水準)を
+追加した。
+
+**初期配置は左上、既存4panelの右端カスケードとは独立**: `computeInitialRect`
+の`left`計算のみ、`kind === 'guide'`の場合に`SIDE_MARGIN`(左端寄せ)へ
+分岐させた(既存4panelは`container.width - SIDE_MARGIN - width`で右端寄せ)。
+`top`・anchor復元・resize追従・clampのロジックはkindに関わらず共通のため
+一切変更していない。また、`App.tsx`が`FloatingPanel kind="guide"`へ渡す
+`visibleKinds`配列から`'guide'`自身を意図的に除外しているため、
+`stackIndex = visibleKinds.indexOf(kind)`は常に`-1`→`Math.max(0, -1)`により
+`0`に解決される。これにより、操作ガイドは既存4panelの表示順(盤情報→
+積算集約→積算明細→部品台帳)による段数カウントに一切参加せず、逆に
+既存4panelの積み重ねも操作ガイドの表示/非表示によって変化しない。
+
+**表示トグル**: `PanelVisibilityToggles`の一覧**先頭**に、区切り線を挟んで
+「操作ガイド」ボタンを独立配置した(既存の情報系3panel・部品台帳のいずれの
+グループとも異なる役割のため)。配色はニュートラルなグレー系
+(`.panel-visibility-toggles__button--guide`、OFF:枠`#9ca3af`/背景`#f3f4f6`/
+文字`#374151`、ON:塗りつぶし`#4b5563`)とし、既存のviolet系(情報系3panel)・
+slate系(部品台帳)のいずれとも重ならないようにしている。既定は**非表示**
+(`guideVisible=false`、既存4panelは引き続き既定ON)。
+
+**drag/resize/前面化/透過度は既存の仕組みをそのまま再利用**: `FloatingPanel`
+のdrag・resize・前面化・clamp・resize追従・`--floating-panel-bg-alpha`
+(`SystemSettings`の「floating panel透過度」スライダー)による背景透過度は、
+いずれも`kind`を区別しない汎用実装のため、追加のコード変更無しに操作ガイドへも
+そのまま適用される(`SystemSettings.tsx`側は対象panelの列挙文言のみ
+「盤情報・積算集約・積算明細・部品台帳・操作ガイド」へ更新した)。
+
 ## 2. ProjectHeader
 
 - 表示項目: 整理番号 (seiri_no) / 製番 (seiban) / 盤名称 (panel_name) / 解析状態。
