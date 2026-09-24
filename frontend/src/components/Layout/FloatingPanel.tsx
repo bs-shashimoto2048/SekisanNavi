@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import './FloatingPanel.css'
 
-export type FloatingPanelKind = 'panelInfo' | 'aggregation' | 'detail' | 'master'
+export type FloatingPanelKind = 'panelInfo' | 'aggregation' | 'detail' | 'master' | 'guide'
 
 /** floating panelの位置・大きさ (px、`containerRef`の要素基準)。 */
 export interface FloatingPanelRect {
@@ -25,7 +25,12 @@ interface Props {
   /** [Issue #25] 現在表示中の全floating panelの種別一覧(固定の宣言順:
    * 盤情報→積算集約→積算明細→部品台帳でフィルタ済み)。このpanel自身が
    * 表示ONになった瞬間の「何番目に表示されたか」(=右端積み重ねの段数)を
-   * 決めるために使う。`App.tsx`が4つの表示ON/OFF stateから毎回導出して渡す。 */
+   * 決めるために使う。`App.tsx`が4つの表示ON/OFF stateから毎回導出して渡す。
+   * [Issue #31] 操作ガイド(`kind==='guide'`)は右端カスケードの積み重ね対象外
+   * (常に単独でViewer左上へ配置する)であるため、意図的にこの配列へは含めない。
+   * 含まれていなくても`visibleKinds.indexOf('guide')`は-1を返し、
+   * `Math.max(0, -1)`により`stackIndex`は常に0として扱われるため、
+   * 既存4panel用の配列をそのまま渡しても問題ない。 */
   visibleKinds: FloatingPanelKind[]
   /** 位置・大きさのクランプ基準にするコンテナ要素(`app-workspace__viewer-wrap`)。 */
   containerRef: React.RefObject<HTMLDivElement | null>
@@ -49,11 +54,15 @@ const MIN_WIDTH = 260
 //   上部の固定UIが多いため、4種の中では最大の下限を確保する。
 // - detail: 見出し+情報源タブ+表1行分。
 // - master: 見出し+検索欄+カテゴリタブ+表1行分。
+// - guide: [Issue #31] 見出し+クイックリファレンス表の最低1〜2行分。全文
+//   マニュアルを埋め込まず簡易表のみのため、4panel中もっとも軽いpanelInfo
+//   (120px)と同程度で足りると判断した。
 const MIN_HEIGHT_BY_KIND: Record<FloatingPanelKind, number> = {
   panelInfo: 120,
   aggregation: 160,
   detail: 150,
   master: 150,
+  guide: 120,
 }
 // panelの「高さの伸びやすさ」の目安(コンテナ高さに対する割合)。指示25章由来の
 // 既存値をそのまま踏襲する(Issue #25は位置ロジックのみが対象で、高さの決め方
@@ -63,6 +72,9 @@ const HEIGHT_FRACTION_BY_KIND: Record<FloatingPanelKind, number> = {
   aggregation: 0.32,
   detail: 0.38,
   master: 0.34,
+  // [Issue #31] クイックリファレンス表のみのため、他panelより控えめな
+  // 伸び率にする(内容が少ないのにViewer高さいっぱいまで広がらないように)。
+  guide: 0.3,
 }
 // [追加修正: floating panelの初期幅を実ブラウザ実測ベースで再調整]
 // Playwrightで実データ(製番A1GV2421 P16)を使い、各表の列ごとに「隠しnowrap
@@ -80,6 +92,9 @@ const DEFAULT_WIDTH_BY_KIND: Record<FloatingPanelKind, number> = {
   aggregation: 480,
   detail: 770,
   master: 320,
+  // [Issue #31] クイックリファレンス表(操作/方法の2列)のみのため、
+  // 4panel中もっとも幅を必要としないpanelInfoと同程度で足りる。
+  guide: 300,
 }
 const SIDE_MARGIN = 20
 // DrawingCanvas自身のtoolbar(図面名+Zoom/Fit/BBox削除、Viewer上端いっぱいの1行)を
@@ -132,11 +147,21 @@ function clampSize(rect: FloatingPanelRect, container: Size, kind: FloatingPanel
  *
  * kind別の初期幅(`DEFAULT_WIDTH_BY_KIND`)・高さの伸び方(`HEIGHT_FRACTION_BY_KIND`)
  * 自体は既存の値を維持する(指示: 「kindごとの初期幅は維持する」)。
+ *
+ * **[Issue #31] 操作ガイド(`kind==='guide'`)のみ左端寄せ**: 役割が既存4panel
+ * (業務情報の表示・操作)とは異なる「操作方法のクイックリファレンス」である
+ * ため、右端カスケードには混ぜず、常にViewer左上へ単独で配置する
+ * (`stackIndex`は呼び出し側で常に0になる想定。上記`visibleKinds`のコメント
+ * 参照)。`left`の算出をkindで分岐させるだけで、`top`・その後のViewer/browser
+ * resize追従(`deriveAnchor`/`reflowForResize`、下記)・clampはいずれも
+ * 既存の座標ベースの汎用ロジックがそのまま働く(leftが小さい値になる結果、
+ * `deriveAnchor`が自動的に`xAnchor:'left'`を導出するため)。
  */
 function computeInitialRect(kind: FloatingPanelKind, container: Size, stackIndex: number): FloatingPanelRect {
   const minHeight = MIN_HEIGHT_BY_KIND[kind]
   const width = Math.max(MIN_WIDTH, Math.min(DEFAULT_WIDTH_BY_KIND[kind], container.width - SIDE_MARGIN * 2))
-  const left = Math.max(0, container.width - SIDE_MARGIN - width)
+  const left =
+    kind === 'guide' ? SIDE_MARGIN : Math.max(0, container.width - SIDE_MARGIN - width)
 
   const maxTop = Math.max(TOP_CLEARANCE, container.height - BOTTOM_MARGIN - minHeight)
   const top = Math.min(TOP_CLEARANCE + Math.max(0, stackIndex) * STACK_OFFSET, maxTop)
@@ -217,14 +242,16 @@ function reflowForResize(
 }
 
 /**
- * 盤情報・積算集約・積算明細・積算コードMasterをViewer上へ重ねて表示するための
- * floating panelシェル (Issue #19 Phase 2/4で新設・拡張、追加修正でドラッグ移動・
- * リサイズに対応、さらなる追加修正で積算コードMasterも対象に追加、Issue #25で
- * 初期配置(右端寄せの積み重ね)・Viewerサイズ変更時の相対位置追従を追加)。
+ * 盤情報・積算集約・積算明細・積算コードMaster・操作ガイドをViewer上へ重ねて
+ * 表示するためのfloating panelシェル (Issue #19 Phase 2/4で新設・拡張、
+ * 追加修正でドラッグ移動・リサイズに対応、さらなる追加修正で積算コードMaster
+ * も対象に追加、Issue #25で初期配置(右端寄せの積み重ね)・Viewerサイズ変更時の
+ * 相対位置追従を追加、Issue #31で操作ガイド(`kind==='guide'`)を追加)。
  *
- * `PanelInfo`/`EstimateAggregation`/`EstimateDetail`/`EstimateMasterPicker`自体は
- * 一切変更していない(前3コンポーネント自身の折りたたみ機能はPhase 4追加修正で
- * 廃止済み。表示/非表示は`PanelVisibilityToggles`のみで行う)。
+ * `PanelInfo`/`EstimateAggregation`/`EstimateDetail`/`EstimateMasterPicker`/
+ * `ViewerGuide`自体は一切変更していない(前3コンポーネント自身の折りたたみ
+ * 機能はPhase 4追加修正で廃止済み。表示/非表示は`PanelVisibilityToggles`
+ * のみで行う)。
  *
  * **ドラッグ移動**: 各componentが自分自身で描画する見出し(`<h2>`)領域を
  * ドラッグハンドルとして使う。`FloatingPanel`はchildrenの内部構造を知らないため、

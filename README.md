@@ -36,6 +36,15 @@ Webシステムのプロトタイプ(PoC)。「AIによる完全自動積算シ�
 floating panelの表示ON/OFFは、Viewer右上のツールバー(元に戻す/やり直すボタンの
 並び)右端にある表示切替ボタン群から行う。
 
+**[2026-09 Issue #31] 操作ガイド(floating panel)**: 上記4panelとは別に、
+マウス操作・floating panelの役割を作業中にその場で確認できる簡易な
+クイックリファレンス「操作ガイド」もViewer上へ重ねて表示できる(既定は
+非表示)。表示は表示切替ボタン群の先頭にある「操作ガイド」ボタンから行う。
+初期表示位置はViewer左上で、他4panelの右端カスケードとは独立している
+(drag移動・resize・最前面化・透過度調整は他4panelと共通の仕組み)。
+`docs/user-guide.md` 4-7節を置き換えるものではなく、あくまで作業中の簡易な
+参照用(詳しい操作方法は引き続き`docs/user-guide.md`を参照)。
+
 ## 解決する課題
 
 - 図面・設計データ・AI検出結果が別々に存在し、積算に必要な情報を人手で
@@ -240,6 +249,42 @@ Vite開発サーバーのプロキシ経由でBackendへ転送する (`vite.conf
 
 設定値・環境変数の一覧は [`docs/configuration.md`](docs/configuration.md) を参照。
 
+#### 社内LAN上の他端末から画面を確認する (Issue #31)
+
+Vite開発サーバーは既定で`server.host = true`(`vite.config.ts`)になっており、
+追加の実装無しに社内LAN上の他端末からアクセスできる。`npm run dev`実行時の
+ターミナル出力に、次のように`Local:`(開発機自身からのみ有効)に加えて
+`Network:`(LAN上の他端末からアクセスできるURL)が表示される。
+
+```
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://<LANの実IPアドレス>:5173/  イーサネット
+  ➜  Network: http://<別の仮想アダプタのIPアドレス>:5173/   vEthernet (WSL ...)
+```
+
+- **他端末からは`Network:`のURLを使う**(`Local:`は開発機自身からしかアクセスできない)。
+- **開発機にネットワークアダプタが複数ある場合、`Network:`行も複数表示される**。
+  WSL・VPN・仮想スイッチ等の仮想アダプタのIPが混ざって表示されることがあり、
+  実際に社内LANの他端末から到達できるのは、通常は物理LAN(有線/無線)側の
+  アダプタに割り当てられたIPのみ。どれが正しいIPか分からない場合は、社内の
+  ネットワーク・PC担当者に確認するか、開発機で`ipconfig`(Windows)を実行し、
+  実際に使用している物理アダプタのIPアドレスと突き合わせて判断すること。
+- **Windows Firewallの確認**: 初回はWindows Firewallの許可ダイアログが出る
+  ことがある。ブロックしたままだと他端末から`Network:`のURLへ接続できない。
+- **Backendは直接LANへ公開しない**: 上記手順どおり`uvicorn app.main:app`を
+  `--host`指定無しで起動している場合、Backendは`127.0.0.1`(開発機自身)
+  のみでlistenする。他端末のブラウザは`/api/...`宛のリクエストも含めて
+  常にVite開発サーバー(`Network:`のURL、同一オリジン)へアクセスし、
+  Vite開発サーバー自身(Node側のサーバー間通信)がBackendへプロキシするため、
+  Backend自体をLAN向けに`--host 0.0.0.0`等で公開する必要は無い
+  (`vite.config.ts`のプロキシ設定、CORS設定変更も不要)。
+- **認証機能は無い**: ユーザー単位の認証・ログイン機能は実装していないため、
+  `Network:`のURLへ到達できる端末・利用者は誰でも同じ権限(管理者パスワードが
+  必要な設定変更を除く)でアクセスできる。レビュー・作業者評価等の限定的な
+  用途を想定しており、社外・不特定多数がアクセスできるネットワークでは
+  使用しないこと。詳細は [`docs/known-limitations.md`](docs/known-limitations.md)
+  「認証・actor」節を参照。
+
 ### テスト・型チェック・Lint
 
 ```bash
@@ -253,7 +298,7 @@ cd frontend && npm run lint
 cd frontend && npm run build   # 型チェックを兼ねたビルド確認
 ```
 
-2026-09時点のmainで、Backend 223件・Frontend 659件(31ファイル)のテストが
+2026-09時点のmainで、Backend 223件・Frontend 666件(32ファイル)のテストが
 全件成功することを確認済み。
 
 ## 重要な前提・現在の制約

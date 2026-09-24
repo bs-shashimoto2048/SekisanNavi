@@ -1,6 +1,11 @@
 import './PanelVisibilityToggles.css'
 
 interface Props {
+  /** [Issue #31] Viewer内「操作ガイド」floating panelの表示トグル。既存4panel
+   * (業務情報の表示・操作)とは役割が異なるクイックリファレンスのため、
+   * 一覧の先頭・専用のニュートラルなグレー系配色+区切り線で分離する。 */
+  guideVisible: boolean
+  onToggleGuide: () => void
   panelInfoVisible: boolean
   onTogglePanelInfo: () => void
   aggregationVisible: boolean
@@ -14,8 +19,8 @@ interface Props {
 }
 
 /**
- * floating panel(盤情報・積算集約・積算明細・積算コードMaster)の表示
- * トグル群 (Issue #19 Phase 4)。
+ * floating panel(操作ガイド・盤情報・積算集約・積算明細・積算コードMaster)の
+ * 表示トグル群 (Issue #19 Phase 4、Issue #31で操作ガイドを追加)。
  *
  * Phase 2ではViewer右上に独立したfloating toggle barとして浮かせていたが、
  * 追加UI修正指示により、Undo/Redoボタンと同じ編集ツールバー
@@ -35,8 +40,16 @@ interface Props {
  * であるため、区切り線(`.panel-visibility-toggles__divider`)を挟んで
  * 別グループとして配置し、専用のslate系配色
  * (`.panel-visibility-toggles__button--tool`)を与える。
+ *
+ * [Issue #31] Viewer内「操作ガイド」も同様に、業務情報を表示する3panel・
+ * 作業ツールの部品台帳のいずれとも異なる役割(操作方法のクイックリファレンス)
+ * であるため、一覧の**先頭**に区切り線を挟んで独立配置し、専用のニュートラルな
+ * グレー系配色(`.panel-visibility-toggles__button--guide`)を与える。
+ * 既定は非表示(`guideVisible=false`)。
  */
 export function PanelVisibilityToggles({
+  guideVisible,
+  onToggleGuide,
   panelInfoVisible,
   onTogglePanelInfo,
   aggregationVisible,
@@ -48,6 +61,16 @@ export function PanelVisibilityToggles({
 }: Props) {
   return (
     <div className="panel-visibility-toggles">
+      <button
+        type="button"
+        className="panel-visibility-toggles__button panel-visibility-toggles__button--guide"
+        aria-pressed={guideVisible}
+        title={guideVisible ? '操作ガイドを隠す' : '操作ガイドを表示'}
+        onClick={onToggleGuide}
+      >
+        操作ガイド
+      </button>
+      <span className="panel-visibility-toggles__divider" aria-hidden="true" />
       <button
         type="button"
         className="panel-visibility-toggles__button"

@@ -110,6 +110,21 @@ Phase 1調査で、`decision_events`/`estimate_confirmations`がappend-only(特�
 6. 検証後は検証用DBファイルを破棄するか任意の場所(Git管理対象外)へ保管し、
    Frontendの`VITE_BACKEND_URL`を本番backendのポートへ戻す。
 
+## 社内LAN共有 (Issue #31)
+
+Vite開発サーバーの`server.host`(`frontend/vite.config.ts`)は`true`に設定
+済みで、全ネットワークインターフェース(`0.0.0.0`/`::`)でlistenする。これは
+社内LAN上の他端末からレビュー用途で画面を確認できるようにするための設定
+(コードとしては元から存在、Issue #31はdocsでの明文化のみ)。
+
+- Backend側の設定・起動コマンドはこのために変更する必要は無い(`uvicorn`を
+  `--host`指定無しで起動していれば`127.0.0.1`のみでlistenしたままでよい。
+  `/api`宛のリクエストはVite開発サーバーが同一オリジンでプロキシするため)。
+- `ALLOWED_ORIGINS`(上記`app/config.py`)もLAN経由アクセスのために変更する
+  必要は無い(ブラウザは常にVite開発サーバーのオリジンへアクセスするため)。
+- 実際の利用手順・複数`Network:`表示時の判断方法・認証面の注意は
+  [README.md](../README.md)「社内LAN上の他端末から画面を確認する」を参照。
+
 ## ポート番号について
 
 `README.md`のセットアップ手順は既定値としてBackend `8000` / Frontend(Vite)

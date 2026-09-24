@@ -65,6 +65,7 @@ import { DecisionEventHistory } from './components/DecisionEventHistory/Decision
 import { PaneSplitter } from './components/Layout/PaneSplitter'
 import { FloatingPanel, type FloatingPanelKind, type FloatingPanelRect } from './components/Layout/FloatingPanel'
 import { PanelVisibilityToggles } from './components/Layout/PanelVisibilityToggles'
+import { ViewerGuide } from './components/ViewerGuide/ViewerGuide'
 import { usePaneWidth } from './hooks/usePaneWidth'
 import { useFloatingPanelBgAlpha } from './hooks/useFloatingPanelBgAlpha'
 import './App.css'
@@ -278,6 +279,10 @@ function App() {
   // floating panelへ移行した。表示/非表示の考え方(初期値true、セッション内
   // のみ保持)も他3panelと揃える。
   const [estimateMasterFloatingVisible, setEstimateMasterFloatingVisible] = useState(true)
+  // [Issue #31] Viewer内「操作ガイド」floating panel。既存4panelとは異なり、
+  // 既定は非表示(指示B-4: 「デフォルトは非表示」)。表示ON/OFFの考え方
+  // (セッション内のみ保持、localStorage永続化なし)自体は他4panelと揃える。
+  const [viewerGuideVisible, setViewerGuideVisible] = useState(false)
 
   // floating panel(盤情報/積算集約/積算明細/積算コードMaster)の位置・大きさ
   // ([追加修正] ドラッグ移動・リサイズ対応)。`FloatingPanel`コンポーネント
@@ -291,6 +296,9 @@ function App() {
   const [aggregationRect, setAggregationRect] = useState<FloatingPanelRect | null>(null)
   const [detailRect, setDetailRect] = useState<FloatingPanelRect | null>(null)
   const [masterRect, setMasterRect] = useState<FloatingPanelRect | null>(null)
+  // [Issue #31] 操作ガイドの位置・大きさ。右端カスケードの4panelとは独立して
+  // 保持する(`visibleFloatingKinds`には含めない。下記コメント参照)。
+  const [viewerGuideRect, setViewerGuideRect] = useState<FloatingPanelRect | null>(null)
   // floating panelの位置・大きさのクランプ基準となるコンテナ要素。
   const viewerWrapRef = useRef<HTMLDivElement>(null)
 
@@ -298,6 +306,9 @@ function App() {
   // 盤情報→積算集約→積算明細→部品台帳)。`FloatingPanel`が「表示ONにした
   // 瞬間、自分より前に何枚表示中か」を数えて初期配置(右端寄せ+積み重ね)の
   // 段数を決めるために使う。表示ON/OFFの4state以外には一切依存しない。
+  // [Issue #31] 操作ガイド(`viewerGuideVisible`)はこの配列へ意図的に含めない
+  // (右端カスケードの積み重ね対象外、常にViewer左上へ単独配置するため。
+  // `FloatingPanel.tsx`の`visibleKinds`コメント参照)。
   const visibleFloatingKinds = useMemo<FloatingPanelKind[]>(() => {
     const kinds: FloatingPanelKind[] = []
     if (panelInfoFloatingVisible) kinds.push('panelInfo')
@@ -1238,6 +1249,8 @@ function App() {
             トグルをUndo/Redoと同じツールバーの右端へ移動した(旧: Viewer上部の
             独立したfloating toggle bar)。 */}
         <PanelVisibilityToggles
+          guideVisible={viewerGuideVisible}
+          onToggleGuide={() => setViewerGuideVisible((v) => !v)}
           panelInfoVisible={panelInfoFloatingVisible}
           onTogglePanelInfo={() => setPanelInfoFloatingVisible((v) => !v)}
           aggregationVisible={estimateAggregationFloatingVisible}
@@ -1384,6 +1397,20 @@ function App() {
                 onRectChange={setMasterRect}
               >
                 <EstimateMasterPicker selectedItemId={selectedMasterItemId} onSelectItem={handleSelectMasterItem} />
+              </FloatingPanel>
+              {/* [Issue #31] Viewer内「操作ガイド」。既存4panelと同じ
+                  FloatingPanelシェルをそのまま再利用する(`kind="guide"`により
+                  右端カスケードには混ぜず、常にViewer左上へ単独配置される。
+                  `FloatingPanel.tsx::computeInitialRect`参照)。 */}
+              <FloatingPanel
+                visible={viewerGuideVisible}
+                kind="guide"
+                visibleKinds={visibleFloatingKinds}
+                containerRef={viewerWrapRef}
+                rect={viewerGuideRect}
+                onRectChange={setViewerGuideRect}
+              >
+                <ViewerGuide />
               </FloatingPanel>
             </div>
           </div>
