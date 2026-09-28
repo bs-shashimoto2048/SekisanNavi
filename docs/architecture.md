@@ -136,11 +136,14 @@ src/
                              積算集約・積算明細→盤情報の順にfloating panel化、
                              追加修正で部品台帳、Issue #31で操作ガイドも統合。
                              20〜23章・28章、Issue #25で右端カスケード初期配置・
-                             縦anchor復元ロジックを追加。ui-spec.md 1.7/1.8章参照)。
-                             表示中のみ描画するシェルで、drag移動・resize・
-                             最前面化を自前実装する
+                             縦anchor復元ロジックを追加。Issue #34でkind別識別色
+                             のCSS変数(`:root`定義)・最前面panel共有状態
+                             (`frontKind`、`useSyncExternalStore`)を追加、29章。
+                             ui-spec.md 1.7/1.8/1.9章参照)。表示中のみ描画する
+                             シェルで、drag移動・resize・最前面化を自前実装する
       PanelVisibilityToggles.tsx  5panelの表示ON/OFFトグル(旧
-                             `FloatingPanelToggleBar.tsx`を置き換え。23章・28章参照)
+                             `FloatingPanelToggleBar.tsx`を置き換え。23章・28章、
+                             Issue #34でkind別theme化・29章参照)
   domain/                Frontend側の純粋な業務ロジック (Backendを介さない計算)
     estimateAggregationReal.ts  積算集約・積算明細を実データから組み立てる
                                  (対象別/総合計の数量集約、BBox所属判定を含む)
@@ -1451,3 +1454,72 @@ floating panel自体の見た目もglassmorphism(半透明+ぼかし)へ変更�
   検証する既存テスト(操作ガイドボタン追加に伴うボタン数・`aria-pressed`
   初期値の変化)も追従修正した。Frontend全体で666件(32ファイル)が
   成功することを確認済み。
+
+## 29. FloatingPanelのkind別識別色・最前面panel強調 (Issue #34)
+
+5panel(盤情報/積算集約/積算明細/部品台帳/操作ガイド)の表示切替ボタン・
+タイトルバー・外枠を、panelごとの識別色で統一した。あわせて、現在最前面
+(z-index最大)のpanelを外枠・shadowで一段強調するようにした。詳細な色一覧・
+設計判断は`docs/ui-spec.md` 1.9章参照。実装上のポイントのみ記す:
+
+- **色の定義は`FloatingPanel.css`の`:root`ブロック1箇所に集約**:
+  `--panel-theme-<kind>-accent`/`-accent-strong`/`-bg`/`-fg`(5kind×4個=
+  20個のcustom property)。他のファイル(各panelのheading CSS、
+  `PanelVisibilityToggles.css`)はハードコード値を一切持たない。
+  - `.floating-panel--<kind>`(`FloatingPanel.css`)が、kindごとに`:root`の
+    値を汎用名(`--panel-accent`等)へ割り当て、`.floating-panel`自身
+    (外枠)とchildren(各panelのheading)はCSS変数の継承経由でこの汎用名を
+    参照する(各component自身のheading CSS、例: `PanelInfo.css`の
+    `.panel-info__heading`は`var(--panel-accent-fg)`等のみを参照し、
+    色の値は持たない)。
+  - `PanelVisibilityToggles.css`(別DOMツリーのため継承が届かない)のみ、
+    `:root`の`--panel-theme-<kind>-*`を直接参照する。以前3panel
+    (盤情報/積算集約/積算明細)が共有していたviolet系の基底配色クラスは
+    廃止し、5kind分の個別modifier class
+    (`--panelInfo`/`--aggregation`/`--detail`/`--tool`/`--guide`)へ分離した。
+  - 既存の`--accent-section`(`src/index.css`、`DrawingNavigator`とも共有)は
+    floating panel専用ではないため、今回のtheme化には使わなかった
+    (使うと図面一覧の見出し色にも影響してしまうため)。
+- **外枠**: `.floating-panel`共通ルールの`border`を`1px`→`2px`へ太くし、色を
+  固定値から`var(--panel-accent, ...)`へ変更した。border-radius・
+  glassmorphism(backdrop-filter・inset box-shadowのハイライト)は無変更。
+- **最前面panelの共有状態(`frontKind`)は`FloatingPanel.tsx`内で完結**:
+  Phase 1調査で提示した案A(既存の`zCounter`と同じモジュールスコープ変数
+  パターン)を採用した。`bringToFront()`(既存、pointerdownキャプチャ・
+  表示ON検知の両方から呼ばれる)が呼ばれるたびにモジュールスコープの
+  `frontKind`を更新し、購読者へ通知する。各`FloatingPanel`インスタンスは
+  React 19標準の`useSyncExternalStore`でこれを購読し、自分の`kind`と一致
+  する場合のみ`floating-panel--front` classを付与する。**`App.tsx`側の
+  state・`FloatingPanel`の`Props`型はいずれも変更していない**(5箇所の
+  `<FloatingPanel kind="...">`呼び出しも無変更)。
+- **`floating-panel--front`と`floating-panel--interacting`の優先順位**:
+  CSS側で`.floating-panel--front`より後に`.floating-panel--interacting`を
+  定義することで(単一classセレクタ同士は詳細度が同じで後勝ち)、両方の
+  classが同時に付いた場合は常にinteracting側(achromaticな強い強調)が
+  優先されるようにした。「interacting > front > normal」の順で見た目が
+  強くなる(drag/resize開始は必ず`bringToFront()`も伴うため、実際には
+  frontとinteractingは同時に付くことが多い)。
+- **既存透過度(`--floating-panel-bg-alpha`)とは完全に独立**: 新設した
+  `--panel-accent*`はこの変数を参照・上書きしておらず、`SystemSettings`の
+  透過度スライダーを最小/最大にしても、タイトルバー・外枠の識別色は
+  変わらない(実ブラウザで確認済み)。
+- **既存ロジックへの非干渉**: drag/resize/clamp/anchor/reflow/右端カスケード
+  初期配置・guide左上配置・既存の前面化トリガー(pointerdownキャプチャ・
+  表示ON検知)はいずれも変更していない(既存の関連テストが無修正のまま
+  通ることを確認済み)。
+- **テスト**: `App.test.tsx`へ新規describe`'App: FloatingPanelのkind別
+  theme・最前面強調 (Issue #34)'`(トグル5個の個別theme class・headingの
+  kind別`--panel-accent-bg`・透過度変数との独立性・front classが常に1つ
+  だけ付与される・front classがクリックで移動する・表示OFF→ONでの
+  再front化・resize開始でのfront化・front+interactingの共存、計7件)を
+  追加した。既存の「3panel/masterで枠線色が同一であること」を前提にした
+  テスト3件(`floating panelの枠線強化`描画block・
+  `積算コードMasterのfloating panel化`describe block内2件)は、標準
+  プロパティ経由のvar()がjsdomで解決できない制約(`docs/coding-
+  conventions.md`「テスト」節)を踏まえ、custom property自体を
+  `getComputedStyle(el).getPropertyValue('--panel-accent')`で直接読む、
+  またはCSSクラス名の付与状況で検証する形へ更新した。Frontend全体で
+  677件(32ファイル)が成功することを確認済み。実ブラウザ(Playwright、
+  1024px/1600px)で5panel同時表示時の色の判別性・front強調・drag中の
+  interacting優先・透過度スライダー独立性・console/pageエラー無しを
+  確認済み。

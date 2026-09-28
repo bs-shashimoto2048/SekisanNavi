@@ -15,19 +15,22 @@
 }
 
 /* 3領域(盤情報・積算集約・積算明細)の見出しを統一する (指示9章)。
-   薄いコバルトブルー背景で「主要ブロックの先頭」であることを一目で示す。
-   UI視覚階層改善 指示10章/11章: 左アクセントバーを追加する。背景色は既存の
-   #eff6ffを維持する(#dbeafeは.estimate-detail__row--current-pageの意味色と
-   重複するため使わない。指示25章)。[追加修正] floating panelの最小高さを
-   さらに縮めるため、上下padding/margin-bottomを引き締める(font-size/背景色は
-   変更しない)。 */
+   「主要ブロックの先頭」であることを一目で示す。[追加修正] floating panelの
+   最小高さをさらに縮めるため、上下padding/margin-bottomを引き締める
+   (font-size/背景色は変更しない)。
+   [Issue #34] 色はkind別識別色(`--panel-accent*`、`FloatingPanel.css`の
+   `.floating-panel--detail`が定義しCSS変数の継承で渡ってくる、indigo/
+   blue-violet系)を参照する形へ変更した。積算集約(purple)と近い色相だが
+   別の値のため、実ブラウザで判別できる(指示3章)。以前は盤情報・積算集約と
+   同じ`--accent-section`(青系、DrawingNavigatorとも共有)を使っていたが、
+   5panel個別色化のため分離した。 */
 .estimate-detail__heading {
   font-size: 0.98rem; /* 全体フォント拡大 指示1章 */
   font-weight: 700;
-  color: #1e3a8a;
-  background: #eff6ff;
-  border-left: 3px solid var(--accent-section);
-  box-shadow: inset 0 -1px 0 0 #93c5fd;
+  color: var(--panel-accent-fg);
+  background: var(--panel-accent-bg);
+  border-left: 3px solid var(--panel-accent);
+  box-shadow: inset 0 -1px 0 0 var(--panel-accent);
   margin: 0 0 0.3rem;
   padding: 0.2rem 0.5rem;
   border-radius: 0 4px 4px 0;

@@ -219,6 +219,10 @@ Undo/Redoボタンと同じ編集ツールバー(`app-layout__edit-toolbar`)の�
   一目で分かるようにする。
 - hover/focus-visibleでも上記violet系のまま濃淡を変えるのみ(色相は変えない)。
 
+**[2026-09 Issue #34で仕様変更]** 盤情報・積算集約・積算明細が共有していた
+このviolet系配色は、5panel個別識別色化に伴い廃止した。現在の配色は1.9章
+参照(3ボタンとも別々のkind別theme色を持つ)。
+
 **実装上の注意(CSS詳細度の罠)**: `.panel-visibility-toggles__button`は
 `.app-layout__edit-toolbar`の内側に置かれる`<button>`のため、対策なしでは
 ツールバー側の汎用ルール`.app-layout__edit-toolbar button`
@@ -335,7 +339,13 @@ Viewer上の図面がうっすら透けて見えるが、`PanelInfo`/`EstimateAg
 (`FloatingPanel.css`に一括定義、component側で個別に上書きしていない)。
 **[2026-09 追加修正]** 部品台帳のみ、7章で説明する「ツール系panel」
 の識別のため、この共通枠線に加えて上端3px太のslate系アクセントバー
-(`.floating-panel--master`)を追加している。
+(`.floating-panel--master`)を追加している(なお、この専用アクセントバー自体は
+その後の追加修正で他panelとの統一感を優先し廃止済み。1.9章参照)。
+
+**[2026-09 Issue #34で仕様変更]** 上記の「5panelとも同じ枠線色を共有する」
+という前提は、5panel個別識別色化により変更された。外枠の太さ(1px→2px)・
+`--floating-panel-bg-alpha`との独立性は維持しつつ、色のみkindごとに異なる
+識別色を使うようになった。詳細は1.9章参照。
 
 **Viewer操作との重なり・z-index**: `DrawingViewer`内部のOverlay
 (盤領域/引出線/BBox本体/選択中BBox/Resize Handle/Tooltip、
@@ -428,6 +438,90 @@ slate系(部品台帳)のいずれとも重ならないようにしている。�
 いずれも`kind`を区別しない汎用実装のため、追加のコード変更無しに操作ガイドへも
 そのまま適用される(`SystemSettings.tsx`側は対象panelの列挙文言のみ
 「盤情報・積算集約・積算明細・部品台帳・操作ガイド」へ更新した)。
+
+## 1.9. FloatingPanelのkind別識別色・最前面panel強調 (Issue #34)
+
+5panelすべてで「どの表示切替ボタンがどのpanelに対応するか」を色で一目で
+分かるようにするため、識別色をtoggle button・タイトルバー・外枠の3箇所へ
+統一して適用した。あわせて、現在最前面(z-index最大)のpanelを外枠・shadow
+で一段強調するようにした。本文(body)のglassmorphism・共通透過度
+(`--floating-panel-bg-alpha`)は変更していない。
+
+**識別色の一覧**(寒色系中心、積算集約・積算明細は近い色相だが判別できる差):
+
+| kind | 色系統 | 通常(accent) | 最前面/ON(accent-strong) | 背景(bg) | 文字(fg) |
+|---|---|---|---|---|---|
+| guide(操作ガイド) | neutral gray | `#9ca3af` | `#4b5563` | `#f3f4f6` | `#374151` |
+| panelInfo(盤情報) | blue | `#3b82f6` | `#1d4ed8` | `#eff6ff` | `#1e3a8a` |
+| aggregation(積算集約) | purple | `#a855f7` | `#7e22ce` | `#faf5ff` | `#6b21a8` |
+| detail(積算明細) | indigo/blue-violet | `#6366f1` | `#4338ca` | `#eef2ff` | `#3730a3` |
+| master(部品台帳) | navy/slate | `#64748b` | `#1e293b` | `#f1f5f9` | `#334155` |
+
+**値の定義箇所は1つ(`FloatingPanel.css`の`:root`)に集約**: `--panel-theme-
+<kind>-accent`/`-accent-strong`/`-bg`/`-fg`の4つ×5kind=20個のcustom
+propertyとして`FloatingPanel.css`冒頭の`:root`ブロックへ集約した。他の
+ファイルはこの値をハードコードしない。
+
+- `.floating-panel--<kind>`(`FloatingPanel.css`)が、kindごとに上記`:root`の
+  値を汎用名(`--panel-accent`/`--panel-accent-strong`/`--panel-accent-bg`/
+  `--panel-accent-fg`)へ割り当てる。`.floating-panel`自身の外枠
+  (`border-color: var(--panel-accent, ...)`)と、children(各panelの
+  heading、`PanelInfo.css`等)がCSS変数の継承経由でこの汎用名を参照する
+  (各component自身のheading CSSはハードコード値を持たず、`var(--panel-accent-
+  fg)`等のみを指定する)。
+- `PanelVisibilityToggles.css`のトグルボタンは、別DOMツリー(継承が届かない)
+  のため、`:root`の`--panel-theme-<kind>-*`を直接参照する
+  (`.panel-visibility-toggles__button--panelInfo`等、5kind分の新規class。
+  以前3panelが共有していたviolet系の基底配色は廃止した)。
+
+**外枠**: `.floating-panel`共通ルールの`border`を`1px`→`2px`へ太くし、色を
+kind非依存の固定値から`var(--panel-accent, ...)`(フォールバックは旧来の
+`rgba(51, 65, 85, 0.45)`)へ変更した。border-radius(10px)・glassmorphism
+(backdrop-filter・inset box-shadowのハイライト)は変更していない。
+
+**タイトルバー**: 各component自身の`__heading`(`panel-info__heading`等)の
+`color`/`background`/`border-left`/`box-shadow(inset)`を、すべて
+`--panel-accent-fg`/`--panel-accent-bg`/`--panel-accent`の3つの変数のみで
+構成し直した(以前は左端3pxアクセントバーと下端の薄い下線とで微妙に異なる
+色を使っていたが、同じ`--panel-accent`へ統一することで「一体のタイトルバー」
+として見えるようにした)。drag handleとしての`<h2>`のDOM構造・pointerdown
+判定(`e.target.closest('h2')`)は変更していない。
+
+**最前面panelの強調(`floating-panel--front`)**:
+
+- 「現在最前面のkind」を、既存の`zCounter`(z-index採番用のモジュールスコープ
+  変数)と同じ考え方のモジュールスコープ変数`frontKind`で管理する
+  (`FloatingPanel.tsx`)。`bringToFront()`(既存、pointerdownキャプチャ・
+  表示ON検知の両方から呼ばれる)が呼ばれるたびに`frontKind`をそのpanel自身の
+  `kind`へ更新し、購読者(他の`FloatingPanel`インスタンス)へ通知する。
+- 各インスタンスはReact 19標準の`useSyncExternalStore`でこの値を購読し、
+  自分の`kind`と一致する場合のみ`floating-panel--front` classを付与する。
+  **`App.tsx`側のstate・`FloatingPanel`の`Props`型はいずれも変更していない**
+  (5箇所の`<FloatingPanel kind="...">`呼び出しも無変更、`FloatingPanel.tsx`
+  内で完結する設計、Phase 1調査の案A)。
+- CSS側(`floating-panel--front`)は、通常状態より外枠を`--panel-accent-
+  strong`(濃色)へ、box-shadowをわずかに強める(`0 10px 32px`、通常は
+  `0 8px 28px`)。発光・点滅・派手なoutlineは使わない。
+- **`floating-panel--interacting`(drag/resize中)との優先順位**:
+  `.floating-panel--front`より後に`.floating-panel--interacting`を定義して
+  いるため(単一classセレクタ同士は詳細度が同じで後勝ち)、front+interacting
+  が同時に付いた場合は常にinteracting側(achromaticな`rgba(30, 41, 59,
+  0.65)`+より強いshadow)が優先される。「interacting > front > normal」の
+  順で見た目が強くなる(drag/resize開始は必ず`bringToFront()`も伴うため、
+  実際にはfrontとinteractingは同時に付くことが多い)。
+- 表示OFFになったpanelが`frontKind`の指す先のまま残っても、そのkindの
+  `FloatingPanel`インスタンスは`visible=false`の間描画されない
+  (`return null`)ため、どの表示中panelも誤って最前面扱いにはならない
+  (再度そのpanelを表示ONにする、または他panelを操作すれば通常どおり
+  frontKindが更新される)。
+
+**既知の制約(自動テスト)**: jsdomの`getComputedStyle()`はCSS custom
+propertyを含む値(`var(...)`)を解決できない(`docs/coding-conventions.md`
+「テスト」節)。`App.test.tsx`のIssue #34関連テストでは、標準プロパティの
+実値ではなく、custom property自体を`getComputedStyle(el).getPropertyValue(
+'--panel-accent')`で直接読む、またはCSSクラス名の付与状況(`floating-panel--
+front`等)で検証している。実際の色の判別性・見た目はPlaywright等の実ブラウザ
+確認で担保する。
 
 ## 2. ProjectHeader
 

@@ -1,3 +1,56 @@
+/* [Issue #34] 5panel(盤情報/積算集約/積算明細/部品台帳/操作ガイド)の識別色を
+   ここへ集約する。値の定義はこの`:root`ブロックのみとし、他のファイル
+   (各panelのheading CSS、PanelVisibilityToggles.css)はハードコード値を持たず、
+   このブロックのcustom propertyをvar()で参照する(「トグルボタン↔タイトルバー↔
+   外枠を同一themeで揃える」指示を、値の重複を増やさずに実現する)。
+   `.floating-panel--<kind>`(下記)がkindごとに`--panel-theme-<kind>-*`を
+   汎用名(`--panel-accent`等)へ割り当て、`.floating-panel`自身(外枠)と
+   children(各panelのheading)はCSS変数の継承経由でこの汎用名を参照する。
+   `PanelVisibilityToggles.css`(別DOMツリーのため継承が届かない)のみ、
+   `--panel-theme-<kind>-*`を直接参照する。
+   既存の`--accent-section`(`src/index.css`、DrawingNavigatorとも共有)は
+   floating panel専用ではないため、今回のtheme化には使わない。
+   色は寒色系中心で選定し、積算集約(purple)と積算明細(indigo/blue-violet)は
+   意図的に近い色相にしつつ、実ブラウザで判別できる程度の差を付けている。
+   guide/master(部品台帳)は、既存のPanelVisibilityToggles配色(Issue #31/
+   追加修正で先行導入済みのgray系/slate系)をそのまま踏襲した。
+   [注記] jsdomの`getComputedStyle()`はカスタムプロパティを含む値を解決
+   できない既知の制約があるため(`docs/coding-conventions.md`「テスト」節)、
+   自動テストでは色の実値ではなくCSSクラス名の付与状況で検証する
+   (`App.test.tsx`のIssue #34関連テスト参照)。実際の見た目・色の判別性は
+   Playwright等の実ブラウザ確認で担保する。 */
+:root {
+  /* 操作ガイド: neutral gray */
+  --panel-theme-guide-accent: #9ca3af; /* gray-400 */
+  --panel-theme-guide-accent-strong: #4b5563; /* gray-600 */
+  --panel-theme-guide-bg: #f3f4f6; /* gray-100 */
+  --panel-theme-guide-fg: #374151; /* gray-700 */
+
+  /* 盤情報: blue */
+  --panel-theme-panelInfo-accent: #3b82f6; /* blue-500 */
+  --panel-theme-panelInfo-accent-strong: #1d4ed8; /* blue-700 */
+  --panel-theme-panelInfo-bg: #eff6ff; /* blue-50 */
+  --panel-theme-panelInfo-fg: #1e3a8a; /* blue-900 */
+
+  /* 積算集約: purple */
+  --panel-theme-aggregation-accent: #a855f7; /* purple-500 */
+  --panel-theme-aggregation-accent-strong: #7e22ce; /* purple-700 */
+  --panel-theme-aggregation-bg: #faf5ff; /* purple-50 */
+  --panel-theme-aggregation-fg: #6b21a8; /* purple-800 */
+
+  /* 積算明細: indigo/blue-violet (積算集約と近い色相だが判別可能な差を付ける) */
+  --panel-theme-detail-accent: #6366f1; /* indigo-500 */
+  --panel-theme-detail-accent-strong: #4338ca; /* indigo-700 */
+  --panel-theme-detail-bg: #eef2ff; /* indigo-50 */
+  --panel-theme-detail-fg: #3730a3; /* indigo-800 */
+
+  /* 部品台帳: navy/slate */
+  --panel-theme-master-accent: #64748b; /* slate-500 */
+  --panel-theme-master-accent-strong: #1e293b; /* slate-800、front時は濃紺寄り */
+  --panel-theme-master-bg: #f1f5f9; /* slate-100 */
+  --panel-theme-master-fg: #334155; /* slate-700 */
+}
+
 /* Issue #19 Phase 2で新設・Phase 4で拡張・追加修正でドラッグ移動/リサイズに対応:
    盤情報・積算集約・積算明細をViewer上へ重ねるfloating panel。`DrawingViewer`
    内部のOverlay(0.0〜1.0正規化座標のBBox/盤領域等)とは別の、Viewerの外側
@@ -29,18 +82,79 @@
   background: rgba(255, 255, 255, var(--floating-panel-bg-alpha, 0.6));
   backdrop-filter: blur(14px) saturate(160%);
   -webkit-backdrop-filter: blur(14px) saturate(160%);
-  /* 追加UI修正指示4章: 背景図面との境界が曖昧にならないよう、細め(1px)だが
-     明確に認識できる境界線にする。従来の半透明白(rgba(255,255,255,0.55))は
-     明るい背景図面上でほぼ見えなくなってしまうため、glassmorphismと調和する
-     寒色〜中性色系(slate系、青系構造色・状態色とは別トーン)へ変更する。
-     内側にごく薄い白のハイライトリング(inset box-shadow)を重ね、
-     「フロストガラスの縁」らしい見た目を保ちつつ外周の視認性を確保する。 */
-  border: 1px solid rgba(51, 65, 85, 0.45);
+  /* 追加UI修正指示4章: 背景図面との境界が曖昧にならないよう、明確に認識できる
+     境界線にする。従来の半透明白(rgba(255,255,255,0.55))は明るい背景図面上で
+     ほぼ見えなくなってしまうため、glassmorphismと調和する寒色〜中性色系へ
+     変更した。[Issue #34] さらに、境界線の色をkind別の識別色
+     (`--panel-accent`、下記`.floating-panel--<kind>`が定義する)にすることで
+     「トグルボタン↔タイトルバー↔外枠」を同一themeで対応付ける。太さは1px→2px
+     (指示6章「1.5〜2px相当」)にして、色による識別をより確実にした。
+     内側にごく薄い白のハイライトリング(inset box-shadow)は変更せず、
+     「フロストガラスの縁」らしい見た目を保つ。 */
+  border: 2px solid var(--panel-accent, rgba(51, 65, 85, 0.45));
   border-radius: 10px;
   box-shadow:
     0 8px 28px rgba(15, 23, 42, 0.22),
     inset 0 0 0 1px rgba(255, 255, 255, 0.35);
   overflow: hidden;
+}
+
+/* [Issue #34] kindごとに、上記`:root`の識別色を汎用名(`--panel-accent`等)へ
+   割り当てる。この汎用名を、`.floating-panel`自身(外枠、上記)と、
+   children(各panelのheading、`PanelInfo.css`等)がCSS変数の継承経由で
+   参照する。値そのものはここでは持たず、必ず`:root`ブロックを経由するため、
+   色の定義箇所は1箇所のみ(このファイル冒頭)に保たれる。
+   `PanelVisibilityToggles.css`(別DOMツリーのため継承では届かない)は、
+   この汎用名ではなく`:root`の`--panel-theme-<kind>-*`を直接参照する。 */
+.floating-panel--guide {
+  --panel-accent: var(--panel-theme-guide-accent);
+  --panel-accent-strong: var(--panel-theme-guide-accent-strong);
+  --panel-accent-bg: var(--panel-theme-guide-bg);
+  --panel-accent-fg: var(--panel-theme-guide-fg);
+}
+
+.floating-panel--panelInfo {
+  --panel-accent: var(--panel-theme-panelInfo-accent);
+  --panel-accent-strong: var(--panel-theme-panelInfo-accent-strong);
+  --panel-accent-bg: var(--panel-theme-panelInfo-bg);
+  --panel-accent-fg: var(--panel-theme-panelInfo-fg);
+}
+
+.floating-panel--aggregation {
+  --panel-accent: var(--panel-theme-aggregation-accent);
+  --panel-accent-strong: var(--panel-theme-aggregation-accent-strong);
+  --panel-accent-bg: var(--panel-theme-aggregation-bg);
+  --panel-accent-fg: var(--panel-theme-aggregation-fg);
+}
+
+.floating-panel--detail {
+  --panel-accent: var(--panel-theme-detail-accent);
+  --panel-accent-strong: var(--panel-theme-detail-accent-strong);
+  --panel-accent-bg: var(--panel-theme-detail-bg);
+  --panel-accent-fg: var(--panel-theme-detail-fg);
+}
+
+.floating-panel--master {
+  --panel-accent: var(--panel-theme-master-accent);
+  --panel-accent-strong: var(--panel-theme-master-accent-strong);
+  --panel-accent-bg: var(--panel-theme-master-bg);
+  --panel-accent-fg: var(--panel-theme-master-fg);
+}
+
+/* [Issue #34] 最前面panelの強調。通常状態(kind別の`--panel-accent`)より
+   一段だけ強く(`--panel-accent-strong`、shadowもわずかに強める)。
+   発光・点滅・派手なoutlineは使わない。`.floating-panel--interacting`
+   (すぐ下で定義、drag/resize中)がこのルールより後に定義されているため、
+   両方のclassが同時に付いた場合は`.floating-panel--interacting`が勝つ
+   (CSS優先順位: 単一classセレクタ同士は詳細度が同じため、後勝ち)。
+   これにより「interacting > front > normal」の見え方になる
+   (drag/resize開始は必ずbringToFront()も伴うため、実際にはfrontとinteracting
+   は同時に付くことが多いが、その場合は常にinteracting側の見た目が優先される)。 */
+.floating-panel--front {
+  border-color: var(--panel-accent-strong);
+  box-shadow:
+    0 10px 32px rgba(15, 23, 42, 0.26),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.4);
 }
 
 /* backdrop-filter非対応環境向けのfallback (指示: Windows/Chromiumで
@@ -66,7 +180,10 @@
     0 14px 36px rgba(15, 23, 42, 0.32),
     inset 0 0 0 1px rgba(255, 255, 255, 0.5);
   /* 追加UI修正指示4章: active時はfocus/frontmostの目印として境界色をわずかに
-     強める(色相・太さは変えず、濃さのみ上げる)。 */
+     強める(色相・太さは変えず、濃さのみ上げる)。[Issue #34] 上記
+     `.floating-panel--front`より後に定義しているため(単一classセレクタ同士は
+     詳細度が同じため後勝ち)、frontのkind別着色より優先される
+     (「今まさに操作中」であることを最優先で伝える)。 */
   border-color: rgba(30, 41, 59, 0.65);
 }
 
