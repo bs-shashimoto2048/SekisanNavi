@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import './FloatingPanel.css'
 
 export type FloatingPanelKind = 'panelInfo' | 'aggregation' | 'detail' | 'master' | 'guide'
@@ -111,6 +111,34 @@ const STACK_OFFSET = 40
 // UI状態のため、React stateではなくモジュールスコープの変数で十分
 // (`App.tsx`の`editSequenceRef`と同じ考え方)。
 let zCounter = 100
+
+// [Issue #34] 「現在最前面のkind」を5つのFloatingPanelインスタンス間で共有する
+// ための、`zCounter`と同じ考え方のモジュールスコープ状態。`bringToFront()`が
+// 呼ばれるたびに更新され、各インスタンスは`useSyncExternalStore`で購読して
+// 「自分が最前面かどうか」を判定する(Phase 1調査の案A)。`App.tsx`・
+// `Props`型のいずれにも新しいpropを追加しない(呼び出し側は無変更)。
+// 表示OFF(unmount相当の`return null`)になったpanelがこの値の指す先の
+// ままでも、そのkindのインスタンスは描画されないため実害は無い(どの表示中
+// panelも`isFront`がfalseになるだけで、無理に他panelへ委譲し直すような
+// 補正は行わない。再度そのpanelを表示ONにする、または他panelを操作すれば
+// 通常どおり更新される)。
+let frontKind: FloatingPanelKind | null = null
+const frontListeners = new Set<() => void>()
+
+function setFrontKind(kind: FloatingPanelKind) {
+  if (frontKind === kind) return
+  frontKind = kind
+  for (const listener of frontListeners) listener()
+}
+
+function subscribeFront(listener: () => void) {
+  frontListeners.add(listener)
+  return () => frontListeners.delete(listener)
+}
+
+function getFrontSnapshot() {
+  return frontKind
+}
 
 function clampPosition(rect: FloatingPanelRect, container: Size): FloatingPanelRect {
   const maxLeft = Math.max(0, container.width - rect.width)
@@ -284,10 +312,24 @@ function reflowForResize(
  * - 表示トグルをONにした瞬間(`visible`がtrueへ変わったことを検知するuseEffect。
  *   このcomponentインスタンス自体は`visible=false`の間も内部で`return null`
  *   しているだけでunmountはされないため、明示的な検知が必要)
+ *
+ * **[Issue #34] kind別識別色・最前面panelの強調**: 5panel(盤情報/積算集約/
+ * 積算明細/部品台帳/操作ガイド)それぞれの識別色は、`.floating-panel--<kind>`
+ * 単位でCSS custom property(`--panel-accent`等)として`FloatingPanel.css`
+ * 側にのみ集約する(このcomponent自身はkind名によるclass付与のみ行い、
+ * 色の値は一切持たない)。「現在最前面のkind」は上記z-indexカウンタ
+ * (`zCounter`)と同じ考え方のモジュールスコープ変数(`frontKind`)で管理し、
+ * 各インスタンスは`useSyncExternalStore`で購読して`floating-panel--front`
+ * classを付与するかどうかを決める(`App.tsx`側のstate・propsは一切増やさない、
+ * Phase 1調査で提示した案Aを採用)。
  */
 export function FloatingPanel({ visible, kind, visibleKinds, containerRef, rect, onRectChange, children }: Props) {
   const [zIndex, setZIndex] = useState(100)
   const [interacting, setInteracting] = useState(false)
+  // [Issue #34] 自分(kind)が現在の最前面kindと一致するかどうかを購読する
+  // (Phase 1調査の案A、`App.tsx`・`Props`型は無変更)。
+  const currentFrontKind = useSyncExternalStore(subscribeFront, getFrontSnapshot)
+  const isFront = currentFrontKind === kind
   const dragRef = useRef<{
     pointerId: number
     startX: number
@@ -379,6 +421,7 @@ export function FloatingPanel({ visible, kind, visibleKinds, containerRef, rect,
   function bringToFront() {
     zCounter += 1
     setZIndex(zCounter)
+    setFrontKind(kind)
   }
 
   // [追加修正: 表示ONにしたfloating panelを必ず最前面へ]
@@ -493,6 +536,7 @@ export function FloatingPanel({ visible, kind, visibleKinds, containerRef, rect,
       className={
         'floating-panel' +
         ` floating-panel--${kind}` +
+        (isFront ? ' floating-panel--front' : '') +
         (interacting ? ' floating-panel--interacting' : '')
       }
       style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height, zIndex }}

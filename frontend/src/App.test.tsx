@@ -1269,7 +1269,7 @@ describe('App: 積算コードMasterのfloating panel化 (Issue #19 追加修正
     await waitFor(() => expect(row11001.className).toContain('master-picker__row--selected'))
   })
 
-  it('groups the Master toggle visually apart from the 3 info-panel toggles, with a distinct (non-violet) color', async () => {
+  it('groups the Master toggle visually apart from the 3 info-panel toggles, with its own distinct theme class (Issue #34: navy/slate)', async () => {
     await renderApp()
     const toggleGroup = document.querySelector('.panel-visibility-toggles') as HTMLElement
     expect(within(toggleGroup).getByRole('button', { name: '部品台帳' })).toBeInTheDocument()
@@ -1277,29 +1277,44 @@ describe('App: 積算コードMasterのfloating panel化 (Issue #19 追加修正
 
     const infoToggle = screen.getByRole('button', { name: '積算集約' })
     const masterToggle = screen.getByRole('button', { name: '部品台帳' })
-    expect(getComputedStyle(masterToggle).backgroundColor).not.toBe(getComputedStyle(infoToggle).backgroundColor)
+    // [Issue #34] 色の実値はjsdomの`getComputedStyle()`では検証できない
+    // (var()を解決できない既知の制約、`docs/coding-conventions.md`「テスト」節
+    // 参照)ため、専用のtheme class(`--tool`)を持ち、情報系panelの
+    // theme class(`--aggregation`)とは共有していないことで検証する。
+    // 実際の色の判別性はPlaywright等の実ブラウザ確認で担保する。
+    expect(masterToggle.className).toContain('panel-visibility-toggles__button--tool')
+    expect(infoToggle.className).toContain('panel-visibility-toggles__button--aggregation')
+    expect(masterToggle.className).not.toContain('panel-visibility-toggles__button--aggregation')
   })
 
-  it('gives the master floating panel a distinct-but-subtle heading accent, while sharing the same shell format as the 3 info panels (追加修正: フォーマット統一・控えめなaccent)', async () => {
+  it('gives the master floating panel its own kind別 outer border/heading theme, while sharing the same shell shape as the info panels (Issue #34)', async () => {
     await renderApp()
     const masterFloat = document.querySelector('.floating-panel--master') as HTMLElement
     const infoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
 
-    // floating panel shell自体(枠線・角丸・glassmorphism)は他panelと共通のもの
-    // を使う(専用の太いaccentバーは追加修正で廃止した)。
-    expect(getComputedStyle(masterFloat).borderTopColor).toBe(getComputedStyle(infoFloat).borderTopColor)
+    // floating panel shell自体の形状(角丸・glassmorphism)は他panelと共通の
+    // ものを使う(var()を含まない固定値のため、jsdomでも実際に検証できる)。
     expect(getComputedStyle(masterFloat).borderRadius).toBe(getComputedStyle(infoFloat).borderRadius)
 
-    // 差別化は見出し(h2)のaccent色のみに限定する(構造は同じ、色だけ違う)。
+    // [Issue #34] 外枠色はkindごとに異なるCSS変数(`--panel-accent`)を参照する。
+    // 標準プロパティ(borderTopColor等)経由のvar()はjsdomで解決できないため、
+    // custom property自体を`getPropertyValue()`で直接読み、参照先が
+    // kindごとに異なることを検証する(標準プロパティへの代入と異なり、
+    // custom property自体の値はjsdomでも取得できる)。
+    const masterAccent = getComputedStyle(masterFloat).getPropertyValue('--panel-accent')
+    const infoAccent = getComputedStyle(infoFloat).getPropertyValue('--panel-accent')
+    expect(masterAccent).not.toBe('')
+    expect(masterAccent).not.toBe(infoAccent)
+
+    // 見出し(h2)も同じ`--panel-accent`系統(継承経由)を参照しており、
+    // heading側でも同様にkindごとに異なる値を参照していることを確認する。
     const masterHeading = within(masterFloat).getByRole('heading', { name: /部品台帳/ })
     const infoHeading = within(infoFloat).getByRole('heading', { name: /盤情報/ })
-    expect(getComputedStyle(masterHeading).borderLeftColor).not.toBe(getComputedStyle(infoHeading).borderLeftColor)
-    // ただし見出しの構造(padding/font-size等)は統一されている。
-    // 注記: `border-left-width`はpanel-info側が`border-left: 3px solid
-    // var(--accent-section)`のようにvar()を含むshorthandで指定しているため、
-    // jsdom(cssstyle)がこの値を確実に解決できず(このリポジトリの既存の
-    // 注記と同じ制約)、比較には使わない。実際の描画(3px相当)は実ブラウザで
-    // 確認する。
+    const masterHeadingAccent = getComputedStyle(masterHeading).getPropertyValue('--panel-accent')
+    const infoHeadingAccent = getComputedStyle(infoHeading).getPropertyValue('--panel-accent')
+    expect(masterHeadingAccent).not.toBe('')
+    expect(masterHeadingAccent).not.toBe(infoHeadingAccent)
+    // 見出しの構造(padding/font-size等)は引き続き統一されている。
     expect(getComputedStyle(masterHeading).padding).toBe(getComputedStyle(infoHeading).padding)
     expect(getComputedStyle(masterHeading).fontSize).toBe(getComputedStyle(infoHeading).fontSize)
   })
@@ -1376,26 +1391,29 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
     expect(buttons.slice(1).every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true)
   })
 
-  it('gives the panel-visibility toggles a color distinct from Undo/Redo, and a filled ON vs. muted OFF look (追加UI修正指示2章)', async () => {
+  it('gives the panel-visibility toggles a filled ON vs. muted OFF look, distinct from Undo/Redo (追加UI修正指示2章、Issue #34でkind別theme化)', async () => {
     await renderApp()
     const undoButton = screen.getByRole('button', { name: /元に戻す/ })
     const toggle = screen.getByRole('button', { name: '積算集約' })
 
-    // ON(表示中): 塗りつぶし系。Undo/Redo等の通常操作ボタン(白背景)とは
-    // 明確に異なる背景色にする。
-    expect(toggle).toHaveAttribute('aria-pressed', 'true')
-    const onStyle = getComputedStyle(toggle)
-    const undoStyle = getComputedStyle(undoButton)
-    expect(onStyle.backgroundColor).not.toBe(undoStyle.backgroundColor)
-    expect(onStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)')
-    expect(onStyle.color).toBe('rgb(255, 255, 255)')
+    // Undo/Redo等の通常操作ボタンにはON/OFFという概念自体が無い
+    // (`aria-pressed`を持たない)ため、構造的に区別されている。
+    expect(undoButton).not.toHaveAttribute('aria-pressed')
 
-    // OFF(非表示中): 控えめな背景+境界線だが、Undo/Redoの白背景とは異なる色相を保つ。
+    // ON(表示中): 塗りつぶし系、白文字(`color: #fff`はリテラル指定のため
+    // jsdomでも実際に解決できる)。
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    expect(getComputedStyle(toggle).color).toBe('rgb(255, 255, 255)')
+
+    // OFF(非表示中): 白文字ではなくkind別の控えめな文字色に戻る。
+    // [Issue #34] 背景/文字色はkind別のCSS変数(`--panel-theme-aggregation-*`)
+    // 経由のため、標準プロパティの実値はjsdomでは解決できない
+    // (`docs/coding-conventions.md`「テスト」節)。ここでは「ONのリテラル白文字
+    // ではなくなったこと」で検証する(実際の色の判別性はPlaywright等の実
+    // ブラウザ確認で担保する)。
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-pressed', 'false')
-    const offStyle = getComputedStyle(toggle)
-    expect(offStyle.backgroundColor).not.toBe(undoStyle.backgroundColor)
-    expect(offStyle.backgroundColor).not.toBe(onStyle.backgroundColor)
+    expect(getComputedStyle(toggle).color).not.toBe('rgb(255, 255, 255)')
   })
 
   it('shows both floating panels from the start (指示: 初期状態は既存利用性を損なわない設定=両方ON)', async () => {
@@ -2030,8 +2048,213 @@ describe('App: floating panelの枠線強化 (Issue #19 追加UI修正指示4章
     for (const color of borderColors) {
       expect(color).not.toBe('rgba(255, 255, 255, 0.55)')
     }
-    // 3パネルとも同じ枠線ルールを使う(指示: 盤情報・積算集約・積算明細で同じ枠線ルール)。
-    expect(new Set(borderColors).size).toBe(1)
+  })
+
+  // [Issue #34] 以前は「3panelとも同じ枠線ルールを使う」ことを検証していたが、
+  // 5panel個別色化によりこの前提は無くなった(むしろkindごとに異なる枠線色を
+  // 持つことが新しい仕様)。`--panel-accent`(custom property自体)を
+  // `getPropertyValue()`で直接読み、kindごとに異なる値を参照していることを
+  // 検証する(標準プロパティ経由のvar()はjsdomで解決できないため使わない。
+  // `docs/coding-conventions.md`「テスト」節参照)。
+  it('gives each of the 5 floating panels its own kind別 outer border theme (Issue #34, replaces the old "same border for all 3" assumption)', async () => {
+    await renderApp()
+    fireEvent.click(screen.getByRole('button', { name: '操作ガイド' }))
+    const kinds = ['guide', 'panelInfo', 'aggregation', 'detail', 'master']
+    const accents = kinds.map(
+      (kind) => getComputedStyle(document.querySelector(`.floating-panel--${kind}`) as HTMLElement).getPropertyValue('--panel-accent'),
+    )
+    for (const accent of accents) {
+      expect(accent).not.toBe('')
+    }
+    expect(new Set(accents).size).toBe(kinds.length)
+  })
+})
+
+describe('App: FloatingPanelのkind別theme・最前面強調 (Issue #34)', () => {
+  async function renderApp() {
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
+  }
+
+  it('gives each of the 5 panel-visibility toggles exactly one distinct kind別theme class', async () => {
+    await renderApp()
+    fireEvent.click(screen.getByRole('button', { name: '操作ガイド' }))
+
+    const kindClasses = [
+      ['操作ガイド', 'panel-visibility-toggles__button--guide'],
+      ['盤情報', 'panel-visibility-toggles__button--panelInfo'],
+      ['積算集約', 'panel-visibility-toggles__button--aggregation'],
+      ['積算明細', 'panel-visibility-toggles__button--detail'],
+      ['部品台帳', 'panel-visibility-toggles__button--tool'],
+    ] as const
+
+    const allModifierClasses = kindClasses.map(([, cls]) => cls)
+    for (const [label, expectedClass] of kindClasses) {
+      const button = screen.getByRole('button', { name: label })
+      expect(button.className).toContain(expectedClass)
+      // 自分専用のtheme classのみを持ち、他kindのtheme classは持たない。
+      for (const otherClass of allModifierClasses) {
+        if (otherClass === expectedClass) continue
+        expect(button.className).not.toContain(otherClass)
+      }
+    }
+  })
+
+  it('gives each of the 5 floating panel headings a distinct kind別 --panel-accent-bg (headingがkind別themeを参照/反映している)', async () => {
+    await renderApp()
+    fireEvent.click(screen.getByRole('button', { name: '操作ガイド' }))
+
+    const headingByKind: Record<string, RegExp> = {
+      guide: /操作ガイド/,
+      panelInfo: /盤情報/,
+      aggregation: /積算集約/,
+      detail: /積算明細/,
+      master: /部品台帳/,
+    }
+    const bgValues = Object.entries(headingByKind).map(([kind, name]) => {
+      const panel = document.querySelector(`.floating-panel--${kind}`) as HTMLElement
+      const heading = within(panel).getByRole('heading', { name })
+      return getComputedStyle(heading).getPropertyValue('--panel-accent-bg')
+    })
+    for (const bg of bgValues) {
+      expect(bg).not.toBe('')
+    }
+    expect(new Set(bgValues).size).toBe(Object.keys(headingByKind).length)
+  })
+
+  it('does not change the shared background-transparency behavior (共通透過度のCSS変数は今回のtheme変数と独立している)', async () => {
+    await renderApp()
+    const panelInfoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    // 既存のfloating panel共通透過度(PR #22)は`--floating-panel-bg-alpha`のみが
+    // 対象で、今回追加した`--panel-accent*`とは独立した別の変数である
+    // (App.tsxのSystemSettings連携・localStorage永続化は無変更)。
+    const alpha = getComputedStyle(document.querySelector('.app-layout') as HTMLElement).getPropertyValue(
+      '--floating-panel-bg-alpha',
+    )
+    expect(alpha).not.toBe('')
+    // 新規theme変数(`--panel-accent`)は透過度用変数とは別名で存在する。
+    expect(getComputedStyle(panelInfoFloat).getPropertyValue('--panel-accent')).not.toBe('')
+  })
+
+  it('marks only one panel as front (floating-panel--front) at a time, and moves it when another panel is clicked', async () => {
+    await renderApp()
+    const panelInfoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    const aggregationFloat = document.querySelector('.floating-panel--aggregation') as HTMLElement
+    const detailFloat = document.querySelector('.floating-panel--detail') as HTMLElement
+    const masterFloat = document.querySelector('.floating-panel--master') as HTMLElement
+    const allFloats = [panelInfoFloat, aggregationFloat, detailFloat, masterFloat]
+
+    function frontCount() {
+      return allFloats.filter((el) => el.className.includes('floating-panel--front')).length
+    }
+
+    // 初期mount直後も、既定表示中panelのうちいずれか1つが最前面になっている
+    // (`visible`がtrueへ変わった瞬間に毎回bringToFront()が呼ばれるため)。
+    expect(frontCount()).toBe(1)
+
+    fireEvent.pointerDown(within(panelInfoFloat).getByRole('heading', { name: /盤情報/ }), {
+      pointerId: 1,
+      clientX: 10,
+      clientY: 10,
+      button: 0,
+    })
+    fireEvent.pointerUp(within(panelInfoFloat).getByRole('heading', { name: /盤情報/ }), {
+      pointerId: 1,
+      clientX: 10,
+      clientY: 10,
+    })
+    expect(panelInfoFloat.className).toContain('floating-panel--front')
+    expect(frontCount()).toBe(1)
+
+    fireEvent.pointerDown(within(aggregationFloat).getByRole('heading', { name: '積算集約' }), {
+      pointerId: 2,
+      clientX: 10,
+      clientY: 10,
+      button: 0,
+    })
+    fireEvent.pointerUp(within(aggregationFloat).getByRole('heading', { name: '積算集約' }), {
+      pointerId: 2,
+      clientX: 10,
+      clientY: 10,
+    })
+    // 前面が積算集約へ移り、盤情報は前面ではなくなる。
+    expect(aggregationFloat.className).toContain('floating-panel--front')
+    expect(panelInfoFloat.className).not.toContain('floating-panel--front')
+    expect(frontCount()).toBe(1)
+  })
+
+  it('re-fronts a panel when its visibility toggle is switched OFF then ON again', async () => {
+    await renderApp()
+    const detailFloat = document.querySelector('.floating-panel--detail') as HTMLElement
+
+    // 積算明細を前面化しておく。
+    fireEvent.pointerDown(within(detailFloat).getByRole('heading', { name: '積算明細' }), {
+      pointerId: 1,
+      clientX: 10,
+      clientY: 10,
+      button: 0,
+    })
+    fireEvent.pointerUp(within(detailFloat).getByRole('heading', { name: '積算明細' }), {
+      pointerId: 1,
+      clientX: 10,
+      clientY: 10,
+    })
+    expect(detailFloat.className).toContain('floating-panel--front')
+
+    // 盤情報をOFF→ONし直すと、表示ONの瞬間に前面へ来る
+    // (表示OFFになったpanelがfront kindのまま残っても、非表示中は
+    // どのみち描画されないため不自然な状態にはならない)。
+    fireEvent.click(screen.getByRole('button', { name: '盤情報' }))
+    expect(document.querySelector('.floating-panel--panelInfo')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '盤情報' }))
+    const panelInfoFloatAfter = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    expect(panelInfoFloatAfter.className).toContain('floating-panel--front')
+    expect(detailFloat.className).not.toContain('floating-panel--front')
+  })
+
+  it('fronts a panel when a resize starts on its handle (not only on drag)', async () => {
+    await renderApp()
+    const panelInfoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    const detailFloat = document.querySelector('.floating-panel--detail') as HTMLElement
+    const detailHandle = detailFloat.querySelector('.floating-panel__resize-handle') as HTMLElement
+
+    // 盤情報を先に前面化しておく。
+    fireEvent.pointerDown(within(panelInfoFloat).getByRole('heading', { name: /盤情報/ }), {
+      pointerId: 1,
+      clientX: 10,
+      clientY: 10,
+      button: 0,
+    })
+    fireEvent.pointerUp(within(panelInfoFloat).getByRole('heading', { name: /盤情報/ }), {
+      pointerId: 1,
+      clientX: 10,
+      clientY: 10,
+    })
+    expect(panelInfoFloat.className).toContain('floating-panel--front')
+
+    // 積算明細のリサイズハンドルをpointerdownすると、そちらへ前面が移る。
+    fireEvent.pointerDown(detailHandle, { pointerId: 2, clientX: 500, clientY: 500, button: 0 })
+    expect(detailFloat.className).toContain('floating-panel--front')
+    expect(detailFloat.className).toContain('floating-panel--interacting')
+    expect(panelInfoFloat.className).not.toContain('floating-panel--front')
+    fireEvent.pointerUp(detailHandle, { pointerId: 2, clientX: 500, clientY: 500 })
+  })
+
+  it('allows floating-panel--front and floating-panel--interacting to coexist while dragging, without error', async () => {
+    await renderApp()
+    const panelInfoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    const heading = within(panelInfoFloat).getByRole('heading', { name: /盤情報/ })
+
+    fireEvent.pointerDown(heading, { pointerId: 1, clientX: 50, clientY: 50, button: 0 })
+    // dragを開始した時点で、bringToFront()(front付与)とinteracting(drag中)の
+    // 両方が同時に立つ(front+interactingが同時に付いても壊れないことの確認、
+    // 実際の見え方の優先順位はCSS側(FloatingPanel.css)で解決する)。
+    expect(panelInfoFloat.className).toContain('floating-panel--front')
+    expect(panelInfoFloat.className).toContain('floating-panel--interacting')
+    fireEvent.pointerUp(heading, { pointerId: 1, clientX: 50, clientY: 50 })
+    expect(panelInfoFloat.className).not.toContain('floating-panel--interacting')
+    // drag終了後もfrontはそのまま維持される。
+    expect(panelInfoFloat.className).toContain('floating-panel--front')
   })
 })
 

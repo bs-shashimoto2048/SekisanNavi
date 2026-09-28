@@ -36,6 +36,54 @@ const LABEL_FONT_FAMILY =
 // 水平線の左右余白 (指示書12章: 4〜8px程度の候補から中間値を採用)。
 const HORIZONTAL_LINE_PADDING_PX = 6
 
+// [Issue #34 追加修正] 引出線の太さ・矢印head・(不可視の)ヒットエリア幅を、
+// Zoom倍率・図面の原寸(nativeSize)に関わらず画面上でほぼ一定のpxに見せるための
+// 定数群。
+//
+// **問題の原因**: `.leader-line-overlay`のSVGは`viewBox="0 0 1 1"`
+// (正規化座標)を使っており、この座標系は`.drawing-canvas__content`
+// (`DrawingCanvas.tsx`が`style={{ width: zoom * nativeSize.width, ... }}`で
+// 実pxサイズを直接変更している。CSSの`transform: scale()`ではなく、
+// コンテンツ自体のCSS px寸法をzoomに比例して変える実装)の実表示px幅
+// いっぱいに引き伸ばされる (`preserveAspectRatio="none"`)。そのため、
+// 以前のように`strokeWidth`/`markerWidth`を**固定の正規化値**
+// (例: `0.0018`)で指定すると、実際の画面上px幅は
+// `正規化値 × コンテナのCSS px幅(= zoom × nativeSize.width)`となり、
+// zoomにほぼ比例して太く/大きくなってしまう(実ブラウザ実測: 太さ0.0018は
+// Fit(約50%)で約1.9px・100%で約3.6px・200%で約8.9px・400%で約14pxまで
+// 増大することを確認した)。ラベル文字(`.leader-line-overlay__label`、
+// HTML要素・`font-size: 1rem`)はこのSVG正規化座標系の外にあり、ルート
+// font-sizeにのみ連動するため、zoomの影響を受けず常に画面上一定サイズで
+// 描画される(=修正不要、文字が相対的に小さく見えるのは線・矢印側が
+// 肥大化しているため)。
+//
+// **修正方針**: 水平線の長さ計算(`computeLabelWidthFraction`)が既に使っている
+// 「目標px ÷ コンテナの現在の実表示px幅(`containerWidthPx`)」という変換
+// パターンをそのまま踏襲する。`containerWidthPx`はzoom変更のたびに
+// ResizeObserverで再計測されるため(下記`forceRerenderTick`)、その値を使って
+// 正規化値を都度再計算すれば、`正規化値 × containerWidthPx = 目標px`
+// (zoom非依存の定数)が常に成り立つ。
+const LEADER_LINE_STROKE_TARGET_PX = 1.8 // 実ブラウザでのFit(約50%)時点の見た目(約1.9px)を基準値とした
+const LEADER_ARROW_TARGET_PX = 10 // 同様にFit時点のmarker実寸(約10.4px)を基準値とした。線幅とは独立して調整可能に保つ(既存方針どおり)
+const LEADER_HIT_AREA_TARGET_PX = 10 // 不可視ヒットエリア(hover/クリック判定用)。Zoomアウト時も一定の当たり判定幅を保つ
+
+// 極端に小さい`containerWidthPx`(理論上は測定前の0、または将来的なUI変更で
+// 極小panelになった場合)で正規化値が過大化し、線が図面全体を覆うような
+// 破綻を避けるための上限(指示: 「必要ならmin/maxクランプを入れる」)。
+// 実際の運用ではzoomは0.1〜6倍・原寸は数百px以上あるため、通常この上限に
+// 達することはない(あくまで異常系向けの安全弁)。
+const MAX_NORMALIZED_FRACTION = 0.05
+
+/** 画面上で常に`targetPx`前後に見えるよう、目標pxをその時点のコンテナ実表示px幅
+ * (`containerWidthPx`)で正規化座標(0〜1)へ変換する。`computeLabelWidthFraction`
+ * と同じ「px ÷ 現在のコンテナ幅」パターン。`containerWidthPx`が0以下
+ * (`overlayRef`未マウントの初回レンダー等)の場合は、旧来の固定正規化値
+ * (`fallbackFraction`)へフォールバックする。 */
+function computeScreenSpaceFraction(targetPx: number, containerWidthPx: number, fallbackFraction: number): number {
+  if (containerWidthPx <= 0) return fallbackFraction
+  return Math.min(MAX_NORMALIZED_FRACTION, targetPx / containerWidthPx)
+}
+
 // テキスト幅計測用のcanvas 2d contextを遅延生成してキャッシュする
 // (`document.createElement('canvas')`のコストを毎レンダー払わないため)。
 // jsdom環境(単体テスト)は`canvas`パッケージが無い場合`getContext('2d')`が
@@ -269,6 +317,19 @@ function pathD(geometry: LeaderGeometry): string {
  *
  * 見た目の線幅(細)とは別に、hover/dragの対象を広く取るためSVG側で透明な
  * 太いヒットエリアを重ねている (指示書15章/18章。斜線・水平線の全体に沿わせる)。
+ *
+ * **[Issue #34 追加修正] 線幅・矢印head・ヒットエリアはscreen-space基準**:
+ * SVG自体は正規化座標(`viewBox="0 0 1 1"`)で、`.drawing-canvas__content`の
+ * 実表示px幅(`= zoom × nativeSize.width`)いっぱいに引き伸ばされるため、
+ * 固定の正規化値を使うとzoomにほぼ比例して太く/大きくなってしまう
+ * (`computeScreenSpaceFraction`のコメント参照)。目標px(`LEADER_LINE_
+ * STROKE_TARGET_PX`等)を都度のコンテナ実表示px幅で正規化する方式へ変更し、
+ * zoom・図面原寸サイズに関わらず画面上でほぼ一定のpxに見えるようにした。
+ * ラベル文字列(`.leader-line-overlay__label`)はこの正規化座標系の外にある
+ * HTML要素で、ルートfont-sizeにのみ連動するため元々zoom非依存(変更不要)。
+ * endpoint(BBox右上/左上切替)ルール・ラベルdrag追従・BBox move/resize追従・
+ * Pan/Fit/Zoom追従のロジックはいずれも変更していない(太さ/大きさの計算式
+ * のみの変更)。
  */
 // masterItemById省略時の既定値。毎レンダー新規Mapを作らないよう、モジュール
 // スコープに固定のインスタンスを1つだけ持つ (propsのデフォルト値としてのみ使う。
@@ -473,6 +534,16 @@ export function LeaderLineOverlay({
   // `computeLabelWidthFraction`側で0以下の場合のフォールバックを持つ。
   const containerWidthPx = overlayRef.current?.getBoundingClientRect().width ?? 0
 
+  // [Issue #34 追加修正] 引出線・矢印・ヒットエリアの太さ/大きさを、画面上で
+  // ほぼ一定pxに見せるための正規化値。`containerWidthPx`はzoom変更のたびに
+  // ResizeObserverで再計測される(上記`forceRerenderTick`)ため、zoomを変える
+  // たびにこれらの値も再計算され、結果として画面上のpxはzoomに関わらず
+  // ほぼ一定に保たれる(旧来の固定正規化値0.0018/0.01/0.014は、
+  // フォールバック値としてそのまま残している)。
+  const strokeWidthFraction = computeScreenSpaceFraction(LEADER_LINE_STROKE_TARGET_PX, containerWidthPx, 0.0018)
+  const arrowFraction = computeScreenSpaceFraction(LEADER_ARROW_TARGET_PX, containerWidthPx, 0.01)
+  const hitAreaFraction = computeScreenSpaceFraction(LEADER_HIT_AREA_TARGET_PX, containerWidthPx, 0.014)
+
   return (
     <div className="leader-line-overlay" ref={overlayRef}>
       <svg className="leader-line-overlay__svg" preserveAspectRatio="none" viewBox="0 0 1 1">
@@ -503,13 +574,17 @@ export function LeaderLineOverlay({
                   viewBox="0 0 10 10"
                   refX={9}
                   refY={5}
-                  // 矢印headの大きさ (追加修正指示1章〜4章)。旧0.018はBBox四隅の
+                  // 矢印headの大きさ (追加修正指示1章〜4章、Issue #34追加修正で
+                  // zoom非依存のscreen-space基準へ変更)。旧0.018はBBox四隅の
                   // リサイズハンドルより大きく図面の文字を隠しやすかったため、
-                  // 約55%の0.010へ縮小 (指示の50〜65%範囲内)。markerUnitsは
-                  // 意図的に"userSpaceOnUse"のままとし、線の太さ(strokeWidth)の
-                  // チューニングから矢印の大きさを独立させ、挙動を予測しやすくする。
-                  markerWidth={0.01}
-                  markerHeight={0.01}
+                  // 約55%の0.010へ縮小した経緯があり(指示の50〜65%範囲内)、
+                  // その見た目(Fit時点で実測約10.4px)を`LEADER_ARROW_TARGET_PX`の
+                  // 基準値としている。markerUnitsは意図的に"userSpaceOnUse"の
+                  // ままとし、線の太さ(strokeWidth)のチューニングから矢印の
+                  // 大きさを独立させ、挙動を予測しやすくする(この方針自体は
+                  // 変更していない)。
+                  markerWidth={arrowFraction}
+                  markerHeight={arrowFraction}
                   markerUnits="userSpaceOnUse"
                   orient="auto"
                 >
@@ -517,12 +592,14 @@ export function LeaderLineOverlay({
                 </marker>
               </defs>
               {/* 透明な太いヒットエリア (指示書15章/18章)。斜線・水平線の全体に沿わせ、
-                  hoverで対応BBoxを表示できるようにする (要件8)。 */}
+                  hoverで対応BBoxを表示できるようにする (要件8)。[Issue #34
+                  追加修正] zoomアウト時も一定の当たり判定幅を保てるよう、
+                  screen-space基準へ変更した。 */}
               <path
                 d={d}
                 fill="none"
                 stroke="transparent"
-                strokeWidth={0.014}
+                strokeWidth={hitAreaFraction}
                 style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
                 onMouseEnter={(e) => handleDetectionHoverEnter(e, detection.id)}
                 onMouseMove={(e) => handleDetectionHoverMove(e, detection.id)}
@@ -530,12 +607,13 @@ export function LeaderLineOverlay({
                 onClick={() => onSelectDetection(detection.id)}
               />
               {/* 見た目の引出線 (アンカー→折れ点→水平線端の1本の連続したpolyline。
-                  追加修正9章: 斜線と水平線の間に隙間を作らない)。 */}
+                  追加修正9章: 斜線と水平線の間に隙間を作らない)。[Issue #34
+                  追加修正] 太さをzoom非依存のscreen-space基準へ変更した。 */}
               <path
                 d={d}
                 fill="none"
                 stroke={colors.leaderColor}
-                strokeWidth={0.0018}
+                strokeWidth={strokeWidthFraction}
                 markerEnd={`url(#${markerId})`}
                 style={{ pointerEvents: 'none' }}
               />

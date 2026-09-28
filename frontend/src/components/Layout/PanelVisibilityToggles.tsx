@@ -38,14 +38,21 @@ interface Props {
  * [追加修正: 積算コードMasterのfloating panel化] 積算コードMasterは
  * 「表示情報」の3panelとは異なり、BBox追加操作へ直接つながる「作業ツール」
  * であるため、区切り線(`.panel-visibility-toggles__divider`)を挟んで
- * 別グループとして配置し、専用のslate系配色
- * (`.panel-visibility-toggles__button--tool`)を与える。
+ * 別グループとして配置する。
  *
  * [Issue #31] Viewer内「操作ガイド」も同様に、業務情報を表示する3panel・
  * 作業ツールの部品台帳のいずれとも異なる役割(操作方法のクイックリファレンス)
- * であるため、一覧の**先頭**に区切り線を挟んで独立配置し、専用のニュートラルな
- * グレー系配色(`.panel-visibility-toggles__button--guide`)を与える。
- * 既定は非表示(`guideVisible=false`)。
+ * であるため、一覧の**先頭**に区切り線を挟んで独立配置する。既定は非表示
+ * (`guideVisible=false`)。
+ *
+ * [Issue #34] 5ボタンはそれぞれ個別のkind別識別色を持つ
+ * (`.panel-visibility-toggles__button--panelInfo`(blue)/`--aggregation`
+ * (purple)/`--detail`(indigo/blue-violet)/`--tool`(部品台帳、navy/slate)/
+ * `--guide`(gray))。以前は盤情報・積算集約・積算明細の3つが同じviolet系を
+ * 共有していたが、対応するFloatingPanelのタイトルバー・外枠と同じ色に
+ * 揃えるため分離した。色の値そのものはこのCSSファイルにはハードコードせず、
+ * `FloatingPanel.css`の`:root`が定義するcustom property
+ * (`--panel-theme-<kind>-*`)を直接参照する(値の定義箇所を1つに保つ)。
  */
 export function PanelVisibilityToggles({
   guideVisible,
@@ -73,7 +80,7 @@ export function PanelVisibilityToggles({
       <span className="panel-visibility-toggles__divider" aria-hidden="true" />
       <button
         type="button"
-        className="panel-visibility-toggles__button"
+        className="panel-visibility-toggles__button panel-visibility-toggles__button--panelInfo"
         aria-pressed={panelInfoVisible}
         title={panelInfoVisible ? '盤情報を隠す' : '盤情報を表示'}
         onClick={onTogglePanelInfo}
@@ -82,7 +89,7 @@ export function PanelVisibilityToggles({
       </button>
       <button
         type="button"
-        className="panel-visibility-toggles__button"
+        className="panel-visibility-toggles__button panel-visibility-toggles__button--aggregation"
         aria-pressed={aggregationVisible}
         title={aggregationVisible ? '積算集約を隠す' : '積算集約を表示'}
         onClick={onToggleAggregation}
@@ -91,7 +98,7 @@ export function PanelVisibilityToggles({
       </button>
       <button
         type="button"
-        className="panel-visibility-toggles__button"
+        className="panel-visibility-toggles__button panel-visibility-toggles__button--detail"
         aria-pressed={detailVisible}
         title={detailVisible ? '積算明細を隠す' : '積算明細を表示'}
         onClick={onToggleDetail}
