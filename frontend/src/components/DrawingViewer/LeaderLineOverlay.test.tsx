@@ -1521,4 +1521,180 @@ describe('LeaderLineOverlay (Phase 1.11 UI改修指示5章〜16章)', () => {
       expect(getComputedStyle(screen.getByRole('tooltip')).pointerEvents).toBe('none')
     })
   })
+
+  describe('引出線太さ・矢印head・ヒットエリアのscreen-space補正 (Issue #34 追加修正)', () => {
+    // LeaderLineOverlay.tsx側の定数と同じ値(テストの期待値を直接計算するため
+    // 意図的にミラーしている。実装側の定数名: `LEADER_LINE_STROKE_TARGET_PX`/
+    // `MAX_NORMALIZED_FRACTION`)。
+    const STROKE_TARGET_PX = 1.8
+    const MAX_FRACTION = 0.05
+
+    // MockResizeObserver.trigger()によるstate更新はReactの通常のイベント
+    // ハンドラ経由ではないため、「水平線長の自動計算」describe blockの既存
+    // パターンと同じく`vi.waitFor`で実際に再レンダーが反映されるのを
+    // 待ってから読み取る(同期的に直後を読むと更新前の値のままになる)。
+    // 「前の値と異なること」ではなく「その幅で数学的に期待される値になった
+    // こと」を待つ(widthの選び方によっては旧フォールバック値と新しい計算値が
+    // 偶然一致しうるため、「差分があること」による判定は使わない)。
+    async function triggerContainerResize(width: number, height: number, container: HTMLElement) {
+      setOverlayRect(width, height)
+      const el = document.querySelector('.leader-line-overlay') as HTMLElement
+      getLatestMockResizeObserver().trigger(el, { width, height })
+      const expectedStroke = Math.min(MAX_FRACTION, STROKE_TARGET_PX / width)
+      await vi.waitFor(() => {
+        expect(getVisibleStrokeWidth(container)).toBeCloseTo(expectedStroke, 6)
+      })
+    }
+
+    // 各`<g>`(1検出あたり)は、`<defs><marker><path/></marker></defs>`(矢印head本体、
+    // marker-end属性を持たない)+ヒットエリア(marker-end無し)+見た目の引出線
+    // (marker-end有り)という3つの`<path>`を持つ。`svg path`(全階層)だと
+    // marker内部の矢印head用pathまで拾ってしまう(marker-end属性を持たない点が
+    // ヒットエリアと同じため誤検出する)ため、`<g>`の直接の子である2つの
+    // `<path>`(ヒットエリア・見た目の引出線)のみに絞り込む`svg g > path`を使う。
+    function getHitAreaStrokeWidth(container: HTMLElement): number {
+      const paths = container.querySelectorAll('svg g > path')
+      const hitArea = Array.from(paths).find((p) => !p.getAttribute('marker-end'))
+      return Number(hitArea!.getAttribute('stroke-width'))
+    }
+
+    function getVisibleStrokeWidth(container: HTMLElement): number {
+      const paths = container.querySelectorAll('svg g > path')
+      const visible = Array.from(paths).find((p) => p.getAttribute('marker-end'))
+      return Number(visible!.getAttribute('stroke-width'))
+    }
+
+    function getMarkerSize(container: HTMLElement): number {
+      const marker = container.querySelector('svg marker')!
+      return Number(marker.getAttribute('markerWidth'))
+    }
+
+    it('halves the normalized stroke/marker/hit-area fraction when the container width doubles (=zoom 2x相当)、screen-space pxは一定に保たれる', async () => {
+      const detection = makeDetection()
+      const { container } = render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+
+      // [注記] 幅の選択について: 1000pxは`LEADER_LINE_STROKE_TARGET_PX(1.8)/1000
+      // = 0.0018`のように、偶然にも旧来の固定フォールバック値と一致してしまう
+      // 「磁力点」があるため、意図的に避けている(1200/2400のように、
+      // stroke/marker/hitAreaいずれの新しい計算値も旧フォールバック値
+      // (0.0018/0.01/0.014)と一致しない幅を選ぶ)。
+      await triggerContainerResize(1200, 1200, container)
+      const strokeAt1200 = getVisibleStrokeWidth(container)
+      const markerAt1200 = getMarkerSize(container)
+      const hitAreaAt1200 = getHitAreaStrokeWidth(container)
+
+      await triggerContainerResize(2400, 2400, container) // zoomを2倍にした状況を模す
+      const strokeAt2400 = getVisibleStrokeWidth(container)
+      const markerAt2400 = getMarkerSize(container)
+      const hitAreaAt2400 = getHitAreaStrokeWidth(container)
+
+      // 正規化値(fraction)はコンテナ幅に反比例して半分になる。
+      expect(strokeAt2400).toBeCloseTo(strokeAt1200 / 2, 6)
+      expect(markerAt2400).toBeCloseTo(markerAt1200 / 2, 6)
+      expect(hitAreaAt2400).toBeCloseTo(hitAreaAt1200 / 2, 6)
+
+      // fraction × containerWidthPx (= 画面上の実際のpx) は、コンテナ幅が変わっても一定
+      // (zoom非依存であることの直接的な検証)。
+      expect(strokeAt1200 * 1200).toBeCloseTo(strokeAt2400 * 2400, 6)
+      expect(markerAt1200 * 1200).toBeCloseTo(markerAt2400 * 2400, 6)
+      expect(hitAreaAt1200 * 1200).toBeCloseTo(hitAreaAt2400 * 2400, 6)
+    })
+
+    it('keeps the on-screen px constant across Fit(小さいcontainer)〜400%相当(大きいcontainer)の範囲', async () => {
+      const detection = makeDetection()
+      const { container } = render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+
+      // 実ブラウザでのFit(約50%)〜400%相当の実測コンテナ幅レンジを模す
+      // (Phase 2追加調査でのPlaywright実測値を参考にした代表値)。
+      const widths = [1200, 2400, 5000, 7700]
+      const screenPxByWidth: { width: number; strokePx: number; markerPx: number }[] = []
+      for (const w of widths) {
+        await triggerContainerResize(w, w, container)
+        screenPxByWidth.push({
+          width: w,
+          strokePx: getVisibleStrokeWidth(container) * w,
+          markerPx: getMarkerSize(container) * w,
+        })
+      }
+      for (const { strokePx, markerPx } of screenPxByWidth) {
+        expect(strokePx).toBeCloseTo(screenPxByWidth[0].strokePx, 4)
+        expect(markerPx).toBeCloseTo(screenPxByWidth[0].markerPx, 4)
+      }
+    })
+
+    it('falls back to the legacy fixed normalized values before the container size is known (containerWidthPx=0)', () => {
+      const detection = makeDetection()
+      const { container } = render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      // ResizeObserverをtriggerしない = containerWidthPxが未確定(0)のまま
+      // (`setOverlayRect`/`triggerContainerResize`を呼ばない)。
+      expect(getVisibleStrokeWidth(container)).toBeCloseTo(0.0018, 6)
+      expect(getMarkerSize(container)).toBeCloseTo(0.01, 6)
+      expect(getHitAreaStrokeWidth(container)).toBeCloseTo(0.014, 6)
+    })
+
+    it('clamps the normalized fraction at MAX_NORMALIZED_FRACTION for a pathologically small container width', async () => {
+      const detection = makeDetection()
+      const { container } = render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      await triggerContainerResize(1, 1, container) // 極端に小さいコンテナ幅(理論上の異常系)
+      expect(getVisibleStrokeWidth(container)).toBeLessThanOrEqual(0.05)
+      expect(getMarkerSize(container)).toBeLessThanOrEqual(0.05)
+      expect(getHitAreaStrokeWidth(container)).toBeLessThanOrEqual(0.05)
+    })
+
+    it('does not change the leader line endpoint geometry (anchor/elbow/end points unaffected by the stroke width fix)', async () => {
+      const detection = makeDetection({ bbox_x: 0.2, bbox_y: 0.3, bbox_w: 0.1, bbox_h: 0.1 })
+      const { container } = render(
+        <LeaderLineOverlay
+          detections={[detection]}
+          selectedDetectionId={null}
+          hoveredDetectionId={null}
+          onHoverDetection={() => {}}
+          onSelectDetection={() => {}}
+          onMoveLabel={() => {}}
+        />,
+      )
+      const beforePoints = parsePathPoints(getVisiblePathD(container))
+      await triggerContainerResize(2500, 2500, container)
+      const afterPoints = parsePathPoints(getVisiblePathD(container))
+      // endpoint(BBox右上角)の座標自体は、太さ補正の前後で変化しない
+      // (太さ/大きさの計算式のみの変更であることの回帰確認)。
+      expect(afterPoints[afterPoints.length - 1]).toEqual(beforePoints[beforePoints.length - 1])
+    })
+  })
 })

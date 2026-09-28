@@ -806,6 +806,11 @@ z-index(floating panel: 100、トグルバー: 110)を使うが、この契約�
 横方向Resize Handle(既存)と縦方向Resize Handle(Master領域の高さ変更)を
 同じコンポーネントで実現している。
 
+**[2026-09 Issue #34 追加修正]** 引出線の太さ・矢印head・ヒットエリアを
+Zoom非依存のscreen-space基準へ補正した。この章のSVG正規化座標の設計自体は
+変更していない(太さ/大きさの計算式のみの変更)。詳細は30章、
+`docs/ui-spec.md`の「引出線 (Leader Line)」節参照。
+
 ## 16. decision_events — 判断・修正データの最小event記録 (Issue #4 Phase A-1/A-2)
 
 将来の見積り自動化に向けて、「通常の積算作業を行うだけで判断データが自然に
@@ -1523,3 +1528,58 @@ floating panel自体の見た目もglassmorphism(半透明+ぼかし)へ変更�
   1024px/1600px)で5panel同時表示時の色の判別性・front強調・drag中の
   interacting優先・透過度スライダー独立性・console/pageエラー無しを
   確認済み。
+
+## 30. Viewer拡大時の積算シンボル(引出線)表示補正 (Issue #34 追加修正)
+
+Viewerを大きく拡大した際、引出線が極端に太く・矢印headが過大に見える一方、
+ラベル文字は相対的に小さく見える縮尺バランス崩れを修正した。詳細な設計判断・
+数値根拠は`docs/ui-spec.md`「引出線 (Leader Line)」節の同項目参照。実装上の
+ポイントのみ記す:
+
+- **原因**: `LeaderLineOverlay`のSVGは正規化座標(`viewBox="0 0 1 1"`)を使い、
+  `preserveAspectRatio="none"`で`.drawing-canvas__content`の実表示px幅
+  (`DrawingCanvas.tsx`の`contentWidth = zoom * nativeSize.width`。CSSの
+  `transform: scale()`ではなく実pxとして直接変更する実装)いっぱいに
+  引き伸ばされる。以前は`strokeWidth`/`markerWidth`を固定の正規化値
+  (`0.0018`/`0.01`)で指定していたため、画面上のpx幅が
+  `正規化値 × コンテナ実表示px幅(= zoom × nativeSize.width)`となり、Zoomに
+  ほぼ比例して太く/大きくなっていた(実測: 太さ0.0018はFit(約50%)で約1.9px・
+  100%で約3.6px・200%で約8.9px・400%で約14pxまで増大)。一方、ラベル文字列
+  (`.leader-line-overlay__label`、HTML要素・`font-size: 1rem`)はこの正規化
+  座標系の外にありルートfont-sizeにのみ連動するため、元々Zoom非依存だった
+  (変更不要。「文字が相対的に小さく見える」のは線・矢印側が肥大化していた
+  ためと判明)。
+- **修正方針**: 水平線の長さ計算(`computeLabelWidthFraction`、追加修正
+  第3ラウンド)が既に使っている「目標px ÷ 現在のコンテナ実表示px幅
+  (`containerWidthPx`)」という変換パターンを、線幅・矢印head・(不可視の)
+  ヒットエリアにも適用した(`computeScreenSpaceFraction`、
+  `LeaderLineOverlay.tsx`新規)。`containerWidthPx`はzoom変更のたびに
+  既存のResizeObserverで再計測されるため、追加のイベント購読は不要
+  (既存の再計算トリガーをそのまま再利用する最小差分)。
+  - `LEADER_LINE_STROKE_TARGET_PX`(1.8px)・`LEADER_ARROW_TARGET_PX`(10px)・
+    `LEADER_HIT_AREA_TARGET_PX`(10px)はいずれも実ブラウザでのFit(約50%)
+    時点の見た目を基準値とした。矢印headのサイズは既存方針どおり線幅の
+    チューニングから独立させている(`markerUnits="userSpaceOnUse"`は変更なし)。
+  - `containerWidthPx<=0`(`overlayRef`未マウント等)の場合は、旧来の固定
+    正規化値へフォールバックする(`computeLabelWidthFraction`と同じ既存の
+    防御パターン)。
+  - 理論上の異常系(コンテナ幅が極端に小さい)向けに、正規化値の上限
+    (`MAX_NORMALIZED_FRACTION`=0.05)を設けた。
+- **既存ロジックへの非干渉**: endpoint(BBox右上/左上切替、Issue #25)ルール・
+  ラベルdrag追従・BBox move/resizeのリアルタイム追従(`previewBBox`)・
+  Pan/Fit/Zoom追従のいずれのロジックも変更していない(太さ/大きさの計算式
+  のみの変更)。
+- **テスト**: `LeaderLineOverlay.test.tsx`へ新規describe`'引出線太さ・矢印
+  head・ヒットエリアのscreen-space補正 (Issue #34 追加修正)'`(5件: コンテナ幅
+  が2倍になると正規化値が半分になり画面上pxは一定に保たれる、Fit〜400%相当の
+  レンジで画面上pxが一定、containerWidthPx=0時は旧来のフォールバック値を使う、
+  極端に小さいコンテナ幅でのクランプ、太さ補正の前後でendpoint座標が
+  変化しない)を追加した。`MockResizeObserver.trigger()`によるstate更新は
+  `vi.waitFor`で実際の再レンダー反映を待ってから読み取る、既存の「水平線長の
+  自動計算」describe blockと同じパターンを踏襲している。Frontend全体で
+  682件(32ファイル)が成功することを確認済み。
+- **実ブラウザ確認(Playwright)**: Fit・50%・100%・200%・400%相当のいずれでも
+  stroke=1.80px・marker=10.00px・ヒットエリア=10.00px・ラベルfont-size=15px
+  で一定であることを実測確認した。ラベルdrag追従・console/pageエラー無しも
+  確認済み。実データを含むスクリーンショットはローカル確認のみに使用し、
+  Issue/PR/リポジトリのいずれにも掲載していない。

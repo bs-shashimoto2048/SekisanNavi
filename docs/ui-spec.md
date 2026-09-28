@@ -1049,6 +1049,29 @@ front`等)で検証している。実際の色の判別性・見た目はPlaywri
   hoverすると、対応するBBoxをカテゴリ色の薄い塗りつぶしで一時的に表示する
   (Resize Handle無し)。細い線そのものだけをhover対象にすると操作しにくいため、
   見た目の線幅(2px程度)とは別に透明な太いヒットエリアを重ねている (指示書15章)。
+- **[2026-09 Issue #34 追加修正] 太さ・矢印head・ヒットエリアのscreen-space補正**:
+  `LeaderLineOverlay`のSVGは正規化座標(`viewBox="0 0 1 1"`)を使い、
+  `.drawing-canvas__content`の実表示px幅(`= zoom × nativeSize.width`。
+  `DrawingCanvas.tsx`がCSS `transform: scale()`ではなく実pxとして直接変更する)
+  いっぱいに引き伸ばされる。そのため以前は`strokeWidth`/`markerWidth`を固定の
+  正規化値で指定しており、Zoomにほぼ比例して線が太く・矢印が大きくなりすぎる
+  問題があった(実測: 太さ約0.0018はFit(約50%)で約1.9px・400%相当で約14pxまで
+  増大)。水平線の長さ計算(前掲)が既に使っている「目標px ÷ 現在のコンテナ実表示
+  px幅」という変換を、線幅・矢印head・ヒットエリアにも適用し、目標px
+  (`LEADER_LINE_STROKE_TARGET_PX`=1.8px、`LEADER_ARROW_TARGET_PX`=10px、
+  `LEADER_HIT_AREA_TARGET_PX`=10px、いずれも`LeaderLineOverlay.tsx`)を都度の
+  コンテナ幅で正規化することで、Zoom・図面原寸サイズに関わらず画面上でほぼ
+  一定のpxに見えるようにした(実ブラウザでFit/50%/100%/200%/400%相当を確認し、
+  いずれもstroke=1.80px/marker=10.00px/ヒットエリア=10.00pxで一定であることを
+  確認済み)。ラベル文字列(`.leader-line-overlay__label`)はこの正規化座標系の
+  外にあるHTML要素で、ルートfont-sizeにのみ連動するため元々Zoom非依存
+  (今回変更していない。「文字が相対的に小さく見える」症状は線・矢印側の肥大化が
+  原因だった)。endpoint(BBox右上/左上切替)ルール・ラベルdrag追従・BBox
+  move/resize追従・Pan/Fit/Zoom追従のロジックはいずれも変更していない
+  (太さ/大きさの計算式のみの変更)。理論上の異常系
+  (`containerWidthPx`が極端に小さい/0)向けに、正規化値の上限クランプ
+  (`MAX_NORMALIZED_FRACTION`=0.05)と、`containerWidthPx<=0`時のフォールバック
+  (旧来の固定正規化値)を用意している。
 - **クリックで編集状態へ (指示書8章)**: 引出線・ラベルいずれをクリックしても
   対応するDetectionが選択状態(編集中)になり、BBox本体+Resize Handleが表示される。
   引出線経由で選択したDetectionも、Toolbarの「BBox削除」ボタン・Deleteキーで
