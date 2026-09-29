@@ -1660,7 +1660,7 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
 
   it('renders the 確定履歴 modal outside the aggregation floating panel (追加修正: stacking contextに埋もれないようdocument.bodyへportalする)', async () => {
     await renderApp()
-    fireEvent.click(screen.getByRole('button', { name: '確定履歴を見る' }))
+    fireEvent.click(screen.getByRole('button', { name: '履歴' }))
     const backdrop = await screen.findByText(/確定履歴\(製番/)
     const aggregationFloat = document.querySelector('.floating-panel--aggregation') as HTMLElement
     expect(aggregationFloat.contains(backdrop)).toBe(false)
@@ -1690,13 +1690,27 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     // ドラッグした位置ではなく、右端寄せの新しい位置になっている。
     expect(reshown.style.left).not.toBe(movedLeft)
     expect(reshown.style.top).not.toBe(movedTop)
-    // 幅480px(kind別初期幅)・コンテナ1200pxに対し、右端から20pxのマージンで
-    // 右寄せされている(1200 - 20 - 480 = 700)。
-    expect(reshown.style.left).toBe('700px')
+    // 幅500px([Issue #36] kind別初期幅、480→500へ調整済み)・コンテナ1200pxに
+    // 対し、右端から20pxのマージンで右寄せされている(1200 - 20 - 500 = 680)。
+    expect(reshown.style.left).toBe('680px')
     // 積み重ねの段数は「表示中panelの固定宣言順(盤情報→積算集約→積算明細→
     // 部品台帳)における自分の順位」で決まる(他panelの表示ON/OFF状況に
     // かかわらず、積算集約は常に2段目=段数1)。48 + 1 * 40 = 88。
     expect(reshown.style.top).toBe('88px')
+  })
+
+  it('[Issue #36] gives 積算集約 an initial width of 500px (up from 480px, to fit the 1行compact row at the panel既定幅)', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+    // 積算集約は既定表示中(justShownはinitial mount時に既に発火済み、
+    // かつコンテナ実測前の0サイズ基準だったため)、`setViewerWrapRect`単体では
+    // 反映されない。OFF→ONで「表示された瞬間」の計算をスタブ適用後に
+    // 作り直す(既存のIssue #25テストと同じ手順、`docs/coding-conventions.md`
+    // 「テスト」節のjsdom既知の制約参照)。
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
+    fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
+    const panel = document.querySelector('.floating-panel--aggregation') as HTMLElement
+    expect(panel.style.width).toBe('500px')
   })
 
   it('does not affect BBox selection/Zoom/Fit when dragging a panel heading', async () => {

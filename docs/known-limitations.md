@@ -57,7 +57,8 @@
   読み取り専用で、確定時点の再現性を保つため現在のMaster価格等での再計算はしない。
 - Frontend側にも確定履歴の一覧・詳細閲覧UI(`components/EstimateAggregation/
   EstimateConfirmationHistory.tsx`、積算集約(現在はViewer上のfloating panel、
-  `docs/ui-spec.md` 1.7章)内の「確定履歴を見る」ボタン)がある。
+  `docs/ui-spec.md` 1.7章)内の「履歴」ボタン、旧「確定履歴を見る」から
+  Issue #36で短縮)がある。
 
 ## CI / GitHub Actions
 

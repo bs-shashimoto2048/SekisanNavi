@@ -85,7 +85,7 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
 
   it('shows only the trigger button until opened, and does not call the API yet', () => {
     render(<EstimateConfirmationHistory productNo="A1GV2421" />)
-    expect(screen.getByRole('button', { name: '確定履歴を見る' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '履歴' })).toBeInTheDocument()
     expect(listEstimateConfirmations).not.toHaveBeenCalled()
   })
 
@@ -93,7 +93,7 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
     vi.mocked(listEstimateConfirmations).mockResolvedValue([])
     render(<EstimateConfirmationHistory productNo="A1OTHER99" />)
 
-    fireEvent.click(screen.getByRole('button', { name: '確定履歴を見る' }))
+    fireEvent.click(screen.getByRole('button', { name: '履歴' }))
 
     await waitFor(() => expect(listEstimateConfirmations).toHaveBeenCalledWith('A1OTHER99'))
     expect(await screen.findByText(/まだ積算確定されていません/)).toBeInTheDocument()
@@ -106,7 +106,7 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
     ])
     render(<EstimateConfirmationHistory productNo="A1GV2421" />)
 
-    fireEvent.click(screen.getByRole('button', { name: '確定履歴を見る' }))
+    fireEvent.click(screen.getByRole('button', { name: '履歴' }))
 
     await screen.findByText('2026-09-05 10:00:00')
     expect(screen.getByText('2026-09-04 07:28:06')).toBeInTheDocument()
@@ -121,7 +121,7 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
     vi.mocked(getEstimateConfirmation).mockResolvedValue(makeDetail())
     render(<EstimateConfirmationHistory productNo="A1GV2421" />)
 
-    fireEvent.click(screen.getByRole('button', { name: '確定履歴を見る' }))
+    fireEvent.click(screen.getByRole('button', { name: '履歴' }))
     await screen.findByText('2026-09-04 07:28:06')
     fireEvent.click(screen.getByText('2026-09-04 07:28:06'))
 
@@ -169,7 +169,7 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
     )
     render(<EstimateConfirmationHistory productNo="A1GV2421" />)
 
-    fireEvent.click(screen.getByRole('button', { name: '確定履歴を見る' }))
+    fireEvent.click(screen.getByRole('button', { name: '履歴' }))
     await screen.findByText('2026-09-04 07:28:06')
     fireEvent.click(screen.getByText('2026-09-04 07:28:06'))
 
@@ -183,7 +183,7 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
     vi.mocked(getEstimateConfirmation).mockResolvedValue(makeDetail())
     render(<EstimateConfirmationHistory productNo="A1GV2421" />)
 
-    fireEvent.click(screen.getByRole('button', { name: '確定履歴を見る' }))
+    fireEvent.click(screen.getByRole('button', { name: '履歴' }))
     await screen.findByText('2026-09-04 07:28:06')
     fireEvent.click(screen.getByText('2026-09-04 07:28:06'))
     await screen.findByText('11002')
@@ -197,7 +197,7 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
     vi.mocked(listEstimateConfirmations).mockRejectedValue(new ApiError(503, 'データ参照ルートに接続できません。'))
     render(<EstimateConfirmationHistory productNo="A1GV2421" />)
 
-    fireEvent.click(screen.getByRole('button', { name: '確定履歴を見る' }))
+    fireEvent.click(screen.getByRole('button', { name: '履歴' }))
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('データ参照ルートに接続できません。')
@@ -207,7 +207,7 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
     vi.mocked(listEstimateConfirmations).mockResolvedValue([])
     render(<EstimateConfirmationHistory productNo="A1GV2421" />)
 
-    fireEvent.click(screen.getByRole('button', { name: '確定履歴を見る' }))
+    fireEvent.click(screen.getByRole('button', { name: '履歴' }))
     await waitFor(() => expect(listEstimateConfirmations).toHaveBeenCalledTimes(1))
 
     // [追加修正] modalはfloating panelのstacking contextに埋もれないよう
@@ -217,7 +217,14 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
     expect(backdrop).not.toBeNull()
     fireEvent.click(backdrop as Element)
 
-    expect(screen.getByRole('button', { name: '確定履歴を見る' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '履歴' })).toBeInTheDocument()
     expect(screen.queryByText(/まだ積算確定されていません/)).not.toBeInTheDocument()
+  })
+
+  it('[Issue #36] uses a short visible label ("履歴") with a title attribute for the fuller description, without changing the accessible name', () => {
+    render(<EstimateConfirmationHistory productNo="A1GV2421" />)
+    const button = screen.getByRole('button', { name: '履歴' })
+    expect(button).toHaveAttribute('title', '確定履歴を見る')
+    expect(button).toHaveAccessibleName('履歴')
   })
 })

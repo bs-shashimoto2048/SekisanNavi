@@ -1,37 +1,28 @@
-/* [追加修正: 積算集約上部の余白削減] 確定操作群自体もコンパクトにまとめる。
-   枠・背景・操作の可視性は維持しつつ、上下margin/paddingを引き締める。 */
-.estimate-confirmation-action {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  margin: 0.25rem 0 0.3rem;
-  padding: 0.3rem 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  background: #f9fafb;
-}
-
-.estimate-confirmation-action__row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-}
-
+/* [Issue #36] 積算集約の1行compact row(EstimateAggregation.css
+   `.estimate-aggregation__compact-row`)へ直接溶け込ませるため、以前ここに
+   あった独立した箱(border/background付きの`<div>`、`.estimate-confirmation-
+   action`)は廃止した。ラベル(`__label`)・button(`__button`)は
+   `EstimateConfirmationAction.tsx`側でも`<Fragment>`をルートにしており、
+   compact rowの他要素(合計・件数・対象select等)と同じflex containerの
+   直接の子として並ぶ。 */
 .estimate-confirmation-action__label {
   font-size: 0.85rem;
   color: #374151;
   font-weight: 600;
+  white-space: nowrap;
 }
 
+/* [Issue #36] 「小さめのcompact button、ただしclick領域は極端に小さくしない」
+   の方針で、以前(padding: 0.3rem 0.7rem)より一段引き締めた。 */
 .estimate-confirmation-action__button {
   font-size: 0.85rem;
-  padding: 0.3rem 0.7rem;
+  padding: 0.25rem 0.55rem;
   border: 1px solid #2563eb;
   border-radius: 4px;
   background: #2563eb;
   color: #fff;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .estimate-confirmation-action__button:hover:not(:disabled) {
@@ -44,7 +35,11 @@
   opacity: 0.6;
 }
 
+/* [Issue #36] 成功/失敗メッセージはcompact rowの中へ無理に詰めず、
+   `flex-basis: 100%`によって(親がflex-wrapのため)必要時のみ独立した行
+   として折り返させる。`width: 100%`は指定不要(flex-basis 100%で十分)。 */
 .estimate-confirmation-action__result {
+  flex-basis: 100%;
   margin: 0;
   font-size: 0.82rem;
 }

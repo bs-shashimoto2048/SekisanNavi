@@ -1,14 +1,16 @@
-/* [追加修正: 積算集約上部の余白削減] 親(.estimate-aggregation__confirmation-row)
-   側のgapで間隔を確保するため、自身の上下marginは最小限にする。 */
+/* [Issue #36] 親(`.estimate-aggregation__compact-row`、1行compact row)側の
+   gapで間隔を確保するため、自身の上下marginは最小限にする。「小さめのcompact
+   button、ただしclick領域は極端に小さくしない」の方針で、confirm button
+   (`.estimate-confirmation-action__button`)と揃えた padding にした。 */
 .estimate-confirmation-history__trigger {
   font-size: 0.82rem;
-  padding: 0.25rem 0.6rem;
+  padding: 0.25rem 0.55rem;
   border: 1px solid #6b7280;
   border-radius: 4px;
   background: #fff;
   color: #374151;
   cursor: pointer;
-  margin: 0.1rem 0;
+  white-space: nowrap;
 }
 
 .estimate-confirmation-history__trigger:hover {

@@ -71,15 +71,15 @@ describe('EstimateConfirmationAction (Issue #4 Phase B-3: 積算確定の最小U
 
   it('shows the product number in the label so the product-wide scope of the action is explicit', () => {
     render(<EstimateConfirmationAction productNo="A1GV2421" />)
-    expect(screen.getByText('製番 A1GV2421 の積算確定')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '積算確定する' })).toBeInTheDocument()
+    expect(screen.getByText('製番 A1GV2421')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '確定' })).toBeInTheDocument()
   })
 
   it('does not call the API when the user cancels the confirmation dialog', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false)
     render(<EstimateConfirmationAction productNo="A1GV2421" />)
 
-    fireEvent.click(screen.getByRole('button', { name: '積算確定する' }))
+    fireEvent.click(screen.getByRole('button', { name: '確定' }))
 
     expect(window.confirm).toHaveBeenCalledTimes(1)
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('製番 A1GV2421'))
@@ -91,7 +91,7 @@ describe('EstimateConfirmationAction (Issue #4 Phase B-3: 積算確定の最小U
     vi.mocked(createEstimateConfirmation).mockResolvedValue(makeConfirmation())
     render(<EstimateConfirmationAction productNo="A1GV2421" />)
 
-    fireEvent.click(screen.getByRole('button', { name: '積算確定する' }))
+    fireEvent.click(screen.getByRole('button', { name: '確定' }))
 
     await waitFor(() => expect(createEstimateConfirmation).toHaveBeenCalledTimes(1))
     expect(createEstimateConfirmation).toHaveBeenCalledWith('A1GV2421')
@@ -107,7 +107,7 @@ describe('EstimateConfirmationAction (Issue #4 Phase B-3: 積算確定の最小U
     )
     render(<EstimateConfirmationAction productNo="A1GV2421" />)
 
-    fireEvent.click(screen.getByRole('button', { name: '積算確定する' }))
+    fireEvent.click(screen.getByRole('button', { name: '確定' }))
 
     const button = await screen.findByRole('button', { name: '確定中...' })
     expect(button).toBeDisabled()
@@ -116,7 +116,7 @@ describe('EstimateConfirmationAction (Issue #4 Phase B-3: 積算確定の最小U
     expect(createEstimateConfirmation).toHaveBeenCalledTimes(1)
 
     resolvePromise(makeConfirmation())
-    await waitFor(() => expect(screen.getByRole('button', { name: '積算確定する' })).not.toBeDisabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: '確定' })).not.toBeDisabled())
   })
 
   it('shows confirmation id / confirmed_at / item_count / total amount on success', async () => {
@@ -126,7 +126,7 @@ describe('EstimateConfirmationAction (Issue #4 Phase B-3: 積算確定の最小U
     )
     render(<EstimateConfirmationAction productNo="A1GV2421" />)
 
-    fireEvent.click(screen.getByRole('button', { name: '積算確定する' }))
+    fireEvent.click(screen.getByRole('button', { name: '確定' }))
 
     await screen.findByText(/確定しました/)
     const result = screen.getByText(/確定しました/)
@@ -143,7 +143,7 @@ describe('EstimateConfirmationAction (Issue #4 Phase B-3: 積算確定の最小U
     )
     render(<EstimateConfirmationAction productNo="A1OTHER99" />)
 
-    fireEvent.click(screen.getByRole('button', { name: '積算確定する' }))
+    fireEvent.click(screen.getByRole('button', { name: '確定' }))
 
     const result = await screen.findByText(/確定しました/)
     expect(result.textContent).toContain('積算コード 0件')
@@ -155,13 +155,29 @@ describe('EstimateConfirmationAction (Issue #4 Phase B-3: 積算確定の最小U
     vi.mocked(createEstimateConfirmation).mockRejectedValue(new ApiError(503, 'データ参照ルートに接続できません。'))
     render(<EstimateConfirmationAction productNo="A1GV2421" />)
 
-    fireEvent.click(screen.getByRole('button', { name: '積算確定する' }))
+    fireEvent.click(screen.getByRole('button', { name: '確定' }))
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('積算確定に失敗しました')
     expect(alert.textContent).toContain('データ参照ルートに接続できません。')
     expect(screen.queryByText(/^確定しました/)).not.toBeInTheDocument()
     // 失敗後は再試行できるようボタンが有効へ戻ること
-    expect(screen.getByRole('button', { name: '積算確定する' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: '確定' })).not.toBeDisabled()
+  })
+
+  it('[Issue #36] uses a short visible label ("確定") with a title attribute for the fuller description, without changing the accessible name', () => {
+    render(<EstimateConfirmationAction productNo="A1GV2421" />)
+    const button = screen.getByRole('button', { name: '確定' })
+    expect(button).toHaveAttribute('title', '積算確定する')
+    // accessible nameは可視テキスト(「確定」)のままで、title属性には
+    // 上書きされない(titleは可視テキストが無い場合のみaccessible nameの
+    // 情報源として使われる。可視テキストが優先されるため、既存の
+    // `getByRole('button', { name: '確定' })`ベースのテストは壊れない)。
+    expect(button).toHaveAccessibleName('確定')
+  })
+
+  it('[Issue #36] no longer wraps the label/button in the old bordered box (border/background廃止、compact rowへ直接溶け込む)', () => {
+    const { container } = render(<EstimateConfirmationAction productNo="A1GV2421" />)
+    expect(container.querySelector('.estimate-confirmation-action')).not.toBeInTheDocument()
   })
 })

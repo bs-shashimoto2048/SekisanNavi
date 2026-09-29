@@ -25,6 +25,20 @@ import './EstimateConfirmationAction.css'
  * 完了表示に常に`item_count`をそのまま表示することで、0件だった場合も
  * その事実が完了時に分かるようにする(確認ダイアログの時点では
  * 事前計算をせず、Backend側の実際の結果のみを正とする)。
+ *
+ * **[Issue #36 追加修正] compact row化に伴うルート要素の変更**: 以前は
+ * `.estimate-confirmation-action`という独立したborder/background付きの箱
+ * (`<div>`)をルート要素にしていたが、`EstimateAggregation`側の1行compact row
+ * (製番/合計/件数/対象select/確定/履歴)へ視覚的に溶け込ませるため、この箱を
+ * 廃止し、`<Fragment>`をルートにして「製番ラベル」「確定button」を直接
+ * 親のflex containerの子として並べる形にした。成功/失敗メッセージ
+ * (`<p>`)は、それ自体には`flex-basis: 100%`(`EstimateConfirmationAction.css`)
+ * を与え、compact row内で必要時のみ独立した行として折り返させる。
+ * ラベル文言(`製番 {productNo}`、旧`製番 {productNo} の積算確定`から短縮)・
+ * ボタン文言(`確定`/`確定中...`、旧`積算確定する`/`確定中...`から短縮)・
+ * `title`属性(`積算確定する`、accessible nameは可視テキストの`確定`を維持し
+ * 上書きしない)を追加した。disabled/確定中/成功/失敗のロジック自体は
+ * 一切変更していない。
  */
 
 interface Props {
@@ -90,18 +104,17 @@ export function EstimateConfirmationAction({ productNo }: Props) {
   }
 
   return (
-    <div className="estimate-confirmation-action">
-      <div className="estimate-confirmation-action__row">
-        <span className="estimate-confirmation-action__label">製番 {productNo} の積算確定</span>
-        <button
-          type="button"
-          className="estimate-confirmation-action__button"
-          onClick={() => void handleClick()}
-          disabled={confirming}
-        >
-          {confirming ? '確定中...' : '積算確定する'}
-        </button>
-      </div>
+    <>
+      <span className="estimate-confirmation-action__label">製番 {productNo}</span>
+      <button
+        type="button"
+        className="estimate-confirmation-action__button"
+        onClick={() => void handleClick()}
+        disabled={confirming}
+        title="積算確定する"
+      >
+        {confirming ? '確定中...' : '確定'}
+      </button>
 
       {state.kind === 'success' && (
         <p className="estimate-confirmation-action__result estimate-confirmation-action__result--success">
@@ -118,6 +131,6 @@ export function EstimateConfirmationAction({ productNo }: Props) {
           積算確定に失敗しました: {state.message}
         </p>
       )}
-    </div>
+    </>
   )
 }
