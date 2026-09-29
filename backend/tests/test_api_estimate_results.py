@@ -184,3 +184,117 @@ def test_drawing_evidence_types_endpoint_returns_empty_when_none_seeded(client):
     res = client.get("/api/drawing-evidence-types")
     assert res.status_code == 200
     assert res.json() == []
+
+
+# --- PR #41レビュー指摘対応: 係数override APIのallowed_factors制約 ---
+
+
+def _setup_product_and_rule_with_allowed_factors(client, monkeypatch, tmp_path, db_path, allowed_factors):
+    product = tmp_path / "A1GV2421"
+    product.mkdir()
+    _write_cp932_csv(product / "product_df.csv", _PRODUCT_DF_HEADER, [_PANEL_1_1_ROW])
+    _write_cp932_csv(product / "estcode_df.csv", _ESTCODE_DF_HEADER, [_ESTCODE_ROW_1_1])
+    _configure_root(client, monkeypatch, tmp_path)
+
+    detection = _create_manual_detection(client)
+    _set_evidence_type(db_path, detection["id"], "side_door")
+
+    master_item = _first_master_item(client)
+    with get_connection(db_path) as conn:
+        create_rule_master(
+            conn,
+            master_item_id=master_item["id"],
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_EVIDENCE,
+            judgment_condition=StandardCondition(required_evidence_types=["side_door"]),
+            allowed_factors=allowed_factors,
+        )
+    return detection, master_item
+
+
+def test_override_with_value_in_allowed_factors_succeeds(client, monkeypatch, tmp_path, db_path):
+    _setup_product_and_rule_with_allowed_factors(client, monkeypatch, tmp_path, db_path, [0.5, 0.7, 1.0])
+    evaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    result_id = evaluated["results"][0]["id"]
+
+    res = client.patch(
+        f"/api/products/A1GV2421/estimate-results/{result_id}",
+        json={"current_factor": 0.7},
+    )
+    assert res.status_code == 200
+    assert res.json()["current_factor"] == 0.7
+    assert res.json()["factor_overridden"] is True
+
+
+def test_override_with_value_outside_allowed_factors_is_rejected(client, monkeypatch, tmp_path, db_path):
+    _setup_product_and_rule_with_allowed_factors(client, monkeypatch, tmp_path, db_path, [0.5, 0.7, 1.0])
+    evaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    result_id = evaluated["results"][0]["id"]
+
+    res = client.patch(
+        f"/api/products/A1GV2421/estimate-results/{result_id}",
+        json={"current_factor": 0.9},
+    )
+    assert res.status_code == 422
+    assert "0.9" in res.json()["detail"]
+
+    # 拒否された場合、値は変更されずに残る。
+    unchanged = client.get("/api/products/A1GV2421/estimate-results").json()[0]
+    assert unchanged["current_factor"] == 1.0
+    assert unchanged["factor_overridden"] is False
+
+
+def test_override_succeeds_with_any_value_when_allowed_factors_is_null(client, monkeypatch, tmp_path, db_path):
+    """allowed_factors未設定のルールは、現行互換で自由入力を許容する
+    (PR #41レビュー指摘の明示要件)。"""
+    _setup_product_and_rule_with_allowed_factors(client, monkeypatch, tmp_path, db_path, None)
+    evaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    result_id = evaluated["results"][0]["id"]
+
+    res = client.patch(
+        f"/api/products/A1GV2421/estimate-results/{result_id}",
+        json={"current_factor": 0.37},
+    )
+    assert res.status_code == 200
+    assert res.json()["current_factor"] == 0.37
+
+
+def test_override_with_allowed_factors_survives_reevaluation(client, monkeypatch, tmp_path, db_path):
+    """allowed_factorsが設定されたルールでも、手修正した係数は再評価後も
+    保持される(PR #41レビュー指摘の要件5「再評価後も手修正係数保持」)。"""
+    _setup_product_and_rule_with_allowed_factors(client, monkeypatch, tmp_path, db_path, [0.5, 0.7, 1.0])
+    evaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    result_id = evaluated["results"][0]["id"]
+
+    override_res = client.patch(
+        f"/api/products/A1GV2421/estimate-results/{result_id}",
+        json={"current_factor": 0.7},
+    )
+    assert override_res.status_code == 200
+
+    reevaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    assert reevaluated["results"][0]["current_factor"] == 0.7
+    assert reevaluated["results"][0]["factor_overridden"] is True
+
+    # 保持されたcurrent_factorに対して、再度候補外の値で上書きしようとすると
+    # 引き続き拒否される(再評価後もallowed_factors制約自体は効き続ける)。
+    rejected = client.patch(
+        f"/api/products/A1GV2421/estimate-results/{result_id}",
+        json={"current_factor": 0.42},
+    )
+    assert rejected.status_code == 422
+
+
+def test_reset_factor_endpoint_unaffected_by_allowed_factors(client, monkeypatch, tmp_path, db_path):
+    """reset-factorの挙動は変更しない(PR #41レビュー指摘の明示要件)。"""
+    _setup_product_and_rule_with_allowed_factors(client, monkeypatch, tmp_path, db_path, [0.5, 0.7])
+    evaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    result_id = evaluated["results"][0]["id"]
+
+    client.patch(f"/api/products/A1GV2421/estimate-results/{result_id}", json={"current_factor": 0.7})
+    res = client.post(f"/api/products/A1GV2421/estimate-results/{result_id}/reset-factor")
+
+    assert res.status_code == 200
+    assert res.json()["current_factor"] == res.json()["initial_factor"] == 1.0
+    assert res.json()["factor_overridden"] is False

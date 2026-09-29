@@ -31,6 +31,28 @@ from app.domain.estimate_rules import (
     JudgmentMethod,
     JudgmentScope,
 )
+from app.repositories.estimate_rule_masters import get_allowed_factors
+
+# 許容係数候補との比較に使う許容誤差 (Issue #40 7-3章、PR #41レビュー指摘対応)。
+# 候補値(0.7等)は10進小数だがfloatはIEEE754二進表現のため、単純な`==`比較は
+# 丸め誤差で意図せず不一致になりうる。候補自体が業務上「小数点2桁程度」の
+# 粒度である前提のもと、十分小さい絶対誤差で同値判定する。
+_FACTOR_TOLERANCE = 1e-9
+
+
+class FactorNotAllowedError(Exception):
+    """係数の手修正値が、対象ルールの`allowed_factors`候補に含まれない場合
+    (Issue #40 7-3章「係数は…その積算コードで取り得る候補値から選択する」、
+    PR #41レビュー指摘対応)。呼び出し側(router)がHTTP 422等へ変換する。
+    """
+
+    def __init__(self, current_factor: float, allowed_factors: list[float]):
+        self.current_factor = current_factor
+        self.allowed_factors = allowed_factors
+        super().__init__(
+            f"係数 {current_factor} はこの積算結果で許容される候補 {allowed_factors} に含まれていません。"
+        )
+
 
 _COLUMNS = """
     id, product_no, result_key, master_item_id, code, quantity, applicable_unit,
@@ -292,7 +314,31 @@ def set_current_factor(
     """係数の手修正 (Issue #40 7-3章)。`factor_overridden`をTrueにし、
     以後の再評価(`replace_results_for_product`)からこの値を保護する。
     `price`/`labor`もこの場で新しい係数を使って再計算する。
+
+    **PR #41レビュー指摘対応**: 対象の積算結果が`source_rule_id`を持ち、
+    かつそのルール(`estimate_rule_masters.allowed_factors`)に候補値が
+    設定されている場合、`current_factor`がその候補に含まれない値なら
+    `FactorNotAllowedError`を投げて保存を拒否する(Issue #40 7-3章「係数は
+    可能な限り自由入力ではなく、その積算コードで取り得る候補値から選択する」
+    をAPI層でも保証するため)。`allowed_factors`が未設定(None)の場合は
+    Phase 1時点で係数候補が未確定のルールを想定し、現時点では自由入力を
+    許容する(推測で候補を捏造しない)。
     """
+    row = conn.execute(
+        "SELECT source_rule_id FROM estimate_results WHERE id = ? AND product_no = ?",
+        (result_id, product_no),
+    ).fetchone()
+    if row is None:
+        return None
+
+    source_rule_id = row["source_rule_id"]
+    if source_rule_id is not None:
+        allowed_factors = get_allowed_factors(conn, source_rule_id)
+        if allowed_factors is not None and not any(
+            abs(current_factor - candidate) <= _FACTOR_TOLERANCE for candidate in allowed_factors
+        ):
+            raise FactorNotAllowedError(current_factor, allowed_factors)
+
     cur = conn.execute(
         """
         UPDATE estimate_results
@@ -341,4 +387,5 @@ __all__ = [
     "replace_results_for_product",
     "set_current_factor",
     "reset_factor_to_initial",
+    "FactorNotAllowedError",
 ]

@@ -12,11 +12,13 @@ from app.domain.estimate_rules import (
     JudgmentScope,
 )
 from app.repositories.estimate_results import (
+    FactorNotAllowedError,
     list_results_for_product,
     replace_results_for_product,
     reset_factor_to_initial,
     set_current_factor,
 )
+from app.repositories.estimate_rule_masters import create_rule_master
 
 
 def _candidate(**overrides) -> EstimateResultCandidate:
@@ -65,11 +67,20 @@ def test_replace_results_removes_rows_whose_condition_no_longer_holds(db_path):
     from app.db.connection import get_connection
 
     with get_connection(db_path) as conn:
-        replace_results_for_product(conn, product_no="A1GV2421", candidates=[_candidate()])
+        [created] = replace_results_for_product(conn, product_no="A1GV2421", candidates=[_candidate()])
+        assert len(created.evidence) == 1
         # 2回目の評価では候補が0件(条件不成立)になったとする。
         results = replace_results_for_product(conn, product_no="A1GV2421", candidates=[])
 
+        # PR #41自己レビュー確認事項: estimate_result_evidence側も
+        # ON DELETE CASCADEで連動削除され、孤立行(dangling row)が残らないこと。
+        remaining_evidence = conn.execute(
+            "SELECT COUNT(*) FROM estimate_result_evidence WHERE estimate_result_id = ?",
+            (created.id,),
+        ).fetchone()[0]
+
     assert results == []
+    assert remaining_evidence == 0
 
 
 def test_manual_factor_override_survives_reevaluation(db_path):
@@ -163,3 +174,139 @@ def test_list_results_for_product_scopes_by_product_no(db_path):
     assert len(other_results) == 1
     assert a1_results[0].product_no == "A1GV2421"
     assert other_results[0].product_no == "OTHER999"
+
+
+# --- PR #41レビュー指摘対応: 係数override APIのallowed_factors制約 ---
+
+
+def _create_rule_with_allowed_factors(conn, allowed_factors):
+    master_item_id = conn.execute("SELECT id FROM estimate_master_items LIMIT 1").fetchone()[0]
+    rule = create_rule_master(
+        conn,
+        master_item_id=master_item_id,
+        judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+        judgment_scope=JudgmentScope.PANEL,
+        allowed_factors=allowed_factors,
+    )
+    return rule.id
+
+
+def test_set_current_factor_succeeds_when_value_is_in_allowed_factors(db_path):
+    from app.db.connection import get_connection
+
+    with get_connection(db_path) as conn:
+        rule_id = _create_rule_with_allowed_factors(conn, [0.5, 0.7, 1.0])
+        [created] = replace_results_for_product(
+            conn, product_no="A1GV2421", candidates=[_candidate(source_rule_id=rule_id)]
+        )
+
+        result = set_current_factor(
+            conn,
+            product_no="A1GV2421",
+            result_id=created.id,
+            current_factor=0.7,
+            reason=None,
+            updated_by=None,
+        )
+
+    assert result.current_factor == 0.7
+    assert result.factor_overridden is True
+
+
+def test_set_current_factor_rejects_value_outside_allowed_factors(db_path):
+    from app.db.connection import get_connection
+
+    with get_connection(db_path) as conn:
+        rule_id = _create_rule_with_allowed_factors(conn, [0.5, 0.7, 1.0])
+        [created] = replace_results_for_product(
+            conn, product_no="A1GV2421", candidates=[_candidate(source_rule_id=rule_id)]
+        )
+
+        try:
+            set_current_factor(
+                conn,
+                product_no="A1GV2421",
+                result_id=created.id,
+                current_factor=0.9,
+                reason=None,
+                updated_by=None,
+            )
+            assert False, "FactorNotAllowedErrorが送出されるべき"
+        except FactorNotAllowedError as e:
+            assert e.current_factor == 0.9
+            assert e.allowed_factors == [0.5, 0.7, 1.0]
+
+        # 拒否された場合、既存の値は変更されない(現状維持)。
+        unchanged = [r for r in list_results_for_product(conn, product_no="A1GV2421") if r.id == created.id][0]
+    assert unchanged.current_factor == 1.0
+    assert unchanged.factor_overridden is False
+
+
+def test_set_current_factor_allows_free_input_when_allowed_factors_is_null(db_path):
+    """allowed_factors未設定のルールは、現時点では自由入力を許容する
+    (Phase 1で係数候補が未確定のルールへの後方互換。PR #41レビュー指摘の
+    明示要件)。"""
+    from app.db.connection import get_connection
+
+    with get_connection(db_path) as conn:
+        rule_id = _create_rule_with_allowed_factors(conn, None)
+        [created] = replace_results_for_product(
+            conn, product_no="A1GV2421", candidates=[_candidate(source_rule_id=rule_id)]
+        )
+
+        result = set_current_factor(
+            conn,
+            product_no="A1GV2421",
+            result_id=created.id,
+            current_factor=0.37,  # 候補に無さそうな任意の値
+            reason=None,
+            updated_by=None,
+        )
+
+    assert result.current_factor == 0.37
+    assert result.factor_overridden is True
+
+
+def test_set_current_factor_allows_free_input_when_no_source_rule(db_path):
+    """source_rule_idが無い積算結果(専用ルール由来等)は、参照先のルールが
+    無いため従来通り自由入力を許容する。"""
+    from app.db.connection import get_connection
+
+    with get_connection(db_path) as conn:
+        [created] = replace_results_for_product(
+            conn, product_no="A1GV2421", candidates=[_candidate(source_rule_id=None)]
+        )
+
+        result = set_current_factor(
+            conn,
+            product_no="A1GV2421",
+            result_id=created.id,
+            current_factor=0.37,
+            reason=None,
+            updated_by=None,
+        )
+
+    assert result.current_factor == 0.37
+
+
+def test_reset_factor_to_initial_is_unaffected_by_allowed_factors(db_path):
+    """reset-factorの挙動は変更しない(PR #41レビュー指摘の明示要件)。
+    initial_factor自体が候補外であっても、reset操作自体は拒否しない
+    (ルールマスタ側の初期係数設定はこの制約の対象外)。"""
+    from app.db.connection import get_connection
+
+    with get_connection(db_path) as conn:
+        rule_id = _create_rule_with_allowed_factors(conn, [0.5, 0.7])
+        [created] = replace_results_for_product(
+            conn,
+            product_no="A1GV2421",
+            candidates=[_candidate(source_rule_id=rule_id, initial_factor=1.0)],
+        )
+        set_current_factor(
+            conn, product_no="A1GV2421", result_id=created.id, current_factor=0.7, reason=None, updated_by=None
+        )
+
+        reset = reset_factor_to_initial(conn, product_no="A1GV2421", result_id=created.id)
+
+    assert reset.current_factor == 1.0  # initial_factor(候補外の1.0)へそのまま復元される
+    assert reset.factor_overridden is False

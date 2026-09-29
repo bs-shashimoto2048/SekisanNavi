@@ -96,6 +96,24 @@ def get_rule_master_by_master_item_id(
     return _row_to_rule_master(row) if row else None
 
 
+def get_allowed_factors(conn: sqlite3.Connection, rule_master_id: int) -> list[float] | None:
+    """`estimate_rule_masters.id`(`estimate_results.source_rule_id`が指す先)
+    から許容係数候補を取得する (Issue #40 7-3章「係数は可能な限り自由入力では
+    なく、その積算コードで取り得る候補値から選択する」)。
+
+    未設定(NULL)の場合はNoneを返す(=候補未定義。呼び出し側が「現時点では
+    自由入力を許可する」判断に使う。PR #41レビュー指摘対応)。行自体が
+    存在しない場合もNoneを返す(存在確認は呼び出し側の責務外とする、
+    他のread-only参照系関数と同じ方針)。
+    """
+    row = conn.execute(
+        "SELECT allowed_factors FROM estimate_rule_masters WHERE id = ?", (rule_master_id,)
+    ).fetchone()
+    if row is None or row["allowed_factors"] is None:
+        return None
+    return json.loads(row["allowed_factors"])
+
+
 def create_rule_master(
     conn: sqlite3.Connection,
     *,

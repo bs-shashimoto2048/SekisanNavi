@@ -12,6 +12,7 @@ from app.api.deps import get_db
 from app.domain.estimate_rules import EstimateResultEvidence
 from app.repositories.drawing_evidence_types import list_evidence_types
 from app.repositories.estimate_results import (
+    FactorNotAllowedError,
     list_results_for_product,
     replace_results_for_product,
     reset_factor_to_initial,
@@ -100,15 +101,24 @@ def override_estimate_result_factor(
     body: EstimateResultFactorOverrideIn,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> EstimateResultOut:
-    """係数の手修正 (Issue #40 7-3章)。以後の再評価でもこの値を保持する。"""
-    result = set_current_factor(
-        conn,
-        product_no=product_no,
-        result_id=result_id,
-        current_factor=body.current_factor,
-        reason=body.reason,
-        updated_by=body.updated_by,
-    )
+    """係数の手修正 (Issue #40 7-3章)。以後の再評価でもこの値を保持する。
+
+    対象の積算結果に紐づくルール(`source_rule_id`)へ許容係数候補
+    (`allowed_factors`)が設定されている場合、その候補に含まれない値は
+    422で拒否する(PR #41レビュー指摘対応。`allowed_factors`が未設定なら
+    現時点では自由入力を許容する)。
+    """
+    try:
+        result = set_current_factor(
+            conn,
+            product_no=product_no,
+            result_id=result_id,
+            current_factor=body.current_factor,
+            reason=body.reason,
+            updated_by=body.updated_by,
+        )
+    except FactorNotAllowedError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     if result is None:
         raise HTTPException(status_code=404, detail="指定された積算結果が見つかりません。")
     return _result_out(result)
