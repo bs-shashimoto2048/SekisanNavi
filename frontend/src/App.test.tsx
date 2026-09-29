@@ -181,6 +181,7 @@ const detectionOnOutline: Detection = {
   master_item_category: null,
   master_item_model: null,
   master_item_code: null,
+  evidence_type_key: null,
 }
 
 // 積算集約(②)・積算明細(③)向けの積算コード(master_item_id有)Detection。
@@ -207,6 +208,7 @@ const masterLinkedDetectionOnOutline: Detection = {
   master_item_category: '箱・単独',
   master_item_model: 'テスト品目',
   master_item_code: '18999',
+  evidence_type_key: null,
 }
 
 // 積算明細強化・Undo/Redo・要確認警告・編集追従 指示7章/11章: 面1/盤1(x:0.1-0.15/
@@ -233,6 +235,7 @@ const tieDetectionOnOutline: Detection = {
   master_item_category: '箱・単独',
   master_item_model: 'テスト品目2',
   master_item_code: '18500',
+  evidence_type_key: null,
 }
 
 const panel: Panel = {
@@ -336,6 +339,7 @@ vi.mock('./api/client', () => ({
       master_item_category: '箱・単独',
       master_item_model: 'OS2-816',
       master_item_code: '11001',
+      evidence_type_key: null,
     }),
   ),
   drawingPageFileUrl: vi.fn((id: number) => `http://localhost:8000/api/drawing-pages/${id}/file`),

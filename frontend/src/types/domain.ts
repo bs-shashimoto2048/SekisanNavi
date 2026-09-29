@@ -97,6 +97,10 @@ export interface Detection {
   // class_name(登録時点のコピー)より、こちらのライブJOIN結果を優先する
   // (指示書12章/14章)。class_nameへ依存しすぎない。
   master_item_code: string | null
+  // Issue #40 Phase 2: 図面情報マスタ(DrawingEvidenceType.key)への参照。
+  // 既存データは全てnull(Phase 3の入力UI再設計以降に設定される)。
+  // このPhaseではUIから設定する手段を追加していない(型定義のみ)。
+  evidence_type_key: string | null
 }
 
 // Manual BBox登録リクエスト (Phase 1.6)。座標は0.0〜1.0の正規化座標。
@@ -335,4 +339,85 @@ export interface DecisionEvent {
  * 含まない軽量な存在確認のみ。 */
 export interface HelpPdfStatus {
   available: boolean
+}
+
+// --- Issue #40 Phase 2: 積算コード選定〜数量・係数・金額/工数算出の一貫ルール化 ---
+//
+// 以下の型はPhase 2時点でBackend APIのレスポンス形と対応させるためだけに用意した
+// ものであり、このPhaseではどのUIコンポーネントからも参照・表示しない
+// (Phase 3「Viewer入力UI」/Phase 4「数量・係数・明細UI」向けの型定義のみを
+// 先行して用意する。既存のViewer/積算集約/積算明細の挙動は一切変更していない)。
+// 内部enum値(英語スネークケース)はBackend `app.domain.estimate_rules`と同じ値。
+
+export type EvidenceUsage = 'estimate_target' | 'condition' | 'both'
+export type JudgmentMethod = 'design_data' | 'drawing_judgment' | 'needs_confirmation'
+export type JudgmentScope = 'position' | 'range' | 'panel' | 'drawing' | 'product' | 'design_data'
+export type ApplicableUnit =
+  | 'face'
+  | 'unit'
+  | 'product'
+  | 'location'
+  | 'sheet'
+  | 'actual_quantity'
+  | 'other'
+export type EvidenceKind = 'detection' | 'design_data'
+export type EstimateResultStatus = 'auto' | 'reviewed' | 'needs_review' | 'excluded'
+
+/** 図面情報マスタ1件 (Issue #40 10-1章、`GET /api/drawing-evidence-types`)。 */
+export interface DrawingEvidenceType {
+  id: number
+  key: string
+  display_name: string
+  category: string | null
+  usage: EvidenceUsage
+  default_judgment_scope: JudgmentScope
+  description: string | null
+  enabled: boolean
+}
+
+/** 積算結果⇔根拠の多対多、1件分 (Issue #40 9章/12章)。 */
+export interface EstimateResultEvidence {
+  id: number
+  evidence_kind: EvidenceKind
+  detection_id: number | null
+  design_data_ref: string | null
+}
+
+/** 積算結果1件 (Issue #40 12章の標準モデル、
+ * `GET/POST /api/products/{product_no}/estimate-results*`)。 */
+export interface EstimateResult {
+  id: number
+  product_no: string
+  result_key: string
+  master_item_id: number | null
+  code: string
+  quantity: number
+  applicable_unit: ApplicableUnit | null
+  initial_factor: number
+  current_factor: number
+  factor_overridden: boolean
+  factor_override_reason: string | null
+  factor_updated_at: string | null
+  factor_updated_by: string | null
+  judgment_method: JudgmentMethod
+  judgment_scope: JudgmentScope
+  target_panel_ban_menno: number | null
+  target_panel_ban_no: number | null
+  target_drawing_page_id: number | null
+  judgment_reason: string | null
+  source_rule_id: number | null
+  unit_price: number | null
+  unit_labor: number | null
+  price: number | null
+  labor: number | null
+  status: EstimateResultStatus
+  evidence: EstimateResultEvidence[]
+}
+
+/** `POST /api/products/{product_no}/estimate-results/evaluate`のレスポンス。
+ * `skipped_rule_master_ids`はPhase 2の評価器が未実装のため評価しなかった
+ * ルールの一覧(診断用)。 */
+export interface EstimateResultEvaluateResponse {
+  results: EstimateResult[]
+  skipped_rule_master_ids: number[]
 }
