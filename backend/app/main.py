@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routers import (
     detections,
     drawings,
+    estimate_results,
     estimates,
     help_pdf,
     master,
@@ -79,6 +80,8 @@ app.include_router(master.router)
 app.include_router(settings.router)
 app.include_router(products.router)
 app.include_router(help_pdf.router)
+app.include_router(estimate_results.router)
+app.include_router(estimate_results.evidence_types_router)
 
 
 @app.get("/api/health")

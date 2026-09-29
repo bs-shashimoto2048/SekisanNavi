@@ -8,6 +8,7 @@ import type {
   DecisionEvent,
   Detection,
   DetectedPreviewItem,
+  DrawingEvidenceType,
   DrawingPage,
   EstimateConfirmation,
   EstimateConfirmationDetail,
@@ -15,6 +16,8 @@ import type {
   EstimateItem,
   EstimateMasterItem,
   EstimatePanelInfo,
+  EstimateResult,
+  EstimateResultEvaluateResponse,
   HelpPdfStatus,
   ManualDetectionCreateInput,
   Panel,
@@ -274,6 +277,51 @@ export function fetchHelpPdfStatus(): Promise<HelpPdfStatus> {
  * fetchでは使わない(ブラウザ標準のPDF表示に委譲するため)。 */
 export function helpPdfFileUrl(): string {
   return `${BASE_URL}/api/help/estimate-pdf/file`
+}
+
+// --- Issue #40 Phase 2: 積算コード選定〜数量・係数・金額/工数算出の一貫ルール化 ---
+//
+// Phase 2はデータモデル/ルールエンジン基盤のみが対象のため、以下の関数は
+// どのUIコンポーネントからも呼ばれない(Phase 3/4向けに先行して用意するのみ)。
+
+/** 図面情報マスタ一覧 (Issue #40 10-1章)。Phase 2では実データを投入しないため、
+ * 通常は空配列が返る。 */
+export function fetchDrawingEvidenceTypes(): Promise<DrawingEvidenceType[]> {
+  return getJson('/api/drawing-evidence-types')
+}
+
+/** 製番`productNo`の現在の積算結果一覧を取得する(読み取り専用。評価器は
+ * 実行しない)。最新化したい場合は`evaluateEstimateResults`を呼ぶ。 */
+export function fetchEstimateResults(productNo: string): Promise<EstimateResult[]> {
+  return getJson(`/api/products/${encodeURIComponent(productNo)}/estimate-results`)
+}
+
+/** 製番`productNo`について、現在の根拠(BBox)×設計データ×有効なルールマスタから
+ * 積算結果を再評価する。手修正済みの係数は上書きされない(Issue #40 7-3章)。 */
+export function evaluateEstimateResults(productNo: string): Promise<EstimateResultEvaluateResponse> {
+  return postJsonNoBody(`/api/products/${encodeURIComponent(productNo)}/estimate-results/evaluate`)
+}
+
+/** 積算結果1件の係数を手修正する (Issue #40 7-3章)。以後の再評価でもこの値を
+ * 保持する。 */
+export function overrideEstimateResultFactor(
+  productNo: string,
+  resultId: number,
+  input: { current_factor: number; reason?: string; updated_by?: string },
+): Promise<EstimateResult> {
+  return sendJson(
+    `/api/products/${encodeURIComponent(productNo)}/estimate-results/${resultId}`,
+    'PATCH',
+    input,
+  )
+}
+
+/** 積算結果1件の係数を「初期値へ戻す」(Issue #40 7-3章)。以後の再評価では
+ * 最新の初期係数へ再び追従するようになる。 */
+export function resetEstimateResultFactor(productNo: string, resultId: number): Promise<EstimateResult> {
+  return postJsonNoBody(
+    `/api/products/${encodeURIComponent(productNo)}/estimate-results/${resultId}/reset-factor`,
+  )
 }
 
 export { ApiError }

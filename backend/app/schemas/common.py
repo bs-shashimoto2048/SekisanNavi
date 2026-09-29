@@ -85,6 +85,9 @@ class DetectionOut(BaseModel):
     # Phase 1.11 追加修正: master_item_idからJOINして得たcode。引出線の「コード」部分は
     # class_name(登録時点のコピー)より、こちらのライブJOIN結果を優先して使う。
     master_item_code: str | None = None
+    # Issue #40 Phase 2: 図面情報マスタ(drawing_evidence_types.key)への参照。
+    # 既存行は全てNone(Phase 3の入力UI再設計以降に設定される)。
+    evidence_type_key: str | None = None
 
 
 class _NormalizedBBoxIn(BaseModel):

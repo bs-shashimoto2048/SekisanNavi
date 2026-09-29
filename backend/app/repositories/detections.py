@@ -12,7 +12,7 @@ _COLUMNS = """
     d.id, d.drawing_page_id, d.panel_id, d.class_name, d.bbox_x, d.bbox_y, d.bbox_w, d.bbox_h,
     d.confidence, d.status, d.source_type, d.master_item_id,
     d.leader_label_x, d.leader_label_y, mi.category AS master_item_category,
-    mi.model AS master_item_model, mi.code AS master_item_code
+    mi.model AS master_item_model, mi.code AS master_item_code, d.evidence_type_key
 """
 _FROM = """
     FROM detections d
@@ -39,6 +39,7 @@ def _row_to_detection(row: sqlite3.Row) -> Detection:
         master_item_category=row["master_item_category"],
         master_item_model=row["master_item_model"],
         master_item_code=row["master_item_code"],
+        evidence_type_key=row["evidence_type_key"],
     )
 
 

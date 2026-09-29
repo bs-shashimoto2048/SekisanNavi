@@ -62,6 +62,7 @@ function makeDetection(overrides: Partial<Detection> = {}): Detection {
     master_item_category: null,
     master_item_model: null,
     master_item_code: null,
+    evidence_type_key: null,
     ...overrides,
   }
 }

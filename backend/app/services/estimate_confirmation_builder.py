@@ -19,7 +19,6 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
 from pathlib import Path
 
 from app.domain.models import (
@@ -31,94 +30,23 @@ from app.repositories.detections import list_detections
 from app.repositories.master import get_master_item
 from app.services.data_source import DataSourceError, resolve_product_dir
 from app.services.estcode_df import EstimatePanelInfo, load_estcode_df
+from app.services.panel_assignment import (
+    PRODUCT_TARGET_ID,
+    TIE_TARGET_ID,
+    PanelAssignment as _PanelAssignment,
+    ProductAssignment as _ProductAssignment,
+    assign_detection_to_panel as _assign_detection_to_panel,
+    panel_target_id,
+)
 from app.services.product_df import PanelAreaFromDf, load_product_df
 
 # Frontend `estimateAggregationReal.ts` と同じ識別子(要求仕様への準拠。
 # 表示文字列を新たに作らず、既存の実装と同じ値をそのまま踏襲する)。
-PRODUCT_TARGET_ID = "product"
-TIE_TARGET_ID = "__tie__"
-
-
-def _physical_panel_key(panel: PanelAreaFromDf) -> str:
-    return f"{panel.ban_menno}:{panel.ban_no}"
-
-
-def panel_target_id(panel: PanelAreaFromDf) -> str:
-    return f"panel:{_physical_panel_key(panel)}"
-
-
-def _intersection_area(
-    ax: float, ay: float, aw: float, ah: float, bx: float, by: float, bw: float, bh: float
-) -> float:
-    """Frontend `utils/bbox.ts::intersectionArea` と同じ計算式の移植。"""
-    ix = max(ax, bx)
-    iy = max(ay, by)
-    iw = min(ax + aw, bx + bw) - ix
-    ih = min(ay + ah, by + bh) - iy
-    if iw > 0 and ih > 0:
-        return iw * ih
-    return 0.0
-
-
-@dataclass
-class _PanelHit:
-    panel: PanelAreaFromDf
-    area: float
-
-
-@dataclass
-class _ProductAssignment:
-    kind: str = "product"
-
-
-@dataclass
-class _PanelAssignment:
-    panel: PanelAreaFromDf
-    area: float
-    kind: str = "panel"
-
-
-@dataclass
-class _TieAssignment:
-    candidates: list[_PanelHit]
-    kind: str = "tie"
-
-
-_Assignment = _ProductAssignment | _PanelAssignment | _TieAssignment
-
-
-def _assign_detection_to_panel(
-    bbox: tuple[float, float, float, float], panels: list[PanelAreaFromDf]
-) -> _Assignment:
-    """Frontend `estimateAggregationReal.ts::assignDetectionToPanel`と同じ判定順の移植。
-
-    判定順:
-      1. 各盤BBoxとの交差面積を求める。
-      2. 交差する盤が0件 -> 製品全体。
-      3. 交差する盤が1件 -> その盤。
-      4. 交差する盤が2件以上 -> 交差面積が最大の盤。
-      5. 最大交差面積が複数の"異なる盤"で完全同値 -> tie(要確認)。
-    """
-    bx, by, bw, bh = bbox
-    hits: list[_PanelHit] = []
-    for panel in panels:
-        area = _intersection_area(
-            bx, by, bw, bh,
-            panel.normalized_rect.x, panel.normalized_rect.y,
-            panel.normalized_rect.w, panel.normalized_rect.h,
-        )
-        if area > 0:
-            hits.append(_PanelHit(panel=panel, area=area))
-
-    if not hits:
-        return _ProductAssignment()
-
-    max_area = max(h.area for h in hits)
-    winners = [h for h in hits if h.area == max_area]
-    winner_groups = {_physical_panel_key(w.panel) for w in winners}
-    if len(winner_groups) > 1:
-        return _TieAssignment(candidates=winners)
-    return _PanelAssignment(panel=winners[0].panel, area=winners[0].area)
+# [Issue #40 Phase 2] 盤所属判定の実体(交差面積計算・tie判定)は
+# `app.services.panel_assignment`へ切り出した(Backend内の二重実装解消)。
+# ここでの再import・別名付けは、このモジュールの既存の公開インターフェース
+# (`panel_target_id`、呼び出し側からの`_assign_detection_to_panel`等の参照)を
+# 変えないための後方互換の薄いshimであり、ロジック自体の変更はない。
 
 
 def _resolve_panel_name(panel: PanelAreaFromDf, estimate_panels: list[EstimatePanelInfo]) -> str:
@@ -133,7 +61,7 @@ def _resolve_panel_name(panel: PanelAreaFromDf, estimate_panels: list[EstimatePa
     return name if name and name.strip() != "" else f"{panel.ban_menno}/{panel.ban_no}"
 
 
-def _detection_page_no_map(conn: sqlite3.Connection, product_no: str) -> dict[int, int]:
+def detection_page_no_map(conn: sqlite3.Connection, product_no: str) -> dict[int, int]:
     """`drawing_pages`のうち、この製番に紐づく行の`id -> source_page_no`。
 
     `docs/data-model.md`の「Phase 1.8での役割変化」の通り、ダミーDrawingPage行が
@@ -171,7 +99,7 @@ def build_confirmation_items(
     df_result = load_product_df(resolution.ccv_dir, resolution.product_no)
     estcode_result = load_estcode_df(resolution.ccv_dir, resolution.product_no)
 
-    page_no_by_drawing_page_id = _detection_page_no_map(conn, product_no)
+    page_no_by_drawing_page_id = detection_page_no_map(conn, product_no)
 
     # Master Itemの再JOINをDetection件数分繰り返さないための簡易キャッシュ
     # (同一製番内で同じ積算コードが複数Detectionから参照されるのは通常の使い方のため)。
@@ -252,4 +180,4 @@ def build_confirmation_items(
     return items
 
 
-__all__ = ["build_confirmation_items", "DataSourceError"]
+__all__ = ["build_confirmation_items", "detection_page_no_map", "DataSourceError"]

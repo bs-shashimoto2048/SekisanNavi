@@ -201,6 +201,13 @@ class Detection:
     # コピーであり将来のMaster Item側の変更に追従しないため、引出線表示は
     # 可能な限りこちらのライブJOIN結果を優先する (指示書12章/14章)。
     master_item_code: str | None = None
+    # 図面情報マスタ(drawing_evidence_types.key)への参照 (Issue #40 Phase 2)。
+    # 「BBox = 積算コード」から「BBoxは図面上の意味を持った根拠情報」への
+    # 移行のための列。既存のmaster_item_idは変更・削除せず、この列を追加する
+    # だけに留める(Issue #40 Phase 2指示2: 新しい設計までDetection=積算コードへ
+    # 引きずらない一方、既存Viewer/BBox運用は壊さない)。既存行は全てNone。
+    # 値の設定はPhase 3の入力UI再設計で行う(このPhaseではAPIを追加しない)。
+    evidence_type_key: str | None = None
 
 
 @dataclass

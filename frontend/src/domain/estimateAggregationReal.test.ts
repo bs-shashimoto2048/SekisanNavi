@@ -44,6 +44,7 @@ function makeDetection(overrides: Partial<Detection> = {}): Detection {
     master_item_category: '箱・単独',
     master_item_model: 'OS2-816',
     master_item_code: '11001',
+    evidence_type_key: null,
     ...overrides,
   }
 }
