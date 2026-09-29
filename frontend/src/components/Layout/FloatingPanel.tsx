@@ -89,7 +89,10 @@ const HEIGHT_FRACTION_BY_KIND: Record<FloatingPanelKind, number> = {
 // 無くなったため)。kind別の初期幅の値そのものは変更していない。
 const DEFAULT_WIDTH_BY_KIND: Record<FloatingPanelKind, number> = {
   panelInfo: 300,
-  aggregation: 480,
+  // [Issue #36] 上部compact row(製番/合計/件数/対象select/確定/履歴)を
+  // 通常幅で1行に収めるため、480→500pxへ微調整した(他kindの幅は変更しない。
+  // 実ブラウザ実測で500px時に1行へ収まることを確認済み)。
+  aggregation: 500,
   detail: 770,
   master: 320,
   // [Issue #31] クイックリファレンス表(操作/方法の2列)のみのため、

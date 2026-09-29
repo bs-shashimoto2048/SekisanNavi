@@ -113,10 +113,12 @@ src/
     PanelInfo/             盤情報 (estcode_df.csv実データ、Phase 1.14でPanelPropertiesから置換。
                            Issue #6で折りたたみ対応)
     EstimateAggregation/  積算集約 (数量・金額の確認。対象別/総合計の数量集約に対応。
-                           「製番合計」金額は赤系(#dc2626)で強調(Issue #9)。
-                           `EstimateConfirmationAction.tsx`(積算確定ボタン、
+                           「合計」(旧「製番合計」、Issue #36で短縮)金額は
+                           赤系(#dc2626)で強調(Issue #9)。
+                           `EstimateConfirmationAction.tsx`(確定ボタン、
                            Issue #4 Phase B-3、17章)を内包。Issue #6で折りたたみ対応。
-                           詳細は`ui-spec.md` 5.5章)
+                           Issue #36でタイトル直下〜表ヘッダーを1行compact化
+                           (31章)。詳細は`ui-spec.md` 5.5章)
     EstimateDetail/        積算明細 (1 Detection = 1行の根拠追跡。旧EstimateTreeの後継、
                            `ui-spec.md` 5.6章。Issue #6で折りたたみ対応)
     EstimateMasterPicker/ 部品台帳検索(旧称: 積算コードMaster検索)
@@ -886,8 +888,9 @@ Frontendから計算済みの値を信頼して受け取る方式は採用して
   `GET /api/products/{product_no}/estimate-confirmations`(過去snapshot一覧、
   新しい順、明細は含まない)と`GET .../estimate-confirmations/{confirmation_id}`
   (確定1件の詳細、明細一式)の2エンドポイント、およびFrontend側の
-  「確定履歴を見る」ボタン(`EstimateConfirmationHistory.tsx`、積算確定ボタンの隣に
-  配置)。いずれも保存済みの値をそのまま返す/表示するのみで、現在の
+  「履歴」ボタン(旧「確定履歴を見る」、Issue #36で短縮。
+  `EstimateConfirmationHistory.tsx`、確定ボタンの隣に配置)。いずれも
+  保存済みの値をそのまま返す/表示するのみで、現在の
   `estimate_master_items`やCSVから再計算しない。`confirmation_id`が別製番に
   属する場合は404とし、他製番のconfirmationを横断的に閲覧できないようにしている。
 
@@ -1299,7 +1302,7 @@ floating panel自体の見た目もglassmorphism(半透明+ぼかし)へ変更�
   値は実ブラウザ確認のうえ決定(盤情報120/積算明細150/積算コードMaster150/
   積算集約160)。
 - **`.floating-panel__body`のoverflow修正**: 各panelを最小高さまで縮めると、
-  中の`flex-shrink:0`な固定領域(見出し・確定操作群・製番合計等)自体が
+  中の`flex-shrink:0`な固定領域(見出し・確定操作群・合計金額等)自体が
   panelの高さを超える場合がある。従来`overflow: hidden`だったため、その
   場合は固定領域の下側が単純に見えなくなり操作不能になっていた
   (積算集約で実際に発生を確認)。`overflow-y: auto`(横は`hidden`のまま)へ
@@ -1583,3 +1586,65 @@ Viewerを大きく拡大した際、引出線が極端に太く・矢印headが�
   で一定であることを実測確認した。ラベルdrag追従・console/pageエラー無しも
   確認済み。実データを含むスクリーンショットはローカル確認のみに使用し、
   Issue/PR/リポジトリのいずれにも掲載していない。
+
+## 31. 積算集約panel上部の1行コンパクト化 (Issue #36)
+
+タイトルバー直下から積算明細カラムヘッダーまでの領域が2段構成(確定操作群の
+行+合計/件数/対象selectの行)になっており、縦方向の表示領域を圧迫していた
+問題を修正した。詳細な設計判断・実測値は`docs/ui-spec.md` 5.5章「1行
+compact化」参照。実装上のポイントのみ記す:
+
+- **2段だった直接原因**: `.estimate-aggregation__confirmation-row`(製番+確定+
+  履歴)と`.estimate-aggregation__summary-row`(合計+件数+対象select)という
+  2つの独立したflex-wrap行が縦に並んでいたこと。特に`<select>`が
+  `max-width`未指定のため、選択肢の中で最も長い文字列(長い盤名称等)に
+  引きずられて閉じた表示幅が広がる(実測288px)ことが、summary-row単体でも
+  折り返す主要因だった。
+- **1つのcompact rowへ統合**: `EstimateAggregation.tsx`で両行を
+  `estimate-aggregation__compact-row`という1つのflex containerへ統合した。
+  `EstimateConfirmationAction`/`EstimateConfirmationHistory`はそれぞれ
+  独立したcomponentのまま(統合していない)だが、`EstimateConfirmationAction`
+  は独立した箱(border/background付きの`<div>`)をルートにするのをやめ、
+  `<Fragment>`をルートにすることで、その子要素(製番ラベル・確定button)が
+  compact rowの直接のflex子要素になるようにした。DOM宣言順と視覚上の
+  並び順が異なる箇所はCSSの`order`で解決している(コンポーネント境界を
+  変えない最小差分)。
+- **文言短縮**: `製番 {製番} の積算確定`→`製番 {製番}`、`製番合計`→`合計`
+  (個別対象の`○○ 小計`は維持)、`積算コード{N}件`→`{N}件`、
+  `積算確定する`→`確定`、`確定履歴を見る`→`履歴`。
+- **対象selectの幅制御**: `max-width: 82px`+`text-overflow: ellipsis`を
+  追加(実ブラウザ実測で「総合計」が省略されずに収まる最小限の値)。
+  `value`/`onChange`/Viewer連動のロジック・`<option>`一覧自体は無変更。
+- **accessibility**: 可視ラベルは短い単語(`確定`/`履歴`)のまま、補足説明は
+  `title`属性(`title="積算確定する"`/`title="確定履歴を見る"`)で行う。
+  `title`は可視テキストが存在する要素のaccessible nameを上書きしないため、
+  既存の`getByRole('button', { name: '確定' })`のようなテストと矛盾しない
+  (`aria-label`で長い文言へ戻す方式は採用していない)。
+- **panel既定幅の調整**: 積算集約の`DEFAULT_WIDTH_BY_KIND`を480px→500pxへ
+  微調整した(他panelの既定幅は変更していない)。文言短縮・select幅制御・
+  gap/padding引き締めをすべて行った上でも、実測ベースでは480pxにわずかに
+  足りなかったため(`FloatingPanel.tsx`)。
+- **狭幅時**: `flex-wrap: wrap`を維持し、`MIN_WIDTH`(260px)まで縮めても
+  実ブラウザ確認で2段以内に収まることを確認済み(横スクロールは前提にしない)。
+- **既存ロジックへの非干渉**: 対象selectの`value`/`onChange`/Viewer連動、
+  確定/履歴の disabled・確定中・成功・失敗ロジック、確定履歴modalの
+  portal描画、既存のFloatingPanel theme(Issue #34、purple系)・前面強調・
+  glassmorphism・共通透過度はいずれも変更していない。
+- **テスト**: 既存の`EstimateConfirmationAction.test.tsx`(9箇所)・
+  `EstimateConfirmationHistory.test.tsx`(9箇所)・`App.test.tsx`(1箇所)・
+  `EstimateAggregation.test.tsx`(2箇所、部分一致衝突回避のため`within()`で
+  grand-total要素へ絞り込み)の文言依存テストを更新した。新規テスト
+  (compact rowの構造・件数/製番ラベルの短縮文言・対象selectの横並び/
+  max-width・`title`属性・aggregation既定幅500px、計8件超)を追加した。
+  Frontend全体で690件(32ファイル)が成功することを確認済み。
+- **実ブラウザ確認(Playwright)**: 1024px/1600pxいずれもpanel既定幅500pxで
+  6要素(製番/合計/件数/対象select/確定/履歴)が1行に収まることを、各要素の
+  実座標(left/right)が重ならず単調増加することで確認した(高さの異なる
+  要素が`align-items:center`で縦中央揃えになるため、要素ごとの`top`座標の
+  微差だけでは「行が分かれているか」を正しく判定できないことが分かり、
+  座標の重なり判定へ検証方法を改めた)。260px付近まで手動でresizeしても
+  2段以内に収まること、対象selectで長い盤名称を選んでも機能連動
+  (Viewerフォーカス表示)が壊れないこと、合計金額の赤系強調・
+  FloatingPanel purple theme・glassmorphismが維持されていること、
+  console/pageエラー0件を確認済み。実データを含むスクリーンショットは
+  ローカル確認のみに使用し、Issue/PR/リポジトリのいずれにも掲載していない。

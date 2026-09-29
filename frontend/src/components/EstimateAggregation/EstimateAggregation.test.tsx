@@ -217,7 +217,7 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
     expect(screen.queryByText('264,500円')).not.toBeInTheDocument() // 全対象合計(23100+241400)は出さない
   })
 
-  it('labels the header amount "製品全体 小計" (not "製番合計") when 製品全体 is selected, so it is not mistaken for the全製番合計 (指示1章)', () => {
+  it('labels the header amount "製品全体 小計" (not "合計") when 製品全体 is selected, so it is not mistaken for the全製番合計 (指示1章、[Issue #36]「製番合計」→「合計」へ短縮後も個別対象の小計ラベルは維持)', () => {
     const targets = [makeTarget()]
     const items = [makeLineItem({ id: 'a', targetId: 'product', amount: 23100 })]
     render(
@@ -257,7 +257,11 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
     const table = screen.getByRole('table')
     expect(within(table).getByText('18311')).toBeInTheDocument()
     expect(within(table).getByText('11576')).toBeInTheDocument()
-    expect(screen.getByText(/製番合計/)).toBeInTheDocument()
+    // `screen.getByText(/合計/)`だと対象select内の「総合計」optionにも
+    // マッチしてしまう([Issue #36] 「製番合計」→「合計」への短縮後、
+    // 部分一致だと衝突するようになったため、grand-total要素に絞り込む)。
+    const grandTotal = document.querySelector('.estimate-aggregation__grand-total') as HTMLElement
+    expect(within(grandTotal).getByText(/合計/)).toBeInTheDocument()
   })
 
   it('does not show a per-row target badge for 総合計 rows, since a totalLineItems row can represent multiple targets merged together (指示14章: 単一Detectionへのpersistent selectionのような誤解を招く表示にしない)', () => {
@@ -275,7 +279,7 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
     expect(document.querySelector('.estimate-aggregation__badge--target')).toBeNull()
   })
 
-  it('shows 製番合計 as the sum of totalLineItems amounts when 総合計 (null) is selected (積算対象連動の金額表示・図面一覧絞り込み 指示3章: 総合計=全対象の合計)', () => {
+  it('shows 合計(旧: 製番合計)as the sum of totalLineItems amounts when 総合計 (null) is selected (積算対象連動の金額表示・図面一覧絞り込み 指示3章: 総合計=全対象の合計)', () => {
     const targets = [makeTarget(), makePanelTarget()]
     const perTargetForCount = [makeLineItem({ id: 'a-per-target', targetId: 'product' })]
     const totals = [
@@ -291,7 +295,10 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
         onSelectTarget={() => {}}
       />,
     )
-    expect(screen.getByText(/製番合計/)).toBeInTheDocument()
+    // 対象select内の「総合計」optionとの部分一致衝突を避けるため、
+    // grand-total要素に絞り込む(直前のテストと同じ理由)。
+    const grandTotal = document.querySelector('.estimate-aggregation__grand-total') as HTMLElement
+    expect(within(grandTotal).getByText(/合計/)).toBeInTheDocument()
     expect(screen.getByText('264,500円')).toBeInTheDocument() // 23100+241400
   })
 
@@ -375,7 +382,7 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
     expect(scrollArea?.contains(grandTotal as Node)).toBe(false)
   })
 
-  it('shows the 製番合計 amount in red, distinct from the app error color, without reddening other rows (Issue #9)', () => {
+  it('shows the 合計(旧: 製番合計)amount in red, distinct from the app error color, without reddening other rows (Issue #9)', () => {
     render(
       <EstimateAggregation
         targets={[makeTarget()]}
@@ -394,8 +401,8 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
     expect(getComputedStyle(amountStrong).color).not.toBe('rgb(180, 83, 9)')
     expect(getComputedStyle(amountStrong).color).not.toBe('rgb(185, 28, 28)')
 
-    // 通常明細行の金額列・単価列は赤へ変更していない(強調範囲を製番合計の
-    // 金額文字だけに閉じる)。
+    // 通常明細行の金額列・単価列は赤へ変更していない(強調範囲を合計(旧:
+    // 製番合計)の金額文字だけに閉じる)。
     const amountCell = document.querySelector('.estimate-aggregation__col-amount') as HTMLElement
     const priceCell = document.querySelector('.estimate-aggregation__col-price') as HTMLElement
     expect(getComputedStyle(amountCell).color).not.toBe('rgb(220, 38, 38)')
@@ -1032,5 +1039,89 @@ describe('EstimateAggregation: 積算対象Selectの視認性 (Issue #6 指示1�
     )
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'panel:1:1' } })
     expect(onSelectTarget).toHaveBeenCalledWith('panel:1:1')
+  })
+
+  describe('1行compact row (Issue #36)', () => {
+    it('places 製番ラベル・合計・件数・対象select・確定button・履歴buttonのすべてを同一のcompact row配下に置く', () => {
+      const { container } = render(
+        <EstimateAggregation
+          targets={[makeTarget()]}
+          lineItems={[makeLineItem()]}
+          totalLineItems={[makeTotalLineItem()]}
+          selectedTargetId={null}
+          onSelectTarget={() => {}}
+          productNo="A1GV2421"
+        />,
+      )
+      const compactRow = container.querySelector('.estimate-aggregation__compact-row')
+      expect(compactRow).not.toBeNull()
+
+      const label = compactRow!.querySelector('.estimate-confirmation-action__label')
+      const grandTotal = compactRow!.querySelector('.estimate-aggregation__grand-total')
+      const codeCount = compactRow!.querySelector('.estimate-aggregation__code-count')
+      const targetSelectLabel = compactRow!.querySelector('.estimate-aggregation__target-select-label')
+      const confirmButton = compactRow!.querySelector('.estimate-confirmation-action__button')
+      const historyButton = compactRow!.querySelector('.estimate-confirmation-history__trigger')
+
+      for (const el of [label, grandTotal, codeCount, targetSelectLabel, confirmButton, historyButton]) {
+        expect(el).not.toBeNull()
+        // 全要素が同じcompact rowの直接の子(または同一のflex containerの
+        // 参加者)であること。`parentElement`が`compactRow`自身であることまでは
+        // 要求しない(EstimateConfirmationActionが`<Fragment>`をルートに
+        // しているため、label/buttonはcompactRowの直接の子になるが、他は
+        // ラッパー要素を持ちうる将来の変更を許容するため、`compactRow`配下に
+        // 含まれることのみを検証する)。
+        expect(compactRow!.contains(el)).toBe(true)
+      }
+    })
+
+    it('件数の表示文言が「17件」のように短縮されている(「積算コード」という前置きを含まない)', () => {
+      render(
+        <EstimateAggregation
+          targets={[makeTarget()]}
+          lineItems={[makeLineItem({ id: 'a', detectionIds: [1, 2] })]}
+          totalLineItems={[]}
+          selectedTargetId={null}
+          onSelectTarget={() => {}}
+        />,
+      )
+      const codeCount = document.querySelector('.estimate-aggregation__code-count') as HTMLElement
+      expect(codeCount.textContent).toBe('2件')
+      expect(codeCount.textContent).not.toContain('積算コード')
+    })
+
+    it('製番ラベルが「製番 {productNo}」のみで、旧「の積算確定」という説明文を含まない', () => {
+      render(
+        <EstimateAggregation
+          targets={[makeTarget()]}
+          lineItems={[makeLineItem()]}
+          totalLineItems={[]}
+          selectedTargetId={null}
+          onSelectTarget={() => {}}
+          productNo="A1GV2421"
+        />,
+      )
+      expect(screen.getByText('製番 A1GV2421')).toBeInTheDocument()
+      expect(screen.queryByText(/の積算確定/)).not.toBeInTheDocument()
+    })
+
+    it('対象selectのlabelが横並び(row)で、selectにmax-width/省略表示が指定されている', () => {
+      render(
+        <EstimateAggregation
+          targets={[makeTarget()]}
+          lineItems={[makeLineItem()]}
+          totalLineItems={[]}
+          selectedTargetId={null}
+          onSelectTarget={() => {}}
+        />,
+      )
+      const label = document.querySelector('.estimate-aggregation__target-select-label') as HTMLElement
+      expect(getComputedStyle(label).flexDirection).toBe('row')
+
+      const select = screen.getByRole('combobox')
+      const style = getComputedStyle(select)
+      expect(style.maxWidth).not.toBe('none')
+      expect(style.textOverflow).toBe('ellipsis')
+    })
   })
 })

@@ -17,14 +17,65 @@
   flex-shrink: 0;
 }
 
-/* Issue #4 Phase B-4: 積算確定ボタンと確定履歴ボタンを横並びにする
-   ラッパー(見た目上は2つの独立ボタンのまま、配置だけをまとめる)。
-   [追加修正] gapを詰め、確定操作群自体もコンパクトにする。 */
-.estimate-aggregation__confirmation-row {
+/* [Issue #36] タイトル直下〜表ヘッダーまでを、通常のpanel既定幅(500px)では
+   原則1行に収める「1行compact row」。以前の`confirmation-row`(製番+確定+
+   履歴)と`summary-row`(合計+件数+対象select)という2つの独立したflex-wrap行を
+   1つに統合した。`align-items: center`で高さの異なる要素(button/select/
+   テキスト)の上下中央を揃え、`flex-wrap: wrap`は維持して狭幅resize時のみ
+   自然に折り返せるようにする(指示: 「通常幅1行、狭幅時のみwrap」)。 */
+.estimate-aggregation__compact-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 0.3rem;
+  /* [Issue #36] 実ブラウザ実測(panel既定幅500px)で1行に収めるため、
+     0.5rem→0.35remへ引き締めた(6要素×5個のgapが積み重なるため、
+     わずかな差でも合計では効いてくる)。 */
+  column-gap: 0.35rem;
+  row-gap: 0.25rem;
+  margin-bottom: 0.3rem;
+}
+
+/* [Issue #36] DOM上の宣言順(`EstimateConfirmationAction`→
+   `EstimateConfirmationHistory`→合計/件数/対象の順)と、視覚上の並び順
+   (製番→合計→件数→対象→確定→履歴)が異なるため、CSSの`order`で並び替える。
+   コンポーネント境界(`EstimateConfirmationAction`/`EstimateConfirmationHistory`
+   がそれぞれ独立したcomponentであること)を変えずに済む、最小差分での実現方法。
+   `EstimateConfirmationAction.tsx`/`EstimateConfirmationHistory.tsx`側の
+   クラス(`.estimate-confirmation-action__label`等)をここで参照しているが、
+   これは「1行compact rowという配置(レイアウト)を担当するのは
+   `EstimateAggregation`側」という責務分担であり、各componentの見た目
+   (色・padding等)自体はそれぞれ自分のCSSファイルで管理したまま変更していない。 */
+.estimate-confirmation-action__label {
+  order: 1;
+}
+
+.estimate-aggregation__grand-total {
+  order: 2;
+}
+
+.estimate-aggregation__code-count {
+  order: 3;
+}
+
+.estimate-aggregation__target-select-label {
+  order: 4;
+}
+
+.estimate-confirmation-action__button {
+  order: 5;
+}
+
+.estimate-confirmation-history__trigger {
+  order: 6;
+}
+
+/* 積算コード0件時の案内文・確定成功/失敗メッセージは、compact rowの中へ
+   無理に詰めず、`flex-basis: 100%`(親がflex-wrapのため)で必要時のみ
+   独立した行として折り返す。 */
+.estimate-aggregation__empty,
+.estimate-confirmation-action__result {
+  flex-basis: 100%;
+  order: 7;
 }
 
 /* 3領域(盤情報・積算集約・積算明細)の見出しを統一する (指示9章/10章)。
@@ -58,19 +109,20 @@
   margin: 0.3rem 0;
 }
 
-/* 製番合計は常に最上部付近に固定し、明細をスクロールしても見失わないようにする。
-   [追加修正: 積算集約上部の余白削減・再配置] 従来はこのブロックを単独で
-   縦に配置していたが、積算コード件数・対象selectと同じ行(下記
-   `.estimate-aggregation__summary-row`)へ並べる形に変更したため、
-   自身の margin-bottom は行側のgapに委ねて0にする(見た目・文言・
-   赤系強調は変更しない)。 */
+/* 合計金額は常に最上部付近に固定し、明細をスクロールしても見失わないようにする。
+   [Issue #36] 「製番合計」→「合計」へラベルを短縮(選択中の対象が無い場合のみ。
+   個別対象選択時の「○○ 小計」は維持)。件数・対象selectと同じ
+   `.estimate-aggregation__compact-row`へ並べるため、自身の margin-bottom は
+   行側のgapに委ねて0にする(赤系強調は変更しない)。 */
 .estimate-aggregation__grand-total {
   font-size: 1.05rem; /* 全体フォント拡大 指示1章 */
   font-weight: 700;
   color: #1f2937;
   background: #f3f4f6;
   border-radius: 4px;
-  padding: 0.3rem 0.5rem;
+  /* [Issue #36] 1行compact rowで500px幅に収めるため、0.3rem 0.5rem→
+     0.15rem 0.35remへ引き締めた(文字サイズ・赤系強調・数値自体は変更しない)。 */
+  padding: 0.15rem 0.35rem;
 }
 
 /* Issue #9: 「製番合計」の金額文字だけを赤系で強調する。旧来は単価暫定表示と
@@ -89,9 +141,8 @@
   margin-left: 0.3rem;
 }
 
-/* [追加修正: 積算集約上部の余白削減・再配置] 「積算コードN件」は独立した
-   ブロックではなく、`.estimate-aggregation__summary-row`内の1要素として
-   製番合計・対象selectと横並びにする。 */
+/* [Issue #36] 「積算コードN件」→「N件」へ短縮。`.estimate-aggregation__
+   compact-row`内の1要素として合計・対象selectと横並びにする。 */
 .estimate-aggregation__code-count {
   font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ */
   color: #4b5563;
@@ -101,19 +152,6 @@
 .estimate-aggregation__code-count strong {
   color: #1f2937;
   font-weight: 700;
-}
-
-/* [追加修正: 積算集約上部の余白削減・再配置] 製番合計・積算コード件数・
-   対象selectを縦に3ブロック積んでいた旧来のレイアウトを、1つの
-   flex-wrap行へまとめる。パネル幅が十分な場合は横一列に収まり、
-   狭い場合のみ自然に折り返す(縦の固定コストを増やさない)。 */
-.estimate-aggregation__summary-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  column-gap: 0.75rem;
-  row-gap: 0.3rem;
-  margin-bottom: 0.3rem;
 }
 
 /* 単価未設定等、金額の一部を合計に含められなかった旨の注記
@@ -134,15 +172,22 @@
   margin: 0 0 0.4rem;
 }
 
-/* 対象セレクト。 [追加修正] summary-row内の1要素になったため、自身の
-   margin-bottomは行側のgapに委ねて0にする。 */
+/* 対象セレクト。[Issue #36] 「対象」ラベルとselectを縦積み(column)から
+   横並び(row)へ変更した(1行compact rowの表示イメージ「対象 [総合計▼]」に
+   合わせる)。`.estimate-aggregation__compact-row`内の1要素になったため、
+   自身のmargin-bottomは行側のgapに委ねて0にする。 */
 .estimate-aggregation__target-select-label {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   gap: 0.15rem;
   font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.75rem→引き上げ */
   color: #6b7280;
   font-weight: 500;
+  /* selectの`max-width`(下記)込みで、compact row内の1要素として振る舞える
+     よう、この要素自体もwidthを内容にfitさせる(親のflex-wrap上、他要素を
+     押しのけて広がらないようにする)。 */
+  min-width: 0;
 }
 
 /* Issue #6 追加修正(色変更が実画面へ反映されていない件): 初回実装は
@@ -159,6 +204,14 @@
    白/灰)の範囲内。状態色(--status-*)やAI/Manualの意味色とは重ならない。
    padding/高さは増やさない(border-boxのためborder-widthを2pxにしても
    外形サイズは変わらない)。 */
+/* [Issue #36] `<select>`は既定でwidth未指定の場合、閉じた状態の表示幅が
+   `<option>`の中で最も長い文字列(実データでは面番号/盤番号付きの長い盤名称等)
+   に引きずられて広がってしまい、現在選択中が短い「総合計」であっても
+   1行compact rowを圧迫する主要因になっていた(Phase 1調査で実測: 対象
+   なし・padding調整前で288px)。`max-width`を指定し、収まらない場合は
+   `text-overflow: ellipsis`で視覚的に省略する(`<option>`一覧自体・
+   value/onChange/Viewer連動のロジックはいずれも変更していない。ドロップ
+   ダウンを開いた際の各`<option>`は省略されず全文表示される)。 */
 .estimate-aggregation__target-select {
   font: inherit;
   font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
@@ -167,8 +220,16 @@
   background: #eff6ff;
   border: 2px solid #2563eb;
   border-radius: 4px;
-  padding: 0.3rem 0.45rem;
+  padding: 0.2rem 0.3rem;
   cursor: pointer;
+  /* [Issue #36] 実ブラウザ実測で「総合計」(既定の選択肢)が省略されずに
+     収まる最小限の値として82pxを採用した(1行compact rowを500px幅で
+     成立させるため)。長い盤名称等を選んだ場合はtext-overflow: ellipsisで
+     視覚的に省略する(下記)。 */
+  max-width: 82px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .estimate-aggregation__target-select:hover {

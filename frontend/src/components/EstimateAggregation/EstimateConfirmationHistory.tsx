@@ -5,9 +5,11 @@ import type { EstimateConfirmationDetail, EstimateConfirmationItem, EstimateConf
 import './EstimateConfirmationHistory.css'
 
 /**
- * 右ペイン②「積算集約」内の「確定履歴を見る」操作 (Issue #4 Phase B-4、最小UI)。
+ * 右ペイン②「積算集約」内の「確定履歴」操作 (Issue #4 Phase B-4、最小UI。
+ * Issue #36で表示文言を「確定履歴を見る」→「履歴」へ短縮、accessible name
+ * (可視テキスト)は`履歴`のまま、hover時の補足は`title="確定履歴を見る"`で行う)。
  *
- * `EstimateConfirmationAction`(積算確定する)の隣に置く独立したボタンで、
+ * `EstimateConfirmationAction`(積算確定)の隣に置く独立したボタンで、
  * 過去に確定したsnapshotを製番単位で一覧・詳細参照できるようにする。
  * このコンポーネント自身は確定操作(POST)を一切呼ばず、読み出し専用の
  * `GET /api/products/{product_no}/estimate-confirmations`(一覧)/
@@ -100,8 +102,13 @@ export function EstimateConfirmationHistory({ productNo }: Props) {
 
   if (!open) {
     return (
-      <button type="button" className="estimate-confirmation-history__trigger" onClick={handleOpen}>
-        確定履歴を見る
+      <button
+        type="button"
+        className="estimate-confirmation-history__trigger"
+        onClick={handleOpen}
+        title="確定履歴を見る"
+      >
+        履歴
       </button>
     )
   }

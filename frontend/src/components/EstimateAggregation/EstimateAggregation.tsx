@@ -162,9 +162,14 @@ function targetOptionLabel(target: EstimateTarget): string {
  * 盤名称だけだと同名盤と区別できないため、面番号/盤番号という実識別子を必ず含める
  * (指示1章: 「面1 / 盤1 小計」のように対象が一意に分かる表現を優先)。
  * ラベルの共通部分は`formatTargetLabel`(積算明細強化・Undo/Redo・要確認警告・
- * 編集追従 指示9章の所属変更通知と共有)へ切り出し、二重管理しない。 */
+ * 編集追従 指示9章の所属変更通知と共有)へ切り出し、二重管理しない。
+ *
+ * **[Issue #36] 総合計選択時のラベルのみ「製番合計」→「合計」へ短縮した**
+ * (1行compact row化に伴う文言短縮方針)。個別対象選択時の`○○ 小計`という
+ * 表現は、対象が一意に分かる情報を保つため意図的に維持している(指示: 「個別
+ * 対象選択時の小計ラベルは今回は短縮しない」)。 */
 function headerAmountLabel(selectedTargetId: string | null, target: EstimateTarget | null): string {
-  if (selectedTargetId == null) return '製番合計'
+  if (selectedTargetId == null) return '合計'
   return `${formatTargetLabel(target)} 小計`
 }
 
@@ -201,6 +206,18 @@ function headerAmountLabel(selectedTargetId: string | null, target: EstimateTarg
  * 内部スクロールする** (盤フォーカス・積算明細再設計 指示5章)。`<thead>`に
  * `position:sticky`を使い、上部金額は`<table>`の外(スクロール領域の外)に置くことで
  * 確実に常時見えるようにしている。
+ *
+ * **[Issue #36] タイトル直下〜表ヘッダまでの1行compact化**: 以前は
+ * 「確定操作群」「合計/件数/対象select」がそれぞれ独立したflex-wrap行
+ * (2段)だったが、通常のpanel既定幅(500px)で以下が原則1行に収まる
+ * `estimate-aggregation__compact-row`へ統合した:
+ * `製番 {productNo} | 合計 {金額} | {N}件 | 対象 [select] | 確定 | 履歴`。
+ * 文言も長い説明文から短い単語へ変更した(`製番合計`→`合計`、
+ * `積算コード{N}件`→`{N}件`、`積算確定する`→`確定`、`確定履歴を見る`→`履歴`。
+ * 個別対象選択時の`○○ 小計`は対象を一意に示す情報のため維持)。
+ * 対象selectの機能(value/onChange/Viewer連動)・確定/履歴の機能
+ * (disabled条件・イベント処理)はいずれも変更していない。詳細は
+ * `docs/ui-spec.md` 5.5章参照。
  */
 export function EstimateAggregation({
   targets,
@@ -276,25 +293,24 @@ export function EstimateAggregation({
             FloatingPanel側のドラッグハンドル判定(`h2`要素であること)を兼ねる。 */}
         <h2 className="estimate-aggregation__heading">積算集約</h2>
 
-        <div className="estimate-aggregation__confirmation-row">
+        {/* [Issue #36] 旧`confirmation-row`(製番+確定+履歴)と旧`summary-row`
+            (合計+件数+対象select)という2つの独立したflex-wrap行を、1つの
+            compact rowへ統合した。通常のpanel既定幅(500px)では以下がすべて
+            1行に収まる: 製番 / 合計 / 件数 / 対象select / 確定 / 履歴。
+            `EstimateConfirmationAction`/`EstimateConfirmationHistory`は
+            それぞれ`<Fragment>`をルートにしているため、その子要素
+            (製番ラベル・確定button・履歴button)はこのcompact rowの直接の
+            flex子要素として並ぶ。DOM上の宣言順とは異なる視覚上の並び順は、
+            CSS側の`order`(`EstimateAggregation.css`)で実現している
+            (コンポーネント境界を変えずに済む最小差分のため)。 */}
+        <div className="estimate-aggregation__compact-row">
           <EstimateConfirmationAction productNo={productNo} />
           <EstimateConfirmationHistory productNo={productNo} />
-        </div>
 
-        {totalCodeCount === 0 ? (
-          <p className="estimate-aggregation__empty">現在の製番に付加されている積算コードがありません</p>
-        ) : (
-          <>
-            {/* [追加修正: 積算集約上部の余白削減・再配置] 旧来は「製番合計」
-                「積算コードN件」「対象select」を縦に3ブロック積んでいたため、
-                floating panel化に伴い上部の固定UIだけで縦の場所を大きく
-                占有していた。情報量自体は変えず、3つを1つのflex-wrap行へ
-                まとめることで、パネルが十分な幅を持つ場合は横並びに収まり、
-                狭い場合のみ自然に折り返す(縦の固定コストを増やさない)。
-                製番合計金額の赤系強調(.estimate-aggregation__grand-total
-                strong)・積算コード件数・対象selectの各要素・クラス名は
-                そのまま維持し、意味・文言は変更していない。 */}
-            <div className="estimate-aggregation__summary-row">
+          {totalCodeCount === 0 ? (
+            <p className="estimate-aggregation__empty">現在の製番に付加されている積算コードがありません</p>
+          ) : (
+            <>
               <div className="estimate-aggregation__grand-total">
                 {headerLabel}
                 {headerUnknownCount > 0 && (
@@ -303,9 +319,13 @@ export function EstimateAggregation({
                 <strong>{formatCurrency(headerAmount)}</strong>
               </div>
               <span className="estimate-aggregation__code-count">
-                積算コード <strong>{totalCodeCount}</strong>件
+                <strong>{totalCodeCount}</strong>件
               </span>
 
+              {/* [Issue #36] 「対象」ラベルはselectの意味を判別するため維持しつつ、
+                  縦積み(flex-direction: column)から横並び(row)へ変更した。
+                  selectには`max-width`+省略表示を追加している(CSS側、
+                  value/onChange/Viewer連動のロジックは無変更)。 */}
               <label className="estimate-aggregation__target-select-label">
                 対象
                 <select
@@ -324,15 +344,15 @@ export function EstimateAggregation({
                   ))}
                 </select>
               </label>
-            </div>
+            </>
+          )}
+        </div>
 
-            {selectedTarget?.type === 'tie' && (
-              <p className="estimate-aggregation__warn estimate-aggregation__warn--block">
-                根拠BBoxが複数の盤と同じ交差面積で重なっており、機械的に一意の盤へ決定
-                できませんでした。実図面を確認し、手動で判断してください。
-              </p>
-            )}
-          </>
+        {totalCodeCount > 0 && selectedTarget?.type === 'tie' && (
+          <p className="estimate-aggregation__warn estimate-aggregation__warn--block">
+            根拠BBoxが複数の盤と同じ交差面積で重なっており、機械的に一意の盤へ決定
+            できませんでした。実図面を確認し、手動で判断してください。
+          </p>
         )}
       </div>
 
