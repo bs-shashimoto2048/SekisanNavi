@@ -138,6 +138,16 @@ FRAME_ORG_X, FRAME_ORG_Y, FRAME_MINI_X, FRAME_MINI_Y, SCALE_X, SCALE_Y
 列が「KITEN_X/Yを基点とした盤領域の幅・高さ(mm)」に一致することを確認した
 (正面図/背面図では `BAN_W`×`BAN_H1`、側面図では `BAN_D`×`BAN_H1` に一致。
 基礎図行のようにBAN_W/H/Dが空欄でもDETECT_AREA_X/Yは必ず入っている)。
+
+**[2026-09 Issue #38 追記]** 上記の検算で確認できているのは、`BAN_H1`が
+矢視の種別(正面図/背面図)に関わらず座標変換に使われる列である、という事実の
+みである。盤情報floating panel(`PanelInfo.tsx`)は`BAN_H1`を「正面高さ」、
+`BAN_H2`を「背面高さ」として扱い「2300 / 2000」のように表示するが、**この
+正面/背面という意味付けはUI仕様上の前提であり、product_df.csv側のデータ
+定義として確定した事実ではない**(`BAN_H2`は座標変換には一切使われておらず、
+その役割を実データ提供元の定義書等で確認できていない)。詳細は
+`docs/ui-spec.md`「5. PanelInfo」章、Issue #38 Phase 1報告コメント参照。
+
 したがって:
 
 ```

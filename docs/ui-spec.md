@@ -1088,52 +1088,81 @@ front`等)で検証している。実際の色の判別性・見た目はPlaywri
   再指定する設計を踏襲しており、透明な親OverlayがViewer全体のクリックを
   奪ってしまう不具合 (`implementation-plan.md` 8.7章) を再発させない。
 
-## 5. PanelInfo (Viewer上のfloating panel: 盤情報。Phase 1.14でestcode_df.csv実データ参照へ変更、2026-09 Issue #19 Phase 4で右ペインから移動、1.7章参照)
+## 5. PanelInfo (Viewer上のfloating panel: 盤情報。Phase 1.14でestcode_df.csv実データ参照へ変更、2026-09 Issue #19 Phase 4で右ペインから移動、Issue #38でカラム型1行一覧へ再設計、1.7章参照)
 
 **[2026-09 Phase 1.14]** 旧`PanelProperties`コンポーネントを廃止し、`PanelInfo`
 コンポーネントへ置き換えた。表示元データを、product_df.csvの盤領域そのもの
 (PAGE/面番号/盤番号/盤名称/表示種別/H1/H2/W/D) から、`estcode_df.csv`(盤ごとの
-積算コード基本情報) の実データへ変更した。
+積算コード基本情報) の実データへ変更した。以後、現在ページのproduct_df盤全件を
+一覧として常時表示する形へ変更され(次work指示)、**2026-09 Issue #38で
+カード型+中点区切りからCSS Gridベースのカラム型1行一覧へ再設計**した。以下は
+Issue #38時点の現行仕様。
 
-- **表示優先順位**: 中央Viewerでproduct_df盤領域が選択されている間
-  (`selectedProductPanel`)、対応する`estcode_df.csv`行(`ban_menno`/`ban_no`で
-  突き合わせたもの。`App.tsx`の`selectedEstimatePanel`)を優先して表示する。
-  実製番表示中はこちらを正とし、product_df由来の旧表示(表示種別・H1/H2個別行等)
-  とは二重に出さない。
-- **6行構成の基本表示 (省スペース化)**:
+- **列構成 (原則1盤=1行)**:
   ```text
-  型式       IS2
-  面番号     5 / 盤番号 5
-  盤名称     No.2-1低圧動力盤
-  盤寸法     H 2300 : W 1700 : D 2200 mm
-  接続情報   箱・左右(L)
-  並び順     1
+  面/盤 | 盤名称 | 型式 | 高さ | 幅 | 奥行 | 接続
   ```
-  盤高・盤幅・盤奥行(BAN_H/BAN_W/BAN_D)は個別行にせず「H x : W x : D x mm」の
-  1行にまとめる。単位はUnicode互換文字の「㎜」ではなく「mm」を使う。面番号
-  (BAN_MENNO)・盤番号(BAN_NO)も1行にまとめ、表示を省スペース化している。
-  盤名称が長い場合はfloating panelの幅(`components/Layout/FloatingPanel.css`、
-  1.7章参照)を超えず自然に折り返す。`label`列と
-  `value`列はCSS Grid (`<dl>`の`dt`/`dd`交互配置) で揃えている。
-- **欠損値**: null/undefined/NaN/空文字はそのまま出さず「-」で統一する
-  (`PanelInfo.tsx::formatValue`)。盤寸法の一部だけ欠けている場合も
-  `H 2300 : W - : D 2200 mm`のように項目単位で表示する。CSVのfloat表記
-  (`2300.0`等) はJSの数値→文字列変換で自動的に整数表記(`2300`)になるため、
-  個別の丸め処理は行っていない。
-- **盤は選択されているがestcode_df.csvに対応行が無い場合**: 「該当する積算盤情報が
-  ありません」と表示する (アプリ全体をエラーにしない)。
-- **盤が選択されていない場合**: 「盤が選択されていません」を表示する
-  (Phase 1.9以降の仕様通り、ページ切替時に`selectedPanel`が解除されるため、
-  盤情報floating panelの表示も自動的にこの状態へ戻る)。
-- **後方互換のフォールバック (回帰確認用に維持)**: `selectedProductPanel`が無く、
-  選択中Detectionに紐づく旧来のダミーDB盤(`panel_id`)がある場合のみ、従来通り
-  `panel.attributes[]`をそのまま描画する属性テーブル表示にフォールバックする
-  (要件12、W/D/H/BAN_NO等の項目名をコンポーネントへハードコードしない)。
-  **[2026-09 追加UI修正: カラム幅最適化]** このフォールバック表(属性名/値/
-  取得元の3列)にも`table-layout: fixed`を指定し、属性名列(30%)・取得元列
-  (20%、`SOURCE_LABEL`)は必要最小限へ、値列(残り約50%)へ優先的に幅を回す
-  ようにした。属性名・取得元は`white-space: nowrap`、値は
-  `overflow-wrap: break-word`のまま(省略記号は使わない)。
+  見出し行(`.panel-info__row--header`)はスクロール領域の外に固定表示し、
+  データ行(`.panel-info__list-scroll`内)だけが縦スクロールする。1盤=1行を
+  `<button class="panel-info__row panel-info__data-row">`(CSS Gridコンテナ、
+  `grid-template-columns`で7列を定義)として描画し、クリックでViewerの
+  `onSelectPanel`と連動する。既存のキーボード操作性・`aria-pressed`は
+  `<table><tr>`化せず`<button>`のまま維持することで変更していない
+  (`role="row"`/`role="columnheader"`/`role="cell"`を各要素へ付与しているが、
+  `<button>`自身のroleは上書きしない)。
+  列がズレないよう、値が無い項目もセルごと省略せず必ず`-`を描画する
+  (`PanelInfo.tsx::buildRowCells`)。均等幅は禁止し、数値列(面/盤・型式・
+  高さ・幅・奥行)は必要最小限、盤名称・接続へ優先的に幅を配分する
+  (`PanelInfo.css`の`.panel-info__row`、実測に基づく値。Issue #38 Phase 1/
+  Phase 2報告コメント参照)。
+- **高さ表示**: `PanelPreview.ban_h1`(正面として扱う)/`ban_h2`(背面として
+  扱う)を優先し、両方欠損している場合のみ`EstimatePanelInfo.ban_h`を
+  fallbackにする(`PanelInfo.tsx::formatHeight`)。
+  - 正面あり/背面あり/同値 → `2300`
+  - 正面あり/背面あり/異値 → `2300 / 2000`
+  - 正面あり/背面なし     → `2300`
+  - 正面なし/背面あり     → `- / 2000` (正面値と誤認しないよう明示的に`-`を残す)
+  - 両方なし              → `ban_h`があればそれを表示、無ければ`-`
+
+  **注意**: `ban_h1`=正面/`ban_h2`=背面という意味付けは、このUI仕様上の前提で
+  あり、`product_df.csv`側のデータ定義として確定した事実ではない(詳細は
+  `docs/data-source.md`「5.1 product_df.csvの盤領域座標変換」章末の注記、
+  およびIssue #38 Phase 1報告コメント参照)。
+- **幅/奥行**: `EstimatePanelInfo.ban_w`/`ban_d`を優先し、無ければ
+  `PanelPreview.ban_w`/`ban_d`をfallbackにする(`PanelInfo.tsx::
+  formatWithFallback`)。値が無ければ`-`。
+- **型式/接続/盤名称**: 型式は`EstimatePanelInfo.model`(fallback無し、無ければ
+  `-`)。接続は`EstimatePanelInfo.ban_connect`(同上)。盤名称は
+  `EstimatePanelInfo.ban_meisyou`を優先し、`PanelPreview.ban_meisyou`を
+  fallbackにする。盤名称・接続のみ長い値をellipsis(`text-overflow: ellipsis`)
+  で省略し、`title`属性で全文を確認できる。型式/高さ/幅/奥行は
+  `white-space: nowrap`のまま(省略記号は使わない)。
+- **欠損値**: null/undefined/NaN/空文字はそのまま出さず`-`で統一する
+  (`PanelInfo.tsx::formatValue`)。CSVのfloat表記(`2300.0`等)はJSの
+  数値→文字列変換で自動的に整数表記(`2300`)になるため、個別の丸め処理は
+  行っていない。
+- **estcode_df.csvに対応行が無い場合**: 行自体は表示し続け(面/盤・盤名称は
+  product_df由来)、型式/接続は`-`、高さ/幅/奥行はproduct_df側の値へ
+  fallback可能なものはfallbackする。「該当する積算盤情報がありません」という
+  長文で列をまとめて置き換える設計は採用していない(7列構造を常に維持する)。
+- **後方互換のフォールバック (回帰確認用に維持、Issue #38では変更していない)**:
+  `selectedProductPanel`が無く、選択中Detectionに紐づく旧来のダミーDB盤
+  (`panel_id`)がある場合のみ、従来通り`panel.attributes[]`をそのまま描画する
+  属性テーブル表示にフォールバックする(要件12、W/D/H/BAN_NO等の項目名を
+  コンポーネントへハードコードしない)。この表(属性名/値/取得元の3列)にも
+  `table-layout: fixed`を指定し、属性名列(30%)・取得元列(20%、
+  `SOURCE_LABEL`)は必要最小限へ、値列(残り約50%)へ優先的に幅を回す。
+  属性名・取得元は`white-space: nowrap`、値は`overflow-wrap: break-word`の
+  まま(省略記号は使わない)。
+- **panel既定幅/最小幅 (Issue #38)**: `panelInfo`の既定幅を300→480pxへ拡大した
+  (`FloatingPanel.tsx::DEFAULT_WIDTH_BY_KIND`)。数値列(面/盤・型式・高さ・
+  幅・奥行)はellipsis無しで常に1行に収まるが、盤名称・接続は値の長さに
+  よってはこの既定幅でもellipsisが働く(実データで盤5件中3件が該当した
+  実測例あり)。narrow resize時の横スクロールを避けるため、
+  `panelInfo`専用の最小幅(`MIN_WIDTH_BY_KIND.panelInfo`)を434pxとした
+  (他4panelのMIN_WIDTHは従来通り260pxのまま)。この値はPlaywrightでの実測
+  (クリップが発生し始める境界が430pxちょうどであることを確認し、+4pxの
+  安全マージンを加えたもの)に基づく。
 - **紐付けキー**: `product_df.csv`の`BAN_MENNO`と`estcode_df.csv`の`BAN_MENNO`は
   実データで値・意味とも完全に一致することを確認済み (`ban_menno`+`ban_no`の
   組み合わせが同一製番内で一意)。詳細は`docs/implementation-plan.md`

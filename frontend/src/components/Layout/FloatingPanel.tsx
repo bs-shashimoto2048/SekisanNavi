@@ -43,7 +43,24 @@ interface Props {
   children: ReactNode
 }
 
-const MIN_WIDTH = 260
+// [Issue #38 Phase 2] 従来は全kind共通の単一MIN_WIDTH(260px)だったが、
+// panelInfoがカラム型1行一覧(CSS Grid、7列)へ再設計されたことで、260pxでは
+// 数値列(型式/高さ/幅/奥行)のnowrapを維持できず`overflow-x: hidden`により
+// 接続列等が無音でクリップされてしまう。他panelは従来通り260pxのままでよいため、
+// `MIN_HEIGHT_BY_KIND`と同じ考え方でkind別へ変更した。
+// panelInfoの値はPlaywrightでの実測(実際のCSS/フォントで`.panel-info__row`の
+// scrollWidthがclientWidthを超えない=クリップが発生しない最小panel幅を、
+// 1px刻みで二分探索的に特定)により、クリップが発生し始める境界が
+// ちょうど430px(429pxで1px分クリップが発生)であることを確認した。
+// 環境間のフォントレンダリング差を吸収する安全マージンとして+4pxし、434pxを
+// 採用する(詳細な実測ログはIssue #38 Phase 2報告コメント参照)。
+const MIN_WIDTH_BY_KIND: Record<FloatingPanelKind, number> = {
+  panelInfo: 434,
+  aggregation: 260,
+  detail: 260,
+  master: 260,
+  guide: 260,
+}
 // [追加修正: 積算コードMasterのfloating化 / 最小高さのさらなる縮小]
 // 従来は全kind共通の単一MIN_HEIGHT(180px)だったが、各panelの実際の構成
 // (見出し+最低限の操作UI+1〜2行程度が成立するライン)は種別ごとに異なるため、
@@ -88,7 +105,10 @@ const HEIGHT_FRACTION_BY_KIND: Record<FloatingPanelKind, number> = {
 // (ROW_GAP)は不要になった(縦に積むだけで、同じ行に並ぶ2panelという概念自体が
 // 無くなったため)。kind別の初期幅の値そのものは変更していない。
 const DEFAULT_WIDTH_BY_KIND: Record<FloatingPanelKind, number> = {
-  panelInfo: 300,
+  // [Issue #38 Phase 2] カラム型1行一覧(7列)を1行で成立させるため、
+  // 300→480pxへ拡大した(実測では省略記号なしの完全表示に約500px必要だが、
+  // Viewer占有とのバランスを優先し、まず480pxで実装・確認する。指示書7章)。
+  panelInfo: 480,
   // [Issue #36] 上部compact row(製番/合計/件数/対象select/確定/履歴)を
   // 通常幅で1行に収めるため、480→500pxへ微調整した(他kindの幅は変更しない。
   // 実ブラウザ実測で500px時に1行へ収まることを確認済み)。
@@ -154,12 +174,13 @@ function clampPosition(rect: FloatingPanelRect, container: Size): FloatingPanelR
 }
 
 function clampSize(rect: FloatingPanelRect, container: Size, kind: FloatingPanelKind): FloatingPanelRect {
+  const minWidth = MIN_WIDTH_BY_KIND[kind]
   const minHeight = MIN_HEIGHT_BY_KIND[kind]
-  const maxWidth = Math.max(MIN_WIDTH, container.width - rect.left)
+  const maxWidth = Math.max(minWidth, container.width - rect.left)
   const maxHeight = Math.max(minHeight, container.height - rect.top)
   return {
     ...rect,
-    width: Math.min(Math.max(MIN_WIDTH, rect.width), maxWidth),
+    width: Math.min(Math.max(minWidth, rect.width), maxWidth),
     height: Math.min(Math.max(minHeight, rect.height), maxHeight),
   }
 }
@@ -190,7 +211,10 @@ function clampSize(rect: FloatingPanelRect, container: Size, kind: FloatingPanel
  */
 function computeInitialRect(kind: FloatingPanelKind, container: Size, stackIndex: number): FloatingPanelRect {
   const minHeight = MIN_HEIGHT_BY_KIND[kind]
-  const width = Math.max(MIN_WIDTH, Math.min(DEFAULT_WIDTH_BY_KIND[kind], container.width - SIDE_MARGIN * 2))
+  const width = Math.max(
+    MIN_WIDTH_BY_KIND[kind],
+    Math.min(DEFAULT_WIDTH_BY_KIND[kind], container.width - SIDE_MARGIN * 2),
+  )
   const left =
     kind === 'guide' ? SIDE_MARGIN : Math.max(0, container.width - SIDE_MARGIN - width)
 
@@ -494,7 +518,7 @@ export function FloatingPanel({ visible, kind, visibleKinds, containerRef, rect,
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
-      startWidth: rect?.width ?? MIN_WIDTH,
+      startWidth: rect?.width ?? MIN_WIDTH_BY_KIND[kind],
       startHeight: rect?.height ?? MIN_HEIGHT_BY_KIND[kind],
     }
   }

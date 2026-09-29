@@ -111,7 +111,9 @@ src/
       ProductPanelOverlay.tsx  product_df由来の盤領域Overlay (Phase 1.8、14章)
       LeaderLineOverlay.tsx    引出線(Leader Line)表示 (Phase 1.11、15章)
     PanelInfo/             盤情報 (estcode_df.csv実データ、Phase 1.14でPanelPropertiesから置換。
-                           Issue #6で折りたたみ対応)
+                           Issue #6で折りたたみ対応。Issue #38でカード型+中点区切りから
+                           CSS Gridベースのカラム型1行一覧(面/盤|盤名称|型式|高さ|幅|奥行|接続)へ
+                           再設計)
     EstimateAggregation/  積算集約 (数量・金額の確認。対象別/総合計の数量集約に対応。
                            「合計」(旧「製番合計」、Issue #36で短縮)金額は
                            赤系(#dc2626)で強調(Issue #9)。
@@ -1646,5 +1648,75 @@ compact化」参照。実装上のポイントのみ記す:
   2段以内に収まること、対象selectで長い盤名称を選んでも機能連動
   (Viewerフォーカス表示)が壊れないこと、合計金額の赤系強調・
   FloatingPanel purple theme・glassmorphismが維持されていること、
+  console/pageエラー0件を確認済み。実データを含むスクリーンショットは
+  ローカル確認のみに使用し、Issue/PR/リポジトリのいずれにも掲載していない。
+
+## 32. 盤情報panelのカラム型1行一覧への再設計 (Issue #38)
+
+カード型+中点区切り(`.panel-info__card`/`.panel-info__card-row`)は1盤あたりの
+縦占有が大きく、Viewer作業領域を圧迫していたため、原則1盤=1行のカラム型一覧
+(面/盤|盤名称|型式|高さ|幅|奥行|接続)へ再設計した。詳細な設計判断・実測値は
+`docs/ui-spec.md` 5章、Issue #38 Phase 1/Phase 2報告コメント参照。実装上の
+ポイントのみ記す:
+
+- **`<table><tr>`化せずCSS Gridを選択**: 各盤の行を`<table><tr>`ではなく、
+  既存の`<button>`(1盤=1行)自身を`display: grid`のコンテナにする方式にした。
+  `<table><tr>`にすると行全体のクリック可能性・キーボード操作性を
+  `role="button" tabIndex=0`+keydownで再実装する必要が生じるため、既存の
+  native `<button>`のキーボード操作性・`aria-pressed`をそのまま活かせる
+  この方式を採用した(Issue #38 Phase 1調査コメントで比較検討済み)。
+  `role="row"`/`role="columnheader"`/`role="cell"`は付与しているが、
+  `<button>`自身の暗黙のrole(button)は上書きしていない
+  (`aria-pressed`との組み合わせがARIA的に無効になることを避けるため)。
+- **7列常時描画**: 値が無い項目もセルごと省略せず必ず`-`を描画する
+  (`PanelInfo.tsx::buildRowCells`)。旧カード型は「値が無ければspanごと
+  省略する」設計だったため、これを検証していた既存test(`PanelInfo.test.tsx`)
+  は新設計と正面から矛盾し、書き換えが必須だった。
+- **列幅は実測ベース**: 均等幅を禁止し、Playwrightで実際のCSS/フォント
+  (`Yu Gothic UI`、ルートfont-size 15px)による自然幅を実測して各列の
+  `grid-template-columns`を決定した。指示書が示した初期値(面/盤44px・
+  盤名称minmax(130px,2fr)・型式70px・高さ90px・幅42px・奥行44px・接続
+  minmax(72px,1fr))をそのまま使うと、既定幅480pxで内容の合計がpanel幅を
+  上回り、`overflow-x: hidden`により接続列等が無音でクリップされることを
+  実測で確認したため、各数値列を実測済みの自然幅+小さな余白まで詰め、
+  浮いた分を盤名称・接続のminmax下限へ回した最終値(面/盤38px・盤名称
+  minmax(70px,2fr)・型式60px・高さ86px・幅34px・奥行36px・接続
+  minmax(40px,1fr))を採用した。「2300 / 2000」が高さ列で1行に収まることを
+  最優先し、高さ列は他の数値列より広めに確保している。
+- **panel既定幅/最小幅の調整**: `DEFAULT_WIDTH_BY_KIND.panelInfo`を
+  300→480pxへ拡大した。また、`MIN_WIDTH`が全kind共通の単一値(260px)
+  だったのを`MIN_WIDTH_BY_KIND`へ変更し(`MIN_HEIGHT_BY_KIND`と同じ考え方)、
+  `panelInfo`のみ434pxとした(他4panelは260pxのまま)。この値は
+  Playwrightで1px刻みに幅を変えながら「`.panel-info__row`のscrollWidthが
+  clientWidthを超えない(クリップが発生しない)」最小幅を特定し(境界は
+  ちょうど430px)、環境間のフォントレンダリング差を吸収する安全マージン
+  として+4pxしたもの。
+- **高さ表示ルール**: `PanelPreview.ban_h1`(正面)/`ban_h2`(背面)を優先し、
+  両方欠損時のみ`EstimatePanelInfo.ban_h`をfallbackにする
+  (`PanelInfo.tsx::formatHeight`)。正面なし・背面のみ存在するケース
+  (Phase 1調査時点で実データでの有無は未確認)は、単に背面値を表示すると
+  正面値と誤認されるため、`- / 2000`のように正面側へ明示的に`-`を残す
+  表示にした。`ban_h1`=正面/`ban_h2`=背面という意味付け自体は、
+  product_df.csv側のデータ定義として確認できた事実ではなく、UI仕様上の
+  前提であることを実装コメント・`docs/data-source.md`双方に明記した。
+- **幅/奥行のfallback順序が反転**: 旧カード型は寸法(H/W/D)をすべて
+  `EstimatePanelInfo`(estcode_df.csv)のみから表示していたが、今回
+  `PanelPreview`(product_df.csv)側へのfallbackを新設した
+  (`EstimatePanelInfo.ban_w/ban_d`優先、無ければ`PanelPreview.ban_w/ban_d`)。
+- **旧fallback表示は変更していない**: product_df盤が0件の場合の旧来Panel
+  属性table(`panel-info__table`)は今回の対象外(回帰確認のみ実施)。
+- **既存ロジックへの非干渉**: `buildPanelCards`(矢視のグループ化)・
+  `onSelectPanel`・Viewer連動・FloatingPanel theme(Issue #34、blue系)・
+  前面強調・glassmorphismはいずれも変更していない。
+- **テスト**: `PanelInfo.test.tsx`を新設計へ全面的に書き換えた(32件)。
+  `App.test.tsx`の寸法結合文字列(`H 2300 : W 900 : D 2200`)を検証していた
+  1箇所を個別セル検証へ更新した。Frontend全体で699件(32ファイル)が
+  成功することを確認済み。
+- **実ブラウザ確認(Playwright)**: 実製番(A1GV2421)で1024px/1600pxいずれも
+  panel既定幅480pxで7列が横スクロール無しに収まること、高さ列(`2300`表記)
+  がクリップされないこと、盤名称/接続のみellipsisが働き型式/高さ/幅/奥行は
+  nowrapのままであること、選択行が薄いblue背景+左accentで識別できること、
+  resize handleでpanelInfoの最小幅(434px)までドラッグしても横スクロールが
+  発生しないこと、5panel theme/前面強調/glassmorphismが維持されていること、
   console/pageエラー0件を確認済み。実データを含むスクリーンショットは
   ローカル確認のみに使用し、Issue/PR/リポジトリのいずれにも掲載していない。

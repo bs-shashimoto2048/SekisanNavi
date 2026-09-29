@@ -45,112 +45,122 @@
   margin: 0;
 }
 
-/* カード一覧だけをスクロールさせる領域 (指示4章: 見出し固定・一覧のみスクロール)。 */
+/* データ行だけをスクロールさせる領域 (指示4章: 見出し固定・一覧のみスクロール)。
+   [Issue #38 Phase 2] 横スクロールは禁止のため(instructions 6/7/13章)、
+   `overflow-x: hidden`を明示し、下記Gridの列幅計算に万一の誤差があっても
+   横スクロールバーそのものは出ない設計にしている(クリップされるのみ)。 */
 .panel-info__list-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
-/* 盤カード一覧 (次work指示3章/4章)。ul自体の既定装飾(マーカー・padding)を消し、
-   カード間はgapで揃える。指示2章: カード間の余白を詰める(旧0.3rem→0.25rem)。 */
+/* 盤一覧 (Issue #38 Phase 2でカラム型1行一覧へ再設計)。ul自体の既定装飾
+   (マーカー・padding)を消し、行間のgap・カードの角丸は撤去して「表形式の
+   row」として見せる(指示2章)。行の区切りは各行のborder-bottomで表現する。 */
 .panel-info__list {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* 盤ごとのコンパクトなカード (次work指示4章。指示1章/2章で原則1行表示・縦余白縮小)。
-   button要素にして、クリックによるViewerとの選択連動を自然な操作対象として
-   提示する (指示書6章: クリック対象の分かりやすさ)。paddingは1カードあたり
-   約30〜36px(目安)に収まる程度まで詰めつつ、クリック対象としての高さは
-   確保する (指示2章)。 */
-.panel-info__card {
-  display: block;
+/* 見出し行・データ行で共有するCSS Grid列定義 (Issue #38 Phase 2 指示6章)。
+   均等幅を禁止し、実測(Issue #38 Phase 1調査コメント参照)に基づき
+   数値列(面/盤・型式・高さ・幅・奥行)は必要最小限、盤名称・接続へ
+   優先的に幅を配分する。「2300 / 2000」が高さ列で1行に収まることが
+   最重要要件のため、高さ列は他の数値列よりも広めに確保している。
+   [Issue #38 Phase 2 実測後の調整] 指示書6章の初期値(面/盤44px・盤名称
+   minmax(130px,2fr)・型式70px・高さ90px・幅42px・奥行44px・接続
+   minmax(72px,1fr))をそのまま使うと、既定幅480px時点で列内容の合計が
+   panel幅を上回り、`overflow-x: hidden`により接続列が無音でクリップされて
+   しまうことをPlaywrightでの実測で確認した(詳細な数値根拠はIssue #38
+   Phase 2報告コメント参照)。各数値列は実測済みの自然幅+小さな余白まで
+   詰め、浮いた分を盤名称・接続のminmax下限へ回すことで、480px既定幅・
+   約430px前後の最小幅のいずれでもクリップが発生しないことを確認した値。 */
+.panel-info__row {
+  display: grid;
+  grid-template-columns: 38px minmax(70px, 2fr) 60px 86px 34px 36px minmax(40px, 1fr);
+  align-items: center;
+  column-gap: 0.4rem;
+}
+
+.panel-info__row--header {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #6b7280;
+  border-bottom: 1px solid var(--border-table-outer, #cbd5e1);
+  padding: 0.2rem 0.5rem;
+  margin-bottom: 0.15rem;
+}
+
+/* 盤ごとのデータ行 (指示2章: カード感を撤去し、表のrowとして見せる)。
+   button要素のまま(クリック可能・キーボード操作性・aria-pressedを
+   一切変更しない、Issue #38 Phase 1調査コメント参照)。 */
+.panel-info__data-row {
   width: 100%;
   text-align: left;
   font: inherit;
   background: #fff;
-  border: 1px solid #e5e7eb;
+  border: none;
+  border-bottom: 1px solid var(--border-cell, #edf1f5);
   border-left: 3px solid transparent; /* 選択中アクセント分の幅を常に確保し、
-                                          選択/非選択切替時にカードの横幅が
+                                          選択/非選択切替時に行の横幅が
                                           ガタつかないようにする。 */
-  border-radius: 4px;
-  padding: 0.3rem 0.5rem;
+  padding: 0.25rem 0.5rem;
   cursor: pointer;
 }
 
-.panel-info__card:hover {
-  border-color: #93c5fd;
+.panel-info__data-row:hover {
   background: #f8fafc;
 }
 
 /* 現在選択中の盤の識別 (指示書6章)。左アクセント+背景色の薄い塗り。
    過度に派手な演出(点滅・太い縁取り等)はしない。 */
-.panel-info__card--selected {
+.panel-info__row--selected {
   border-left-color: #2563eb;
   background: rgba(37, 99, 235, 0.06);
 }
 
-.panel-info__card--selected:hover {
+.panel-info__row--selected:hover {
   background: rgba(37, 99, 235, 0.1);
 }
 
-/* 指示1章: 面/盤番号・盤名称・型式・寸法・接続情報を原則1行にまとめる。
-   `flex-wrap: wrap`だけで折り返し制御を行い、幅が足りない時だけ
-   優先度の低い項目(記述順が後の項目=接続情報→寸法の順)から自然に2行目へ
-   送られる(JSでの幅測定やメディアクエリは使わない)。 */
-.panel-info__card-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  row-gap: 0.15rem;
+/* セル共通: 型式/高さ/幅/奥行は原則nowrap(指示8章)。盤名称/接続のみ
+   `--ellipsis`修飾で折り返し・省略記号を許可する。 */
+.panel-info__cell {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: #4b5563;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
-.panel-info__badge {
-  flex: 0 0 auto;
-  font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ */
+.panel-info__cell--ellipsis {
+  text-overflow: ellipsis;
+}
+
+.panel-info__cell--menban {
   font-weight: 700;
   color: #4b5563;
-  background: #f3f4f6;
-  border-radius: 3px;
-  padding: 0.05rem 0.35rem;
-  white-space: nowrap;
 }
 
-/* 盤名称は最も目立たせたい情報 (指示書5章)。長い名称でも文字が途中で切れたり
-   横スクロールが必要になったりしないよう、折り返しを許可する
-   (指示書1章/8章の「文字が途中で切れない」方針を、この一覧でも踏襲する)。 */
-.panel-info__name {
-  font-size: 1rem; /* 全体フォント拡大 指示1章: 旧0.92rem→引き上げ */
+/* 盤名称は最も目立たせたい情報 (指示書5章)。 */
+.panel-info__cell--name {
+  font-size: 1rem;
   font-weight: 600;
   color: #1f2937;
-  overflow-wrap: break-word;
 }
 
-/* 型式・寸法・接続情報 (指示書5章: 主情報より1段控えめに)。ラベル無しで
-   フィールドを並べ、フィールド間は中点で区切る (指示書5章: 単純なラベル:値の
-   縦並びにしない)。指示1章でbadge/name含む1行にまとめたため、区切り記号は
-   badge以外のすべての項目間(name→型式→寸法→接続情報)へ一律に適用する。 */
-.panel-info__meta {
-  font-size: 0.88rem; /* 全体フォント拡大 指示1章: 旧0.8rem→引き上げ */
-  font-weight: 500; /* 極端に細いweightは避ける (指示書2章) */
-  color: #4b5563;
+.panel-info__cell--header {
+  color: inherit;
+  font: inherit;
+  overflow: visible;
   white-space: nowrap;
-}
-
-.panel-info__card-row > span:not(:first-child)::before {
-  content: '・';
-  margin: 0 0.4rem;
-  color: #d1d5db;
-}
-
-.panel-info__meta--muted {
-  color: #9ca3af;
-  white-space: normal;
 }
 
 /* --- 旧来のダミーDB由来Panel表示 (現在ページにproduct_df盤が1件も無い場合の
