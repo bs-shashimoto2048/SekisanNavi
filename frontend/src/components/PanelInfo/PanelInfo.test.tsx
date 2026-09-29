@@ -45,7 +45,12 @@ const dummyPanel: Panel = {
   ],
 }
 
-describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () => {
+/** 盤名称のテキストから、その盤の行(button)を取得するテスト用ヘルパー。 */
+function getRow(name: string): HTMLElement {
+  return screen.getByText(name).closest('button') as HTMLElement
+}
+
+describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)', () => {
   it('shows the empty message when the current page has no product_df panels and no legacy panel', () => {
     render(
       <PanelInfo
@@ -59,7 +64,7 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
     expect(screen.getByText('このページには盤情報がありません')).toBeInTheDocument()
   })
 
-  it('shows a card with the matched estcode_df fields for a single panel', () => {
+  it('renders a fixed header row with the 7 columns in order, outside the scrollable list', () => {
     render(
       <PanelInfo
         panel={null}
@@ -69,11 +74,65 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
         onSelectPanel={() => {}}
       />,
     )
-    expect(screen.getByText('5/5')).toBeInTheDocument()
-    expect(screen.getByText('No.2-1低圧動力盤')).toBeInTheDocument()
-    expect(screen.getByText('IS2')).toBeInTheDocument()
-    expect(screen.getByText('H 2300 : W 1700 : D 2200')).toBeInTheDocument()
-    expect(screen.getByText('箱・左右(L)')).toBeInTheDocument()
+    const header = document.querySelector('.panel-info__row--header') as HTMLElement
+    expect(header).not.toBeNull()
+    const labels = within(header)
+      .getAllByRole('columnheader')
+      .map((el) => el.textContent)
+    expect(labels).toEqual(['面/盤', '盤名称', '型式', '高さ', '幅', '奥行', '接続'])
+
+    const scrollArea = document.querySelector('.panel-info__list-scroll')
+    expect(scrollArea?.contains(header)).toBe(false)
+  })
+
+  it('always renders exactly 7 cells per row, showing "-" for missing values instead of omitting the cell (指示書8章: 列ズレ禁止)', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[
+          makeEstimatePanel({ model: null, ban_meisyou: null, ban_connect: null, ban_h: null, ban_w: null, ban_d: null }),
+        ]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    // 盤名称はestcode_df側がnullのためproduct_df側('No.2-1低圧動力盤')へfallbackする。
+    const row = getRow('No.2-1低圧動力盤')
+    const cells = within(row).getAllByRole('cell')
+    expect(cells).toHaveLength(7)
+    // 型式・接続はestcode_df側の値が無く、product_dfにも対応fieldが無いため"-"。
+    expect(cells[2].textContent).toBe('-') // 型式
+    expect(cells[6].textContent).toBe('-') // 接続
+    // 高さ/幅/奥行はestcode_dfがnullでもproduct_df側(ban_h1=2100, ban_w=1900, ban_d=1200)へ
+    // fallbackするため"-"にはならない。
+    expect(cells[3].textContent).toBe('2100') // 高さ (ban_h1のみ、ban_h2はnull)
+    expect(cells[4].textContent).toBe('1900') // 幅
+    expect(cells[5].textContent).toBe('1200') // 奥行
+  })
+
+  it('shows the matched estcode_df fields for a single panel across the 7 columns', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel()]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    const row = getRow('No.2-1低圧動力盤')
+    const cells = within(row).getAllByRole('cell')
+    expect(cells[0].textContent).toBe('5/5') // 面/盤
+    expect(cells[1].textContent).toBe('No.2-1低圧動力盤') // 盤名称
+    expect(cells[2].textContent).toBe('IS2') // 型式
+    // 高さ: product_df側 ban_h1=2100/ban_h2=null が優先されるため、
+    // estcode_df側のban_h=2300は使われない (指示書3章の優先順位)。
+    expect(cells[3].textContent).toBe('2100')
+    // 幅/奥行: estcode_df側が優先 (指示書4章)。
+    expect(cells[4].textContent).toBe('1700')
+    expect(cells[5].textContent).toBe('2200')
+    expect(cells[6].textContent).toBe('箱・左右(L)')
     // 見出しに件数が出る (指示書4章の表示例「盤情報 5件」に相当)。
     expect(document.querySelector('.panel-info__heading')?.textContent).toContain('盤情報　1件')
   })
@@ -104,7 +163,7 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
     expect(screen.getByText('制御盤')).toBeInTheDocument()
   })
 
-  it('collapses multiple views (矢視) of the same panel (same ban_menno+ban_no) into a single card', () => {
+  it('collapses multiple views (矢視) of the same panel (same ban_menno+ban_no) into a single row', () => {
     const panels = [
       makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: '高圧受電盤', ban_type: '正面図' }),
       makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: '高圧受電盤', ban_type: '背面図' }),
@@ -126,9 +185,9 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
     render(
       <PanelInfo
         panel={null}
-        panels={[makeProductPanel()]}
+        panels={[makeProductPanel({ ban_h1: null, ban_h2: null, ban_w: null, ban_d: null })]}
         estimatePanels={[
-          makeEstimatePanel({ model: null, ban_meisyou: null, ban_connect: null, ban_h: null }),
+          makeEstimatePanel({ model: null, ban_meisyou: null, ban_connect: null, ban_h: null, ban_w: null, ban_d: null }),
         ]}
         selectedPanel={null}
         onSelectPanel={() => {}}
@@ -137,8 +196,6 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
     expect(screen.queryByText('null')).not.toBeInTheDocument()
     expect(screen.queryByText('undefined')).not.toBeInTheDocument()
     expect(screen.queryByText('NaN')).not.toBeInTheDocument()
-    // 寸法は項目ごとに"-"を出す (指示書8章)。
-    expect(screen.getByText('H - : W 1700 : D 2200')).toBeInTheDocument()
   })
 
   it('falls back to the product_df name when estcode_df has no matching ban_meisyou, instead of showing "-" (実データ上より有用な情報を優先)', () => {
@@ -154,44 +211,11 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
     expect(screen.getByText('No.2-1低圧動力盤')).toBeInTheDocument()
   })
 
-  it('omits the model/connect fields cleanly (no stray "-") when they are absent, rather than cluttering the compact secondary line', () => {
-    render(
-      <PanelInfo
-        panel={null}
-        panels={[makeProductPanel()]}
-        estimatePanels={[makeEstimatePanel({ model: null, ban_connect: null })]}
-        selectedPanel={null}
-        onSelectPanel={() => {}}
-      />,
-    )
-    const card = screen.getByText('No.2-1低圧動力盤').closest('button') as HTMLElement
-    const row = card.querySelector('.panel-info__card-row') as HTMLElement
-    // 寸法のみが残り、値の無い型式・接続情報はスパンごと出さない
-    // (盤情報1行化・3領域リサイズ拡張・Redo時引出線回帰修正 指示1章で
-    // 主情報/副情報の行分けを廃止し、1行(.panel-info__card-row)へ統合した)。
-    expect(row.querySelectorAll('.panel-info__meta')).toHaveLength(1)
-    expect(row.querySelector('.panel-info__meta')?.textContent).toBe('H 2300 : W 1700 : D 2200')
-  })
-
-  it('formats BAN_H/W/D as a single "H x : W x : D x mm" line, not separate rows, with "-" for missing dimensions individually (指示書5章/8章)', () => {
-    render(
-      <PanelInfo
-        panel={null}
-        panels={[makeProductPanel()]}
-        estimatePanels={[makeEstimatePanel({ ban_h: 2300, ban_w: null, ban_d: 2200 })]}
-        selectedPanel={null}
-        onSelectPanel={() => {}}
-      />,
-    )
-    expect(screen.getByText('H 2300 : W - : D 2200')).toBeInTheDocument()
-    expect(screen.queryByText(/㎜/)).not.toBeInTheDocument()
-  })
-
   it('shows whole numbers without a trailing ".0" even if the source value came from a float column (指示書9章)', () => {
     render(
       <PanelInfo
         panel={null}
-        panels={[makeProductPanel({ ban_menno: 5, ban_no: 5 })]}
+        panels={[makeProductPanel({ ban_menno: 5, ban_no: 5, ban_h1: 2300, ban_h2: null })]}
         estimatePanels={[makeEstimatePanel({ ban_h: 2300 })]}
         selectedPanel={null}
         onSelectPanel={() => {}}
@@ -201,7 +225,7 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
     expect(screen.queryByText(/5\.0/)).not.toBeInTheDocument()
   })
 
-  it('shows "該当する積算盤情報がありません" for a panel with no matching estcode_df row, without dropping the card itself (指示書14章)', () => {
+  it('shows "-" for 型式/接続 (and falls back for 幅/奥行) for a panel with no matching estcode_df row, without dropping the row itself (指示書10章)', () => {
     render(
       <PanelInfo
         panel={null}
@@ -211,12 +235,19 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
         onSelectPanel={() => {}}
       />,
     )
-    // カード自体(盤名称)はproduct_df由来の値で表示され続ける。
-    expect(screen.getByText('No.2-1低圧動力盤')).toBeInTheDocument()
-    expect(screen.getByText('該当する積算盤情報がありません')).toBeInTheDocument()
+    // 行自体(盤名称)はproduct_df由来の値で表示され続ける。
+    const row = getRow('No.2-1低圧動力盤')
+    const cells = within(row).getAllByRole('cell')
+    expect(cells[2].textContent).toBe('-') // 型式(estcode_df専用、fallback無し)
+    expect(cells[3].textContent).toBe('2100') // 高さ: product_df ban_h1へfallback
+    expect(cells[4].textContent).toBe('1900') // 幅: product_dfへfallback
+    expect(cells[5].textContent).toBe('1200') // 奥行: product_dfへfallback
+    expect(cells[6].textContent).toBe('-') // 接続(estcode_df専用、fallback無し)
+    // 「該当する積算盤情報がありません」という単一メッセージへの統合はしない(指示書10章)。
+    expect(screen.queryByText('該当する積算盤情報がありません')).not.toBeInTheDocument()
   })
 
-  it('marks the panel matching the current Viewer selection as selected, and no other card (指示書6章)', () => {
+  it('marks the panel matching the current Viewer selection as selected, and no other row (指示書6章)', () => {
     const panels = [
       makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: '高圧受電盤' }),
       makeProductPanel({ ban_menno: 2, ban_no: 1, ban_meisyou: '低圧動力盤' }),
@@ -231,13 +262,13 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
         onSelectPanel={() => {}}
       />,
     )
-    const selectedCard = screen.getByText('高圧受電盤').closest('button') as HTMLElement
-    const otherCard = screen.getByText('低圧動力盤').closest('button') as HTMLElement
-    expect(selectedCard.className).toContain('panel-info__card--selected')
-    expect(otherCard.className).not.toContain('panel-info__card--selected')
+    const selectedRow = getRow('高圧受電盤')
+    const otherRow = getRow('低圧動力盤')
+    expect(selectedRow.className).toContain('panel-info__row--selected')
+    expect(otherRow.className).not.toContain('panel-info__row--selected')
   })
 
-  it('shows no card as selected when selectedPanel is null', () => {
+  it('shows no row as selected when selectedPanel is null', () => {
     const panels = [makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: '高圧受電盤' })]
     render(
       <PanelInfo
@@ -248,11 +279,11 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
         onSelectPanel={() => {}}
       />,
     )
-    const card = screen.getByText('高圧受電盤').closest('button') as HTMLElement
-    expect(card.className).not.toContain('panel-info__card--selected')
+    const row = getRow('高圧受電盤')
+    expect(row.className).not.toContain('panel-info__row--selected')
   })
 
-  it('calls onSelectPanel with the same key/panel a Viewer click would use, when a card is clicked (指示書3章: 既存クリック動作の再利用)', () => {
+  it('calls onSelectPanel with the same key/panel a Viewer click would use, when a row is clicked (指示書1章: 既存クリック動作の再利用)', () => {
     const onSelectPanel = vi.fn()
     const panels = [makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: '高圧受電盤' })]
     render(
@@ -264,7 +295,7 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
         onSelectPanel={onSelectPanel}
       />,
     )
-    fireEvent.click(screen.getByText('高圧受電盤').closest('button') as HTMLElement)
+    fireEvent.click(getRow('高圧受電盤'))
     expect(onSelectPanel).toHaveBeenCalledTimes(1)
     const [key, panel] = onSelectPanel.mock.calls[0]
     expect(key).toBe(panelKey(panels[0], 0))
@@ -299,7 +330,7 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
     expect(screen.getByText('2120 mm')).toBeInTheDocument()
   })
 
-  it('prioritizes the card list over the dummy Detection-linked panel when both are present (要件11相当)', () => {
+  it('prioritizes the row list over the dummy Detection-linked panel when both are present (要件11相当)', () => {
     render(
       <PanelInfo
         panel={dummyPanel}
@@ -313,7 +344,7 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
     expect(screen.queryByText('1 / 高圧受電盤')).not.toBeInTheDocument()
   })
 
-  it('does not crash and shows a long panel name in full without truncation markers (実画面確認: 長い盤名称)', () => {
+  it('does not crash and gives the 盤名称/接続 cells a title attribute (ellipsis時の全文確認用)', () => {
     const longName = '高圧受電盤・低圧動力盤・制御盤・複合ユニット盤(予備含む延長型番)'
     render(
       <PanelInfo
@@ -324,10 +355,14 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
         onSelectPanel={() => {}}
       />,
     )
-    expect(screen.getByText(longName)).toBeInTheDocument()
+    const nameCell = screen.getByText(longName)
+    expect(nameCell).toHaveAttribute('title', longName)
+    const row = nameCell.closest('button') as HTMLElement
+    const connectCell = within(row).getAllByRole('cell')[6]
+    expect(connectCell).toHaveAttribute('title', '箱・左右(L)')
   })
 
-  it('shows the model/dimensions/connect fields without a leading label, separated visually rather than as label:value rows (指示書5章)', () => {
+  it('does not show a leading label before the cell values (指示書5章の踏襲: ラベル:値の縦並びにしない)', () => {
     render(
       <PanelInfo
         panel={null}
@@ -337,14 +372,13 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
         onSelectPanel={() => {}}
       />,
     )
-    // 旧来の"型式"/"面番号"/"接続情報"等のラベル文言は、新デザインでは表示しない
-    // (指示書5章: 単純なラベル:値の縦並びから脱却する)。
-    expect(screen.queryByText('型式')).not.toBeInTheDocument()
+    // 旧来の"面番号"/"接続情報"等のラベル文言は表示しない(見出し行の短い列名のみ)。
+    expect(screen.queryByText('面番号')).not.toBeInTheDocument()
     expect(screen.queryByText('接続情報')).not.toBeInTheDocument()
     expect(screen.queryByText('並び順')).not.toBeInTheDocument()
   })
 
-  it('renders the secondary meta line inside the same secondary block (via aria-pressed reflecting selection state)', () => {
+  it('reflects the selection state via aria-pressed on the row button', () => {
     const panels = [makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: '高圧受電盤' })]
     const selectedPanel = { key: panelKey(panels[0], 0), panel: panels[0] }
     render(
@@ -356,14 +390,121 @@ describe('PanelInfo (次work指示: 複数盤対応・コンパクト化)', () =
         onSelectPanel={() => {}}
       />,
     )
-    const card = screen.getByText('高圧受電盤').closest('button') as HTMLElement
-    expect(within(card).getByText('該当する積算盤情報がありません')).toBeInTheDocument()
-    expect(card.getAttribute('aria-pressed')).toBe('true')
+    const row = getRow('高圧受電盤')
+    expect(row.getAttribute('aria-pressed')).toBe('true')
   })
 })
 
-describe('PanelInfo: 1行表示レイアウト (盤情報1行化・3領域リサイズ拡張・Redo時引出線回帰修正 指示1章/2章)', () => {
-  it('places 面/盤番号・盤名称・型式・寸法・接続情報 all as siblings in a single flex row (not split into 2 stacked rows)', () => {
+describe('PanelInfo: 高さ表示の5分岐 (Issue #38 Phase 2 指示3章)', () => {
+  function heightCellFor(panels: PanelPreview[], estimatePanels: EstimatePanelInfo[]): string {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={panels}
+        estimatePanels={estimatePanels}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    const row = getRow(panels[0].ban_meisyou)
+    return within(row).getAllByRole('cell')[3].textContent ?? ''
+  }
+
+  it('shows a single value when 正面/背面 are equal', () => {
+    expect(
+      heightCellFor([makeProductPanel({ ban_h1: 2300, ban_h2: 2300 })], [makeEstimatePanel()]),
+    ).toBe('2300')
+  })
+
+  it('shows "正面 / 背面" when they differ', () => {
+    expect(
+      heightCellFor([makeProductPanel({ ban_h1: 2300, ban_h2: 2000 })], [makeEstimatePanel()]),
+    ).toBe('2300 / 2000')
+  })
+
+  it('shows only the front value when the back value is missing', () => {
+    expect(
+      heightCellFor([makeProductPanel({ ban_h1: 2300, ban_h2: null })], [makeEstimatePanel()]),
+    ).toBe('2300')
+  })
+
+  it('shows "- / <back>" (not the bare back value) when only the back value is present, to avoid misreading it as the front value', () => {
+    expect(
+      heightCellFor([makeProductPanel({ ban_h1: null, ban_h2: 2000 })], [makeEstimatePanel()]),
+    ).toBe('- / 2000')
+  })
+
+  it('falls back to EstimatePanelInfo.ban_h when both product_df heights are missing', () => {
+    expect(
+      heightCellFor(
+        [makeProductPanel({ ban_h1: null, ban_h2: null })],
+        [makeEstimatePanel({ ban_h: 2450 })],
+      ),
+    ).toBe('2450')
+  })
+
+  it('shows "-" when both product_df heights and the estcode_df fallback are all missing', () => {
+    expect(
+      heightCellFor(
+        [makeProductPanel({ ban_h1: null, ban_h2: null })],
+        [makeEstimatePanel({ ban_h: null })],
+      ),
+    ).toBe('-')
+  })
+})
+
+describe('PanelInfo: 幅/奥行のfallback (Issue #38 Phase 2 指示4章)', () => {
+  it('prefers EstimatePanelInfo.ban_w/ban_d over PanelPreview.ban_w/ban_d when both are present', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel({ ban_w: 1900, ban_d: 1200 })]}
+        estimatePanels={[makeEstimatePanel({ ban_w: 1700, ban_d: 2200 })]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    const row = getRow('No.2-1低圧動力盤')
+    const cells = within(row).getAllByRole('cell')
+    expect(cells[4].textContent).toBe('1700')
+    expect(cells[5].textContent).toBe('2200')
+  })
+
+  it('falls back to PanelPreview.ban_w/ban_d when EstimatePanelInfo values are missing', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel({ ban_w: 1900, ban_d: 1200 })]}
+        estimatePanels={[makeEstimatePanel({ ban_w: null, ban_d: null })]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    const row = getRow('No.2-1低圧動力盤')
+    const cells = within(row).getAllByRole('cell')
+    expect(cells[4].textContent).toBe('1900')
+    expect(cells[5].textContent).toBe('1200')
+  })
+
+  it('shows "-" when both sources are missing', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel({ ban_w: null, ban_d: null })]}
+        estimatePanels={[makeEstimatePanel({ ban_w: null, ban_d: null })]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    const row = getRow('No.2-1低圧動力盤')
+    const cells = within(row).getAllByRole('cell')
+    expect(cells[4].textContent).toBe('-')
+    expect(cells[5].textContent).toBe('-')
+  })
+})
+
+describe('PanelInfo: レイアウト構造 (Issue #38 Phase 2: CSS Gridベースのカラム型1行一覧)', () => {
+  it('makes each data row (button) a CSS Grid container carrying all 7 cells as direct children', () => {
     render(
       <PanelInfo
         panel={null}
@@ -373,27 +514,13 @@ describe('PanelInfo: 1行表示レイアウト (盤情報1行化・3領域リサ
         onSelectPanel={() => {}}
       />,
     )
-    const card = screen.getByText('No.2-1低圧動力盤').closest('button') as HTMLElement
-    // 旧: .panel-info__card-primary(面/盤+名称) と .panel-info__card-secondary
-    // (型式/寸法/接続情報)の2つのdivに分かれていた。指示1章で1行(.panel-info__
-    // card-row)へ統合したため、そのdivが1つだけ存在し、旧2分割用のクラスは
-    // どちらも存在しない。
-    expect(card.querySelectorAll('.panel-info__card-row')).toHaveLength(1)
-    expect(card.querySelector('.panel-info__card-primary')).toBeNull()
-    expect(card.querySelector('.panel-info__card-secondary')).toBeNull()
-
-    const row = card.querySelector('.panel-info__card-row') as HTMLElement
-    // flex-wrapのみで折り返し制御するため、実際に折り返すかはCSSレイアウト
-    // (実ブラウザ)側の話になるが、DOM構造としては全項目が同じ行(親要素)の
-    // 直接の子として並んでいることを確認する。
-    expect(within(row).getByText('5/5')).toBeInTheDocument()
-    expect(within(row).getByText('No.2-1低圧動力盤')).toBeInTheDocument()
-    expect(within(row).getByText('IS2')).toBeInTheDocument()
-    expect(within(row).getByText('H 2300 : W 1700 : D 2200')).toBeInTheDocument()
-    expect(within(row).getByText('箱・左右(L)')).toBeInTheDocument()
+    const row = getRow('No.2-1低圧動力盤')
+    expect(row.className).toContain('panel-info__row')
+    expect(row.className).toContain('panel-info__data-row')
+    expect(within(row).getAllByRole('cell')).toHaveLength(7)
   })
 
-  it('keeps the heading (件数) fixed outside the scrollable card list area', () => {
+  it('keeps the heading (件数) fixed outside the scrollable row list area', () => {
     render(
       <PanelInfo
         panel={null}
@@ -406,11 +533,10 @@ describe('PanelInfo: 1行表示レイアウト (盤情報1行化・3領域リサ
     const heading = screen.getByText(/盤情報.*1件/)
     const scrollArea = document.querySelector('.panel-info__list-scroll')
     expect(scrollArea).not.toBeNull()
-    // 見出しはスクロール領域の外にある (指示4章: 見出し固定・一覧のみスクロール)。
     expect(scrollArea?.contains(heading)).toBe(false)
   })
 
-  it('makes the card list area the internally scrolling part (overflow-y: auto), while the section itself fills 100% of its externally-controlled height', () => {
+  it('makes the row list area the internally scrolling part (overflow-y: auto, overflow-x: hidden), while the section itself fills 100% of its externally-controlled height', () => {
     render(
       <PanelInfo
         panel={null}
@@ -422,16 +548,14 @@ describe('PanelInfo: 1行表示レイアウト (盤情報1行化・3領域リサ
     )
     const section = document.querySelector('.panel-info') as HTMLElement
     const scrollArea = document.querySelector('.panel-info__list-scroll') as HTMLElement
-    // 指示5章: 盤情報の高さは今後App.tsx側のラッパーdivが外部から指定する
-    // (EstimateAggregation/EstimateDetailと同じ設計)。このコンポーネント自身は
-    // 100%を使い切るだけで、独自のmax-height/固定比率は持たない。
     expect(getComputedStyle(section).height).toBe('100%')
     expect(getComputedStyle(scrollArea).overflowY).toBe('auto')
+    expect(getComputedStyle(scrollArea).overflowX).toBe('hidden')
   })
 })
 
 describe('PanelInfo: 見出し (Issue #19 追加修正で折りたたみ機能は廃止、常に本文を表示する)', () => {
-  it('always shows the card list (no collapse feature)', () => {
+  it('always shows the row list (no collapse feature)', () => {
     render(
       <PanelInfo
         panel={null}

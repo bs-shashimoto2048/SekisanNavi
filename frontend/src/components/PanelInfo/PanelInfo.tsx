@@ -39,11 +39,37 @@ function formatValue(value: string | number | null | undefined): string {
   return String(value)
 }
 
-// 盤寸法を「H 2300 : W 1700 : D 2200」の1行にまとめる (指示書5章)。
-// 末尾に単位(mm)を付けると見た目上の違和感があるため表示しない
-// (次work指示1章)。欠損項目は個別に"-"にする(指示書8章)。
-function formatDimensions(h: number | null, w: number | null, d: number | null): string {
-  return `H ${formatValue(h)} : W ${formatValue(w)} : D ${formatValue(d)}`
+function isValidNumber(value: number | null | undefined): value is number {
+  return value != null && !Number.isNaN(value)
+}
+
+// 高さ表示 (Issue #38 Phase 2 指示3章)。PanelPreview.ban_h1/ban_h2を「正面/背面」
+// として扱うが、これはUI仕様上の前提であり、product_df.csv側のデータ定義として
+// 確定した事実ではない (Phase 1調査で確認できたのは、矢視の種別に関わらず
+// ban_h1が座標変換に使われる列であることのみ)。両方欠損している場合のみ
+// EstimatePanelInfo.ban_hをfallbackとして使う。
+//   - 正面あり/背面あり/同値      → "2300"
+//   - 正面あり/背面あり/異値      → "2300 / 2000"
+//   - 正面あり/背面なし          → "2300"
+//   - 正面なし/背面あり          → "- / 2000" (正面値と誤認しないよう明示的に"-"を残す)
+//   - 両方なし                   → ban_hがあればそれを表示、無ければ"-"
+function formatHeight(banH1: number | null, banH2: number | null, fallbackBanH: number | null): string {
+  const hasFront = isValidNumber(banH1)
+  const hasBack = isValidNumber(banH2)
+  if (hasFront && hasBack) {
+    return banH1 === banH2 ? formatValue(banH1) : `${formatValue(banH1)} / ${formatValue(banH2)}`
+  }
+  if (hasFront) return formatValue(banH1)
+  if (hasBack) return `- / ${formatValue(banH2)}`
+  return formatValue(fallbackBanH)
+}
+
+// 幅/奥行 (Issue #38 Phase 2 指示4章): EstimatePanelInfo側を優先し、無ければ
+// PanelPreview側をfallbackにする(盤情報1行化以前と優先順位が逆転している点に
+// 注意。estcode_df.csv側の値を積算上の正とする方針)。
+function formatWithFallback(primary: number | null, fallback: number | null): string {
+  if (isValidNumber(primary)) return formatValue(primary)
+  return formatValue(fallback)
 }
 
 interface PanelCard {
@@ -54,6 +80,31 @@ interface PanelCard {
   panel: PanelPreview
   estimatePanel: EstimatePanelInfo | null
   isSelected: boolean
+}
+
+/** 1行=1盤のカラム型一覧(指示書6章)の7セル。列がズレないよう、値が無い項目も
+ * spanごと省略せず必ず"-"を描画する(Issue #38 Phase 2 指示8章)。 */
+interface PanelRowCells {
+  menban: string
+  name: string
+  model: string
+  height: string
+  width: string
+  depth: string
+  connect: string
+}
+
+function buildRowCells(card: PanelCard): PanelRowCells {
+  const { panel, estimatePanel } = card
+  return {
+    menban: `${formatValue(panel.ban_menno)}/${formatValue(panel.ban_no)}`,
+    name: formatValue(estimatePanel?.ban_meisyou ?? panel.ban_meisyou),
+    model: formatValue(estimatePanel?.model),
+    height: formatHeight(panel.ban_h1, panel.ban_h2, estimatePanel?.ban_h ?? null),
+    width: formatWithFallback(estimatePanel?.ban_w ?? null, panel.ban_w),
+    depth: formatWithFallback(estimatePanel?.ban_d ?? null, panel.ban_d),
+    connect: formatValue(estimatePanel?.ban_connect),
+  }
 }
 
 /**
@@ -95,32 +146,40 @@ function buildPanelCards(
   return cards
 }
 
+/** 7列共通のヘッダーラベル(表示順そのまま。Issue #38 Phase 2 指示1章)。 */
+const COLUMN_HEADERS: { key: keyof PanelRowCells; label: string }[] = [
+  { key: 'menban', label: '面/盤' },
+  { key: 'name', label: '盤名称' },
+  { key: 'model', label: '型式' },
+  { key: 'height', label: '高さ' },
+  { key: 'width', label: '幅' },
+  { key: 'depth', label: '奥行' },
+  { key: 'connect', label: '接続' },
+]
+
 /**
  * 右ペイン上部の「盤情報」表示 (次work指示: 複数盤対応・コンパクト化。
  * 盤情報1行化・3領域リサイズ拡張・Redo時引出線回帰修正 指示1章/2章で
- * 原則1盤=1行のレイアウトへ変更)。
+ * 原則1盤=1行のレイアウトへ変更した後、Issue #38 Phase 2で
+ * 「面/盤|盤名称|型式|高さ|幅|奥行|接続」のカラム型一覧(CSS Grid)へ再設計)。
  *
  * Phase 1.14までは中央Viewerで選択中の盤1件のみを表示する前提だったが、
  * 「現在表示しているプレビュー内の盤・面をすべて確認できること」を優先し、
- * 現在ページのproduct_df盤全件をカード一覧として常時表示する形へ変更した。
- * 選択中の盤はカードの強調表示(左アクセント+背景)で示す (指示書6章)。
+ * 現在ページのproduct_df盤全件を一覧として常時表示する形へ変更した。
+ * 選択中の盤は行の強調表示(左アクセント+背景)で示す (指示書6章)。
  *
- * 表示優先順位 (指示書5章、指示1章で継承):
- *   1. 面/盤番号(バッジ)
- *   2. 盤名称
- *   3. 型式
- *   4. 寸法
- *   5. 接続情報
- * すべてを1つのflex行(`panel-info__card-row`)の子要素として横並びにし、
- * `flex-wrap: wrap`のみで折り返しを制御する。flexboxは幅が足りない場合、
- * 末尾の要素から次の行へ送るため、JSでの幅測定や別途メディアクエリを書かなくても
- * 「通常幅は1行、狭幅時は優先度の低い項目(接続情報→寸法の順)から自然に2行目へ
- * 折り返る」という指示1章の要件をそのまま満たせる。
+ * **列構成(Issue #38 Phase 2)**: 7列を常に描画し、値が無い項目もセルごと
+ * 省略せず"-"を表示する(列がズレないようにするため。`buildRowCells`参照)。
+ * 各`<button>`(1盤=1行)自身をCSS Gridコンテナにすることで、既存の
+ * キーボード操作性・`aria-pressed`・クリック連動(`onSelectPanel`)を
+ * 一切変更せずに列レイアウトへ移行できる(`<table><tr>`化すると行全体の
+ * クリック可能性をJSで再実装する必要が生じるため採用しなかった。
+ * Issue #38 Phase 1調査コメント参照)。
  *
  * 表示優先順位:
- *   1. 現在ページに1件以上product_df盤があれば、盤単位でカード一覧を表示する。
+ *   1. 現在ページに1件以上product_df盤があれば、盤単位で一覧を表示する。
  *   2. product_df盤が1件も無く、旧来のダミーDB由来`panel`がある場合のみ、
- *      後方互換のため従来の属性テーブル表示にフォールバックする。
+ *      後方互換のため従来の属性テーブル表示にフォールバックする(今回変更しない)。
  *   3. どちらも無ければ「このページには盤情報がありません」。
  */
 export function PanelInfo({
@@ -145,53 +204,70 @@ export function PanelInfo({
       )}
 
       {cards.length > 0 && (
-        <div className="panel-info__list-scroll">
-          <ul className="panel-info__list">
-            {cards.map((card) => (
-              <li key={card.key}>
-                <button
-                  type="button"
-                  className={
-                    'panel-info__card' + (card.isSelected ? ' panel-info__card--selected' : '')
-                  }
-                  onClick={() => onSelectPanel(card.key, card.panel)}
-                  aria-pressed={card.isSelected}
-                >
-                  <div className="panel-info__card-row">
-                    <span className="panel-info__badge">
-                      {formatValue(card.panel.ban_menno)}/{formatValue(card.panel.ban_no)}
-                    </span>
-                    <span className="panel-info__name">
-                      {formatValue(card.estimatePanel?.ban_meisyou ?? card.panel.ban_meisyou)}
-                    </span>
-                    {card.estimatePanel ? (
-                      <>
-                        {card.estimatePanel.model != null && card.estimatePanel.model.trim() !== '' && (
-                          <span className="panel-info__meta">{formatValue(card.estimatePanel.model)}</span>
-                        )}
-                        <span className="panel-info__meta">
-                          {formatDimensions(
-                            card.estimatePanel.ban_h,
-                            card.estimatePanel.ban_w,
-                            card.estimatePanel.ban_d,
-                          )}
-                        </span>
-                        {card.estimatePanel.ban_connect != null &&
-                          card.estimatePanel.ban_connect.trim() !== '' && (
-                            <span className="panel-info__meta">{formatValue(card.estimatePanel.ban_connect)}</span>
-                          )}
-                      </>
-                    ) : (
-                      <span className="panel-info__meta panel-info__meta--muted">
-                        該当する積算盤情報がありません
-                      </span>
-                    )}
-                  </div>
-                </button>
-              </li>
+        <>
+          {/* 見出し行はスクロール領域の外に置き、常に固定表示する (指示書1章/8章)。 */}
+          <div className="panel-info__row panel-info__row--header" role="row">
+            {COLUMN_HEADERS.map((col) => (
+              <span
+                key={col.key}
+                className={`panel-info__cell panel-info__cell--header panel-info__cell--${col.key}`}
+                role="columnheader"
+              >
+                {col.label}
+              </span>
             ))}
-          </ul>
-        </div>
+          </div>
+          <div className="panel-info__list-scroll">
+            <ul className="panel-info__list">
+              {cards.map((card) => {
+                const cells = buildRowCells(card)
+                return (
+                  <li key={card.key} role="row">
+                    <button
+                      type="button"
+                      className={
+                        'panel-info__row panel-info__data-row' +
+                        (card.isSelected ? ' panel-info__row--selected' : '')
+                      }
+                      onClick={() => onSelectPanel(card.key, card.panel)}
+                      aria-pressed={card.isSelected}
+                    >
+                      <span className="panel-info__cell panel-info__cell--menban" role="cell">
+                        {cells.menban}
+                      </span>
+                      <span
+                        className="panel-info__cell panel-info__cell--name panel-info__cell--ellipsis"
+                        role="cell"
+                        title={cells.name}
+                      >
+                        {cells.name}
+                      </span>
+                      <span className="panel-info__cell panel-info__cell--model" role="cell">
+                        {cells.model}
+                      </span>
+                      <span className="panel-info__cell panel-info__cell--height" role="cell">
+                        {cells.height}
+                      </span>
+                      <span className="panel-info__cell panel-info__cell--width" role="cell">
+                        {cells.width}
+                      </span>
+                      <span className="panel-info__cell panel-info__cell--depth" role="cell">
+                        {cells.depth}
+                      </span>
+                      <span
+                        className="panel-info__cell panel-info__cell--connect panel-info__cell--ellipsis"
+                        role="cell"
+                        title={cells.connect}
+                      >
+                        {cells.connect}
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        </>
       )}
 
       {cards.length === 0 && panel && (
