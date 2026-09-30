@@ -286,6 +286,12 @@ class EstimateResultCandidate:
     unit_price: float | None
     unit_labor: float | None
     evidence: list[EvidenceRef] = field(default_factory=list)
+    # Issue #40 Phase 5: 積算結果の確認状態。既定は"auto"(通常の自動算出)。
+    # 旧Detection互換変換(`app.services.legacy_detection_adapter`)、および
+    # 新旧経路が同一コードを同時に算出した場合の「一意に判断できないため
+    # 要確認として残す」判定(`app.services.estimate_result_pipeline`)が、
+    # NEEDS_REVIEWを明示的に設定する用途で使う(13章「推測でdedupeしない」)。
+    status: EstimateResultStatus = EstimateResultStatus.AUTO
 
 
 __all__ = [

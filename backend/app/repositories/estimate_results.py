@@ -255,6 +255,10 @@ def replace_results_for_product(
             # factor_overridden=1の行は current_factor を更新しない(既存値の
             # ままprice/labor再計算に使われる)。0の行は current_factor も
             # 新しい initial_factor へ追従させる。
+            #
+            # Issue #40 Phase 5: statusは`factor_overridden`のような手修正保護
+            # 対象ではなく(現時点でstatusを手動変更するAPIは無い)、候補の値で
+            # 毎回上書きしてよい(quantity/judgment_reason等と同じ扱い)。
             conn.execute(
                 """
                 UPDATE estimate_results
@@ -262,12 +266,12 @@ def replace_results_for_product(
                     initial_factor = ?, judgment_method = ?, judgment_scope = ?,
                     target_panel_ban_menno = ?, target_panel_ban_no = ?,
                     target_drawing_page_id = ?, judgment_reason = ?, source_rule_id = ?,
-                    unit_price = ?, unit_labor = ?,
+                    unit_price = ?, unit_labor = ?, status = ?,
                     current_factor = CASE WHEN factor_overridden = 1 THEN current_factor ELSE ? END,
                     updated_at = datetime('now')
                 WHERE id = ?
                 """,
-                (*common_params, candidate.initial_factor, existing_id),
+                (*common_params, candidate.status.value, candidate.initial_factor, existing_id),
             )
             conn.execute(
                 """
@@ -313,7 +317,7 @@ def replace_results_for_product(
                     candidate.quantity * candidate.initial_factor,
                     candidate.unit_labor,
                     candidate.quantity * candidate.initial_factor,
-                    EstimateResultStatus.AUTO.value,
+                    candidate.status.value,
                 ),
             )
             result_id = cursor.lastrowid
