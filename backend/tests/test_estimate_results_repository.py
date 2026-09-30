@@ -310,3 +310,66 @@ def test_reset_factor_to_initial_is_unaffected_by_allowed_factors(db_path):
 
     assert reset.current_factor == 1.0  # initial_factor(候補外の1.0)へそのまま復元される
     assert reset.factor_overridden is False
+
+
+# --- Issue #40 Phase 3: 根拠BBox→関係する積算結果 (detection_idでの絞り込み) ---
+
+
+def test_list_results_for_product_filters_by_detection_id(db_path):
+    from app.db.connection import get_connection
+
+    with get_connection(db_path) as conn:
+        replace_results_for_product(
+            conn,
+            product_no="A1GV2421",
+            candidates=[
+                _candidate(
+                    result_key="18323:evidence:101",
+                    evidence=[EvidenceRef(evidence_kind=EvidenceKind.DETECTION, detection_id=101)],
+                ),
+                _candidate(
+                    result_key="18500:evidence:202",
+                    code="18500",
+                    evidence=[EvidenceRef(evidence_kind=EvidenceKind.DETECTION, detection_id=202)],
+                ),
+            ],
+        )
+
+        matches_101 = list_results_for_product(conn, product_no="A1GV2421", detection_id=101)
+        matches_202 = list_results_for_product(conn, product_no="A1GV2421", detection_id=202)
+        matches_none = list_results_for_product(conn, product_no="A1GV2421", detection_id=999)
+
+    assert len(matches_101) == 1
+    assert matches_101[0].code == "18323"
+    assert len(matches_202) == 1
+    assert matches_202[0].code == "18500"
+    assert matches_none == []
+
+
+def test_list_results_for_product_filters_by_detection_id_shared_by_multiple_results(db_path):
+    """1つのBBoxが複数の積算結果の根拠になりうる(Issue #40 9章)ケース。"""
+    from app.db.connection import get_connection
+
+    with get_connection(db_path) as conn:
+        replace_results_for_product(
+            conn,
+            product_no="A1GV2421",
+            candidates=[
+                _candidate(
+                    result_key="18323:panel:1:1",
+                    evidence=[
+                        EvidenceRef(evidence_kind=EvidenceKind.DETECTION, detection_id=101),
+                        EvidenceRef(evidence_kind=EvidenceKind.DETECTION, detection_id=102),
+                    ],
+                ),
+                _candidate(
+                    result_key="18500:panel:1:1",
+                    code="18500",
+                    evidence=[EvidenceRef(evidence_kind=EvidenceKind.DETECTION, detection_id=101)],
+                ),
+            ],
+        )
+
+        matches = list_results_for_product(conn, product_no="A1GV2421", detection_id=101)
+
+    assert {r.code for r in matches} == {"18323", "18500"}

@@ -122,12 +122,34 @@ def _load_evidence(conn: sqlite3.Connection, estimate_result_ids: list[int]) -> 
     return by_result
 
 
-def list_results_for_product(conn: sqlite3.Connection, *, product_no: str) -> list[EstimateResult]:
-    """製番`product_no`の現在の積算結果一覧を`id`昇順で返す(根拠込み)。"""
-    rows = conn.execute(
-        f"SELECT {_COLUMNS} FROM estimate_results WHERE product_no = ? ORDER BY id",
-        (product_no,),
-    ).fetchall()
+def list_results_for_product(
+    conn: sqlite3.Connection, *, product_no: str, detection_id: int | None = None
+) -> list[EstimateResult]:
+    """製番`product_no`の現在の積算結果一覧を`id`昇順で返す(根拠込み)。
+
+    `detection_id`を指定すると、その根拠(`estimate_result_evidence.
+    detection_id`)を持つ積算結果だけに絞り込む(Issue #40 Phase 3
+    「根拠BBox→関係する積算結果」の双方向トレーサビリティ用)。1つのBBoxが
+    複数の積算結果の根拠になりうる(Issue #40 9章)ため、常にlistで返す。
+    """
+    if detection_id is not None:
+        rows = conn.execute(
+            f"""
+            SELECT {_COLUMNS} FROM estimate_results
+            WHERE product_no = ?
+              AND id IN (
+                  SELECT estimate_result_id FROM estimate_result_evidence
+                  WHERE detection_id = ?
+              )
+            ORDER BY id
+            """,
+            (product_no, detection_id),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            f"SELECT {_COLUMNS} FROM estimate_results WHERE product_no = ? ORDER BY id",
+            (product_no,),
+        ).fetchall()
     results = [_row_to_result(r) for r in rows]
     evidence_by_result = _load_evidence(conn, [r.id for r in results])
     for result in results:

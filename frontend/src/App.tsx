@@ -2,12 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import {
   ApiError,
+  createEvidenceDetection,
   createManualDetection,
   deleteDetection,
+  evaluateEstimateResults,
   fetchDetectedPreview,
   fetchDetections,
   fetchDrawingPages,
   fetchEstimatePanels,
+  fetchEstimateResults,
   fetchMasterItems,
   fetchPanel,
   fetchProductDrawings,
@@ -38,6 +41,7 @@ import type {
   DrawingPage,
   EstimateMasterItem,
   EstimatePanelInfo,
+  EstimateResult,
   Panel,
   PanelPreview,
   ProductDrawing,
@@ -58,6 +62,7 @@ import { PanelInfo } from './components/PanelInfo/PanelInfo'
 import { EstimateAggregation } from './components/EstimateAggregation/EstimateAggregation'
 import { EstimateDetail, type DetailSourceFilter } from './components/EstimateDetail/EstimateDetail'
 import { EstimateMasterPicker } from './components/EstimateMasterPicker/EstimateMasterPicker'
+import { DrawingEvidencePanel } from './components/DrawingEvidencePanel/DrawingEvidencePanel'
 import { SystemSettings } from './components/SystemSettings/SystemSettings'
 import { ProductSelector } from './components/ProductSelector/ProductSelector'
 import { HelpPdfModal } from './components/HelpPdf/HelpPdfModal'
@@ -77,6 +82,18 @@ const HIGHLIGHT_DURATION_MS = 1800
 const EDIT_FOLLOW_HIGHLIGHT_DURATION_MS = 2500
 // 所属変更の一時通知 (指示9章) を自動的に消すまでの時間。
 const TARGET_CHANGE_NOTIFICATION_DURATION_MS = 4000
+// [Issue #40 Phase 3] 積算結果の増減・係数変化を知らせる控えめなtoastを
+// 自動的に消すまでの時間(Issue #40 8章「2〜3秒程度」の指示に沿う)。
+const RULE_TOAST_DURATION_MS = 2600
+// 同時に積み上がるtoastの最大件数(Issue #40 8章「最大数件スタック」)。
+// 大量の変化が一度に起きた場合(例: 複数BBoxを連続削除)でも画面を埋め尽くさない。
+const RULE_TOAST_MAX_STACK = 4
+
+/** 積算結果の増減・係数変化を知らせるtoast1件分 (Issue #40 8章)。 */
+interface RuleToast {
+  id: number
+  message: string
+}
 
 // input/textarea/select/contentEditable上のキー操作かどうかを判定する。
 // Delete/Undo(Ctrl+Z)等、ブラウザ・input自身の挙動を不必要に奪わないためのガードとして
@@ -246,6 +263,19 @@ function App() {
 
   // 積算コードMasterで「Manual BBox追加対象」として選択中のMaster Item (Phase 1.6)。
   const [selectedMasterItemId, setSelectedMasterItemId] = useState<number | null>(null)
+  // [Issue #40 Phase 3] 「図面情報」で「BBox追加対象」として選択中のevidence_type_key。
+  // `selectedMasterItemId`と同時に選択状態になることはない(一方を選ぶと他方を
+  // 解除する。指示: 新UIの主導線ではmaster_item_idを直接選ばせない)。
+  const [selectedEvidenceTypeKey, setSelectedEvidenceTypeKey] = useState<string | null>(null)
+  // [Issue #40 Phase 3] 現在の積算結果一覧(ルール評価器の最新出力)。
+  // BBox追加/削除/移動/resize後にevaluateEstimateResultsを呼び直し、
+  // 前後の差分からtoast通知を作る(Issue #40 8章)。積算集約/積算明細UI自体は
+  // 引き続き既存の`buildRealEstimateAggregation`(Detection.master_item_id
+  // ベース)を使い続けており、この一覧は「差分検知専用」でPhase 3時点では
+  // 画面表示には使わない(Phase 4で積算明細への統合を行う)。
+  const [estimateResults, setEstimateResults] = useState<EstimateResult[]>([])
+  const [ruleToasts, setRuleToasts] = useState<RuleToast[]>([])
+  const ruleToastIdRef = useRef(0)
 
   // 左右ペインの幅 (UIレイアウト追加修正指示)。ドラッグでのリアルタイム変更 +
   // localStorageによる復元を1本のフックへ集約している (hooks/usePaneWidth.ts)。
@@ -283,6 +313,10 @@ function App() {
   // 既定は非表示(指示B-4: 「デフォルトは非表示」)。表示ON/OFFの考え方
   // (セッション内のみ保持、localStorage永続化なし)自体は他4panelと揃える。
   const [viewerGuideVisible, setViewerGuideVisible] = useState(false)
+  // [Issue #40 Phase 3] 「図面情報」floating panel。新しいBBox作成の主導線だが、
+  // 導入初回は既存5panelの右端カスケード積み重ね・初期配置テスト群を不用意に
+  // 壊さないよう、guideと同じく既定非表示にする(ユーザーが明示的にONにする)。
+  const [drawingEvidenceFloatingVisible, setDrawingEvidenceFloatingVisible] = useState(false)
 
   // floating panel(盤情報/積算集約/積算明細/積算コードMaster)の位置・大きさ
   // ([追加修正] ドラッグ移動・リサイズ対応)。`FloatingPanel`コンポーネント
@@ -296,6 +330,9 @@ function App() {
   const [aggregationRect, setAggregationRect] = useState<FloatingPanelRect | null>(null)
   const [detailRect, setDetailRect] = useState<FloatingPanelRect | null>(null)
   const [masterRect, setMasterRect] = useState<FloatingPanelRect | null>(null)
+  // [Issue #40 Phase 3] 図面情報の位置・大きさ。既存4panelと同じ右端カスケードへ
+  // 参加させる(`visibleFloatingKinds`に含める。下記コメント参照)。
+  const [drawingEvidenceRect, setDrawingEvidenceRect] = useState<FloatingPanelRect | null>(null)
   // [Issue #31] 操作ガイドの位置・大きさ。右端カスケードの4panelとは独立して
   // 保持する(`visibleFloatingKinds`には含めない。下記コメント参照)。
   const [viewerGuideRect, setViewerGuideRect] = useState<FloatingPanelRect | null>(null)
@@ -315,12 +352,17 @@ function App() {
     if (estimateAggregationFloatingVisible) kinds.push('aggregation')
     if (estimateDetailFloatingVisible) kinds.push('detail')
     if (estimateMasterFloatingVisible) kinds.push('master')
+    // [Issue #40 Phase 3] 図面情報も業務情報/作業ツールpanelと同じ右端
+    // カスケードへ参加させる(宣言順の末尾に追加。既存4panelの積み重ね段数
+    // 計算には一切影響しない、追加のみ)。
+    if (drawingEvidenceFloatingVisible) kinds.push('drawingEvidence')
     return kinds
   }, [
     panelInfoFloatingVisible,
     estimateAggregationFloatingVisible,
     estimateDetailFloatingVisible,
     estimateMasterFloatingVisible,
+    drawingEvidenceFloatingVisible,
   ])
 
   // 初期データ読込 (案件情報 / ダミー図面一覧 / 全ページ分のDetection)。
@@ -453,6 +495,19 @@ function App() {
         setError(null)
       })
       .catch((e: unknown) => setError(describeFetchError(e, '盤情報を取得できませんでした')))
+  }, [activeProductNo])
+
+  // [Issue #40 Phase 3] 製番切替時に既存の積算結果(estimate_results)を取得する。
+  // BBox操作の都度は`reevaluateEstimateResults`が評価器を再実行して上書きするため、
+  // ここでは起動時/製番切替時の初期表示のみを担う(GETのみ、評価器は実行しない)。
+  useEffect(() => {
+    if (activeProductNo == null) {
+      setEstimateResults([])
+      return
+    }
+    fetchEstimateResults(activeProductNo)
+      .then((results) => setEstimateResults(results))
+      .catch((e: unknown) => setError(describeFetchError(e, '積算結果を取得できませんでした')))
   }, [activeProductNo])
 
   // 積算コードMaster全件をid引きのMapとして取得する (次work指示1章)。製番に依存しない
@@ -595,6 +650,25 @@ function App() {
     return detections.filter((d) => d.master_item_id == null || focusedDetectionIds.has(d.id))
   }, [detections, selectedEstimateTargetId, estimateAggregationData.detailItems, selectedProductPageNo])
 
+  // [Issue #40 Phase 3] 根拠BBox(selectedDetectionId)→関係する積算結果、の逆引き。
+  // `judgment_method=design_data`の積算結果はどのDetectionにも紐付かない
+  // (evidence配列が空、またはdetection_idを持つevidenceが無い)ため、ここには
+  // 現れない。これは意図的な設計であり、「設計データのみコードはViewer非表示」
+  // (Issue #40 Phase 3指示)を、Viewer側で個別に除外処理をせずとも自然に満たす。
+  const relatedEstimateResultsForSelectedDetection = useMemo(() => {
+    if (selectedDetectionId == null) return []
+    return estimateResults.filter((r) => r.evidence.some((ev) => ev.detection_id === selectedDetectionId))
+  }, [estimateResults, selectedDetectionId])
+
+  // [Issue #40 Phase 3] 積算結果→根拠BBox強調。既存の`flashDetection`(点滅表示、
+  // 選択状態は変更しない)をそのまま再利用し、1件の積算結果が複数の根拠BBoxを
+  // 持つ場合は全てを順に強調する。
+  function handleFocusResultEvidence(result: EstimateResult) {
+    for (const ev of result.evidence) {
+      if (ev.detection_id != null) flashDetection(ev.detection_id)
+    }
+  }
+
   // 積算集約(②)の対象選択に連動して、左ペイン図面一覧(DrawingNavigator)を絞り込む
   // 対象ページ番号の集合 (積算対象連動の金額表示・図面一覧絞り込み 指示4章〜6章)。
   // nullは「総合計」(絞り込みなし)。BBox所属判定ロジックには一切触れず、既存の
@@ -636,9 +710,79 @@ function App() {
 
   // 積算コードMasterの行選択トグル (要件6): 同じ行の再クリックで解除、
   // 別の行のクリックで選択を切り替える。同時に選択できるのは1件のみ。
+  // [Issue #40 Phase 3] 図面情報の選択(selectedEvidenceTypeKey)とは排他にする
+  // (どちらか一方だけがBBox追加モードの対象になる。指示: 新UIの主導線では
+  // master_item_idを直接選ばせないが、既存の部品台帳自体は残すため、
+  // 同時に両方が選択された状態を作らないことで「今どちらのモードか」を常に
+  // 一意にする)。
   function handleSelectMasterItem(itemId: number) {
     setSelectedMasterItemId((current) => (current === itemId ? null : itemId))
+    setSelectedEvidenceTypeKey(null)
   }
+
+  // [Issue #40 Phase 3] 「図面情報」の選択トグル。`handleSelectMasterItem`と
+  // 対になる新しい選択ハンドラ(排他選択、上記コメント参照)。
+  function handleSelectEvidenceType(key: string) {
+    setSelectedEvidenceTypeKey((current) => (current === key ? null : key))
+    setSelectedMasterItemId(null)
+  }
+
+  // [Issue #40 Phase 3] 積算結果の増減・係数変化を知らせる控えめなtoastを
+  // スタックへ積む(8章「2〜3秒程度・操作をブロックしない・最大数件スタック・
+  // 大きなモーダルは使わない」)。同時に何件積まれても`RULE_TOAST_MAX_STACK`を
+  // 超えた古いものは表示から溢れさせない(先入れ先出しで古いものを捨てる)。
+  const pushRuleToast = useCallback((message: string) => {
+    const id = ++ruleToastIdRef.current
+    setRuleToasts((prev) => [...prev.slice(-(RULE_TOAST_MAX_STACK - 1)), { id, message }])
+    window.setTimeout(() => {
+      setRuleToasts((prev) => prev.filter((t) => t.id !== id))
+    }, RULE_TOAST_DURATION_MS)
+  }, [])
+
+  // [Issue #40 Phase 3] 積算結果の再評価前後を突き合わせ、追加/削除/係数変化を
+  // toastで通知する。`result_key`(評価器が算出する安定キー、Issue #40
+  // Phase 2参照)が同じ行同士を同一の積算結果とみなす。
+  const diffAndToastEstimateResults = useCallback(
+    (before: EstimateResult[], after: EstimateResult[]) => {
+      const beforeByKey = new Map(before.map((r) => [r.result_key, r]))
+      const afterByKey = new Map(after.map((r) => [r.result_key, r]))
+      const labelFor = (r: EstimateResult) => {
+        const category = r.master_item_id != null ? masterItemById.get(r.master_item_id)?.category : null
+        return category ? `${category} (${r.code})` : r.code
+      }
+      for (const r of after) {
+        if (!beforeByKey.has(r.result_key)) pushRuleToast(`＋ ${labelFor(r)}`)
+      }
+      for (const r of before) {
+        if (!afterByKey.has(r.result_key)) pushRuleToast(`－ ${labelFor(r)}`)
+      }
+      for (const r of after) {
+        const prev = beforeByKey.get(r.result_key)
+        if (prev != null && prev.current_factor !== r.current_factor) {
+          pushRuleToast(`${r.code} 係数 ${prev.current_factor} → ${r.current_factor}`)
+        }
+      }
+    },
+    [masterItemById, pushRuleToast],
+  )
+
+  // [Issue #40 Phase 3] 図面情報付きBBoxの追加/削除/移動/resize/種類変更後に
+  // ルール評価器を再実行する(指示: 「BBox追加/削除/移動/resize/図面情報変更後に
+  // rule evaluatorを再実行」)。評価そのものが失敗しても、呼び出し元のBBox操作
+  // 自体を失敗扱いにはしない(積算結果の再評価はあくまで副次的な反映であり、
+  // 主操作(BBox保存)は既に成功しているため。エラーは控えめにerror bannerへ
+  // 出すだけに留める)。
+  const reevaluateEstimateResults = useCallback(async () => {
+    try {
+      const outcome = await evaluateEstimateResults(activeProductNo)
+      setEstimateResults((before) => {
+        diffAndToastEstimateResults(before, outcome.results)
+        return outcome.results
+      })
+    } catch (e) {
+      setError(describeFetchError(e, '積算結果の再評価に失敗しました'))
+    }
+  }, [activeProductNo, diffAndToastEstimateResults])
 
   // Drawing Viewer上のドラッグで確定したManual BBoxをBackendへ登録する (要件9/17)。
   // 登録後もMaster Itemの選択状態は維持し、同じ積算コードで連続追加できるようにする (要件8)。
@@ -669,6 +813,33 @@ function App() {
       setEditHistory((h) => pushCommand(h, { kind: 'create', detectionId: created.id, input }))
     } catch (e) {
       setError(describeFetchError(e, 'Manual BBoxの登録に失敗しました'))
+    }
+  }
+
+  // [Issue #40 Phase 3] Drawing Viewer上のドラッグで確定した「図面情報」付き
+  // BBoxをBackendへ登録する。`handleCreateManualBBox`の図面情報版(既存関数は
+  // 変更しない、指示: 既存Manual BBoxとの互換維持)。登録後、ルール評価器を
+  // 再実行して積算結果の増減をtoastで知らせる。
+  async function handleCreateEvidenceBBox(rect: { x: number; y: number; w: number; h: number }) {
+    if (matchingDbPage == null || selectedEvidenceTypeKey == null) return
+    try {
+      const input = {
+        drawing_page_id: matchingDbPage.id,
+        evidence_type_key: selectedEvidenceTypeKey,
+        bbox_x: rect.x,
+        bbox_y: rect.y,
+        bbox_w: rect.w,
+        bbox_h: rect.h,
+      }
+      const created = await createEvidenceDetection(input)
+      setDetections((prev) => [...prev, created])
+      setAllDetections((prev) => [...prev, created])
+      setError(null)
+      bumpEditMeta(created.id)
+      setEditHistory((h) => pushCommand(h, { kind: 'create', detectionId: created.id, input }))
+      await reevaluateEstimateResults()
+    } catch (e) {
+      setError(describeFetchError(e, '図面情報付きBBoxの登録に失敗しました'))
     }
   }
 
@@ -853,8 +1024,19 @@ function App() {
       // (createManualDetection)がmaster_item_idを必須とするため削除後の再作成が
       // できず、Undoを提供できない (指示18章で開示する既知の制約)。そのため
       // その場合は履歴へ積まない(編集順の更新はする)。
-      if (existing != null && existing.master_item_id != null) {
+      // [Issue #40 Phase 3] Undo対応(既存のmaster_item_id経由と同じ理由:
+      // 既存API(createManualDetection)はmaster_item_idを必須とするため、
+      // 図面情報のみのDetection(master_item_id === null)はこの分岐に該当せず
+      // 履歴へ積まれない。ただしこちらは`applyEditCommand`側の削除undo分岐で
+      // evidence_type_key経由の再作成に対応させたため、実際にはevidence_type_key
+      // を持つ行もUndo可能にする(下記の別条件を参照)。
+      if (existing != null && (existing.master_item_id != null || existing.evidence_type_key != null)) {
         setEditHistory((h) => pushCommand(h, { kind: 'delete', detectionId, snapshot: existing }))
+      }
+      // [Issue #40 Phase 3] 図面情報付きBBoxの削除後、ルール評価器を再実行する
+      // (指示: BBox削除後にrule evaluatorを再実行)。
+      if (existing?.evidence_type_key != null) {
+        await reevaluateEstimateResults()
       }
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
@@ -867,7 +1049,7 @@ function App() {
       }
       setError(describeFetchError(e, 'BBoxの削除に失敗しました'))
     }
-  }, [allDetections])
+  }, [allDetections, reevaluateEstimateResults])
 
   // BBoxリサイズ/移動保存 (Phase 1.7, 要件17/23/24。Phase 1.11でBBox内部drag移動にも
   // 流用)。mouseup時に一度だけ呼ばれる(ドラッグ中は呼ばれない。指示8章の
@@ -907,6 +1089,13 @@ function App() {
         if (pageNo != null && existing != null) {
           followTargetChangeIfNeeded(updated, beforeRect, rect, pageNo, existing.drawing_page_id)
         }
+      }
+      // [Issue #40 Phase 3] 図面情報付きBBoxの移動/resize後、ルール評価器を
+      // 再実行する(指示: BBox移動/resize後にrule evaluatorを再実行。複数BBox
+      // 条件(VCT+CH等)は位置関係で成立/不成立が変わりうるため、単純な所属変更
+      // だけでなく移動そのものが評価に影響しうる)。
+      if (existing?.evidence_type_key != null) {
+        await reevaluateEstimateResults()
       }
     } catch (e) {
       setError(describeFetchError(e, 'BBoxのリサイズ保存に失敗しました'))
@@ -981,6 +1170,12 @@ function App() {
         setSelectedMasterItemId(null)
         return
       }
+      // [Issue #40 Phase 3] 図面情報選択(BBox追加モード)もEscapeで解除できる
+      // ようにする(既存のselectedMasterItemIdと同じ優先順位段階)。
+      if (selectedEvidenceTypeKey != null) {
+        setSelectedEvidenceTypeKey(null)
+        return
+      }
       if (selectedPanel != null) {
         setSelectedPanel(null)
       }
@@ -994,6 +1189,7 @@ function App() {
     isHelpOpen,
     selectedDetectionId,
     selectedMasterItemId,
+    selectedEvidenceTypeKey,
     selectedPanel,
   ])
 
@@ -1052,10 +1248,17 @@ function App() {
           // 上記と同じ理由でcurrentRect(実際の現在値)を使う。
           if (pageNo != null) followTargetChangeIfNeeded(updated, currentRect, targetRect, pageNo, existing.drawing_page_id)
         }
+        // [Issue #40 Phase 3] 図面情報付きBBoxのUndo/Redoによる移動後も、
+        // 通常の移動/resizeと同様にルール評価器を再実行する。
+        if (existing?.evidence_type_key != null) await reevaluateEstimateResults()
         return {}
       }
 
       if (command.kind === 'create') {
+        // [Issue #40 Phase 3] command.inputの形(master_item_id経由か
+        // evidence_type_key経由か)から、どちらの経路で作られたBBoxかを判別する
+        // (`editHistory.ts::CreateEditCommand`のdocstring参照)。
+        const isEvidenceBased = 'evidence_type_key' in command.input
         if (direction === 'undo') {
           await deleteDetection(command.detectionId)
           setDetections((prev) => prev.filter((d) => d.id !== command.detectionId))
@@ -1063,13 +1266,18 @@ function App() {
           setSelectedDetectionId((current) => (current === command.detectionId ? null : current))
           bumpEditMeta(command.detectionId)
           setError(null)
+          if (isEvidenceBased) await reevaluateEstimateResults()
           return {}
         }
-        const created = await createManualDetection(command.input)
+        const created =
+          'evidence_type_key' in command.input
+            ? await createEvidenceDetection(command.input)
+            : await createManualDetection(command.input)
         setDetections((prev) => [...prev, created])
         setAllDetections((prev) => [...prev, created])
         bumpEditMeta(created.id)
         setError(null)
+        if (isEvidenceBased) await reevaluateEstimateResults()
         return created.id !== command.detectionId
           ? { rebase: { oldId: command.detectionId, newId: created.id } }
           : {}
@@ -1077,22 +1285,36 @@ function App() {
 
       // command.kind === 'delete'
       if (direction === 'undo') {
-        // 積算コードに紐づかないDetectionは既存API(createManualDetection)が
-        // master_item_idを必須とするため復元できない (指示18章で開示する既知の制約。
+        // [Issue #40 Phase 3] 図面情報のみのDetection(master_item_id===null,
+        // evidence_type_key!==null)も、専用の作成APIで復元できるようにした。
+        // どちらも持たないDetection(積算コードに紐づかない旧来のAI検出等)は
+        // 引き続き復元できない (指示18章で開示する既知の制約。
         // handleDeleteDetection側でそもそもこの場合は履歴へ積んでいないため、
         // 通常はここへ到達しないが、念のため防御しておく)。
-        if (command.snapshot.master_item_id == null) {
+        if (command.snapshot.master_item_id == null && command.snapshot.evidence_type_key == null) {
           setError('このBBoxの削除は元に戻せません(積算コードに紐づかないBBoxのため)')
           return null
         }
-        const created = await createManualDetection({
-          drawing_page_id: command.snapshot.drawing_page_id,
-          master_item_id: command.snapshot.master_item_id,
-          bbox_x: command.snapshot.bbox_x,
-          bbox_y: command.snapshot.bbox_y,
-          bbox_w: command.snapshot.bbox_w,
-          bbox_h: command.snapshot.bbox_h,
-        })
+        const created =
+          command.snapshot.master_item_id != null
+            ? await createManualDetection({
+                drawing_page_id: command.snapshot.drawing_page_id,
+                master_item_id: command.snapshot.master_item_id,
+                bbox_x: command.snapshot.bbox_x,
+                bbox_y: command.snapshot.bbox_y,
+                bbox_w: command.snapshot.bbox_w,
+                bbox_h: command.snapshot.bbox_h,
+              })
+            : await createEvidenceDetection({
+                drawing_page_id: command.snapshot.drawing_page_id,
+                // 直前のnullチェックにより、この分岐ではevidence_type_keyが
+                // 必ず非nullであることが保証されている。
+                evidence_type_key: command.snapshot.evidence_type_key as string,
+                bbox_x: command.snapshot.bbox_x,
+                bbox_y: command.snapshot.bbox_y,
+                bbox_w: command.snapshot.bbox_w,
+                bbox_h: command.snapshot.bbox_h,
+              })
         setDetections((prev) => [...prev, created])
         setAllDetections((prev) => [...prev, created])
         bumpEditMeta(created.id)
@@ -1100,6 +1322,7 @@ function App() {
         // Backend既存APIの制約上、source_type/statusはmanual/reviewed固定でしか
         // 復元できない (元がAI検出だった場合、この点だけは完全には再現できない。
         // 指示18章で開示する既知の制約)。
+        if (command.snapshot.evidence_type_key != null) await reevaluateEstimateResults()
         return created.id !== command.detectionId
           ? { rebase: { oldId: command.detectionId, newId: created.id } }
           : {}
@@ -1110,6 +1333,7 @@ function App() {
       setSelectedDetectionId((current) => (current === command.detectionId ? null : current))
       bumpEditMeta(command.detectionId)
       setError(null)
+      if (command.snapshot.evidence_type_key != null) await reevaluateEstimateResults()
       return {}
     } catch (e) {
       setError(describeFetchError(e, direction === 'undo' ? 'Undoに失敗しました' : 'Redoに失敗しました'))
@@ -1259,8 +1483,21 @@ function App() {
           onToggleDetail={() => setEstimateDetailFloatingVisible((v) => !v)}
           masterVisible={estimateMasterFloatingVisible}
           onToggleMaster={() => setEstimateMasterFloatingVisible((v) => !v)}
+          drawingEvidenceVisible={drawingEvidenceFloatingVisible}
+          onToggleDrawingEvidence={() => setDrawingEvidenceFloatingVisible((v) => !v)}
         />
       </div>
+      {/* Issue #40 Phase 3・8章: ルール再評価による積算結果増減の控えめな通知。
+          2〜3秒で自動消去され、操作をブロックしない(pushRuleToast参照)。 */}
+      {ruleToasts.length > 0 && (
+        <div className="app-layout__rule-toast-stack" role="status">
+          {ruleToasts.map((toast) => (
+            <div key={toast.id} className="app-layout__rule-toast">
+              {toast.message}
+            </div>
+          ))}
+        </div>
+      )}
       {/* 指示9章: BBox編集によって積算先(面/盤)が変わった場合の一時通知。 */}
       {targetChangeNotification && (
         <div className="app-layout__target-change-toast" role="status">
@@ -1314,14 +1551,21 @@ function App() {
                 selectedPanelKey={selectedPanel?.key ?? null}
                 onSelectPanel={handleSelectPanel}
                 masterItemById={masterItemById}
-                masterItemSelected={selectedMasterItemId != null}
+                // [Issue #40 Phase 3] 図面情報の選択でも同じ「BBox追加準備中」の
+                // 見た目(カーソル等)にする(両モードとも排他選択のため、常に
+                // どちらか一方のみがtrueになる)。
+                masterItemSelected={selectedMasterItemId != null || selectedEvidenceTypeKey != null}
                 detectedPreview={detectedPreview}
                 detections={viewerDetections}
                 selectedDetectionId={selectedDetectionId}
                 highlightedDetectionId={highlightedDetectionId}
                 onSelectDetection={handleSelectDetection}
-                bboxAddMode={selectedMasterItemId != null && matchingDbPage != null}
-                onCreateBBox={handleCreateManualBBox}
+                bboxAddMode={
+                  (selectedMasterItemId != null || selectedEvidenceTypeKey != null) && matchingDbPage != null
+                }
+                onCreateBBox={
+                  selectedEvidenceTypeKey != null ? handleCreateEvidenceBBox : handleCreateManualBBox
+                }
                 onResizeDetection={handleResizeDetection}
                 onMoveDetectionLabel={handleMoveDetectionLabel}
                 onDeleteSelectedDetection={() => {
@@ -1397,6 +1641,24 @@ function App() {
                 onRectChange={setMasterRect}
               >
                 <EstimateMasterPicker selectedItemId={selectedMasterItemId} onSelectItem={handleSelectMasterItem} />
+              </FloatingPanel>
+              {/* [Issue #40 Phase 3] 「図面情報」floating panel。新しいBBox
+                  作成の主導線。既存の部品台帳(EstimateMasterPicker)は変更せず
+                  そのまま併存させる(指示: 既存Manual BBoxとの互換維持)。 */}
+              <FloatingPanel
+                visible={drawingEvidenceFloatingVisible}
+                kind="drawingEvidence"
+                visibleKinds={visibleFloatingKinds}
+                containerRef={viewerWrapRef}
+                rect={drawingEvidenceRect}
+                onRectChange={setDrawingEvidenceRect}
+              >
+                <DrawingEvidencePanel
+                  selectedKey={selectedEvidenceTypeKey}
+                  onSelectKey={handleSelectEvidenceType}
+                  relatedResults={relatedEstimateResultsForSelectedDetection}
+                  onFocusResult={handleFocusResultEvidence}
+                />
               </FloatingPanel>
               {/* [Issue #31] Viewer内「操作ガイド」。既存4panelと同じ
                   FloatingPanelシェルをそのまま再利用する(`kind="guide"`により

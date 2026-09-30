@@ -11,6 +11,7 @@ Sekisan Naviが参照する設定値の一覧。secretの実値は記載しな�
 |---|---|---|---|
 | `SEKISAN_NAVI_ADMIN_PASSWORD` | 事実上必須 | 未設定 | データ参照ルート変更・接続テストAPIの認証に使う定数時間比較用パスワード。未設定の場合、これらのAPIは常に認証失敗になる(fail-closed、`app/config.py`)。`backend/.env`(Git管理対象外)からも読み込める(`_load_dotenv_if_present()`)。 |
 | `SEKISAN_NAVI_DB_PATH` | 任意 | 未設定(下記`DB_PATH`の既定値を使用) | Issue #23 Phase 2で追加。使用するSQLite DBファイルのパスを上書きする(検証用DBへの切替用)。未設定時は挙動が一切変わらない。相対パスを指定した場合、Backend起動時のカレントディレクトリを基準に解決される(このモジュール側では`.resolve()`等による絶対パス化は行わない)。起動ディレクトリの取り違えによる事故を避けたい場合は絶対パスを推奨する。`backend/.env`からも読み込める。データ参照ルート(`system_settings.data_source_root`)はDBファイルの中身の一部のため、この変数は変更しない(切替先DBに保存されている値がそのまま使われる)。詳細な運用手順は本ファイル末尾の「検証用DBへの切替」節、および[README.md](../README.md)参照。 |
+| `SEKISAN_NAVI_ALLOW_DEFAULT_DB_AUTOMIGRATE` | 任意 | 未設定(`"1"`以外は全て「許可しない」扱い) | Issue #40 PR #42で追加。既定DBパス(`SEKISAN_NAVI_DB_PATH`未設定時に使われる、本番運用でも使われうるパス)に対して、Backend起動時のmigration自動適用を明示的に許可する。既定DBパスかつ既にmigration履歴がある場合、この変数を`"1"`に設定しない限り起動時のmigration自動適用は行われない(初回セットアップ、すなわちまだ1件もmigrationが適用されていないDBに対しては、この変数が無くても常に自動適用される。既存の開発体験を壊さないため)。`SEKISAN_NAVI_DB_PATH`を明示指定している場合はこの変数の影響を受けない(常に自動適用)。背景・判定ロジックは`app/config.py::should_auto_migrate_on_startup`のdocstring、および[PR #42](https://github.com/bs-shashimoto2048/SekisanNavi/pull/42)参照。 |
 
 `backend/.env.example`をコピーして`backend/.env`を作成し、値を設定する運用
 (README参照)。実パスワード入りの`.env`はコミットしないこと(`.gitignore`)。
@@ -77,6 +78,15 @@ Phase 1調査で、`decision_events`/`estimate_confirmations`がappend-only(特�
   - Frontend側の表示(検証用DBに接続していることを示すUIバナー等は無い。
     どのBackendポートに接続しているかは、起動時の`netstat`等でのプロセス確認
     (下記手順5)で判断すること)
+
+**Issue #40 PR #42追記**: `SEKISAN_NAVI_DB_PATH`を明示指定するこの検証用途は
+これまでどおり常に自動migrationが適用される(変更なし)。一方、
+`SEKISAN_NAVI_DB_PATH`を指定していない既定DBパス(=本番運用でも使われうる
+パス)側は、既にmigration履歴がある場合、`SEKISAN_NAVI_ALLOW_DEFAULT_DB_AUTOMIGRATE=1`
+を明示設定しない限り起動時のmigration自動適用が行われなくなった(上記
+環境変数一覧参照)。これは、開発中のソースコード変更による`uvicorn --reload`
+の再起動だけで本番DBへ未検証の新migrationが適用されてしまう事故が
+実際に発生したための対策であり、検証用DBの切替手順そのものには影響しない。
 
 ### 手順例
 

@@ -118,6 +118,66 @@ def create_manual_detection(
     return detection
 
 
+def create_evidence_detection(
+    conn: sqlite3.Connection,
+    *,
+    drawing_page_id: int,
+    evidence_type_key: str,
+    bbox_x: float,
+    bbox_y: float,
+    bbox_w: float,
+    bbox_h: float,
+) -> Detection:
+    """図面情報(`evidence_type_key`)付きのBBoxを登録する (Issue #40 Phase 3)。
+
+    `create_manual_detection`(`master_item_id`経由、既存の部品台帳UI向け)とは
+    別の新規関数として追加する。既存のManual BBox作成(`master_item_id`)は
+    一切変更しない(Issue #40 Phase 3指示: 既存Manual BBoxとの互換維持、
+    新UIの主導線ではmaster_item_idを直接選ばせない)。
+
+    `class_name`には既存のmaster_item_id経由作成(`master_item.code`を
+    class_nameとして流用する規則)と同じ考え方で、`evidence_type_key`自身を
+    そのまま使う(いずれも「後からJOINで人間向け表示名を解決できる、
+    技術的な識別子」という位置づけが同じであるため)。
+
+    - `master_item_id`: NULL(このBBoxは「積算コードへの直結」を持たない。
+      Issue #40 2-1章「BBox = 積算コード、を廃止する」)。
+    - panel_id: 現時点では自動推定しない(既存のManual BBoxと同じ、未確定)。
+    - confidence: 手動追加のためNULL。
+    - status: 'reviewed'(既存Manual BBoxと同じ規則)。
+
+    呼び出し側(router)で`drawing_page_id`/`evidence_type_key`の実在確認を
+    済ませてから呼ぶこと(`create_manual_detection`と同じ責務分担)。
+    """
+    (detection_id,) = conn.execute(
+        """
+        INSERT INTO detections
+            (drawing_page_id, panel_id, class_name, bbox_x, bbox_y, bbox_w, bbox_h,
+             confidence, status, source_type, master_item_id, evidence_type_key)
+        VALUES (?, NULL, ?, ?, ?, ?, ?, NULL, 'reviewed', 'manual', NULL, ?)
+        RETURNING id
+        """,
+        (drawing_page_id, evidence_type_key, bbox_x, bbox_y, bbox_w, bbox_h, evidence_type_key),
+    ).fetchone()
+    detection = get_detection(conn, detection_id)
+    assert detection is not None  # 直前に挿入したレコードなので必ず存在する
+
+    # 既存Manual BBoxと同じくdecision_eventsへ記録する(Issue #4 Phase A-1の
+    # event logging方針は、根拠の種別(master_item_id/evidence_type_key)に
+    # 関わらず「BBoxのcreate/delete/bbox_edit」という事実を等しく対象にする)。
+    record_event(
+        conn,
+        event_type=DecisionEventType.CREATE,
+        detection_id=detection.id,
+        drawing_page_id=detection.drawing_page_id,
+        source_type=detection.source_type,
+        master_item_id=detection.master_item_id,
+        before_bbox=None,
+        after_bbox=(detection.bbox_x, detection.bbox_y, detection.bbox_w, detection.bbox_h),
+    )
+    return detection
+
+
 def update_detection_bbox(
     conn: sqlite3.Connection,
     detection_id: int,

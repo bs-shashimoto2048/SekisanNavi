@@ -113,6 +113,19 @@ export interface ManualDetectionCreateInput {
   bbox_h: number
 }
 
+/** 図面情報(evidence_type_key)付きBBox登録リクエスト (Issue #40 Phase 3)。
+ * `ManualDetectionCreateInput`(master_item_id経由、既存の部品台帳UI向け)とは
+ * 別の入力形。`master_item_id`を持たない点で判別できる(`editHistory.ts`の
+ * Undo/Redoでの分岐に利用する)。 */
+export interface EvidenceDetectionCreateInput {
+  drawing_page_id: number
+  evidence_type_key: string
+  bbox_x: number
+  bbox_y: number
+  bbox_w: number
+  bbox_h: number
+}
+
 // Phase 1.7: data/master/estimate_master_a.xlsx (Sheet2) を正式な参照元とする。
 // 実データにitem_nameに相当する列はないため削除、categoryは1件だけ空欄行が
 // 存在することを確認したためnullableとした (docs/data-model.md参照)。

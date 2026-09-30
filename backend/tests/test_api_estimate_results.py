@@ -298,3 +298,21 @@ def test_reset_factor_endpoint_unaffected_by_allowed_factors(client, monkeypatch
     assert res.status_code == 200
     assert res.json()["current_factor"] == res.json()["initial_factor"] == 1.0
     assert res.json()["factor_overridden"] is False
+
+
+def test_list_estimate_results_filters_by_detection_id(client, monkeypatch, tmp_path, db_path):
+    """Issue #40 Phase 3: 根拠BBox→関係する積算結果(detection_idでの絞り込み)。"""
+    detection, _ = _setup_product_and_rule(client, monkeypatch, tmp_path, db_path)
+    other_detection = _create_manual_detection(client, bbox_x=0.5, bbox_y=0.5)
+    client.post("/api/products/A1GV2421/estimate-results/evaluate")
+
+    matches = client.get(
+        f"/api/products/A1GV2421/estimate-results?detection_id={detection['id']}"
+    ).json()
+    assert len(matches) == 1
+    assert detection["id"] in [e["detection_id"] for e in matches[0]["evidence"]]
+
+    no_matches = client.get(
+        f"/api/products/A1GV2421/estimate-results?detection_id={other_detection['id']}"
+    ).json()
+    assert no_matches == []

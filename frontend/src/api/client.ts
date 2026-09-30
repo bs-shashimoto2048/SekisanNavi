@@ -18,6 +18,7 @@ import type {
   EstimatePanelInfo,
   EstimateResult,
   EstimateResultEvaluateResponse,
+  EvidenceDetectionCreateInput,
   HelpPdfStatus,
   ManualDetectionCreateInput,
   Panel,
@@ -139,6 +140,14 @@ export function fetchMasterItems(params: { q?: string; category?: string }): Pro
 // Manual BBox登録 (Phase 1.6)。
 export function createManualDetection(input: ManualDetectionCreateInput): Promise<Detection> {
   return sendJson('/api/detections', 'POST', input)
+}
+
+// 図面情報(evidence_type_key)付きBBox登録 (Issue #40 Phase 3)。既存の
+// createManualDetection(master_item_id経由)とは別のエンドポイントを呼ぶ
+// (Backend側も別関数・別エンドポイントとして実装しており、既存の部品台帳経由
+// の作成には一切影響しない)。
+export function createEvidenceDetection(input: EvidenceDetectionCreateInput): Promise<Detection> {
+  return sendJson('/api/detections/by-evidence-type', 'POST', input)
 }
 
 // BBoxリサイズ/移動保存 (Phase 1.7)。Manual/AIの双方が対象。
@@ -281,19 +290,22 @@ export function helpPdfFileUrl(): string {
 
 // --- Issue #40 Phase 2: 積算コード選定〜数量・係数・金額/工数算出の一貫ルール化 ---
 //
-// Phase 2はデータモデル/ルールエンジン基盤のみが対象のため、以下の関数は
-// どのUIコンポーネントからも呼ばれない(Phase 3/4向けに先行して用意するのみ)。
+// Phase 2ではデータモデル/ルールエンジン基盤のみが対象だったため、当初は
+// どのUIコンポーネントからも呼ばれていなかったが、Phase 3のViewer入力UI
+// (図面情報FloatingPanel・即時再評価・双方向トレーサビリティ)から実際に使う。
 
-/** 図面情報マスタ一覧 (Issue #40 10-1章)。Phase 2では実データを投入しないため、
- * 通常は空配列が返る。 */
+/** 図面情報マスタ一覧 (Issue #40 10-1章)。 */
 export function fetchDrawingEvidenceTypes(): Promise<DrawingEvidenceType[]> {
   return getJson('/api/drawing-evidence-types')
 }
 
 /** 製番`productNo`の現在の積算結果一覧を取得する(読み取り専用。評価器は
- * 実行しない)。最新化したい場合は`evaluateEstimateResults`を呼ぶ。 */
-export function fetchEstimateResults(productNo: string): Promise<EstimateResult[]> {
-  return getJson(`/api/products/${encodeURIComponent(productNo)}/estimate-results`)
+ * 実行しない)。最新化したい場合は`evaluateEstimateResults`を呼ぶ。
+ * `detectionId`を指定すると、そのBBoxが根拠になっている積算結果だけに
+ * 絞り込む(Issue #40 Phase 3「根拠BBox→関係する積算結果」)。 */
+export function fetchEstimateResults(productNo: string, detectionId?: number): Promise<EstimateResult[]> {
+  const query = detectionId != null ? `?detection_id=${detectionId}` : ''
+  return getJson(`/api/products/${encodeURIComponent(productNo)}/estimate-results${query}`)
 }
 
 /** 製番`productNo`について、現在の根拠(BBox)×設計データ×有効なルールマスタから

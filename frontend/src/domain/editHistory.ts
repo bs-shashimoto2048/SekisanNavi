@@ -3,7 +3,7 @@
 // Reactの状態更新から切り離した純粋関数として保持する。副作用(fetch呼び出し・
 // setState)はApp.tsx側が担い、このモジュールは「今どういう履歴状態にあるべきか」
 // だけを計算する。
-import type { Detection, ManualDetectionCreateInput } from '../types/domain'
+import type { Detection, EvidenceDetectionCreateInput, ManualDetectionCreateInput } from '../types/domain'
 import type { NormalizedRect } from '../utils/bbox'
 
 /** BBoxの移動/リサイズ確定 (Phase 1.7のonResizeDetection相当)。 */
@@ -16,11 +16,17 @@ export interface BBoxEditCommand {
 
 /** Manual BBox新規追加。Undo=削除、Redo=同じ内容で再作成する
  * (Backend側で新しいidが払い出されるため、再作成後は`rebaseDetectionId`で
- * このコマンド自身のdetectionIdを書き換える)。 */
+ * このコマンド自身のdetectionIdを書き換える)。
+ *
+ * [Issue #40 Phase 3] `input`は「積算コードMaster経由(部品台帳)」
+ * (`ManualDetectionCreateInput`、`master_item_id`を持つ)と「図面情報経由」
+ * (`EvidenceDetectionCreateInput`、`evidence_type_key`を持つ)のいずれかを
+ * 保持できる。`'master_item_id' in input`で判別する(呼び出し側
+ * `App.tsx::applyEditCommand`がこれに基づき再作成先のAPIを選ぶ)。 */
 export interface CreateEditCommand {
   kind: 'create'
   detectionId: number
-  input: ManualDetectionCreateInput
+  input: ManualDetectionCreateInput | EvidenceDetectionCreateInput
 }
 
 /** Detection削除。Undo=削除前スナップショットから再作成、Redo=削除。
