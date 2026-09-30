@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 # backend/ をimportパスに追加 (pytestをbackend/から実行する前提だが、念のため)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import app.main as app_main
 from app.api.deps import get_db
 from app.db.connection import get_connection
 from app.db.master_importer import import_master_excel
@@ -29,7 +30,20 @@ def db_path(tmp_path) -> Path:
 
 
 @pytest.fixture()
-def client(db_path) -> TestClient:
+def client(db_path, monkeypatch) -> TestClient:
+    """`TestClient(app)`は`with`文に入る際、実際にFastAPIのlifespan
+    (`app.main.lifespan`)を起動する。lifespanは`app.config.DB_PATH`
+    (=`app.main`がimport時に束縛した`app.main.DB_PATH`)へ直接
+    `run_migrations`/`seed`/`import_master_excel`を実行するため、
+    `get_db`依存関係のoverride(下記`_override_get_db`、ルートハンドラのみに
+    効く)だけでは不十分で、`app.main.DB_PATH`自体をこの`db_path`
+    (tmp_path内の使い捨てDB)へ差し替えないと、lifespanが実際の既定DBパス
+    (`SEKISAN_NAVI_DB_PATH`未設定時は本番運用で使われるパス)へ
+    migration/seed/master importを適用してしまう(Issue #40 PR #42で
+    発覚した、テスト実行のたびに本番DBへ新migrationが適用されていた
+    不具合の直接の原因)。"""
+    monkeypatch.setattr(app_main, "DB_PATH", db_path)
+
     def _override_get_db():
         with get_connection(db_path) as conn:
             yield conn

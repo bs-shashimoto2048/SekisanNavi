@@ -46,6 +46,50 @@ def _load_dotenv_if_present() -> None:
             os.environ[key] = value
 
 
+def should_auto_migrate_on_startup(
+    *,
+    db_path_env: str | None,
+    allow_default_automigrate_env: str | None,
+    has_existing_migration_history: bool,
+) -> bool:
+    """Backend起動時(`app.main.lifespan`)に`run_migrations`を自動実行してよいかを
+    判定する(Issue #40 PR #42で発覚した事故の再発防止)。
+
+    事故の経緯: `SEKISAN_NAVI_DB_PATH`を指定せず既定DBパス
+    (=本番運用で使われる`backend/data/sekisan_navi.db`)で起動していた
+    常駐Backendが、開発中のソースコード変更による`uvicorn --reload`の
+    再起動だけで、起動のたびに`run_migrations(DB_PATH)`を無条件実行して
+    しまい、未検証の新migrationが本番DBへ意図せず適用された
+    (原因調査はPR #42のコメント参照。再起動そのものの正確な発生経路は
+    特定できていないが、「既定DBパスに対しては自動適用しない」という
+    ガードを設けることで、経路によらず再発を防止する)。
+
+    - `db_path_env`が設定されている(=検証用DB等、既定DBパス以外を明示的に
+      指定している)場合は、常に自動適用してよい(Issue #23の検証用DB切替の
+      既存挙動を変えない)。
+    - `db_path_env`が未設定(=既定DBパスを使う)場合:
+        - `has_existing_migration_history`が`False`(=まだ1件もmigrationが
+          適用されていない真っ新なDB、初回セットアップ)なら自動適用してよい。
+          このガードが守りたいのは「既存のmigration履歴を持つDBへ、検証
+          されていない新migrationが黙って追加適用されること」であり、
+          初回セットアップの手間を増やすことは意図していない
+          (`README.md`記載の`uvicorn app.main:app --reload --port 8000`
+          だけで動かせる、という既存の開発体験を壊さない)。
+        - 既に何らかのmigration履歴がある場合は、
+          `allow_default_automigrate_env`が`"1"`のときのみ自動適用する。
+          それ以外は自動適用しない(migrationの適用は運用者が
+          `python -m app.db.migrate` を明示的に実行することを想定する。
+          `python -m app.db.migrate`自体はこの関数を経由しないため、
+          この判定の影響を受けない)。
+    """
+    using_default_db_path = not db_path_env
+    if not using_default_db_path:
+        return True
+    if not has_existing_migration_history:
+        return True
+    return allow_default_automigrate_env == "1"
+
+
 def _resolve_db_path(env_value: str | None, default: Path) -> Path:
     """`SEKISAN_NAVI_DB_PATH` 環境変数から実際に使うDBパスを解決する
     (Issue #23 Phase 2: 検証用DBをソース複製なしで切り替え可能にする)。
