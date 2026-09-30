@@ -122,6 +122,20 @@ class ManualDetectionCreateIn(_NormalizedBBoxIn):
     master_item_id: int
 
 
+class EvidenceDetectionCreateIn(_NormalizedBBoxIn):
+    """図面情報付きBBox登録リクエスト (Issue #40 Phase 3)。
+
+    `ManualDetectionCreateIn`(`master_item_id`経由、既存の部品台帳UI向け)とは
+    別のリクエスト形にする(既存エンドポイント・既存スキーマは一切変更しない、
+    Issue #40 Phase 3指示: 既存Manual BBoxとの互換維持)。source_type/statusは
+    クライアントから指定させず、Backend側で固定する(常にmanual/reviewedとして
+    登録する。既存と同じ規則)。
+    """
+
+    drawing_page_id: int
+    evidence_type_key: str
+
+
 class DetectionBBoxUpdateIn(_NormalizedBBoxIn):
     """BBoxリサイズ・移動・引出線ラベル位置の更新リクエスト
     (Phase 1.7, 要件23。Phase 1.11でleader_label_x/yを追加)。

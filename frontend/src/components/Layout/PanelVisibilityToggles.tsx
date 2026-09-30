@@ -16,6 +16,10 @@ interface Props {
    * (視覚的な区切り + ツール系配色)で表示ON/OFFを切り替える。 */
   masterVisible: boolean
   onToggleMaster: () => void
+  /** [Issue #40 Phase 3] 図面情報。新しいBBox作成の主導線であり、既存の
+   * 部品台帳(masterVisible)と並ぶ「作業ツール」グループの一員として配置する。 */
+  drawingEvidenceVisible: boolean
+  onToggleDrawingEvidence: () => void
 }
 
 /**
@@ -65,6 +69,8 @@ export function PanelVisibilityToggles({
   onToggleDetail,
   masterVisible,
   onToggleMaster,
+  drawingEvidenceVisible,
+  onToggleDrawingEvidence,
 }: Props) {
   return (
     <div className="panel-visibility-toggles">
@@ -117,6 +123,17 @@ export function PanelVisibilityToggles({
         onClick={onToggleMaster}
       >
         部品台帳
+      </button>
+      {/* [Issue #40 Phase 3] 新しいBBox作成の主導線。部品台帳と同じ
+          「作業ツール」グループに並べる(区切り線の追加はしない)。 */}
+      <button
+        type="button"
+        className="panel-visibility-toggles__button panel-visibility-toggles__button--drawingEvidence"
+        aria-pressed={drawingEvidenceVisible}
+        title={drawingEvidenceVisible ? '図面情報を隠す' : '図面情報を表示'}
+        onClick={onToggleDrawingEvidence}
+      >
+        図面情報
       </button>
     </div>
   )

@@ -308,6 +308,12 @@ vi.mock('./api/client', () => ({
   // 固定fixtureを返す (右ペイン連動テストが意味のある値で検証できるようにする)。
   fetchEstimatePanels: vi.fn(async () => estimatePanelsFixture),
   fetchMasterItems: vi.fn(async () => masterItems),
+  // Issue #40 Phase 3: ルールエンジン積算結果。既存テストは図面情報floating
+  // panel(既定非表示)を使わないため、空配列を返すだけの最小スタブでよい。
+  fetchEstimateResults: vi.fn(async () => []),
+  evaluateEstimateResults: vi.fn(async () => ({ results: [], skipped_rule_master_ids: [] })),
+  fetchDrawingEvidenceTypes: vi.fn(async () => []),
+  createEvidenceDetection: vi.fn(),
   // Phase 1.8: 製番選択・左ペインPNGサムネイル。
   fetchProductDrawings: vi.fn(async () => [productPageFoundation, productPageOutline]),
   fetchProductInfo: vi.fn(async (productNo: string) => ({
@@ -1390,9 +1396,19 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
     // [Issue #31] Viewer内「操作ガイド」トグルが先頭(盤情報の手前)へ
     // 区切り線付きで追加された。操作ガイドは既定非表示のため、他4panelとは
     // 別にaria-pressedを検証する。
-    expect(buttons.map((b) => b.textContent)).toEqual(['操作ガイド', '盤情報', '積算集約', '積算明細', '部品台帳'])
+    // [Issue #40 Phase 3] 「図面情報」トグルが末尾へ追加された。既存Manual BBox
+    // 主導線を壊さないため既定非表示(操作ガイドと同様に別途検証する)。
+    expect(buttons.map((b) => b.textContent)).toEqual([
+      '操作ガイド',
+      '盤情報',
+      '積算集約',
+      '積算明細',
+      '部品台帳',
+      '図面情報',
+    ])
     expect(buttons[0].getAttribute('aria-pressed')).toBe('false')
-    expect(buttons.slice(1).every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true)
+    expect(buttons.slice(1, -1).every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true)
+    expect(buttons[buttons.length - 1].getAttribute('aria-pressed')).toBe('false')
   })
 
   it('gives the panel-visibility toggles a filled ON vs. muted OFF look, distinct from Undo/Redo (追加UI修正指示2章、Issue #34でkind別theme化)', async () => {

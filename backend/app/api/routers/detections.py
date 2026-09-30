@@ -4,15 +4,22 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.deps import get_db
 from app.repositories.detections import (
+    create_evidence_detection,
     create_manual_detection,
     delete_detection,
     get_detection,
     list_detections,
     update_detection_bbox,
 )
+from app.repositories.drawing_evidence_types import get_evidence_type_by_key
 from app.repositories.drawings import get_drawing_page
 from app.repositories.master import get_master_item
-from app.schemas.common import DetectionBBoxUpdateIn, DetectionOut, ManualDetectionCreateIn
+from app.schemas.common import (
+    DetectionBBoxUpdateIn,
+    DetectionOut,
+    EvidenceDetectionCreateIn,
+    ManualDetectionCreateIn,
+)
 
 router = APIRouter(prefix="/api/detections", tags=["detections"])
 
@@ -48,6 +55,43 @@ def create_detection(
         master_item_id=body.master_item_id,
         # 表示ラベルにはMaster Itemのコードを用いる (要件11: 名称・価格情報の大量コピーはしない)。
         class_name=master_item.code,
+        bbox_x=body.bbox_x,
+        bbox_y=body.bbox_y,
+        bbox_w=body.bbox_w,
+        bbox_h=body.bbox_h,
+    )
+    return DetectionOut(**detection.__dict__)
+
+
+@router.post("/by-evidence-type", response_model=DetectionOut, status_code=201)
+def create_detection_by_evidence_type(
+    body: EvidenceDetectionCreateIn, conn: sqlite3.Connection = Depends(get_db)
+) -> DetectionOut:
+    """図面情報(`evidence_type_key`)付きのBBoxを登録する (Issue #40 Phase 3)。
+
+    「BBox = 積算コード」を前提としない新しいBBox作成経路(Issue #40 2-1章)。
+    既存の`create_detection`(`master_item_id`経由)は一切変更しない
+    (Issue #40 Phase 3指示: 既存Manual BBoxとの互換維持)。
+
+    - drawing_page_id / evidence_type_key は事前に実在確認する(不正な値は404)。
+    - master_item_idは設定しない(積算コードへの直結を持たないBBoxとして登録する)。
+    - 登録後の積算結果への反映は、呼び出し側(Frontend)が
+      `POST /api/products/{product_no}/estimate-results/evaluate`を
+      別途呼ぶことで行う(このエンドポイント自身は評価器を実行しない。
+      既存の`create_detection`が積算結果を再計算しないのと同じ設計)。
+    """
+    page = get_drawing_page(conn, body.drawing_page_id)
+    if page is None:
+        raise HTTPException(status_code=404, detail="指定された図面ページが見つかりません。")
+
+    evidence_type = get_evidence_type_by_key(conn, body.evidence_type_key)
+    if evidence_type is None:
+        raise HTTPException(status_code=404, detail="指定された図面情報が見つかりません。")
+
+    detection = create_evidence_detection(
+        conn,
+        drawing_page_id=body.drawing_page_id,
+        evidence_type_key=body.evidence_type_key,
         bbox_x=body.bbox_x,
         bbox_y=body.bbox_y,
         bbox_w=body.bbox_w,

@@ -117,6 +117,25 @@
   border-color: var(--panel-theme-master-accent-strong);
 }
 
+/* [Issue #40 Phase 3] 図面情報は新しいBBox作成の主導線であり、部品台帳
+   (作業ツール)と近い位置づけだが、意図的に異なる色相(green)にして
+   「新しい入力方式」であることを視覚的に区別する。 */
+.panel-visibility-toggles__button--drawingEvidence {
+  border-color: var(--panel-theme-drawingEvidence-accent);
+  background: var(--panel-theme-drawingEvidence-bg);
+  color: var(--panel-theme-drawingEvidence-fg);
+}
+
+.panel-visibility-toggles__button--drawingEvidence:hover {
+  border-color: var(--panel-theme-drawingEvidence-accent-strong);
+}
+
+.panel-visibility-toggles__button--drawingEvidence[aria-pressed='true'] {
+  background: var(--panel-theme-drawingEvidence-accent-strong);
+  color: #fff;
+  border-color: var(--panel-theme-drawingEvidence-accent-strong);
+}
+
 /* [Issue #31] Viewer内「操作ガイド」は、業務情報3panel・部品台帳(作業ツール)
    のいずれとも異なる役割(操作方法のクイックリファレンス)であるため、
    どちらとも重ならないニュートラルなグレー系にする。編集ツールバーの通常

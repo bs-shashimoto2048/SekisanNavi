@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import './FloatingPanel.css'
 
-export type FloatingPanelKind = 'panelInfo' | 'aggregation' | 'detail' | 'master' | 'guide'
+// [Issue #40 Phase 3] 'drawingEvidence'(図面情報)を追加した。既存の
+// 'master'(部品台帳、master_item_id経由のBBox作成)は変更・撤去せず併存させる
+// (指示: 既存Manual BBoxとの互換維持。新UIの主導線は'drawingEvidence'側)。
+export type FloatingPanelKind = 'panelInfo' | 'aggregation' | 'detail' | 'master' | 'guide' | 'drawingEvidence'
 
 /** floating panelの位置・大きさ (px、`containerRef`の要素基準)。 */
 export interface FloatingPanelRect {
@@ -60,6 +63,7 @@ const MIN_WIDTH_BY_KIND: Record<FloatingPanelKind, number> = {
   detail: 260,
   master: 260,
   guide: 260,
+  drawingEvidence: 260,
 }
 // [追加修正: 積算コードMasterのfloating化 / 最小高さのさらなる縮小]
 // 従来は全kind共通の単一MIN_HEIGHT(180px)だったが、各panelの実際の構成
@@ -80,6 +84,9 @@ const MIN_HEIGHT_BY_KIND: Record<FloatingPanelKind, number> = {
   detail: 150,
   master: 150,
   guide: 120,
+  // [Issue #40 Phase 3] 見出し+カテゴリselect+一覧1〜2行分。masterと同程度の
+  // 構成(見出し+select+表)のため同じ下限を採用する。
+  drawingEvidence: 150,
 }
 // panelの「高さの伸びやすさ」の目安(コンテナ高さに対する割合)。指示25章由来の
 // 既存値をそのまま踏襲する(Issue #25は位置ロジックのみが対象で、高さの決め方
@@ -92,6 +99,8 @@ const HEIGHT_FRACTION_BY_KIND: Record<FloatingPanelKind, number> = {
   // [Issue #31] クイックリファレンス表のみのため、他panelより控えめな
   // 伸び率にする(内容が少ないのにViewer高さいっぱいまで広がらないように)。
   guide: 0.3,
+  // [Issue #40 Phase 3] masterと同程度の伸び率にする(一覧の構成が近いため)。
+  drawingEvidence: 0.34,
 }
 // [追加修正: floating panelの初期幅を実ブラウザ実測ベースで再調整]
 // Playwrightで実データ(製番A1GV2421 P16)を使い、各表の列ごとに「隠しnowrap
@@ -118,6 +127,9 @@ const DEFAULT_WIDTH_BY_KIND: Record<FloatingPanelKind, number> = {
   // [Issue #31] クイックリファレンス表(操作/方法の2列)のみのため、
   // 4panel中もっとも幅を必要としないpanelInfoと同程度で足りる。
   guide: 300,
+  // [Issue #40 Phase 3] masterと同程度の構成(見出し+カテゴリselect+一覧)のため
+  // 同じ既定幅から開始する(実ブラウザ確認のうえ調整の余地あり)。
+  drawingEvidence: 320,
 }
 const SIDE_MARGIN = 20
 // DrawingCanvas自身のtoolbar(図面名+Zoom/Fit/BBox削除、Viewer上端いっぱいの1行)を

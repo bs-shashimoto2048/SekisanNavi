@@ -6,7 +6,7 @@
 """
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.deps import get_db
 from app.domain.estimate_rules import EstimateResultEvidence
@@ -58,12 +58,18 @@ def read_evidence_types(conn: sqlite3.Connection = Depends(get_db)) -> list[Draw
 
 @router.get("/{product_no}/estimate-results", response_model=list[EstimateResultOut])
 def read_estimate_results(
-    product_no: str, conn: sqlite3.Connection = Depends(get_db)
+    product_no: str,
+    detection_id: int | None = Query(default=None),
+    conn: sqlite3.Connection = Depends(get_db),
 ) -> list[EstimateResultOut]:
     """製番`product_no`の現在の積算結果一覧を返す(読み取り専用。評価器は
     実行しない)。評価器を実行して最新化したい場合は
-    `POST .../estimate-results/evaluate`を呼ぶ。"""
-    results = list_results_for_product(conn, product_no=product_no)
+    `POST .../estimate-results/evaluate`を呼ぶ。
+
+    `detection_id`を指定すると、そのBBoxが根拠になっている積算結果だけに
+    絞り込む (Issue #40 Phase 3「根拠BBox→関係する積算結果」)。
+    """
+    results = list_results_for_product(conn, product_no=product_no, detection_id=detection_id)
     return [_result_out(r) for r in results]
 
 

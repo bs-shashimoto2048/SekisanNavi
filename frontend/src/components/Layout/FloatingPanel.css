@@ -49,6 +49,13 @@
   --panel-theme-master-accent-strong: #1e293b; /* slate-800、front時は濃紺寄り */
   --panel-theme-master-bg: #f1f5f9; /* slate-100 */
   --panel-theme-master-fg: #334155; /* slate-700 */
+
+  /* [Issue #40 Phase 3] 図面情報: green(既存5色とは異なる色相。「BBoxへ
+     意味を与える新しい入力の主導線」であることを他panelと明確に区別する) */
+  --panel-theme-drawingEvidence-accent: #22c55e; /* green-500 */
+  --panel-theme-drawingEvidence-accent-strong: #15803d; /* green-700 */
+  --panel-theme-drawingEvidence-bg: #f0fdf4; /* green-50 */
+  --panel-theme-drawingEvidence-fg: #166534; /* green-800 */
 }
 
 /* Issue #19 Phase 2で新設・Phase 4で拡張・追加修正でドラッグ移動/リサイズに対応:
@@ -139,6 +146,13 @@
   --panel-accent-strong: var(--panel-theme-master-accent-strong);
   --panel-accent-bg: var(--panel-theme-master-bg);
   --panel-accent-fg: var(--panel-theme-master-fg);
+}
+
+.floating-panel--drawingEvidence {
+  --panel-accent: var(--panel-theme-drawingEvidence-accent);
+  --panel-accent-strong: var(--panel-theme-drawingEvidence-accent-strong);
+  --panel-accent-bg: var(--panel-theme-drawingEvidence-bg);
+  --panel-accent-fg: var(--panel-theme-drawingEvidence-fg);
 }
 
 /* [Issue #34] 最前面panelの強調。通常状態(kind別の`--panel-accent`)より

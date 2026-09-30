@@ -147,12 +147,9 @@ CREATE TABLE estimate_results (
     judgment_reason TEXT,
     source_rule_id INTEGER REFERENCES estimate_rule_masters(id),
 
-    -- 係数適用前の単価/工数(evaluator算出時点のestimate_master_items由来値の
-    -- コピー)。price/laborの再計算(係数の手修正・初期値復元時、evaluatorを
-    -- 再実行せずに済むように保持する)に使う。calc_type='direct'以外、および
-    -- 業務ルールが未確定な組み合わせでは常にNULL。
-    unit_price REAL,
-    unit_labor REAL,
+    -- 係数適用前の単価/工数は0009_estimate_results_unit_price_labor.sqlで追加する
+    -- (このmigrationが本番DBへ初めて適用された後に列追加の必要が判明したため。
+    -- 別migrationに分離した理由は同ファイルのコメント参照)。
     -- 価格・工数 (Issue #40 13章)。`unit_price/unit_labor × quantity ×
     -- current_factor`で計算した値。unit_price/unit_laborがNULLの場合は
     -- 常にNULLのまま(0円/0工数への捏造はしない)。
