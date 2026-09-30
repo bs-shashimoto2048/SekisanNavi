@@ -82,6 +82,64 @@ describe('EstimateResultFactorCell (Issue #40 Phase 4: 積算明細の係数UI)'
     expect(onOverride).toHaveBeenCalledWith(0.42)
   })
 
+  // PR #43レビュー指摘対応: Number('') === 0 により、空欄blurで意図せず
+  // 係数0が保存されてしまっていた不具合の再発防止テスト。
+  describe('free-input blur edge cases (PR #43レビュー指摘対応)', () => {
+    it('does not call onOverride and restores the display value when blurred while empty', () => {
+      const onOverride = vi.fn()
+      const result = makeResult({ current_factor: 0.7, allowed_factors: null })
+      render(<EstimateResultFactorCell result={result} onOverride={onOverride} onReset={() => {}} />)
+      const input = screen.getByLabelText('係数') as HTMLInputElement
+      fireEvent.change(input, { target: { value: '' } })
+      fireEvent.blur(input)
+      expect(onOverride).not.toHaveBeenCalled()
+      expect(input.value).toBe('0.7')
+    })
+
+    it('calls onOverride(0) when the user explicitly types 0 and blurs (0 itself is not forbidden)', () => {
+      const onOverride = vi.fn()
+      const result = makeResult({ current_factor: 0.7, allowed_factors: null })
+      render(<EstimateResultFactorCell result={result} onOverride={onOverride} onReset={() => {}} />)
+      const input = screen.getByLabelText('係数') as HTMLInputElement
+      fireEvent.change(input, { target: { value: '0' } })
+      fireEvent.blur(input)
+      expect(onOverride).toHaveBeenCalledWith(0)
+    })
+
+    it('does not call onOverride and restores the display value for a non-numeric value', () => {
+      const onOverride = vi.fn()
+      const result = makeResult({ current_factor: 0.7, allowed_factors: null })
+      render(<EstimateResultFactorCell result={result} onOverride={onOverride} onReset={() => {}} />)
+      const input = screen.getByLabelText('係数') as HTMLInputElement
+      fireEvent.change(input, { target: { value: 'abc' } })
+      fireEvent.blur(input)
+      expect(onOverride).not.toHaveBeenCalled()
+      expect(input.value).toBe('0.7')
+    })
+
+    it('still overrides normally for an ordinary numeric change (regression check)', () => {
+      const onOverride = vi.fn()
+      const result = makeResult({ current_factor: 0.7, allowed_factors: null })
+      render(<EstimateResultFactorCell result={result} onOverride={onOverride} onReset={() => {}} />)
+      const input = screen.getByLabelText('係数') as HTMLInputElement
+      fireEvent.change(input, { target: { value: '0.9' } })
+      fireEvent.blur(input)
+      expect(onOverride).toHaveBeenCalledWith(0.9)
+    })
+
+    it('applies the same empty-value guard when committed via Enter (blur-on-Enter)', () => {
+      const onOverride = vi.fn()
+      const result = makeResult({ current_factor: 0.7, allowed_factors: null })
+      render(<EstimateResultFactorCell result={result} onOverride={onOverride} onReset={() => {}} />)
+      const input = screen.getByLabelText('係数') as HTMLInputElement
+      input.focus()
+      fireEvent.change(input, { target: { value: '  ' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(onOverride).not.toHaveBeenCalled()
+      expect(input.value).toBe('0.7')
+    })
+  })
+
   it('calls onReset when the reset button is clicked, and disables it when already at initial value', () => {
     const onReset = vi.fn()
     const overridden = makeResult({ factor_overridden: true })

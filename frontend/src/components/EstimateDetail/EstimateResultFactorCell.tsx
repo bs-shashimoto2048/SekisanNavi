@@ -38,9 +38,20 @@ export function EstimateResultFactorCell({ result, onOverride, onReset }: Props)
     ? `現在: ${result.current_factor}\n初期: ${result.initial_factor}\n手動修正`
     : `初期値のまま (${result.initial_factor})`
 
+  // PR #43レビュー指摘対応: `Number('')`はJavaScript仕様上`0`になるため、
+  // 空欄のままblurすると意図せず係数0が保存されてしまっていた
+  // (allowed_factors=NULL時は自由入力のためBackend側も拒否しない)。
+  // 空欄・数値として不正な値は、保存せず現在の`result.current_factor`の
+  // 表示へ戻す。明示的に"0"を入力した場合はそのまま有効な手修正値として
+  // 許可する(0自体を禁止する業務根拠は無いため)。
   function commitFreeInput() {
-    const parsed = Number(freeInputValue)
-    if (Number.isFinite(parsed) && parsed !== result.current_factor) {
+    const trimmed = freeInputValue.trim()
+    const parsed = Number(trimmed)
+    if (trimmed === '' || !Number.isFinite(parsed)) {
+      setFreeInputValue(String(result.current_factor))
+      return
+    }
+    if (parsed !== result.current_factor) {
       onOverride(parsed)
     }
   }
