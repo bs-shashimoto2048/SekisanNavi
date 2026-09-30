@@ -78,6 +78,36 @@
   `estimate_master_items`参照だけでは、再インポート後に過去の金額が変わりうる。
   `docs/decision-data-gap-analysis.md` 7.2章)。
 
+## EstimateResultの正本化 (Issue #40 Phase 5) に伴う未確定事項・既知の制約
+
+- **新旧同一コード衝突のdedupe方針は未確定**: 新方式(ルール評価)・旧方式
+  (`legacy_detection_adapter.py`、master_item_id直結の旧Manual/AI BBox)が
+  同一(対象盤/コード)を算出した場合、どちらを正として採用すべきか、あるいは
+  別結果として両方残すべきかの業務ルールが確定していない。Phase 5では
+  推測でdedupeせず、両方を`status=needs_review`として残す暫定対応にとどめて
+  いる(`docs/architecture.md` 33章、`docs/data-model.md` 6.7章)。
+- **積算確定(EstimateConfirmation)は未移行**: 確定・確定履歴は引き続き
+  `detections`(旧Detection単位)からsnapshotを組み立てる(`estimate_confirmation_
+  builder.py`)。EstimateResultベースへの移行はPhase 6以降の検討課題
+  (`docs/data-model.md` 6.6章末尾の追記参照)。
+- **設計データ根拠の判定値は表示していない**: 積算明細の「根拠」ボタンは、
+  BBox根拠のAI/手動取得元は表示するが、設計データ根拠については
+  `estimate_result_evidence.design_data_ref`(盤キー等の簡易JSONのみ)から
+  実際の判定値(型式/幅/奥行等)を復元できないため、値の表示は行っていない。
+- **数量の手修正は未実装**: 積算結果の`quantity`は評価器の自動算定値を正本
+  とし、Phase 5では手修正UIを実装していない(業務ルール未確定のため。将来
+  `initial_quantity`/`current_quantity`/`quantity_overridden`を持てる拡張
+  余地は`estimate_results`のテーブル設計上壊していない)。
+- **積算明細の「明細行クリックで対象ページへ自動遷移する」機構は廃止**:
+  EstimateResultは複数ページ/複数BBoxにまたがる根拠を持ちうるため(旧
+  「1行=1 Detection=1ページ」という前提が成り立たなくなったため)、Phase 4
+  以前にあった明細行クリックでの自動ページ遷移は実装していない。ページ移動は
+  左のDrawingNavigatorから行う(`docs/ui-spec.md` 5.6章)。
+- **編集直後の積算明細行の一時強調(edit-follow)は廃止**: BBox移動直後に
+  Viewer側のBBoxを一時強調する機構(`flashDetection`)はPhase 5でも維持して
+  いるが、積算明細側の対応する行を同時に一時強調していた旧機構(1行=1
+  Detection前提)は、明細行の全面書き換えに伴い実装していない。
+
 ## その他、コードから確認できる制約
 
 - 積算コードの体系(11xxx/18xxx/44xxx等の桁の意味)は未確定

@@ -357,6 +357,79 @@ estimate-confirmations`(過去snapshot一覧、新しい順、明細は含まな
 list_confirmations`/`get_confirmation`。詳細は`docs/api-reference.md`、
 設計は`docs/decision-snapshot-design.md` 11章/13章参照)。
 
+**[Issue #40 Phase 5] 確定機能とEstimateResultの関係(現状・未確定事項)**:
+`estimate_confirmations`/`estimate_confirmation_items`は本節作成時点(Phase
+B-1〜B-3)の設計のまま、`app/services/estimate_confirmation_builder.py`が
+その時点の`detections`(旧Detection単位)からsnapshotを組み立てる仕様を維持
+しており、Phase 5では**まだEstimateResultベースへ移行していない**
+(既存の確定・確定履歴の動作・過去snapshotの内容はPhase 5で変更していない。
+回帰が無いことは既存テストで確認済み)。EstimateResultを確定対象にする移行
+(本ファイル冒頭の指示13章相当)はPhase 6以降の検討課題として残っている。
+
+## 6.7. EstimateResult / EstimateResultEvidence / EstimateRuleMaster / DrawingEvidenceType (積算ルールエンジン、Issue #40 Phase 2〜4で追加。**Phase 5より積算結果の正本**)
+
+`0008_estimate_rule_engine_foundation.sql`で追加。**[Issue #40 Phase 5]
+`estimate_results`は、上記6章の`EstimateItem`/`EstimateReference`(Phase 1由来、
+現在は使われていない旧seedモデル)にも、`detections.master_item_id`直結の
+旧Manual/AI BBox方式にも代わり、UIが表示する積算結果の唯一の正本になった。**
+
+- **`estimate_results`(積算結果1件)**: `product_no`+`result_key`(評価器が
+  根拠・ルールから決定論的に組み立てる安定キー)でUNIQUE。評価器
+  (`app/services/estimate_rule_evaluator.py`)・互換レイヤ
+  (`app/services/legacy_detection_adapter.py`、後述)のいずれかが生成した
+  候補(`EstimateResultCandidate`)を`replace_results_for_product`が
+  product_no単位でUPSERTする。`current_factor`/`factor_overridden`等の
+  手修正済み列は再評価時にSELECTで読み取り、Python側で明示的に引き継ぐ
+  (再評価のたびに手修正が消えることはない)。
+  - `judgment_method`(`design_data`/`drawing_judgment`/`needs_confirmation`):
+    UIタブの軸。
+  - `status`(`auto`/`reviewed`/`needs_review`/`excluded`):
+    `judgment_method`とは独立した軸。`needs_review`は「盤所属が複数の盤と
+    同一最大交差面積で一意に決まらない」場合に加え、Phase 5より「新方式
+    (ルール評価、`source_rule_id`が非NULL)・旧方式(互換レイヤ、
+    `source_rule_id`がNULL)の両方が同一(対象盤/コード)を算出し、一意に
+    統合できなかった場合」も含む(下記「Phase 5: 旧Detection互換レイヤ」
+    参照)。いずれの場合も片方を無条件に破棄せず、両方の行を`needs_review`
+    のまま残す(業務ルール未確定のため推測でdedupeしない、Issue #40参照)。
+  - `unit_price`/`unit_labor`/`price`/`labor`: `price`/`laborはunit_price/
+    unit_labor × quantity × current_factor`。unit_price/unit_laborがNULLの
+    場合は常にNULL(0円/0工数への捏造はしない)。
+- **`estimate_result_evidence`(積算結果⇔根拠、多対多)**: `evidence_kind`が
+  `detection`(BBox根拠、`detection_id`を持つ。FK制約なし、既存の
+  `decision_events`/`estimate_confirmation_items`と同じ歴史的参照の考え方)
+  または`design_data`(設計データ根拠、`design_data_ref`に盤キー等の簡易JSON
+  を持つ)。1件のEstimateResultが複数BBox根拠を持てる(複数BBox条件の表現)。
+- **`estimate_rule_masters`**: `estimate_master_items`の1行に対する評価ルール
+  (成立条件・数量算定方式(`PER_EVIDENCE`/`PER_CONDITION_GROUP`)・適用単位・
+  許容係数候補等)。
+- **`drawing_evidence_types`**: 「図面情報」panel(Phase 3)が生成する
+  Detectionの分類マスタ(`detections.evidence_type_key`)。
+
+### Phase 5: 旧Detection互換レイヤ (`legacy_detection_adapter.py`)
+
+`detections.master_item_id`が直接設定された旧来のManual/AI BBox
+(`evidence_type_key`は使わない、Phase 2以前からの唯一の積算コード付与方法)を、
+削除・変更せずそのまま保持した上で、都度`EstimateResultCandidate`へ変換する
+**読み取り専用の互換レイヤ**。
+
+- 変換対象: `master_item_id IS NOT NULL AND evidence_type_key IS NULL`
+  かつ`status != 'excluded'`のDetection(`evidence_type_key`も設定されている
+  Detectionは、新方式(評価器)側が別途候補を生成するため二重計上防止のため
+  明示的にスキップする。実運用では両方が同時に設定されることは無い
+  (2つの作成経路が互いに他方のフィールドをNULLにするため)が、防御的に
+  ガードしている)。
+- 盤所属判定は評価器と共通の`app/services/panel_assignment.py::
+  assign_detection_to_panel`をそのまま使う(判定ロジックの二重実装を避ける。
+  `frontend/src/domain/estimateAggregationReal.ts::assignDetectionToPanel`が
+  そのFrontend版)。
+- 1旧Detectionにつき常に1 EstimateResult候補(`quantity=1`)を生成する
+  (`result_key`は`f"{code}:legacy:{detection.id}"`で安定させ、再評価のたびに
+  同一Detectionから重複生成しない)。
+- 新方式(評価器)の候補と互換レイヤの候補は、`app/services/
+  estimate_result_pipeline.py::build_all_candidates`が1回の評価実行で
+  まとめて`replace_results_for_product`へ渡す。同一(対象盤/コード)キーが
+  両方式から算出された場合の扱いは上記`status`の説明を参照。
+
 ## 7. system_settings (Phase 1.5で追加)
 
 管理者が変更可能なシステム共通設定を key-value で保持する。
