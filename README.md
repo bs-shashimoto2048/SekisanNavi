@@ -303,8 +303,8 @@ cd frontend && npm run lint
 cd frontend && npm run build   # 型チェックを兼ねたビルド確認
 ```
 
-2026-09時点のmainで、Backend 223件・Frontend 666件(32ファイル)のテストが
-全件成功することを確認済み。
+2026-09時点(Issue #40 Phase 5)で、Backend 292件・Frontend 714件(36ファイル)の
+テストが全件成功することを確認済み。
 
 ## 重要な前提・現在の制約
 
