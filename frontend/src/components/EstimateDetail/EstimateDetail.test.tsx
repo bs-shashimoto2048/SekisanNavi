@@ -1,10 +1,9 @@
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { EstimateDetail } from './EstimateDetail'
-import type { EstimateDetailItem, EstimateTarget } from '../../types/estimateAggregation'
-import type { EstimateMasterItem, EstimateResult } from '../../types/domain'
+import type { Detection, EstimateMasterItem, EstimateResult } from '../../types/domain'
 
-function makeRuleResult(overrides: Partial<EstimateResult> = {}): EstimateResult {
+function makeResult(overrides: Partial<EstimateResult> = {}): EstimateResult {
   return {
     id: 1,
     product_no: 'A1GV2421',
@@ -37,633 +36,277 @@ function makeRuleResult(overrides: Partial<EstimateResult> = {}): EstimateResult
   }
 }
 
-function makeDetailItem(overrides: Partial<EstimateDetailItem> = {}): EstimateDetailItem {
-  return {
-    id: '1',
-    detectionId: 1,
-    drawingPageId: 100,
-    pageNo: 16,
-    targetId: 'product',
-    source: 'manual',
-    masterItemId: 10,
-    code: '18311',
-    itemName: null,
-    model: '換気扇',
-    rating: '上部取付',
-    status: 'reviewed',
-    editedAt: null,
-    editSequence: 0,
-    ...overrides,
-  }
-}
+const masterItemById = new Map<number, EstimateMasterItem>([
+  [
+    10,
+    {
+      id: 10,
+      code: '11001',
+      category: '箱',
+      model: 'IS2',
+      rating: '2300*900*2200',
+      note: null,
+      total_price_a: 1000,
+      box_parts_price: null,
+      painting_price: null,
+      setup_a: null,
+      sheet_metal_price: null,
+      assembly_price: null,
+      inspection_price: null,
+    },
+  ],
+])
 
-const productTarget: EstimateTarget = { id: 'product', type: 'product', name: '製品全体', banMenno: null, banNo: null }
-const panel11Target: EstimateTarget = { id: 'panel:1:1', type: 'panel', name: '高圧受電盤', banMenno: 1, banNo: 1 }
-const panel22Target: EstimateTarget = { id: 'panel:2:2', type: 'panel', name: '低圧電灯盤', banMenno: 2, banNo: 2 }
-const tieTarget: EstimateTarget = {
-  id: '__tie__',
-  type: 'tie',
-  name: '要確認（複数盤の交差面積が同値）',
-  banMenno: null,
-  banNo: null,
-}
-const DEFAULT_TARGETS = [productTarget, panel11Target, panel22Target, tieTarget]
+const detectionById = new Map<number, Detection>([
+  [
+    42,
+    {
+      id: 42,
+      drawing_page_id: 1,
+      panel_id: null,
+      class_name: 'side_door',
+      bbox_x: 0.1,
+      bbox_y: 0.1,
+      bbox_w: 0.05,
+      bbox_h: 0.05,
+      confidence: null,
+      status: 'reviewed',
+      source_type: 'manual',
+      master_item_id: null,
+      leader_label_x: null,
+      leader_label_y: null,
+      master_item_category: null,
+      master_item_model: null,
+      master_item_code: null,
+      evidence_type_key: 'side_door',
+    },
+  ],
+])
 
 function renderDetail(props: Partial<Parameters<typeof EstimateDetail>[0]> = {}) {
   return render(
     <EstimateDetail
-      detailItems={[]}
-      targets={DEFAULT_TARGETS}
-      selectedTargetId={null}
-      currentPageNo={null}
-      onNavigateReference={() => {}}
-      onHoverDetail={() => {}}
-      sourceFilter="all"
-      onSourceFilterChange={() => {}}
+      results={[]}
+      masterItemById={masterItemById}
+      detectionById={detectionById}
+      tabFilter="all"
+      onTabFilterChange={() => {}}
       {...props}
     />,
   )
 }
 
-describe('EstimateDetail (積算明細強化・Undo/Redo・要確認警告・編集追従: 8カラム表)', () => {
-  it('shows the empty message inside the table when there are no detail items', () => {
-    renderDetail({ detailItems: [] })
-    expect(screen.getByText('明細がありません')).toBeInTheDocument()
+describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積算明細)', () => {
+  it('shows the 5 new tabs (全て/設計データ/図面判定/要確認/修正あり), not the old AI/manual tabs', () => {
+    renderDetail({ results: [makeResult()] })
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent?.replace(/\s?\d+$/, ''))
+    expect(tabs).toEqual(['全て', '設計データ', '図面判定', '要確認', '修正あり'])
+    expect(screen.queryByRole('tab', { name: /^AI/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /マニュアル/ })).not.toBeInTheDocument()
   })
 
-  it('shows the 8 columns: 面/盤・品名・コード・型式・定格・図面・状態・編集順 (指示1章)', () => {
-    renderDetail({ detailItems: [makeDetailItem()], currentPageNo: 16 })
-    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent?.replace(/[▲▼]/g, ''))
-    expect(headers).toEqual(['面/盤', '品名', 'コード', '型式', '定格', '図面', '状態', '編集順'])
-  })
-
-  it('derives the 面/盤 cell from the existing EstimateTarget (targetId lookup), not by parsing display strings (指示1章)', () => {
-    renderDetail({
-      detailItems: [
-        makeDetailItem({ id: '1', targetId: 'panel:1:1' }),
-        makeDetailItem({ id: '2', detectionId: 2, targetId: 'product', code: '18312' }),
-        makeDetailItem({ id: '3', detectionId: 3, targetId: '__tie__', code: '18313' }),
-      ],
-      currentPageNo: 16,
-    })
-    const panelCol = document.querySelectorAll('tbody .estimate-detail__col-panel')
-    const texts = Array.from(panelCol).map((c) => c.textContent)
-    expect(texts).toEqual(['1/1', '全体', '要確認'])
-  })
-
-  it('shows "-" for 面/盤 when the targetId has no matching EstimateTarget', () => {
-    renderDetail({ detailItems: [makeDetailItem({ targetId: 'panel:9:9' })], currentPageNo: 16 })
-    expect(document.querySelector('tbody .estimate-detail__col-panel')?.textContent).toBe('-')
-  })
-
-  it('shows "-" for 品名 since no real item-name field exists in the data, without fabricating a value', () => {
-    renderDetail({ detailItems: [makeDetailItem({ itemName: null })], currentPageNo: 16 })
-    const row = screen.getByText('18311').closest('tr') as HTMLElement
-    const nameCell = row.querySelector('.estimate-detail__col-name')
-    expect(nameCell?.textContent).toBe('-')
-  })
-
-  it('shows 型式 and 定格 as independent columns', () => {
-    renderDetail({
-      detailItems: [makeDetailItem({ model: 'IS2-1622', rating: '2.3*1.6*2.2:両開' })],
-      currentPageNo: 16,
-    })
-    const row = screen.getByText('18311').closest('tr') as HTMLElement
-    expect(within(row).getByText('IS2-1622')).toBeInTheDocument()
-    expect(within(row).getByText('2.3*1.6*2.2:両開')).toBeInTheDocument()
-  })
-
-  it('shows only the page number (e.g. "P16"), not the drawing name, in the 図面 column', () => {
-    renderDetail({ detailItems: [makeDetailItem({ pageNo: 16 })], currentPageNo: 16 })
-    expect(screen.getByText('P16')).toBeInTheDocument()
-    expect(screen.queryByText(/外形図/)).not.toBeInTheDocument()
-  })
-
-  it('shows the status as one of ○/△/× symbols, mapped from the real Detection.status', () => {
-    const items = [
-      makeDetailItem({ id: '1', detectionId: 1, status: 'reviewed' }),
-      makeDetailItem({ id: '2', detectionId: 2, status: 'needs_review' }),
-      makeDetailItem({ id: '3', detectionId: 3, status: 'pending' }),
-      makeDetailItem({ id: '4', detectionId: 4, status: 'excluded' }),
-    ]
-    renderDetail({ detailItems: items, currentPageNo: 16 })
-    expect(screen.getAllByText('○')).toHaveLength(1) // reviewed
-    expect(screen.getAllByText('△')).toHaveLength(2) // needs_review + pending
-    expect(screen.getAllByText('×')).toHaveLength(1) // excluded
-  })
-
-  it('shows "-" for 編集順 when the item has never been edited this session (editedAt === null)', () => {
-    renderDetail({ detailItems: [makeDetailItem({ editedAt: null })], currentPageNo: 16 })
-    expect(document.querySelector('tbody .estimate-detail__col-edit-order')?.textContent).toBe('-')
-  })
-
-  it('shows both the datetime and the sequence number for an edited item (CSS container query switches which is visible)', () => {
-    const editedAt = new Date(2026, 8, 3, 10, 44, 3).getTime() // 2026-09-03 10:44:03 (月は0始まり)
-    renderDetail({ detailItems: [makeDetailItem({ editedAt, editSequence: 15 })], currentPageNo: 16 })
-    const cell = document.querySelector('tbody .estimate-detail__col-edit-order') as HTMLElement
-    expect(within(cell).getByText('20260903 10:44:03')).toBeInTheDocument()
-    expect(within(cell).getByText('15')).toBeInTheDocument()
-  })
-
-  it('shows a legend explaining the status symbols, always outside the scroll area', () => {
-    renderDetail({ detailItems: [makeDetailItem()], currentPageNo: 16 })
-    const legend = document.querySelector('.estimate-detail__legend')
-    expect(legend?.textContent).toBe('○ 確定　△ 要確認　× 不備')
-    // 凡例はテーブルのスクロール領域(.estimate-detail__table-scroll)の外にある。
-    expect(document.querySelector('.estimate-detail__table-scroll')?.contains(legend as Node)).toBe(false)
-  })
-
-  it('shows 4 source tabs (全て/AI/設計情報/マニュアル) with counts, controlled by the sourceFilter prop', () => {
-    const items = [
-      makeDetailItem({ id: '1', source: 'ai' }),
-      makeDetailItem({ id: '2', source: 'manual' }),
-      makeDetailItem({ id: '3', source: 'manual' }),
-    ]
-    renderDetail({ detailItems: items, currentPageNo: 16 })
-    expect(screen.getByRole('tab', { name: '全て 3' }).getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByRole('tab', { name: 'AI 1' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: '設計情報 0' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'マニュアル 2' })).toBeInTheDocument()
-  })
-
-  it('calls onSourceFilterChange (not an internal state) when a source tab is clicked (指示12章: App.tsx側から強制切替できるようcontrolled)', () => {
-    const onSourceFilterChange = vi.fn()
-    renderDetail({
-      detailItems: [makeDetailItem({ source: 'ai' })],
-      currentPageNo: 16,
-      sourceFilter: 'all',
-      onSourceFilterChange,
-    })
-    fireEvent.click(screen.getByRole('tab', { name: /^AI/ }))
-    expect(onSourceFilterChange).toHaveBeenCalledWith('ai')
-  })
-
-  it('filters detail items to the currently selected target', () => {
-    const items = [
-      makeDetailItem({ id: '1', targetId: 'product', code: '18311' }),
-      makeDetailItem({ id: '2', targetId: 'panel:1:1', code: '11576' }),
-    ]
-    renderDetail({ detailItems: items, selectedTargetId: 'panel:1:1', currentPageNo: 16 })
-    expect(screen.queryByText('18311')).not.toBeInTheDocument()
-    expect(screen.getByText('11576')).toBeInTheDocument()
-  })
-
-  it('does not merge same-code items across different pages: each stays its own row', () => {
-    const items = [
-      makeDetailItem({ id: '1', detectionId: 1, pageNo: 16 }),
-      makeDetailItem({ id: '2', detectionId: 2, pageNo: 18 }),
-      makeDetailItem({ id: '3', detectionId: 3, pageNo: 23 }),
-    ]
-    renderDetail({ detailItems: items, currentPageNo: 16 })
-    expect(screen.getAllByText('18311')).toHaveLength(3)
-    expect(screen.getByText('P16')).toBeInTheDocument()
-    expect(screen.getByText('P18')).toBeInTheDocument()
-    expect(screen.getByText('P23')).toBeInTheDocument()
-  })
-
-  it('calls onHoverDetail(detectionId) on row mouseEnter and onHoverDetail(null) on mouseLeave', () => {
-    const onHoverDetail = vi.fn()
-    renderDetail({ detailItems: [makeDetailItem({ detectionId: 42 })], currentPageNo: 16, onHoverDetail })
-    const row = screen.getByText('18311').closest('tr') as HTMLElement
-    fireEvent.mouseEnter(row)
-    expect(onHoverDetail).toHaveBeenCalledWith(42)
-    fireEvent.mouseLeave(row)
-    expect(onHoverDetail).toHaveBeenCalledWith(null)
-  })
-
-  it('calls onNavigateReference when the 図面 cell is clicked, and does NOT call it on mere hover', () => {
-    const onNavigateReference = vi.fn()
-    renderDetail({
-      detailItems: [makeDetailItem({ detectionId: 7, drawingPageId: 55, pageNo: 16 })],
-      currentPageNo: 18,
-      onNavigateReference,
-    })
-    const row = screen.getByText('18311').closest('tr') as HTMLElement
-    fireEvent.mouseEnter(row)
-    expect(onNavigateReference).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByText('P16'))
-    expect(onNavigateReference).toHaveBeenCalledWith(55, 7)
-  })
-
-  it('marks the page link for the currently-displayed page distinctly from other pages', () => {
-    const items = [makeDetailItem({ id: '1', detectionId: 1, pageNo: 16 }), makeDetailItem({ id: '2', detectionId: 2, pageNo: 18 })]
-    renderDetail({ detailItems: items, currentPageNo: 16 })
-    expect(screen.getByText('P16').className).toContain('estimate-detail__page-link--current')
-    expect(screen.getByText('P18').className).not.toContain('estimate-detail__page-link--current')
-  })
-
-  describe('現在ページ行の強調 (指示4章)', () => {
-    it('marks the row whose pageNo matches currentPageNo with the current-page class, and no others', () => {
-      const items = [
-        makeDetailItem({ id: '1', detectionId: 1, pageNo: 16, code: '111' }),
-        makeDetailItem({ id: '2', detectionId: 2, pageNo: 18, code: '222' }),
-      ]
-      renderDetail({ detailItems: items, currentPageNo: 16 })
-      const row16 = screen.getByText('111').closest('tr') as HTMLElement
-      const row18 = screen.getByText('222').closest('tr') as HTMLElement
-      expect(row16.className).toContain('estimate-detail__row--current-page')
-      expect(row18.className).not.toContain('estimate-detail__row--current-page')
-    })
-
-    it('switches which row is marked as current-page in real time when currentPageNo prop changes', () => {
-      const items = [
-        makeDetailItem({ id: '1', detectionId: 1, pageNo: 16, code: '111' }),
-        makeDetailItem({ id: '2', detectionId: 2, pageNo: 18, code: '222' }),
-      ]
-      const { rerender } = renderDetail({ detailItems: items, currentPageNo: 16 })
-      expect((screen.getByText('111').closest('tr') as HTMLElement).className).toContain('--current-page')
-
-      rerender(
-        <EstimateDetail
-          detailItems={items}
-          targets={DEFAULT_TARGETS}
-          selectedTargetId={null}
-          currentPageNo={18}
-          onNavigateReference={() => {}}
-          onHoverDetail={() => {}}
-          sourceFilter="all"
-          onSourceFilterChange={() => {}}
-        />,
-      )
-      expect((screen.getByText('111').closest('tr') as HTMLElement).className).not.toContain('--current-page')
-      expect((screen.getByText('222').closest('tr') as HTMLElement).className).toContain('--current-page')
-    })
-  })
-
-  describe('編集直後の一時強調 (指示5章/13章)', () => {
-    it('marks the edit-followed row with the edit-follow class, taking priority over current-page', () => {
-      const items = [makeDetailItem({ id: '1', detectionId: 1, pageNo: 16, code: '111' })]
-      renderDetail({ detailItems: items, currentPageNo: 16, editFollowDetectionId: 1 })
-      const row = screen.getByText('111').closest('tr') as HTMLElement
-      expect(row.className).toContain('estimate-detail__row--edit-follow')
-    })
-
-    it('does not mark any row when editFollowDetectionId does not match any item', () => {
-      const items = [makeDetailItem({ id: '1', detectionId: 1, pageNo: 16, code: '111' })]
-      renderDetail({ detailItems: items, currentPageNo: 16, editFollowDetectionId: 999 })
-      const row = screen.getByText('111').closest('tr') as HTMLElement
-      expect(row.className).not.toContain('estimate-detail__row--edit-follow')
-    })
-
-    it('scrolls the edit-followed row into view', () => {
-      const items = [makeDetailItem({ id: '1', detectionId: 1, pageNo: 16, code: '111' })]
-      const scrollIntoView = vi.fn()
-      const originalScrollIntoView = HTMLElement.prototype.scrollIntoView
-      HTMLElement.prototype.scrollIntoView = scrollIntoView
-      try {
-        renderDetail({ detailItems: items, currentPageNo: 16, editFollowDetectionId: 1 })
-        expect(scrollIntoView).toHaveBeenCalled()
-      } finally {
-        HTMLElement.prototype.scrollIntoView = originalScrollIntoView
-      }
-    })
-  })
-
-  describe('全カラムソート (指示3章)', () => {
-    it('defaults to 編集順 descending (指示3章: 初期状態は編集順降順)', () => {
-      const items = [
-        makeDetailItem({ id: '1', detectionId: 1, code: '111', editSequence: 1 }),
-        makeDetailItem({ id: '2', detectionId: 2, code: '222', editSequence: 3 }),
-        makeDetailItem({ id: '3', detectionId: 3, code: '333', editSequence: 2 }),
-      ]
-      renderDetail({ detailItems: items, currentPageNo: 16 })
-      const codes = screen.getAllByText(/^(111|222|333)$/).map((el) => el.textContent)
-      expect(codes).toEqual(['222', '333', '111']) // editSequence 3,2,1
-      // 編集順ヘッダに▼(降順)が出ている。
-      const editOrderHeader = screen.getAllByRole('columnheader').find((h) => h.textContent?.includes('編集順'))
-      expect(editOrderHeader?.textContent).toContain('▼')
-    })
-
-    it('sorts by コード numerically (指示3章: 数値順)', () => {
-      const items = [
-        makeDetailItem({ id: '1', detectionId: 1, code: '20' }),
-        makeDetailItem({ id: '2', detectionId: 2, code: '3' }),
-        makeDetailItem({ id: '3', detectionId: 3, code: '100' }),
-      ]
-      renderDetail({ detailItems: items, currentPageNo: 16 })
-      fireEvent.click(screen.getByRole('button', { name: 'コードでソート' }))
-      const codes = screen.getAllByText(/^(20|3|100)$/).map((el) => el.textContent)
-      expect(codes).toEqual(['3', '20', '100']) // 昇順、数値として3<20<100 (文字列順なら100<20<3)
-    })
-
-    it('toggles ascending/descending on repeated header clicks of the same column', () => {
-      const items = [
-        makeDetailItem({ id: '1', detectionId: 1, code: '20' }),
-        makeDetailItem({ id: '2', detectionId: 2, code: '3' }),
-      ]
-      renderDetail({ detailItems: items, currentPageNo: 16 })
-      const codeHeaderButton = screen.getByRole('button', { name: 'コードでソート' })
-      fireEvent.click(codeHeaderButton) // 1回目: 昇順
-      expect(screen.getAllByText(/^(20|3)$/).map((el) => el.textContent)).toEqual(['3', '20'])
-      fireEvent.click(codeHeaderButton) // 2回目: 降順
-      expect(screen.getAllByText(/^(20|3)$/).map((el) => el.textContent)).toEqual(['20', '3'])
-    })
-
-    it('sorts 図面 (page) numerically, so P2 comes before P10', () => {
-      const items = [
-        makeDetailItem({ id: '1', detectionId: 1, pageNo: 10, code: 'a' }),
-        makeDetailItem({ id: '2', detectionId: 2, pageNo: 2, code: 'b' }),
-      ]
-      renderDetail({ detailItems: items, currentPageNo: 16 })
-      fireEvent.click(screen.getByRole('button', { name: '図面でソート' }))
-      const pages = screen.getAllByText(/^P(2|10)$/).map((el) => el.textContent)
-      expect(pages).toEqual(['P2', 'P10'])
-    })
-
-    it('sorts 状態 as ×→△→○ ascending (指示3章)', () => {
-      const items = [
-        makeDetailItem({ id: '1', detectionId: 1, code: 'a', status: 'reviewed' }),
-        makeDetailItem({ id: '2', detectionId: 2, code: 'b', status: 'excluded' }),
-        makeDetailItem({ id: '3', detectionId: 3, code: 'c', status: 'needs_review' }),
-      ]
-      renderDetail({ detailItems: items, currentPageNo: 16 })
-      fireEvent.click(screen.getByRole('button', { name: '状態でソート' }))
-      const rows = screen.getAllByRole('row').slice(1) // ヘッダ行を除く
-      const symbols = rows.map((r) => within(r).getByTitle(/reviewed|excluded|needs_review/).textContent)
-      expect(symbols).toEqual(['×', '△', '○'])
-    })
-
-    it('sorts 面/盤 by banMenno then banNo numerically, using the EstimateTarget lookup (not string parsing)', () => {
-      const items = [
-        makeDetailItem({ id: '1', detectionId: 1, targetId: 'panel:2:2', code: 'a' }),
-        makeDetailItem({ id: '2', detectionId: 2, targetId: 'panel:1:1', code: 'b' }),
-      ]
-      renderDetail({ detailItems: items, currentPageNo: 16 })
-      fireEvent.click(screen.getByRole('button', { name: '面/盤でソート' }))
-      const codes = screen.getAllByText(/^(a|b)$/).map((el) => el.textContent)
-      expect(codes).toEqual(['b', 'a']) // 面1/盤1 (b) が先
-    })
-
-    it('does not reset the sort column when the data changes (parent re-render), preserving the user-selected sort (指示14章)', () => {
-      const items = [
-        makeDetailItem({ id: '1', detectionId: 1, code: '20' }),
-        makeDetailItem({ id: '2', detectionId: 2, code: '3' }),
-      ]
-      const { rerender } = renderDetail({ detailItems: items, currentPageNo: 16 })
-      fireEvent.click(screen.getByRole('button', { name: 'コードでソート' })) // コード昇順にする
-
-      const updatedItems = [
-        makeDetailItem({ id: '1', detectionId: 1, code: '20', editSequence: 5 }),
-        makeDetailItem({ id: '2', detectionId: 2, code: '3', editSequence: 5 }),
-      ]
-      rerender(
-        <EstimateDetail
-          detailItems={updatedItems}
-          targets={DEFAULT_TARGETS}
-          selectedTargetId={null}
-          currentPageNo={16}
-          onNavigateReference={() => {}}
-          onHoverDetail={() => {}}
-          sourceFilter="all"
-          onSourceFilterChange={() => {}}
-        />,
-      )
-      // 編集順(初期ソート)へ戻らず、コード昇順のまま維持されている。
-      expect(screen.getAllByText(/^(20|3)$/).map((el) => el.textContent)).toEqual(['3', '20'])
-    })
-  })
-})
-
-// Sekisan Navi 追加UI修正指示: 表セル境界の統一 + ヘッダ左寄せ / 数値セル右寄せ
-describe('EstimateDetail: 表セル境界の統一・ヘッダ左寄せ/数値セル右寄せ', () => {
-  it('keeps every column header left-aligned (5章: 積算明細も数値列を含めheader文字は原則左寄せ、既存のまま変更なし)', () => {
-    renderDetail({ detailItems: [makeDetailItem()] })
-    const headers = screen.getAllByRole('columnheader')
-    expect(headers.length).toBeGreaterThan(0)
-    for (const th of headers) {
-      expect(getComputedStyle(th).textAlign).toBe('left')
-    }
-  })
-
-  it('does not change header/cell padding (row/header height不変, 指示18章: 情報密度を変えない)', () => {
-    renderDetail({ detailItems: [makeDetailItem()] })
-    const th = screen.getAllByRole('columnheader')[0]
-    const td = screen.getByRole('table').querySelector('td') as HTMLElement
-    expect(getComputedStyle(th).padding).toBe('0.3rem')
-    expect(getComputedStyle(td).padding).toBe('0.35rem 0.3rem')
-  })
-
-  it('keeps the sort indicator visible after the cell-border change (9章)', () => {
-    renderDetail({ detailItems: [makeDetailItem()] })
-    expect(screen.getByRole('button', { name: '編集順でソート' }).textContent).toContain('▼')
-  })
-
-  it('keeps the sticky header positioning unaffected by the new cell border (17章)', () => {
-    renderDetail({ detailItems: [makeDetailItem()] })
-    const th = screen.getAllByRole('columnheader')[0]
-    expect(getComputedStyle(th).position).toBe('sticky')
-  })
-
-  // 注記: jsdom(cssstyle)はborder-right(var(...)使用)の解決を確実には行わないため、
-  // --border-cellトークンの値自体はindex.css.test.ts側で検証し、実際の縦罫線描画は
-  // 実ブラウザ確認で行う(EstimateMasterPicker.test.tsx既存の注記と同じ制約)。
-})
-
-describe('EstimateDetail: 見出し (Issue #19 追加修正で折りたたみ機能は廃止、常に本文を表示する)', () => {
-  it('always shows the source tabs/table (no collapse feature)', () => {
-    renderDetail({ detailItems: [makeDetailItem()] })
-    expect(screen.getByRole('table')).toBeInTheDocument()
-    expect(screen.getByRole('tablist', { name: '情報源' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '積算明細' })).toBeInTheDocument()
-    // 折りたたみ用のchevronトグルボタンは存在しない (見出しは<h2>のプレーンテキスト)。
-    expect(screen.queryByRole('button', { name: /積算明細/ })).not.toBeInTheDocument()
-  })
-})
-
-describe('EstimateDetail: 列幅配分 (Issue #19 追加修正: 定格列の折り返し対策)', () => {
-  // 実データ(製番A1GV2421 P23、積算コード44253「入力（主回路銅帯）」)の定格
-  // 「3Φ 50kVA 200V級　公共建築 (225A)」が実ブラウザで1行に収まらなかった
-  // 不具合を受け、列幅配分を再調整した。table-layout: fixedの下では各列の
-  // width指定がそのまま確定値になるため(jsdomでも文字列としてそのまま解決
-  // できる、レイアウト計算そのものは行わない)、意図した配分から後退しないよう
-  // 主要な列の割合をここで固定する。実際の折り返し有無(ピクセル単位の実測)は
-  // 実ブラウザ確認で行う(jsdomは実レイアウトを行わないため確認できない)。
-  it('gives the longest variable-length column (定格) the largest share, ahead of 品名/型式', () => {
-    renderDetail({ detailItems: [makeDetailItem()] })
-    const table = screen.getByRole('table')
-    const widthOf = (cls: string) => {
-      const cell = table.querySelector(`.${cls}`) as HTMLElement
-      return parseFloat(getComputedStyle(cell).width)
-    }
-    const rating = widthOf('estimate-detail__col-rating')
-    const name = widthOf('estimate-detail__col-name')
-    const model = widthOf('estimate-detail__col-model')
-    const panel = widthOf('estimate-detail__col-panel')
-    const code = widthOf('estimate-detail__col-code')
-    const page = widthOf('estimate-detail__col-page')
-    const status = widthOf('estimate-detail__col-status')
-
-    // 定格が最大の可変長列であること (指示: 余った横幅を最優先で割り当てる)。
-    expect(rating).toBeGreaterThan(name)
-    expect(rating).toBeGreaterThan(model)
-    // 文字数の少ない列(面/盤・コード・図面・状態)は、長い文字列列(品名・型式)より
-    // 明確に狭いこと。
-    for (const short of [panel, code, page, status]) {
-      expect(short).toBeLessThan(name)
-      expect(short).toBeLessThan(model)
-      expect(short).toBeLessThan(rating)
-    }
-    // table-layout: fixedが維持されていること(この配分が確定値として機能する前提)。
-    expect(getComputedStyle(table).tableLayout).toBe('fixed')
-  })
-})
-
-describe('EstimateDetail: 「ルール結果」タブ (Issue #40 Phase 4: EstimateResult対応)', () => {
-  const masterItemById = new Map<number, EstimateMasterItem>([
-    [
-      10,
-      {
-        id: 10,
-        code: '11001',
-        category: '箱',
-        model: null,
-        rating: null,
-        note: null,
-        total_price_a: null,
-        box_parts_price: null,
-        painting_price: null,
-        setup_a: null,
-        sheet_metal_price: null,
-        assembly_price: null,
-        inspection_price: null,
-      },
-    ],
-  ])
-
-  it('shows a 5th tab "ルール結果" alongside the existing 4 tabs, with its own count', () => {
-    renderDetail({ ruleResults: [makeRuleResult(), makeRuleResult({ id: 2 })] })
-    const tab = screen.getByRole('tab', { name: 'ルール結果 2' })
-    expect(tab).toBeInTheDocument()
-  })
-
-  it('shows コード/品名/数量/適用単位/係数/金額/判定方法 columns, in Japanese (not raw enum values)', () => {
-    renderDetail({
-      sourceFilter: 'rule_result',
-      ruleResults: [makeRuleResult()],
-      masterItemById,
-    })
+  it('shows コード/内容/数量/適用単位/係数/金額/判定 as the 7 columns', () => {
+    renderDetail({ results: [makeResult()] })
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent)
-    expect(headers).toEqual(['コード', '品名', '数量', '適用単位', '係数', '金額', '判定方法'])
+    expect(headers).toEqual(['コード', '内容', '数量', '適用単位', '係数', '金額', '判定'])
+  })
 
-    expect(screen.getByText('11001')).toBeInTheDocument()
-    expect(screen.getByText('箱')).toBeInTheDocument() // 品名(masterItemById経由)
-    expect(screen.getByText('1面')).toBeInTheDocument() // 適用単位: 日本語ラベル
-    expect(screen.getByText('図面判定')).toBeInTheDocument() // 判定方法: 日本語ラベル
-    expect(screen.queryByText('face')).not.toBeInTheDocument()
+  it('"全て" tab includes every EstimateResult regardless of judgment_method', () => {
+    const results = [
+      makeResult({ id: 1, code: 'A', judgment_method: 'design_data' }),
+      makeResult({ id: 2, code: 'B', judgment_method: 'drawing_judgment' }),
+      makeResult({ id: 3, code: 'C', judgment_method: 'needs_confirmation' }),
+    ]
+    renderDetail({ results, tabFilter: 'all' })
+    expect(screen.getByText('A')).toBeInTheDocument()
+    expect(screen.getByText('B')).toBeInTheDocument()
+    expect(screen.getByText('C')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^全て/ }).textContent).toContain('3')
+  })
+
+  it('"設計データ" tab filters to judgment_method === design_data only', () => {
+    const results = [
+      makeResult({ id: 1, code: 'A', judgment_method: 'design_data' }),
+      makeResult({ id: 2, code: 'B', judgment_method: 'drawing_judgment' }),
+    ]
+    renderDetail({ results, tabFilter: 'design_data' })
+    expect(screen.getByText('A')).toBeInTheDocument()
+    expect(screen.queryByText('B')).not.toBeInTheDocument()
+  })
+
+  it('"図面判定" tab filters to judgment_method === drawing_judgment only', () => {
+    const results = [
+      makeResult({ id: 1, code: 'A', judgment_method: 'design_data' }),
+      makeResult({ id: 2, code: 'B', judgment_method: 'drawing_judgment' }),
+    ]
+    renderDetail({ results, tabFilter: 'drawing_judgment' })
+    expect(screen.queryByText('A')).not.toBeInTheDocument()
+    expect(screen.getByText('B')).toBeInTheDocument()
+  })
+
+  it('"要確認" tab still shows judgment_method === needs_confirmation rows (and hides ordinary rows)', () => {
+    const results = [
+      makeResult({ id: 1, code: 'A', judgment_method: 'drawing_judgment' }),
+      makeResult({ id: 2, code: 'B', judgment_method: 'needs_confirmation' }),
+    ]
+    renderDetail({ results, tabFilter: 'needs_confirmation' })
+    expect(screen.queryByText('A')).not.toBeInTheDocument()
+    expect(screen.getByText('B')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^要確認/ }).textContent).toContain('1')
+  })
+
+  it('"要確認" tab also shows status === needs_review rows whose judgment_method is drawing_judgment (新旧同一コード衝突)', () => {
+    const results = [
+      makeResult({ id: 1, code: 'A', judgment_method: 'drawing_judgment', status: 'auto' }),
+      makeResult({ id: 2, code: 'B', judgment_method: 'drawing_judgment', status: 'needs_review' }),
+      makeResult({ id: 3, code: 'C', judgment_method: 'needs_confirmation', status: 'auto' }),
+    ]
+    renderDetail({ results, tabFilter: 'needs_confirmation' })
+    expect(screen.queryByText('A')).not.toBeInTheDocument()
+    expect(screen.getByText('B')).toBeInTheDocument()
+    expect(screen.getByText('C')).toBeInTheDocument()
+    // タブ件数も表示条件と同じ(2件)
+    expect(screen.getByRole('tab', { name: /^要確認/ }).textContent).toContain('2')
+  })
+
+  it('counts a row that is both needs_review and needs_confirmation only once in the "要確認" tab', () => {
+    const results = [makeResult({ id: 1, code: 'A', judgment_method: 'needs_confirmation', status: 'needs_review' })]
+    renderDetail({ results, tabFilter: 'needs_confirmation' })
+    expect(screen.getByRole('tab', { name: /^要確認/ }).textContent).toMatch(/要確認\s*1$/)
+  })
+
+  it('keeps needs_review rows in their own judgment_method tab too, without affecting other tab counts', () => {
+    const results = [
+      makeResult({ id: 1, code: 'A', judgment_method: 'drawing_judgment', status: 'needs_review' }),
+      makeResult({ id: 2, code: 'B', judgment_method: 'design_data', status: 'auto' }),
+    ]
+    renderDetail({ results, tabFilter: 'drawing_judgment' })
+    expect(screen.getByText('A')).toBeInTheDocument()
+    expect(screen.queryByText('B')).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^全て/ }).textContent).toContain('2')
+    expect(screen.getByRole('tab', { name: /^設計データ/ }).textContent).toContain('1')
+    expect(screen.getByRole('tab', { name: /^図面判定/ }).textContent).toContain('1')
+    expect(screen.getByRole('tab', { name: /^要確認/ }).textContent).toContain('1')
+  })
+
+  it('"修正あり" tab filters to factor_overridden === true regardless of judgment_method', () => {
+    const results = [
+      makeResult({ id: 1, code: 'A', judgment_method: 'design_data', factor_overridden: false }),
+      makeResult({ id: 2, code: 'B', judgment_method: 'drawing_judgment', factor_overridden: true }),
+    ]
+    renderDetail({ results, tabFilter: 'overridden' })
+    expect(screen.queryByText('A')).not.toBeInTheDocument()
+    expect(screen.getByText('B')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^修正あり/ }).textContent).toContain('1')
+  })
+
+  it('calls onTabFilterChange (not internal state) when a tab is clicked', () => {
+    const onTabFilterChange = vi.fn()
+    renderDetail({ results: [makeResult()], onTabFilterChange })
+    fireEvent.click(screen.getByRole('tab', { name: /^設計データ/ }))
+    expect(onTabFilterChange).toHaveBeenCalledWith('design_data')
+  })
+
+  it('shows judgment_method in Japanese, never the raw enum value', () => {
+    renderDetail({ results: [makeResult({ judgment_method: 'drawing_judgment' })] })
+    expect(screen.getByText('図面判定')).toBeInTheDocument()
     expect(screen.queryByText('drawing_judgment')).not.toBeInTheDocument()
   })
 
-  it('shows "-" for 品名/適用単位 when master_item_id/applicable_unit is null (does not fabricate a value)', () => {
-    renderDetail({
-      sourceFilter: 'rule_result',
-      ruleResults: [makeRuleResult({ master_item_id: null, applicable_unit: null })],
-    })
-    const row = screen.getByText('11001').closest('tr') as HTMLElement
-    const cells = within(row).getAllByRole('cell').map((c) => c.textContent)
-    expect(cells[1]).toBe('-') // 品名
-    expect(cells[3]).toBe('-') // 適用単位
+  it('shows applicable_unit in Japanese, or "-" when null', () => {
+    const { rerender } = renderDetail({ results: [makeResult({ applicable_unit: 'face' })] })
+    expect(screen.getByText('1面')).toBeInTheDocument()
+
+    rerender(
+      <EstimateDetail
+        results={[makeResult({ id: 2, applicable_unit: null })]}
+        masterItemById={masterItemById}
+        tabFilter="all"
+        onTabFilterChange={() => {}}
+      />,
+    )
+    expect(document.querySelector('tbody .estimate-detail__col-rr-unit')?.textContent).toBe('-')
   })
 
-  it('shows price formatted with a currency prefix when present, and "-" (never 0円) when null', () => {
-    const { rerender } = renderDetail({
-      sourceFilter: 'rule_result',
-      ruleResults: [makeRuleResult({ price: 1000 })],
-    })
+  it('shows price formatted with a currency prefix, and "-" (never 0円) when null', () => {
+    const { rerender } = renderDetail({ results: [makeResult({ price: 1000 })] })
     expect(screen.getByText('¥1,000')).toBeInTheDocument()
 
     rerender(
       <EstimateDetail
-        detailItems={[]}
-        targets={DEFAULT_TARGETS}
-        selectedTargetId={null}
-        currentPageNo={null}
-        onNavigateReference={() => {}}
-        onHoverDetail={() => {}}
-        sourceFilter="rule_result"
-        onSourceFilterChange={() => {}}
-        ruleResults={[makeRuleResult({ price: null })]}
+        results={[makeResult({ id: 2, price: null })]}
+        masterItemById={masterItemById}
+        tabFilter="all"
+        onTabFilterChange={() => {}}
       />,
     )
     expect(document.querySelector('tbody .estimate-detail__col-rr-price')?.textContent).toBe('-')
     expect(screen.queryByText('0円')).not.toBeInTheDocument()
-    expect(screen.queryByText('¥0')).not.toBeInTheDocument()
   })
 
-  it('shows a 理由 button (with judgment_reason as its title) only when judgment_reason is present', () => {
-    const { rerender } = renderDetail({
-      sourceFilter: 'rule_result',
-      ruleResults: [makeRuleResult({ judgment_reason: 'VCT + CH / 同一盤 / CHがVCTより上' })],
-    })
-    const reasonButton = screen.getByRole('button', { name: '判定理由' })
-    expect(reasonButton.title).toBe('VCT + CH / 同一盤 / CHがVCTより上')
+  it('resolves 内容 from the master item (model/rating), falling back to code', () => {
+    renderDetail({ results: [makeResult({ master_item_id: 10 })] })
+    expect(screen.getByText('IS2 / 2300*900*2200')).toBeInTheDocument()
+  })
+
+  it('shows a 理由 button (with judgment_reason as its title) only when present', () => {
+    const { rerender } = renderDetail({ results: [makeResult({ judgment_reason: 'VCT + CH / 同一盤' })] })
+    expect(screen.getByRole('button', { name: '判定理由' }).title).toBe('VCT + CH / 同一盤')
 
     rerender(
       <EstimateDetail
-        detailItems={[]}
-        targets={DEFAULT_TARGETS}
-        selectedTargetId={null}
-        currentPageNo={null}
-        onNavigateReference={() => {}}
-        onHoverDetail={() => {}}
-        sourceFilter="rule_result"
-        onSourceFilterChange={() => {}}
-        ruleResults={[makeRuleResult({ judgment_reason: null })]}
+        results={[makeResult({ id: 2, judgment_reason: null })]}
+        masterItemById={masterItemById}
+        tabFilter="all"
+        onTabFilterChange={() => {}}
       />,
     )
     expect(screen.queryByRole('button', { name: '判定理由' })).not.toBeInTheDocument()
   })
 
-  it('calls onFocusResultEvidence on row hover for a drawing_judgment (BBox-backed) row', () => {
+  it('shows a 根拠 button summarizing evidence provenance (AI/手動) from detectionById', () => {
+    renderDetail({ results: [makeResult()] })
+    const button = screen.getByRole('button', { name: '根拠' })
+    expect(button.title).toContain('取得元: 手動')
+  })
+
+  it('shows a needs-review badge only when status === needs_review', () => {
+    const { rerender } = renderDetail({ results: [makeResult({ status: 'needs_review' })] })
+    expect(screen.getByText('⚠要確認')).toBeInTheDocument()
+
+    rerender(
+      <EstimateDetail
+        results={[makeResult({ id: 2, status: 'auto' })]}
+        masterItemById={masterItemById}
+        tabFilter="all"
+        onTabFilterChange={() => {}}
+      />,
+    )
+    expect(screen.queryByText('⚠要確認')).not.toBeInTheDocument()
+  })
+
+  it('calls onFocusResultEvidence on row hover (Phase 3 BBox highlight reuse)', () => {
     const onFocusResultEvidence = vi.fn()
-    const result = makeRuleResult({ judgment_method: 'drawing_judgment' })
-    renderDetail({
-      sourceFilter: 'rule_result',
-      ruleResults: [result],
-      onFocusResultEvidence,
-    })
+    const result = makeResult()
+    renderDetail({ results: [result], onFocusResultEvidence })
     const row = screen.getByText('11001').closest('tr') as HTMLElement
     fireEvent.mouseEnter(row)
     expect(onFocusResultEvidence).toHaveBeenCalledWith(result)
   })
 
-  it('still calls onFocusResultEvidence for a design_data-only row, but the caller (App.tsx) naturally no-ops since evidence is empty', () => {
-    // このコンポーネント自体はonFocusResultEvidenceを呼ぶだけで、実際に
-    // BBoxを強調するかどうかはApp.tsx側のhandleFocusResultEvidenceが
-    // evidence配列を見て判断する(Phase 3の既存実装、そちらで
-    // evidenceが空/detection_idを持たない場合は何もしない)。
-    const onFocusResultEvidence = vi.fn()
-    const result = makeRuleResult({ judgment_method: 'design_data', evidence: [] })
-    renderDetail({
-      sourceFilter: 'rule_result',
-      ruleResults: [result],
-      onFocusResultEvidence,
-    })
-    const row = screen.getByText('11001').closest('tr') as HTMLElement
-    fireEvent.mouseEnter(row)
-    expect(onFocusResultEvidence).toHaveBeenCalledWith(result)
-    expect(result.evidence).toEqual([])
-  })
-
-  it('calls onOverrideResultFactor/onResetResultFactor from the factor cell', () => {
+  it('calls onOverrideResultFactor/onResetResultFactor from the embedded factor cell', () => {
     const onOverrideResultFactor = vi.fn()
     const onResetResultFactor = vi.fn()
-    const result = makeRuleResult({ current_factor: 0.7, allowed_factors: [0.5, 0.7, 1.0], factor_overridden: true })
-    renderDetail({
-      sourceFilter: 'rule_result',
-      ruleResults: [result],
-      onOverrideResultFactor,
-      onResetResultFactor,
-    })
+    const result = makeResult({ current_factor: 0.7, allowed_factors: [0.5, 0.7, 1.0], factor_overridden: true })
+    renderDetail({ results: [result], onOverrideResultFactor, onResetResultFactor })
     fireEvent.change(screen.getByLabelText('係数'), { target: { value: '0.5' } })
     expect(onOverrideResultFactor).toHaveBeenCalledWith(result, 0.5)
-
     fireEvent.click(screen.getByRole('button', { name: '初期値へ戻す' }))
     expect(onResetResultFactor).toHaveBeenCalledWith(result)
   })
 
-  it('shows "ルール結果がありません" when there are no rule results', () => {
-    renderDetail({ sourceFilter: 'rule_result', ruleResults: [] })
-    expect(screen.getByText('ルール結果がありません')).toBeInTheDocument()
+  it('shows "積算結果がありません" when there are no results', () => {
+    renderDetail({ results: [] })
+    expect(screen.getByText('積算結果がありません')).toBeInTheDocument()
   })
 })

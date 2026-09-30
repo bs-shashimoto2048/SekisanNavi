@@ -1,8 +1,7 @@
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { EstimateAggregation } from './EstimateAggregation'
-import { EstimateDetail } from '../EstimateDetail/EstimateDetail'
-import type { EstimateDetailItem, EstimateLineItem, EstimateTarget } from '../../types/estimateAggregation'
+import type { EstimateLineItem, EstimateTarget } from '../../types/estimateAggregation'
 
 function makeTarget(overrides: Partial<EstimateTarget> = {}): EstimateTarget {
   return { id: 'product', type: 'product', name: '製品全体', banMenno: null, banNo: null, ...overrides }
@@ -784,59 +783,11 @@ describe('EstimateAggregation: ソート機能 (PR #2 追加修正指示: 積算
     expect(within(row18311).getByText('92,400円')).toBeInTheDocument()
   })
 
-  it('has an independent sort state from 積算明細(EstimateDetail): sorting the aggregation table does not affect EstimateDetail\'s own sort/indicator (14章)', () => {
-    const targets = [makeTarget()]
-    const totals = [
-      makeTotalLineItem({ id: 'a', code: '18311', amount: 659400 }),
-      makeTotalLineItem({ id: 'b', code: '18330', amount: -9700 }),
-    ]
-    const detailItem: EstimateDetailItem = {
-      id: '1',
-      detectionId: 1,
-      drawingPageId: 1,
-      pageNo: 1,
-      targetId: 'product',
-      source: 'manual',
-      masterItemId: 10,
-      code: '18311',
-      itemName: '換気扇',
-      model: null,
-      rating: null,
-      status: 'reviewed',
-      editedAt: null,
-      editSequence: 0,
-    }
-    const { container } = render(
-      <>
-        <EstimateAggregation
-          targets={targets}
-          lineItems={totals}
-          totalLineItems={totals}
-          selectedTargetId={null}
-          onSelectTarget={() => {}}
-        />
-        <EstimateDetail
-          detailItems={[detailItem]}
-          targets={targets}
-          selectedTargetId={null}
-          currentPageNo={null}
-          onNavigateReference={() => {}}
-          onHoverDetail={() => {}}
-          sourceFilter="all"
-          onSourceFilterChange={() => {}}
-        />
-      </>,
-    )
-    const aggregationTable = container.querySelectorAll('table')[0] as HTMLElement
-
-    // 積算明細の初期ソートは「編集順の降順」(積算集約とは無関係の独立したstate)。
-    const detailEditOrderButton = screen.getByRole('button', { name: '編集順でソート' })
-    expect(detailEditOrderButton.textContent).toContain('▼')
-
-    // 積算集約側で「金額」列をソートしても、積算明細のソート状態には一切影響しない。
-    fireEvent.click(sortButton('金額', aggregationTable))
-    expect(screen.getByRole('button', { name: '編集順でソート' }).textContent).toContain('▼')
-  })
+  // 旧テスト「積算明細(EstimateDetail)とは独立したソート状態を持つ」は
+  // Issue #40 Phase 5でのEstimateDetail全面刷新(EstimateResultベースの
+  // 新5タブ構成、列ごとのソート機能自体を廃止)に伴い削除した。積算集約
+  // (このファイル)自体のソート機能・独立性は本ファイルの他のテストで
+  // 引き続き検証している。
 })
 
 // Sekisan Navi 追加UI修正指示: 表セル境界の統一 + ヘッダ左寄せ / 数値セル右寄せ

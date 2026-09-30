@@ -82,6 +82,13 @@ def _set_evidence_type(db_path, detection_id: int, key: str) -> None:
     conn.close()
 
 
+def _set_detection_status(db_path, detection_id: int, status: str) -> None:
+    conn = sqlite3.connect(db_path)
+    conn.execute("UPDATE detections SET status = ? WHERE id = ?", (status, detection_id))
+    conn.commit()
+    conn.close()
+
+
 def _setup_product_and_rule(client, monkeypatch, tmp_path, db_path):
     product = tmp_path / "A1GV2421"
     product.mkdir()
@@ -318,9 +325,19 @@ def test_estimate_result_allowed_factors_is_null_when_rule_has_no_candidates(cli
 
 
 def test_list_estimate_results_filters_by_detection_id(client, monkeypatch, tmp_path, db_path):
-    """Issue #40 Phase 3: 根拠BBox→関係する積算結果(detection_idでの絞り込み)。"""
+    """Issue #40 Phase 3: 根拠BBox→関係する積算結果(detection_idでの絞り込み)。
+
+    Issue #40 Phase 5より、`master_item_id`直結の通常Manual BBox
+    (`other_detection`)自体も旧方式互換レイヤ経由でEstimateResultを持つように
+    なった(`legacy_detection_adapter`)。そのため、この`other_detection`は
+    もはや「EstimateResultを一切持たないDetection」の例としては使えない。
+    ここでは`status='excluded'`のDetection(旧方式でも積算結果を生成しない、
+    唯一「EstimateResultを一切持たない」ケース)を「無関係の対象」として使い、
+    絞り込みが引き続き正確であることを確認する。"""
     detection, _ = _setup_product_and_rule(client, monkeypatch, tmp_path, db_path)
     other_detection = _create_manual_detection(client, bbox_x=0.5, bbox_y=0.5)
+    excluded_detection = _create_manual_detection(client, bbox_x=0.7, bbox_y=0.7)
+    _set_detection_status(db_path, excluded_detection["id"], "excluded")
     client.post("/api/products/A1GV2421/estimate-results/evaluate")
 
     matches = client.get(
@@ -329,7 +346,18 @@ def test_list_estimate_results_filters_by_detection_id(client, monkeypatch, tmp_
     assert len(matches) == 1
     assert detection["id"] in [e["detection_id"] for e in matches[0]["evidence"]]
 
-    no_matches = client.get(
+    # 無関係の(通常の)Detectionで絞り込んでも、他方の積算結果は混ざらない
+    # (自分自身の旧方式互換結果のみが返る)。
+    other_matches = client.get(
         f"/api/products/A1GV2421/estimate-results?detection_id={other_detection['id']}"
+    ).json()
+    assert len(other_matches) == 1
+    assert other_detection["id"] in [e["detection_id"] for e in other_matches[0]["evidence"]]
+    assert detection["id"] not in [e["detection_id"] for e in other_matches[0]["evidence"]]
+
+    # status='excluded'のDetectionは旧方式互換レイヤでも積算結果を生成しない
+    # (唯一、EstimateResultを一切持たないケース)。
+    no_matches = client.get(
+        f"/api/products/A1GV2421/estimate-results?detection_id={excluded_detection['id']}"
     ).json()
     assert no_matches == []

@@ -8,11 +8,18 @@ import type {
   DrawingPage,
   EstimateMasterItem,
   EstimatePanelInfo,
+  EstimateResult,
   Panel,
   PanelArea,
   ProductDrawing,
   ProjectInfo,
 } from './types/domain'
+// [Issue #40 Phase 5] このファイルのmock済み`./api/client`は、旧Detectionベースの
+// 積算結果(master_item_id直結)を、Backend側の互換レイヤ(legacy_detection_adapter.py)
+// と同じ判定ロジックでEstimateResultへ変換した値を`fetchEstimateResults`/
+// `evaluateEstimateResults`から返す(実装ロジック自体は変更しないため、
+// 盤所属判定は本物と同じ`assignDetectionToPanel`をそのまま使う)。
+import { assignDetectionToPanel } from './domain/estimateAggregationReal'
 
 // PDF.js の実描画には依存せず、「積算結果→根拠図面→Viewerページ移動→BBox選択→
 // 一時強調」「積算コードMaster行選択→BBox追加モード」というApp内の状態連動のみを
@@ -281,15 +288,98 @@ const masterItems: EstimateMasterItem[] = [
 
 // 積算集約・積算明細UI再構成: App.tsxは起動時に`fetchDetections()`を引数無しで
 // 呼び、DB全件(=このfixtureでは全ページ分)を取得する。ページ指定時は従来通り
-// そのページのDetectionのみを返す。既定の初期表示ページ(基礎図P18,
-// dbPageId=2)への副作用的な呼び出し(`fetchDetections(2)`)も含め、通常は
-// この既定実装で足りる。個別のテスト(要確認warningテスト等)が一時的に
-// `mockImplementation`で上書きした場合は、このデフォルトへ明示的に戻す
-// (afterEach参照)。
+// そのページのDetectionのみを返す。
+//
+// [Issue #40 Phase 5] 積算集約・積算明細はEstimateResultが正本になったため、
+// `fetchEstimateResults`/`evaluateEstimateResults`のmockも、`fetchDetections`と
+// 同じ「現在のDetection状態」を単一の情報源(`liveDetectionsById`)から導出する
+// ことで、BBox移動・作成・削除・Undo/Redoの結果が正しく反映されるようにする
+// (Backend側で両APIが同じSQLiteを参照するのと同じ考え方)。個別のテストが
+// 異なる初期Detection集合を使いたい場合は、`mockImplementation`でfetchDetections
+// を直接差し替えるのではなく、`seedLiveDetections(...)`でこのstoreへ差し替える。
+let liveDetectionsById = new Map<number, Detection>()
+
+function seedLiveDetections(detections: Detection[]) {
+  liveDetectionsById = new Map(detections.map((d) => [d.id, d]))
+}
+seedLiveDetections([detectionOnOutline, masterLinkedDetectionOnOutline])
+
 function defaultFetchDetectionsImpl(drawingPageId?: number) {
-  const all = [detectionOnOutline, masterLinkedDetectionOnOutline]
+  const all = Array.from(liveDetectionsById.values())
   if (drawingPageId === undefined) return Promise.resolve(all)
-  return Promise.resolve(drawingPageId === 1 ? all : [])
+  return Promise.resolve(all.filter((d) => d.drawing_page_id === drawingPageId))
+}
+
+// pageOutline(id=1, page_no=16)はproductPageOutline.panelsの2盤と、
+// pageFoundation(id=2, page_no=18)は盤を持たない(productPageFoundation.panels=[])。
+// `assignDetectionToPanel`自体は変更せず、旧`estimateAggregationReal.ts`と全く
+// 同じ関数をそのまま使うことで、Backend互換レイヤ(legacy_detection_adapter.py)
+// と同じ判定結果になるようにする。
+function panelsForDrawingPageId(drawingPageId: number) {
+  if (drawingPageId === pageOutline.id) return productPageOutline.panels
+  if (drawingPageId === pageFoundation.id) return productPageFoundation.panels
+  return []
+}
+
+let nextLiveEstimateResultId = 9000
+
+/** `liveDetectionsById`の現在状態から、Backend互換レイヤ相当のEstimateResult[]を
+ * 組み立てる(旧Detectionのmaster_item_id直結分のみ。evidence_type_key経由の
+ * 図面情報detectionはこのファイルのテストで作成されないため対象外)。 */
+function buildLiveEstimateResults(): EstimateResult[] {
+  const results: EstimateResult[] = []
+  for (const d of liveDetectionsById.values()) {
+    if (d.master_item_id == null) continue
+    if (d.evidence_type_key != null) continue
+    if (d.status === 'excluded') continue
+    const panels = panelsForDrawingPageId(d.drawing_page_id)
+    const assignment = assignDetectionToPanel(
+      { x: d.bbox_x, y: d.bbox_y, w: d.bbox_w, h: d.bbox_h },
+      panels,
+    )
+    const master = masterItems.find((m) => m.id === d.master_item_id) ?? null
+    const code = d.master_item_code ?? master?.code ?? String(d.master_item_id)
+    let targetBanMenno: number | null = null
+    let targetBanNo: number | null = null
+    let status: EstimateResult['status'] = 'auto'
+    if (assignment.kind === 'panel') {
+      targetBanMenno = assignment.panel.ban_menno
+      targetBanNo = assignment.panel.ban_no
+    } else if (assignment.kind === 'tie') {
+      status = 'needs_review'
+    }
+    const id = nextLiveEstimateResultId++
+    results.push({
+      id,
+      product_no: 'A1GV2421',
+      result_key: `${code}:legacy:${d.id}`,
+      master_item_id: d.master_item_id,
+      code,
+      quantity: 1,
+      applicable_unit: null,
+      initial_factor: 1.0,
+      current_factor: 1.0,
+      factor_overridden: false,
+      factor_override_reason: null,
+      factor_updated_at: null,
+      factor_updated_by: null,
+      judgment_method: d.status === 'reviewed' ? 'drawing_judgment' : 'needs_confirmation',
+      judgment_scope: assignment.kind === 'panel' ? 'panel' : 'product',
+      target_panel_ban_menno: targetBanMenno,
+      target_panel_ban_no: targetBanNo,
+      target_drawing_page_id: d.drawing_page_id,
+      judgment_reason: null,
+      source_rule_id: null,
+      unit_price: master?.total_price_a ?? null,
+      unit_labor: null,
+      price: master?.total_price_a ?? null,
+      labor: null,
+      status,
+      allowed_factors: null,
+      evidence: [{ id, evidence_kind: 'detection', detection_id: d.id, design_data_ref: null }],
+    })
+  }
+  return results
 }
 
 vi.mock('./api/client', () => ({
@@ -308,10 +398,13 @@ vi.mock('./api/client', () => ({
   // 固定fixtureを返す (右ペイン連動テストが意味のある値で検証できるようにする)。
   fetchEstimatePanels: vi.fn(async () => estimatePanelsFixture),
   fetchMasterItems: vi.fn(async () => masterItems),
-  // Issue #40 Phase 3: ルールエンジン積算結果。既存テストは図面情報floating
-  // panel(既定非表示)を使わないため、空配列を返すだけの最小スタブでよい。
-  fetchEstimateResults: vi.fn(async () => []),
-  evaluateEstimateResults: vi.fn(async () => ({ results: [], skipped_rule_master_ids: [] })),
+  // [Issue #40 Phase 5] 積算集約・積算明細の正本。`liveDetectionsById`の現在状態
+  // (BBox作成/移動/削除・Undo/Redo反映後)から都度導出する。
+  fetchEstimateResults: vi.fn(async () => buildLiveEstimateResults()),
+  evaluateEstimateResults: vi.fn(async () => ({
+    results: buildLiveEstimateResults(),
+    skipped_rule_master_ids: [],
+  })),
   fetchDrawingEvidenceTypes: vi.fn(async () => []),
   createEvidenceDetection: vi.fn(),
   // Phase 1.8: 製番選択・左ペインPNGサムネイル。
@@ -326,8 +419,8 @@ vi.mock('./api/client', () => ({
     (productNo: string, pageNo: number) =>
       `http://localhost:8000/api/products/${productNo}/drawings/${pageNo}/file`,
   ),
-  createManualDetection: vi.fn(
-    async (): Promise<Detection> => ({
+  createManualDetection: vi.fn(async (): Promise<Detection> => {
+    const created: Detection = {
       id: 200,
       drawing_page_id: 1,
       panel_id: null,
@@ -346,10 +439,14 @@ vi.mock('./api/client', () => ({
       master_item_model: 'OS2-816',
       master_item_code: '11001',
       evidence_type_key: null,
-    }),
-  ),
+    }
+    liveDetectionsById.set(created.id, created)
+    return created
+  }),
   drawingPageFileUrl: vi.fn((id: number) => `http://localhost:8000/api/drawing-pages/${id}/file`),
-  deleteDetection: vi.fn(async () => {}),
+  deleteDetection: vi.fn(async (id: number) => {
+    liveDetectionsById.delete(id)
+  }),
   // Issue #19 Phase 3: 積算資料PDF Help。既定では「未配置」を返す(Help modalを
   // 開くテスト以外に影響しないようにするため)。available=trueにするテストは
   // 個別にmockResolvedValueOnce等で上書きする。
@@ -390,9 +487,10 @@ vi.mock('./api/client', () => ({
   // Undo/Redoを跨いだラベル位置追従のテストにはこの反映が必須)。
   updateDetectionBBox: vi.fn(async (id: number, rect: Record<string, number>): Promise<Detection> => {
     const base =
+      liveDetectionsById.get(id) ??
       [detectionOnOutline, masterLinkedDetectionOnOutline, tieDetectionOnOutline].find((d) => d.id === id) ??
       detectionOnOutline
-    return {
+    const updated: Detection = {
       ...base,
       id,
       bbox_x: rect.bbox_x,
@@ -402,6 +500,8 @@ vi.mock('./api/client', () => ({
       leader_label_x: rect.leader_label_x ?? base.leader_label_x,
       leader_label_y: rect.leader_label_y ?? base.leader_label_y,
     }
+    liveDetectionsById.set(id, updated)
+    return updated
   }),
   ApiError: class ApiError extends Error {
     status: number
@@ -417,6 +517,9 @@ vi.mock('./api/client', () => ({
 // クリーンなURLへリセットする (localStorageのclear()と同じ考え方)。
 beforeEach(() => {
   window.history.replaceState(null, '', '/')
+  // [Issue #40 Phase 5] テスト間でliveDetectionsById(=fetchEstimateResults/
+  // evaluateEstimateResultsの導出元)が持ち越されないよう、既定の2件へ戻す。
+  seedLiveDetections([detectionOnOutline, masterLinkedDetectionOnOutline])
 })
 
 // 次work指示(盤情報UI改善)により、中央Viewerの盤領域Overlay(ProductPanelOverlay)と
@@ -436,39 +539,59 @@ function getPanelInfoCard(banMeisyou: string): HTMLElement {
   return within(panelInfo).getByText(banMeisyou).closest('button') as HTMLElement
 }
 
-describe('App: 積算明細 → 図面クリック → Viewer → BBox選択 → 一時強調 (積算集約・積算明細UI再構成 指示17章)', () => {
+// [Issue #40 Phase 5] 積算明細の「根拠」ボタンも(evidenceSummaryTextを通じて)
+// コード文字列を含んだtitle属性を持つため、Viewer上のBBox本体をtitleで検索する際は
+// `.detection-overlay`配下へ必ず絞り込む(絞り込まないと同じ正規表現が両方へ
+// マッチしうる)。
+function getOverlayBBoxByTitle(pattern: RegExp): HTMLElement {
+  const overlay = document.querySelector('.detection-overlay') as HTMLElement
+  return within(overlay).getByTitle(pattern)
+}
+function queryOverlayBBoxByTitle(pattern: RegExp): HTMLElement | null {
+  const overlay = document.querySelector('.detection-overlay')
+  if (overlay == null) return null
+  return within(overlay as HTMLElement).queryByTitle(pattern)
+}
+async function findOverlayBBoxByTitle(pattern: RegExp): Promise<HTMLElement> {
+  const overlay = await waitFor(() => {
+    const el = document.querySelector('.detection-overlay')
+    if (el == null) throw new Error('.detection-overlay not rendered yet')
+    return el as HTMLElement
+  })
+  return within(overlay).findByTitle(pattern)
+}
+
+describe('App: 積算明細行Hover → Viewer → BBox一時強調 (積算集約・積算明細UI再構成 指示17章、Issue #40 Phase 5で明細行クリックによるページ遷移は廃止)', () => {
   afterEach(() => {
     vi.useRealTimers()
   })
 
-  it('navigates to the referenced page and briefly flashes the BBox, WITHOUT entering selected/editing state (明細遷移後のBBox残留・Hover色・品名列修正 指示1章)', async () => {
+  it('flashes the evidence BBox when hovering the corresponding 積算明細 row, WITHOUT entering selected/editing state (明細遷移後のBBox残留・Hover色・品名列修正 指示1章)', async () => {
     render(<App />)
 
-    // 初期表示 (先頭ページ = 基礎図(P18)) が終わるのを待つ
-    await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
+    // [Issue #40 Phase 5] 積算明細はEstimateResultベースの新UIへ全面刷新され、
+    // 旧「明細行の図面リンクをクリックして対象ページへ自動遷移する」機構は廃止した
+    // (EstimateDetail.tsx参照。1行=1 EstimateResultとなり、複数ページ/BBoxに
+    // またがる行も出てくるため、旧来の「1行=1Detection」前提のページ遷移機構を
+    // そのまま持ち込まなかった、開示済みの簡略化)。かわりに、対象BBoxが乗っている
+    // 外形図(P16)へ左の図面一覧から直接移動した上で、明細行Hover→根拠BBox強調
+    // (指示8章の双方向トレーサビリティ)を検証する。
+    const thumbnail = await screen.findByRole('img', { name: 'P16' })
+    fireEvent.click(thumbnail)
+    await screen.findByTitle(/roof_fan/)
 
-    // 積算明細(③)の図面リンクをクリック (指示17章: 既存のViewerナビゲーション
-    // 機構を再利用する経路そのものをテストする)。
-    // 盤フォーカス・積算明細再設計 指示2章: 図面列はページ番号のみ表示するため、
-    // 左ペインの図面一覧サムネイル(同じく"P16"というテキストを含む)と紛れないよう
-    // .estimate-detail配下に限定して探す。
     const estimateDetail = await waitFor(() => {
       const el = document.querySelector('.estimate-detail')
       if (!el) throw new Error('estimate-detail not rendered yet')
       return el as HTMLElement
     })
-    const referenceLink = await within(estimateDetail).findByText('P16')
-    fireEvent.click(referenceLink)
-
-    // Viewerの見出しが対象ページ (外形図(P16)) に切り替わること
-    await waitFor(() => {
-      expect(screen.getAllByText('外形図(P16)').length).toBeGreaterThan(0)
-    })
+    const row = within(estimateDetail).getByText('18999').closest('tr') as HTMLElement
+    fireEvent.mouseEnter(row)
 
     // 対象BBoxが一時的に強調表示されるが、選択(編集)状態にはならない
     // (次々々work指示1章: navigate/flash/selectの役割分離)。
     await waitFor(() => {
-      const bbox = screen.getByTitle(/18999/)
+      const bbox = getOverlayBBoxByTitle(/18999/)
       expect(bbox.className).toContain('detection-overlay__bbox--flash')
       expect(bbox.className).not.toContain('detection-overlay__bbox--selected')
     })
@@ -479,7 +602,7 @@ describe('App: 積算明細 → 図面クリック → Viewer → BBox選択 →
     // 解除後はmaster-linkedなBBoxのため通常どおり非表示に戻る。
     await waitFor(
       () => {
-        expect(screen.queryByTitle(/18999/)).not.toBeInTheDocument()
+        expect(queryOverlayBBoxByTitle(/18999/)).not.toBeInTheDocument()
       },
       { timeout: 3000 },
     )
@@ -648,7 +771,7 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
     // 所属変更通知トーストも同じ文字列("18999 テスト品目")を表示しうるため、
     // role='button'で一意に絞り込む。
     fireEvent.click(screen.getByRole('button', { name: '18999 テスト品目' }))
-    const bbox = await screen.findByTitle(/18999/)
+    const bbox = await findOverlayBBoxByTitle(/18999/)
     setOverlayRect(1000, 1000)
     fireEvent.mouseDown(bbox, { clientX: 500, clientY: 500 })
     fireEvent.mouseMove(window, { clientX: 110, clientY: 140 }) // -0.39, -0.36 → (0.11, 0.14)
@@ -675,14 +798,18 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
     expect(within(toast).getByText('製品全体 → 面1 / 盤1')).toBeInTheDocument()
 
     // 選択状態は残さず、Viewer側は既存flashで一時強調するだけ (指示13章)。
-    const bbox = screen.getByTitle(/18999/)
+    const bbox = getOverlayBBoxByTitle(/18999/)
     expect(bbox.className).toContain('detection-overlay__bbox--flash')
     expect(bbox.className).not.toContain('detection-overlay__bbox--selected')
 
-    // 積算明細側も編集直後として一時強調される (指示5章/13章)。
+    // [Issue #40 Phase 5] 積算明細はEstimateResultベースの新UIへ全面刷新され、
+    // 旧「編集直後として明細行を一時強調する(edit-follow)」表示は廃止した
+    // (EstimateDetail.tsx参照。1行=1 EstimateResultとなり、複数ページ/BBoxに
+    // またがる行も出てくるため、旧来の「1行=1Detection」前提の強調・自動スクロール
+    // 機構をそのまま持ち込まなかった、開示済みの簡略化)。積算明細側にも
+    // 該当コードの行自体は表示され続けることだけを確認する。
     const estimateDetail = document.querySelector('.estimate-detail') as HTMLElement
-    const detailRow = within(estimateDetail).getByText('18999').closest('tr') as HTMLElement
-    expect(detailRow.className).toContain('estimate-detail__row--edit-follow')
+    expect(within(estimateDetail).getByText('18999')).toBeInTheDocument()
   })
 
   it('does not switch the estimate target while dragging is in progress (only after pointer up)', async () => {
@@ -690,7 +817,7 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
     await navigateToOutlinePage()
 
     fireEvent.click(screen.getByText('18999 テスト品目'))
-    const bbox = await screen.findByTitle(/18999/)
+    const bbox = await findOverlayBBoxByTitle(/18999/)
     setOverlayRect(1000, 1000)
     fireEvent.mouseDown(bbox, { clientX: 500, clientY: 500 })
     fireEvent.mouseMove(window, { clientX: 110, clientY: 140 }) // ドラッグ中(mouseup前)
@@ -822,49 +949,40 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
     // UI操作(drag)経由の座標では丸め誤差により意図した同値を再現できない。実装
     // 自体は変更しないため、fixture側で確実に同値になる値を用意している)を
     // このテストにだけ含める。
-    const allWithTie = [detectionOnOutline, masterLinkedDetectionOnOutline, tieDetectionOnOutline]
-    const { fetchDetections } = await import('./api/client')
-    // 既定の初期表示ページ(基礎図P18, dbPageId=2)への呼び出しも発生するため、
-    // 呼び出し順ではなく引数(drawingPageId)で判定する (mockImplementationOnceの
-    // 積み上げでは順序を読み違えやすい)。テスト終了時は既定実装へ戻す。
-    vi.mocked(fetchDetections).mockImplementation(async (drawingPageId?: number) => {
-      if (drawingPageId === undefined) return allWithTie
-      return drawingPageId === 1 ? allWithTie : []
+    // [Issue #40 Phase 5] fetchDetections/fetchEstimateResults/evaluateEstimateResults
+    // は全て`liveDetectionsById`を共通の情報源として導出されるため、storeへ
+    // 直接3件を投入するだけで両者が一致した状態になる(次のテストへは影響しない。
+    // 各テスト開始前の`beforeEach`で既定の2件へ自動的にリセットされる)。
+    seedLiveDetections([detectionOnOutline, masterLinkedDetectionOnOutline, tieDetectionOnOutline])
+
+    render(<App />)
+    await navigateToOutlinePage()
+
+    // 最上部に要確認の警告バナーが表示される (指示7章)。
+    await waitFor(() => {
+      expect(screen.getByText('⚠ 積算先を確定できない項目が 1件あります')).toBeInTheDocument()
     })
 
-    try {
-      render(<App />)
-      await navigateToOutlinePage()
+    // クリックすると積算集約/積算明細の対象が「要確認」へ切り替わる。
+    fireEvent.click(screen.getByText('⚠ 積算先を確定できない項目が 1件あります'))
+    await waitFor(() => {
+      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      expect(select.value).toBe('__tie__')
+    })
+    const estimateDetail = document.querySelector('.estimate-detail') as HTMLElement
+    expect(within(estimateDetail).getByText('18500')).toBeInTheDocument()
 
-      // 最上部に要確認の警告バナーが表示される (指示7章)。
-      await waitFor(() => {
-        expect(screen.getByText('⚠ 積算先を確定できない項目が 1件あります')).toBeInTheDocument()
-      })
+    // 面1/盤1の内側だけへ移動して解消すると、警告が自動的に消える (0件)。
+    fireEvent.click(screen.getByRole('button', { name: '18500 テスト品目2' }))
+    const bbox = await findOverlayBBoxByTitle(/18500/)
+    setOverlayRect(1000, 1000)
+    fireEvent.mouseDown(bbox, { clientX: 500, clientY: 500 })
+    fireEvent.mouseMove(window, { clientX: 465, clientY: 500 }) // dx=-0.035 → x: 0.135→0.1 (面2に届かない)
+    fireEvent.mouseUp(window, { clientX: 465, clientY: 500 })
 
-      // クリックすると積算集約/積算明細の対象が「要確認」へ切り替わる。
-      fireEvent.click(screen.getByText('⚠ 積算先を確定できない項目が 1件あります'))
-      await waitFor(() => {
-        const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
-        expect(select.value).toBe('__tie__')
-      })
-      const estimateDetail = document.querySelector('.estimate-detail') as HTMLElement
-      expect(within(estimateDetail).getByText('18500')).toBeInTheDocument()
-
-      // 面1/盤1の内側だけへ移動して解消すると、警告が自動的に消える (0件)。
-      fireEvent.click(screen.getByRole('button', { name: '18500 テスト品目2' }))
-      const bbox = await screen.findByTitle(/18500/)
-      setOverlayRect(1000, 1000)
-      fireEvent.mouseDown(bbox, { clientX: 500, clientY: 500 })
-      fireEvent.mouseMove(window, { clientX: 465, clientY: 500 }) // dx=-0.035 → x: 0.135→0.1 (面2に届かない)
-      fireEvent.mouseUp(window, { clientX: 465, clientY: 500 })
-
-      await waitFor(() => {
-        expect(screen.queryByText(/積算先を確定できない項目/)).not.toBeInTheDocument()
-      })
-    } finally {
-      // 他のテストへ影響しないよう、既定のfetchDetections実装へ戻す。
-      vi.mocked(fetchDetections).mockImplementation(defaultFetchDetectionsImpl)
-    }
+    await waitFor(() => {
+      expect(screen.queryByText(/積算先を確定できない項目/)).not.toBeInTheDocument()
+    })
   })
 
   it('Ctrl+Z on a focused text input does not trigger the app Undo (does not steal the browser/input\'s own undo, 指示6章)', async () => {

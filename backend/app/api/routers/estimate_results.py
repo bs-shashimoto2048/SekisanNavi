@@ -28,7 +28,7 @@ from app.schemas.estimate_rules import (
     EstimateResultOut,
 )
 from app.services.data_source import DataSourceError
-from app.services.estimate_rule_evaluator import evaluate_product
+from app.services.estimate_result_pipeline import build_all_candidates
 
 router = APIRouter(prefix="/api/products", tags=["estimate-results"])
 evidence_types_router = APIRouter(prefix="/api/drawing-evidence-types", tags=["estimate-results"])
@@ -86,13 +86,20 @@ def evaluate_estimate_results(
     """製番`product_no`について、現在の根拠(detections)×設計データ×
     有効なルールマスタから積算結果を再評価する (Issue #40 Phase 2)。
 
+    Issue #40 Phase 5より、新方式(図面情報→ルール評価)に加えて、旧方式
+    (`master_item_id`直結Detection)も`app.services.estimate_result_pipeline.
+    build_all_candidates`経由でEstimateResultへ変換し、同じ`estimate_results`
+    テーブルへ統合する(積算結果の正本をEstimateResultへ一本化する方針)。
+    新旧両方式が同じ(対象, コード)を算出した場合は、機械的に一方を破棄せず
+    `status=needs_review`として両方残す(Phase 5指示13章)。
+
     手修正済みの係数(`factor_overridden=1`)は上書きしない
     (`app.repositories.estimate_results.replace_results_for_product`参照)。
     条件が成立しなくなった既存結果は削除される。
     """
     root = get_data_source_root(conn)
     try:
-        outcome = evaluate_product(conn, root, product_no)
+        outcome = build_all_candidates(conn, root, product_no)
     except DataSourceError as e:
         raise _error_to_http(e) from e
 

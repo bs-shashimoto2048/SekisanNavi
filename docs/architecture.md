@@ -1720,3 +1720,83 @@ compact化」参照。実装上のポイントのみ記す:
   発生しないこと、5panel theme/前面強調/glassmorphismが維持されていること、
   console/pageエラー0件を確認済み。実データを含むスクリーンショットは
   ローカル確認のみに使用し、Issue/PR/リポジトリのいずれにも掲載していない。
+
+## 33. 積算ルールエンジンとEstimateResultの正本化 (Issue #40 Phase 2〜5)
+
+Phase 2〜4で新設した積算ルールエンジン基盤(設計データ→ルール評価→
+`EstimateResult`)を、Phase 5で「積算結果の唯一の正本」へ格上げした。それまで
+併存していた「旧`detections.master_item_id`直結のManual/AI BBox」と「新
+`EstimateResult`(evidence_type_key経由の図面情報+ルール評価)」の2系統を、
+Backend側の互換レイヤで統合し、Frontend側のUIも`EstimateResult`単一のデータ
+源から描画するよう切り替えた。テーブル定義・列の詳細は`data-model.md` 6.7章
+参照。本節はレイヤー構成・処理フローを中心に記す。
+
+### 全体構成
+
+```
+[Detection] --(evidence_type_key経由)--> [rule evaluator]      \
+                                          (estimate_rule_evaluator.py)  >-- [estimate_result_pipeline.py] --> [replace_results_for_product] --> estimate_results
+[Detection] --(master_item_id直結、旧方式)--> [legacy adapter]  /       (build_all_candidates: 新旧マージ+
+                                          (legacy_detection_adapter.py)  新旧コード衝突→needs_review付与)
+```
+
+- **評価器(`app/services/estimate_rule_evaluator.py`、Phase 2〜3)**: 図面情報
+  panel(Phase 3)経由で作られた`evidence_type_key`付きDetection、および
+  `product_df`/`estcode_df`由来の設計データを根拠に、`estimate_rule_masters`
+  の成立条件を評価し`EstimateResultCandidate`を組み立てる。
+- **旧Detection互換レイヤ(`app/services/legacy_detection_adapter.py`、
+  Phase 5新設)**: `master_item_id`直結の旧Manual/AI BBoxを、削除・変更せず
+  そのまま保持した状態で`EstimateResultCandidate`へ変換する読み取り専用の
+  アダプタ。盤所属判定は評価器と共通の`app/services/panel_assignment.py::
+  assign_detection_to_panel`を再利用する(判定ロジックを2重実装しない)。
+- **パイプライン(`app/services/estimate_result_pipeline.py::
+  build_all_candidates`、Phase 5新設)**: 上記2系統の候補を1回の評価実行で
+  まとめ、同一(対象盤/コード)キーが新方式(`source_rule_id`が非NULL)・旧方式
+  (`source_rule_id`がNULL)の両方から算出された場合、**どちらかを無条件に
+  破棄せず**両方を`status=needs_review`にし、理由を`judgment_reason`へ付記
+  する(業務ルールが未確定なため推測でdedupeしない。Issue #40で継続検討)。
+  `/api/products/{product_no}/estimate-results/evaluate`はこのパイプライン
+  経由に切り替わっている(Phase 4時点は`evaluate_product`を直接呼んでいた)。
+  永続化自体はPhase 2から変わらず`replace_results_for_product`(UPSERT、
+  手修正列の引き継ぎ)を共有する。
+
+### Frontend側の変更点
+
+- **積算集約(`EstimateAggregation`)**: データソースを`Detection`ベースの
+  `estimateAggregationReal.ts`から`EstimateResult`ベースの新設
+  `estimateResultAggregation.ts`へ切替。数量は評価器が算出した
+  `EstimateResult.quantity`をそのままSUMし(集約層で再算定しない)、金額は
+  `EstimateResult.price`をそのままSUMする(1件でもNULLを含むグループは
+  amount全体をNULLにする)。対象(盤/製品全体)一覧は、EstimateResultの有無に
+  関わらず対象セレクトの選択肢が欠けないよう、旧`estimateAggregationReal.ts`
+  が算出した対象一覧(`baseTargets`)をそのまま再利用し、要確認(needs_review)
+  専用バケットのみ追加する。`EstimateAggregation.tsx`コンポーネント自体は
+  この切替に伴うコード変更が不要だった(既存の`EstimateLineItem`/
+  `EstimateTarget`型をそのまま再利用する形で新モジュールを設計したため)。
+- **積算明細(`EstimateDetail`)**: 全面書き換え。旧「全て/AI/設計情報/
+  マニュアル/ルール結果」タブを廃止し、「全て/設計データ/図面判定/要確認/
+  修正あり」の新タブへ統一(AI/手動はタブの軸から外し、各行の根拠詳細へ
+  移動)。標準7列(コード/内容/数量/適用単位/係数/金額/判定)。詳細は
+  `docs/ui-spec.md` 5.6章参照。
+- **`App.tsx`のBBox操作→再評価トリガー**: Phase 3時点は`evidence_type_key`
+  付きDetectionの変更時のみ`reevaluateEstimateResults()`を呼んでいたが、
+  Phase 5では旧Manual BBox(`master_item_id`直結)もEstimateResultへ変換
+  されるようになったため、BBox作成/削除/移動/リサイズ、およびそれらの
+  Undo/Redoの各操作後に、`evidence_type_key != null || master_item_id !=
+  null`の条件で再評価するよう対象を広げた。
+
+### 既知の未確定事項・Phase 6以降の課題
+
+- **積算確定(EstimateConfirmation)は未移行**: `estimate_confirmation_builder.py`
+  は引き続き`detections`(旧Detection単位)からsnapshotを組み立てる。Phase 5
+  では確定・確定履歴の既存動作を壊さないことのみを確認しており、確定対象を
+  EstimateResultベースへ移行するかどうかはPhase 6以降の検討課題(`data-model.md`
+  6.6章の追記参照)。
+- **新旧コード衝突のneeds_review化は暫定運用**: 「同一コードが新方式・旧方式
+  両方から算出された場合にdedupeせずneeds_reviewとして残す」という方針は、
+  正しい統合方法(どちらを採用すべきか、あるいは別結果として両方残すべきか)
+  についての業務ルールが確定するまでの暫定対応であり、Issue #40で継続検討する。
+- **設計データ根拠の詳細表示は未実装**: 積算明細の「根拠」ボタンは、BBox根拠
+  についてはAI/手動の取得元まで表示するが、設計データ根拠については現在の
+  `estimate_result_evidence.design_data_ref`(盤キー等の簡易JSON)からは
+  実際の判定値(型式/幅/奥行等)を復元できないため、値までは表示していない。

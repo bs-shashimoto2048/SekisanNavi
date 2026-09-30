@@ -28,6 +28,7 @@ import {
 } from './domain/estimateAggregationReal'
 import { visiblePageNosForTarget } from './domain/estimateDrawingFilter'
 import { formatTargetLabel } from './domain/estimateTargetLabel'
+import { buildEstimateResultAggregation } from './domain/estimateResultAggregation'
 import {
   EMPTY_EDIT_HISTORY,
   popRedo,
@@ -62,7 +63,7 @@ import { DrawingNavigator } from './components/DrawingNavigator/DrawingNavigator
 import { DrawingViewer } from './components/DrawingViewer/DrawingViewer'
 import { PanelInfo } from './components/PanelInfo/PanelInfo'
 import { EstimateAggregation } from './components/EstimateAggregation/EstimateAggregation'
-import { EstimateDetail, type DetailSourceFilter } from './components/EstimateDetail/EstimateDetail'
+import { EstimateDetail, type DetailTabFilter } from './components/EstimateDetail/EstimateDetail'
 import { EstimateMasterPicker } from './components/EstimateMasterPicker/EstimateMasterPicker'
 import { DrawingEvidencePanel } from './components/DrawingEvidencePanel/DrawingEvidencePanel'
 import { SystemSettings } from './components/SystemSettings/SystemSettings'
@@ -78,10 +79,6 @@ import { useFloatingPanelBgAlpha } from './hooks/useFloatingPanelBgAlpha'
 import './App.css'
 
 const HIGHLIGHT_DURATION_MS = 1800
-// 積算明細強化・Undo/Redo・要確認警告・編集追従 指示5章/13章: 編集直後の行強調
-// (積算明細)・BBox flash(Viewer, 既存HIGHLIGHT_DURATION_MSを再利用)を止める
-// タイミング。「2〜3秒程度」の指示に沿って2500msとする。
-const EDIT_FOLLOW_HIGHLIGHT_DURATION_MS = 2500
 // 所属変更の一時通知 (指示9章) を自動的に消すまでの時間。
 const TARGET_CHANGE_NOTIFICATION_DURATION_MS = 4000
 // [Issue #40 Phase 3] 積算結果の増減・係数変化を知らせる控えめなtoastを
@@ -213,16 +210,18 @@ function App() {
   // 引出線hover(`hoveredDetectionId`, DrawingViewer.tsx内で管理)とは別状態として
   // 持つ (指示21章: 混同しない)。
   const [detailHoveredDetectionId, setDetailHoveredDetectionId] = useState<number | null>(null)
-  // 積算明細(③)の情報源タブ。所属変更追従(積算明細強化・Undo/Redo・要確認警告・
-  // 編集追従 指示12章)でApp.tsx側から強制的に「全て」へ切り替える必要があるため、
-  // 従来のEstimateDetail内部stateからcontrolledへ昇格させた。
-  const [estimateDetailSourceFilter, setEstimateDetailSourceFilter] = useState<DetailSourceFilter>('all')
+  // 積算明細(③)のタブ (Issue #40 Phase 5: 全て/設計データ/図面判定/要確認/
+  // 修正あり。判定方法+手修正状態の軸であり、対象(盤/製品全体)の切替とは
+  // 独立)。EstimateDetail内部stateではなくApp.tsx側で持つ (Phase 4以前からの
+  // controlled化を維持)。
+  const [estimateDetailTabFilter, setEstimateDetailTabFilter] = useState<DetailTabFilter>('all')
 
-  // 積算明細の「編集順」列用のセッション内編集メタ情報 (指示1章/2章)。
-  // detectionId -> {編集日時, 編集シーケンス}。Backend側に永続的な編集日時が
-  // 存在しないため、あくまでFrontendセッション内での編集順として扱う
-  // (「更新日時」とは呼ばない)。
-  const [editMetaByDetectionId, setEditMetaByDetectionId] = useState<
+  // セッション内編集メタ情報 (detectionId -> {編集日時, 編集シーケンス})。
+  // Issue #40 Phase 5でEstimateDetailの「編集順」列自体は廃止したが、
+  // `bumpEditMeta`呼び出し自体は他のBBox編集操作(移動/削除/Undo/Redo等)の
+  // 一部として広く呼ばれ続けているため、呼び出し側を変更せずに済むよう
+  // 記録自体は維持する(読み取り側が無いため、読み取り値は使わない)。
+  const [, setEditMetaByDetectionId] = useState<
     Map<number, { editedAt: number; editSequence: number }>
   >(new Map())
   // 単調増加の通し番号 (Undo/Redoも含め、実データを変更する操作のたびに+1する)。
@@ -242,11 +241,6 @@ function App() {
   // Undo/Redo履歴 (指示6章)。実データを変更する編集操作(BBox移動/リサイズ・
   // Detection追加・削除)のみを対象とし、ページ移動・Hover・選択・ソート等は含めない。
   const [editHistory, setEditHistory] = useState<EditHistoryState>(EMPTY_EDIT_HISTORY)
-
-  // 編集直後、積算明細側で一時的に強調・自動スクロールする対象のDetection id
-  // (指示5章/13章)。Viewer側の一時強調は既存の`highlightedDetectionId`/
-  // `flashDetection`をそのまま再利用するため、ここでは積算明細用のみ別途持つ。
-  const [editFollowDetectionId, setEditFollowDetectionId] = useState<number | null>(null)
 
   // 所属変更の一時通知 (指示9章)。nullの間は非表示。
   const [targetChangeNotification, setTargetChangeNotification] = useState<{
@@ -583,6 +577,24 @@ function App() {
     [productDetectionEntries, panelsByPageNo, estimatePanels, masterItemById],
   )
 
+  // [Issue #40 Phase 5] 積算集約(②)をEstimateResult基準へ切り替える。対象
+  // (盤/製品全体)一覧そのものは、既存の`estimateAggregationData.targets`
+  // (product_df由来の盤一覧、Detectionの有無に関わらず確定している)を
+  // そのまま再利用し、金額・数量の集約だけをEstimateResultから算出し直す
+  // (`estimateResultAggregation.ts`のモジュールコメント参照)。
+  const estimateResultAggregationData = useMemo(
+    () =>
+      buildEstimateResultAggregation({
+        results: estimateResults,
+        masterItemById,
+        baseTargets: estimateAggregationData.targets,
+      }),
+    [estimateResults, masterItemById, estimateAggregationData.targets],
+  )
+
+  // [Issue #40 Phase 5] 積算明細(③)の根拠詳細(AI/手動の区別)表示用。
+  const detectionById = useMemo(() => new Map(allDetections.map((d) => [d.id, d])), [allDetections])
+
   // dbPages由来のdrawingPageId -> 実ページ番号 のMap (積算明細強化・Undo/Redo・
   // 要確認警告・編集追従 指示8章)。Undo/Redoはキーボードショートカットで現在表示中の
   // ページに限らず発火しうるため、対象Detectionの実ページ番号を都度解決できるように
@@ -597,16 +609,6 @@ function App() {
     [dbPages, activeProductNo],
   )
 
-  // 積算明細の「編集順」列: セッション内編集メタ情報をEstimateDetailItemへ後付けする
-  // (`estimateAggregationReal.ts`はこの値の存在を関知しない。指示1章)。
-  const detailItemsWithEditMeta = useMemo(
-    () =>
-      estimateAggregationData.detailItems.map((item) => {
-        const meta = editMetaByDetectionId.get(item.detectionId)
-        return meta ? { ...item, editedAt: meta.editedAt, editSequence: meta.editSequence } : item
-      }),
-    [estimateAggregationData.detailItems, editMetaByDetectionId],
-  )
 
   // 要確認(BBox所属判定でtieになった項目)の対象と件数 (指示7章)。0件になれば
   // 警告バナーは自動的に非表示になる(JSX側で`tieDetailCount > 0`のみ描画するため)。
@@ -671,30 +673,40 @@ function App() {
     }
   }
 
-  // [Issue #40 Phase 4] 積算明細「ルール結果」タブ向けに、選択中の対象(盤/製品
-  // 全体/総合計)へestimateResultsを絞り込む。既存の`detailItems`が
-  // `itemsForTarget`で絞り込まれているのと同じ設計方針を踏襲する。
+  // [Issue #40 Phase 4/5] 積算明細向けに、選択中の対象(盤/製品全体/総合計/
+  // 要確認)へestimateResultsを絞り込む。積算集約(②、
+  // `estimateResultAggregation.ts`)の対象分類と同じ規則にする(対象を
+  // 切り替えたときに両パネルの内容が食い違わないようにするため)。
   //
   // フィルタ規則(このUI専用の表示上の約束であり、業務ルールを推測して
   // 決めたものではない):
-  //   - 総合計(selectedEstimateTargetId === null): 絞り込まない(製番全体)。
-  //   - 個別盤(focusedEstimateTarget.type === 'panel'): その盤の
-  //     banMenno/banNoと一致する結果(target_panel_ban_menno/no)のみ。
-  //   - 製品全体(focusedEstimateTarget.type === 'product'): どの盤にも
-  //     紐づかない結果(target_panel_ban_menno == null。設計データ判定等)。
-  //   - 要確認(tie、複数盤の交差面積が同値): EstimateResult側に対応する
-  //     概念が無いため常に空。
+  //   - 総合計(selectedEstimateTargetId === null): 絞り込まない(製番全体、
+  //     要確認行も含む。積算集約の総合計と同じ「対象を問わず合算」規則)。
+  //   - 要確認(tie、盤所属が一意でない、または新旧コードが重複):
+  //     `status === 'needs_review'`の結果のみ。
+  //   - 個別盤(focusedEstimateTarget.type === 'panel'): 要確認を除いた上で、
+  //     その盤のbanMenno/banNoと一致する結果のみ。
+  //   - 製品全体(focusedEstimateTarget.type === 'product'): 要確認を除いた
+  //     上で、どの盤にも紐づかない結果(design_data判定等)のみ。
   const estimateResultsForSelectedTarget = useMemo(() => {
     if (selectedEstimateTargetId == null) return estimateResults
+    // 要確認バケットは新旧どちらの経路(盤所属tie/コード重複)でも同じ
+    // TIE_TARGET_ID文字列を使うため、対象idを直接比較する(旧
+    // `estimateAggregationData.targets`にはコード重複由来の要確認は
+    // 反映されないため、`focusedEstimateTarget`経由の判定に依存しない)。
+    if (selectedEstimateTargetId === TIE_TARGET_ID) {
+      return estimateResults.filter((r) => r.status === 'needs_review')
+    }
     if (focusedEstimateTarget?.type === 'panel' && viewerFocusPanel != null) {
       return estimateResults.filter(
         (r) =>
+          r.status !== 'needs_review' &&
           r.target_panel_ban_menno === viewerFocusPanel.banMenno &&
           r.target_panel_ban_no === viewerFocusPanel.banNo,
       )
     }
     if (focusedEstimateTarget?.type === 'product') {
-      return estimateResults.filter((r) => r.target_panel_ban_menno == null)
+      return estimateResults.filter((r) => r.status !== 'needs_review' && r.target_panel_ban_menno == null)
     }
     return []
   }, [estimateResults, selectedEstimateTargetId, focusedEstimateTarget, viewerFocusPanel])
@@ -865,6 +877,9 @@ function App() {
       // (指示6章: 新しい編集操作はRedo履歴を破棄する。pushCommandがこれを行う)。
       bumpEditMeta(created.id)
       setEditHistory((h) => pushCommand(h, { kind: 'create', detectionId: created.id, input }))
+      // [Issue #40 Phase 5] master_item_id直結のBBox(旧方式)も互換レイヤ経由で
+      // EstimateResultへ変換されるため、追加後にルール評価器を再実行する。
+      await reevaluateEstimateResults()
     } catch (e) {
       setError(describeFetchError(e, 'Manual BBoxの登録に失敗しました'))
     }
@@ -963,20 +978,6 @@ function App() {
     setSelectedDetectionId(null)
     flashDetection(detection.id)
 
-    // 積算明細側の自動スクロール+一時強調 (指示13章)。
-    setEditFollowDetectionId(detection.id)
-    window.setTimeout(() => {
-      setEditFollowDetectionId((current) => (current === detection.id ? null : current))
-    }, EDIT_FOLLOW_HIGHLIGHT_DURATION_MS)
-
-    // 指示12章: 編集したDetectionが現在の情報源タブで表示されなくなる場合のみ
-    // 「全て」へ切り替える。design_dataは実データに存在しないため常に見えなくなる扱い。
-    setEstimateDetailSourceFilter((current) => {
-      if (current === 'all') return current
-      if (current === 'design_data') return 'all'
-      return current === detection.source_type ? current : 'all'
-    })
-
     // 指示9章: 所属変更の一時通知。
     const code = detection.master_item_code ?? detection.class_name
     setTargetChangeNotification({
@@ -988,34 +989,7 @@ function App() {
     window.setTimeout(() => setTargetChangeNotification(null), TARGET_CHANGE_NOTIFICATION_DURATION_MS)
   }
 
-  // 積算明細(③)の図面セルクリック: ページ遷移+対象BBoxの一時強調のみを行う
-  // (指示17章: 既存のViewerナビゲーション機構(ページ遷移)を再利用しつつ、
-  // 次々々work指示1章により「編集対象として選択(selectedDetectionId)する」
-  // 動作は行わないよう分離した。これにより遷移後にESCを押さなくても
-  // BBoxの選択状態が残らない)。
-  function handleNavigateReference(drawingPageId: number, detectionId: number | null) {
-    navigateToPage(drawingPageId)
-    if (detectionId != null) {
-      flashDetection(detectionId)
-    }
-    // ページが切り替わるため、選択中盤(product_df)・BBox選択・積算明細hover状態
-    // も解除する (Phase 1.9, 要件8の趣旨: 表示中ページと選択状態の不一致を防ぐ。
-    // 指示1章: 遷移先で無関係なBBoxが選択状態のまま残らないようにする)。
-    setSelectedDetectionId(null)
-    setSelectedPanel(null)
-    setDetailHoveredDetectionId(null)
-  }
-
-  // 積算明細(③)の行(または根拠セル)hover: Viewer上の対応BBoxを一時的に強調する
-  // (指示18章〜20章)。Hoverだけでは絶対にページ遷移しない (Clickとの役割分離)。
-  // 別図面の明細をhoverしても、DrawingViewer/DetectionOverlayは現在ページの
-  // detectionsしか描画しないため、該当Detectionが見つからず自然に何も強調されない。
-  function handleHoverEstimateDetail(detectionId: number | null) {
-    setDetailHoveredDetectionId(detectionId)
-  }
-
   // 左の図面一覧からの手動ページ切替 (要件26: 別図面ページへ移動でBBox選択を解除する)。
-  // handleNavigateReference は移動直後に選択し直すため、こちらとは別経路にしている。
   // Phase 1.9 要件8: ページ切替時は選択中盤(product_df)も解除する。
   function handleSelectPage(pageNo: number) {
     setSelectedProductPageNo(pageNo)
@@ -1087,9 +1061,10 @@ function App() {
       if (existing != null && (existing.master_item_id != null || existing.evidence_type_key != null)) {
         setEditHistory((h) => pushCommand(h, { kind: 'delete', detectionId, snapshot: existing }))
       }
-      // [Issue #40 Phase 3] 図面情報付きBBoxの削除後、ルール評価器を再実行する
-      // (指示: BBox削除後にrule evaluatorを再実行)。
-      if (existing?.evidence_type_key != null) {
+      // [Issue #40 Phase 3/5] 積算コードに紐づくBBox(図面情報付き、または
+      // 旧方式のmaster_item_id直結)の削除後、ルール評価器を再実行する
+      // (Phase 5より、旧方式もEstimateResultへ変換されるため対象を広げた)。
+      if (existing?.evidence_type_key != null || existing?.master_item_id != null) {
         await reevaluateEstimateResults()
       }
     } catch (e) {
@@ -1144,11 +1119,14 @@ function App() {
           followTargetChangeIfNeeded(updated, beforeRect, rect, pageNo, existing.drawing_page_id)
         }
       }
-      // [Issue #40 Phase 3] 図面情報付きBBoxの移動/resize後、ルール評価器を
-      // 再実行する(指示: BBox移動/resize後にrule evaluatorを再実行。複数BBox
-      // 条件(VCT+CH等)は位置関係で成立/不成立が変わりうるため、単純な所属変更
-      // だけでなく移動そのものが評価に影響しうる)。
-      if (existing?.evidence_type_key != null) {
+      // [Issue #40 Phase 3/5] 積算コードに紐づくBBox(図面情報付き、または
+      // 旧方式のmaster_item_id直結)の移動/resize後、ルール評価器を再実行する
+      // (指示: BBox移動/resize後にrule evaluatorを再実行。複数BBox条件
+      // (VCT+CH等)は位置関係で成立/不成立が変わりうるため、単純な所属変更
+      // だけでなく移動そのものが評価に影響しうる。Phase 5より、旧方式の
+      // 盤所属変更もEstimateResultの再集計に反映する必要があるため対象を
+      // 広げた)。
+      if (existing?.evidence_type_key != null || existing?.master_item_id != null) {
         await reevaluateEstimateResults()
       }
     } catch (e) {
@@ -1304,7 +1282,9 @@ function App() {
         }
         // [Issue #40 Phase 3] 図面情報付きBBoxのUndo/Redoによる移動後も、
         // 通常の移動/resizeと同様にルール評価器を再実行する。
-        if (existing?.evidence_type_key != null) await reevaluateEstimateResults()
+        // [Issue #40 Phase 5] master_item_id直結の旧Manual BBoxも、互換レイヤ
+        // 経由でEstimateResultへ変換されるようになったため、同様に再実行する。
+        if (existing?.evidence_type_key != null || existing?.master_item_id != null) await reevaluateEstimateResults()
         return {}
       }
 
@@ -1312,7 +1292,10 @@ function App() {
         // [Issue #40 Phase 3] command.inputの形(master_item_id経由か
         // evidence_type_key経由か)から、どちらの経路で作られたBBoxかを判別する
         // (`editHistory.ts::CreateEditCommand`のdocstring参照)。
-        const isEvidenceBased = 'evidence_type_key' in command.input
+        // [Issue #40 Phase 5] どちらの経路もEstimateResultへ変換されるため、
+        // 再評価は経路を問わず必要(旧`isEvidenceBased`という名前のまま残すと
+        // 誤解を招くため、意味に合わせて`isEstimateRelevant`とする)。
+        const isEstimateRelevant = 'evidence_type_key' in command.input || 'master_item_id' in command.input
         if (direction === 'undo') {
           await deleteDetection(command.detectionId)
           setDetections((prev) => prev.filter((d) => d.id !== command.detectionId))
@@ -1320,7 +1303,7 @@ function App() {
           setSelectedDetectionId((current) => (current === command.detectionId ? null : current))
           bumpEditMeta(command.detectionId)
           setError(null)
-          if (isEvidenceBased) await reevaluateEstimateResults()
+          if (isEstimateRelevant) await reevaluateEstimateResults()
           return {}
         }
         const created =
@@ -1331,7 +1314,7 @@ function App() {
         setAllDetections((prev) => [...prev, created])
         bumpEditMeta(created.id)
         setError(null)
-        if (isEvidenceBased) await reevaluateEstimateResults()
+        if (isEstimateRelevant) await reevaluateEstimateResults()
         return created.id !== command.detectionId
           ? { rebase: { oldId: command.detectionId, newId: created.id } }
           : {}
@@ -1376,7 +1359,11 @@ function App() {
         // Backend既存APIの制約上、source_type/statusはmanual/reviewed固定でしか
         // 復元できない (元がAI検出だった場合、この点だけは完全には再現できない。
         // 指示18章で開示する既知の制約)。
-        if (command.snapshot.evidence_type_key != null) await reevaluateEstimateResults()
+        // [Issue #40 Phase 5] master_item_id直結の旧Manual BBoxもEstimateResult
+        // 化されるため、evidence_type_key同様に再評価対象とする。
+        if (command.snapshot.evidence_type_key != null || command.snapshot.master_item_id != null) {
+          await reevaluateEstimateResults()
+        }
         return created.id !== command.detectionId
           ? { rebase: { oldId: command.detectionId, newId: created.id } }
           : {}
@@ -1387,7 +1374,9 @@ function App() {
       setSelectedDetectionId((current) => (current === command.detectionId ? null : current))
       bumpEditMeta(command.detectionId)
       setError(null)
-      if (command.snapshot.evidence_type_key != null) await reevaluateEstimateResults()
+      if (command.snapshot.evidence_type_key != null || command.snapshot.master_item_id != null) {
+        await reevaluateEstimateResults()
+      }
       return {}
     } catch (e) {
       setError(describeFetchError(e, direction === 'undo' ? 'Undoに失敗しました' : 'Redoに失敗しました'))
@@ -1654,9 +1643,9 @@ function App() {
                 onRectChange={setAggregationRect}
               >
                 <EstimateAggregation
-                  targets={estimateAggregationData.targets}
-                  lineItems={estimateAggregationData.lineItems}
-                  totalLineItems={estimateAggregationData.totalLineItems}
+                  targets={estimateResultAggregationData.targets}
+                  lineItems={estimateResultAggregationData.lineItems}
+                  totalLineItems={estimateResultAggregationData.totalLineItems}
                   selectedTargetId={selectedEstimateTargetId}
                   onSelectTarget={setSelectedEstimateTargetId}
                   productNo={activeProductNo}
@@ -1671,17 +1660,11 @@ function App() {
                 onRectChange={setDetailRect}
               >
                 <EstimateDetail
-                  detailItems={detailItemsWithEditMeta}
-                  targets={estimateAggregationData.targets}
-                  selectedTargetId={selectedEstimateTargetId}
-                  currentPageNo={selectedProductPageNo}
-                  onNavigateReference={handleNavigateReference}
-                  onHoverDetail={handleHoverEstimateDetail}
-                  sourceFilter={estimateDetailSourceFilter}
-                  onSourceFilterChange={setEstimateDetailSourceFilter}
-                  editFollowDetectionId={editFollowDetectionId}
-                  ruleResults={estimateResultsForSelectedTarget}
+                  results={estimateResultsForSelectedTarget}
                   masterItemById={masterItemById}
+                  detectionById={detectionById}
+                  tabFilter={estimateDetailTabFilter}
+                  onTabFilterChange={setEstimateDetailTabFilter}
                   onOverrideResultFactor={handleOverrideEstimateResultFactor}
                   onResetResultFactor={handleResetEstimateResultFactor}
                   onFocusResultEvidence={handleFocusResultEvidence}
