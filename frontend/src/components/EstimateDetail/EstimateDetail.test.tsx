@@ -2,6 +2,40 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { EstimateDetail } from './EstimateDetail'
 import type { EstimateDetailItem, EstimateTarget } from '../../types/estimateAggregation'
+import type { EstimateMasterItem, EstimateResult } from '../../types/domain'
+
+function makeRuleResult(overrides: Partial<EstimateResult> = {}): EstimateResult {
+  return {
+    id: 1,
+    product_no: 'A1GV2421',
+    result_key: '11001:panel:1:1',
+    master_item_id: 10,
+    code: '11001',
+    quantity: 1,
+    applicable_unit: 'face',
+    initial_factor: 1.0,
+    current_factor: 1.0,
+    factor_overridden: false,
+    factor_override_reason: null,
+    factor_updated_at: null,
+    factor_updated_by: null,
+    judgment_method: 'drawing_judgment',
+    judgment_scope: 'panel',
+    target_panel_ban_menno: 1,
+    target_panel_ban_no: 1,
+    target_drawing_page_id: 16,
+    judgment_reason: null,
+    source_rule_id: 5,
+    unit_price: 1000,
+    unit_labor: null,
+    price: 1000,
+    labor: null,
+    status: 'auto',
+    allowed_factors: null,
+    evidence: [{ id: 1, evidence_kind: 'detection', detection_id: 42, design_data_ref: null }],
+    ...overrides,
+  }
+}
 
 function makeDetailItem(overrides: Partial<EstimateDetailItem> = {}): EstimateDetailItem {
   return {
@@ -472,5 +506,164 @@ describe('EstimateDetail: 列幅配分 (Issue #19 追加修正: 定格列の折�
     }
     // table-layout: fixedが維持されていること(この配分が確定値として機能する前提)。
     expect(getComputedStyle(table).tableLayout).toBe('fixed')
+  })
+})
+
+describe('EstimateDetail: 「ルール結果」タブ (Issue #40 Phase 4: EstimateResult対応)', () => {
+  const masterItemById = new Map<number, EstimateMasterItem>([
+    [
+      10,
+      {
+        id: 10,
+        code: '11001',
+        category: '箱',
+        model: null,
+        rating: null,
+        note: null,
+        total_price_a: null,
+        box_parts_price: null,
+        painting_price: null,
+        setup_a: null,
+        sheet_metal_price: null,
+        assembly_price: null,
+        inspection_price: null,
+      },
+    ],
+  ])
+
+  it('shows a 5th tab "ルール結果" alongside the existing 4 tabs, with its own count', () => {
+    renderDetail({ ruleResults: [makeRuleResult(), makeRuleResult({ id: 2 })] })
+    const tab = screen.getByRole('tab', { name: 'ルール結果 2' })
+    expect(tab).toBeInTheDocument()
+  })
+
+  it('shows コード/品名/数量/適用単位/係数/金額/判定方法 columns, in Japanese (not raw enum values)', () => {
+    renderDetail({
+      sourceFilter: 'rule_result',
+      ruleResults: [makeRuleResult()],
+      masterItemById,
+    })
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent)
+    expect(headers).toEqual(['コード', '品名', '数量', '適用単位', '係数', '金額', '判定方法'])
+
+    expect(screen.getByText('11001')).toBeInTheDocument()
+    expect(screen.getByText('箱')).toBeInTheDocument() // 品名(masterItemById経由)
+    expect(screen.getByText('1面')).toBeInTheDocument() // 適用単位: 日本語ラベル
+    expect(screen.getByText('図面判定')).toBeInTheDocument() // 判定方法: 日本語ラベル
+    expect(screen.queryByText('face')).not.toBeInTheDocument()
+    expect(screen.queryByText('drawing_judgment')).not.toBeInTheDocument()
+  })
+
+  it('shows "-" for 品名/適用単位 when master_item_id/applicable_unit is null (does not fabricate a value)', () => {
+    renderDetail({
+      sourceFilter: 'rule_result',
+      ruleResults: [makeRuleResult({ master_item_id: null, applicable_unit: null })],
+    })
+    const row = screen.getByText('11001').closest('tr') as HTMLElement
+    const cells = within(row).getAllByRole('cell').map((c) => c.textContent)
+    expect(cells[1]).toBe('-') // 品名
+    expect(cells[3]).toBe('-') // 適用単位
+  })
+
+  it('shows price formatted with a currency prefix when present, and "-" (never 0円) when null', () => {
+    const { rerender } = renderDetail({
+      sourceFilter: 'rule_result',
+      ruleResults: [makeRuleResult({ price: 1000 })],
+    })
+    expect(screen.getByText('¥1,000')).toBeInTheDocument()
+
+    rerender(
+      <EstimateDetail
+        detailItems={[]}
+        targets={DEFAULT_TARGETS}
+        selectedTargetId={null}
+        currentPageNo={null}
+        onNavigateReference={() => {}}
+        onHoverDetail={() => {}}
+        sourceFilter="rule_result"
+        onSourceFilterChange={() => {}}
+        ruleResults={[makeRuleResult({ price: null })]}
+      />,
+    )
+    expect(document.querySelector('tbody .estimate-detail__col-rr-price')?.textContent).toBe('-')
+    expect(screen.queryByText('0円')).not.toBeInTheDocument()
+    expect(screen.queryByText('¥0')).not.toBeInTheDocument()
+  })
+
+  it('shows a 理由 button (with judgment_reason as its title) only when judgment_reason is present', () => {
+    const { rerender } = renderDetail({
+      sourceFilter: 'rule_result',
+      ruleResults: [makeRuleResult({ judgment_reason: 'VCT + CH / 同一盤 / CHがVCTより上' })],
+    })
+    const reasonButton = screen.getByRole('button', { name: '判定理由' })
+    expect(reasonButton.title).toBe('VCT + CH / 同一盤 / CHがVCTより上')
+
+    rerender(
+      <EstimateDetail
+        detailItems={[]}
+        targets={DEFAULT_TARGETS}
+        selectedTargetId={null}
+        currentPageNo={null}
+        onNavigateReference={() => {}}
+        onHoverDetail={() => {}}
+        sourceFilter="rule_result"
+        onSourceFilterChange={() => {}}
+        ruleResults={[makeRuleResult({ judgment_reason: null })]}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: '判定理由' })).not.toBeInTheDocument()
+  })
+
+  it('calls onFocusResultEvidence on row hover for a drawing_judgment (BBox-backed) row', () => {
+    const onFocusResultEvidence = vi.fn()
+    const result = makeRuleResult({ judgment_method: 'drawing_judgment' })
+    renderDetail({
+      sourceFilter: 'rule_result',
+      ruleResults: [result],
+      onFocusResultEvidence,
+    })
+    const row = screen.getByText('11001').closest('tr') as HTMLElement
+    fireEvent.mouseEnter(row)
+    expect(onFocusResultEvidence).toHaveBeenCalledWith(result)
+  })
+
+  it('still calls onFocusResultEvidence for a design_data-only row, but the caller (App.tsx) naturally no-ops since evidence is empty', () => {
+    // このコンポーネント自体はonFocusResultEvidenceを呼ぶだけで、実際に
+    // BBoxを強調するかどうかはApp.tsx側のhandleFocusResultEvidenceが
+    // evidence配列を見て判断する(Phase 3の既存実装、そちらで
+    // evidenceが空/detection_idを持たない場合は何もしない)。
+    const onFocusResultEvidence = vi.fn()
+    const result = makeRuleResult({ judgment_method: 'design_data', evidence: [] })
+    renderDetail({
+      sourceFilter: 'rule_result',
+      ruleResults: [result],
+      onFocusResultEvidence,
+    })
+    const row = screen.getByText('11001').closest('tr') as HTMLElement
+    fireEvent.mouseEnter(row)
+    expect(onFocusResultEvidence).toHaveBeenCalledWith(result)
+    expect(result.evidence).toEqual([])
+  })
+
+  it('calls onOverrideResultFactor/onResetResultFactor from the factor cell', () => {
+    const onOverrideResultFactor = vi.fn()
+    const onResetResultFactor = vi.fn()
+    const result = makeRuleResult({ current_factor: 0.7, allowed_factors: [0.5, 0.7, 1.0], factor_overridden: true })
+    renderDetail({
+      sourceFilter: 'rule_result',
+      ruleResults: [result],
+      onOverrideResultFactor,
+      onResetResultFactor,
+    })
+    fireEvent.change(screen.getByLabelText('係数'), { target: { value: '0.5' } })
+    expect(onOverrideResultFactor).toHaveBeenCalledWith(result, 0.5)
+
+    fireEvent.click(screen.getByRole('button', { name: '初期値へ戻す' }))
+    expect(onResetResultFactor).toHaveBeenCalledWith(result)
+  })
+
+  it('shows "ルール結果がありません" when there are no rule results', () => {
+    renderDetail({ sourceFilter: 'rule_result', ruleResults: [] })
+    expect(screen.getByText('ルール結果がありません')).toBeInTheDocument()
   })
 })

@@ -15,6 +15,8 @@ import {
   fetchPanel,
   fetchProductDrawings,
   fetchProjectInfo,
+  overrideEstimateResultFactor,
+  resetEstimateResultFactor,
   updateDetectionBBox,
 } from './api/client'
 import { describeFetchError } from './api/errors'
@@ -666,6 +668,58 @@ function App() {
   function handleFocusResultEvidence(result: EstimateResult) {
     for (const ev of result.evidence) {
       if (ev.detection_id != null) flashDetection(ev.detection_id)
+    }
+  }
+
+  // [Issue #40 Phase 4] 積算明細「ルール結果」タブ向けに、選択中の対象(盤/製品
+  // 全体/総合計)へestimateResultsを絞り込む。既存の`detailItems`が
+  // `itemsForTarget`で絞り込まれているのと同じ設計方針を踏襲する。
+  //
+  // フィルタ規則(このUI専用の表示上の約束であり、業務ルールを推測して
+  // 決めたものではない):
+  //   - 総合計(selectedEstimateTargetId === null): 絞り込まない(製番全体)。
+  //   - 個別盤(focusedEstimateTarget.type === 'panel'): その盤の
+  //     banMenno/banNoと一致する結果(target_panel_ban_menno/no)のみ。
+  //   - 製品全体(focusedEstimateTarget.type === 'product'): どの盤にも
+  //     紐づかない結果(target_panel_ban_menno == null。設計データ判定等)。
+  //   - 要確認(tie、複数盤の交差面積が同値): EstimateResult側に対応する
+  //     概念が無いため常に空。
+  const estimateResultsForSelectedTarget = useMemo(() => {
+    if (selectedEstimateTargetId == null) return estimateResults
+    if (focusedEstimateTarget?.type === 'panel' && viewerFocusPanel != null) {
+      return estimateResults.filter(
+        (r) =>
+          r.target_panel_ban_menno === viewerFocusPanel.banMenno &&
+          r.target_panel_ban_no === viewerFocusPanel.banNo,
+      )
+    }
+    if (focusedEstimateTarget?.type === 'product') {
+      return estimateResults.filter((r) => r.target_panel_ban_menno == null)
+    }
+    return []
+  }, [estimateResults, selectedEstimateTargetId, focusedEstimateTarget, viewerFocusPanel])
+
+  // [Issue #40 Phase 4] 係数の手修正・初期値復元。API呼び出し後、返ってきた
+  // 最新の積算結果でestimateResults内の該当行だけを置き換える(reevaluate
+  // (評価器の再実行)とは異なり、この操作単体では他の行に影響しないため
+  // 全体を再取得しない)。
+  async function handleOverrideEstimateResultFactor(result: EstimateResult, newFactor: number) {
+    try {
+      const updated = await overrideEstimateResultFactor(activeProductNo, result.id, { current_factor: newFactor })
+      setEstimateResults((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      setError(null)
+    } catch (e) {
+      setError(describeFetchError(e, '係数の変更に失敗しました'))
+    }
+  }
+
+  async function handleResetEstimateResultFactor(result: EstimateResult) {
+    try {
+      const updated = await resetEstimateResultFactor(activeProductNo, result.id)
+      setEstimateResults((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      setError(null)
+    } catch (e) {
+      setError(describeFetchError(e, '係数の初期値復元に失敗しました'))
     }
   }
 
@@ -1626,6 +1680,11 @@ function App() {
                   sourceFilter={estimateDetailSourceFilter}
                   onSourceFilterChange={setEstimateDetailSourceFilter}
                   editFollowDetectionId={editFollowDetectionId}
+                  ruleResults={estimateResultsForSelectedTarget}
+                  masterItemById={masterItemById}
+                  onOverrideResultFactor={handleOverrideEstimateResultFactor}
+                  onResetResultFactor={handleResetEstimateResultFactor}
+                  onFocusResultEvidence={handleFocusResultEvidence}
                 />
               </FloatingPanel>
               {/* [追加修正: 積算コードMasterのfloating panel化] 従来は

@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   applicableUnitLabel,
+  judgmentMethodLabel,
   judgmentScopeLabel,
   usageLabel,
   APPLICABLE_UNIT_LABELS,
+  JUDGMENT_METHOD_LABELS,
   JUDGMENT_SCOPE_LABELS,
   USAGE_LABELS,
 } from './drawingEvidencePresentation'
-import type { ApplicableUnit, EvidenceUsage, JudgmentScope } from '../types/domain'
+import type { ApplicableUnit, EvidenceUsage, JudgmentMethod, JudgmentScope } from '../types/domain'
 
 describe('drawingEvidencePresentation (Issue #40 Phase 3: 作業者向けには英語enumを表示しない)', () => {
   it('translates every EvidenceUsage value to a Japanese label', () => {
@@ -37,10 +39,22 @@ describe('drawingEvidencePresentation (Issue #40 Phase 3: 作業者向けには�
     }
   })
 
+  it('translates every JudgmentMethod value to a Japanese label', () => {
+    const methods: JudgmentMethod[] = ['design_data', 'drawing_judgment', 'needs_confirmation']
+    for (const m of methods) {
+      const label = judgmentMethodLabel(m)
+      expect(label).toBe(JUDGMENT_METHOD_LABELS[m])
+      expect(label).not.toBe(m)
+    }
+  })
+
   it('specific label spot-checks matching Issue #40 UI examples', () => {
     expect(judgmentScopeLabel('panel')).toBe('盤全体')
     expect(judgmentScopeLabel('design_data')).toBe('設計データ')
     expect(usageLabel('both')).toBe('両方')
     expect(applicableUnitLabel('face')).toBe('1面')
+    expect(judgmentMethodLabel('design_data')).toBe('設計データ')
+    expect(judgmentMethodLabel('drawing_judgment')).toBe('図面判定')
+    expect(judgmentMethodLabel('needs_confirmation')).toBe('要確認')
   })
 })

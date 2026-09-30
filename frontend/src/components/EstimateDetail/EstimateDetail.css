@@ -329,6 +329,64 @@
   font-weight: 700;
 }
 
+/* [Issue #40 Phase 4] 「ルール結果」タブ専用の表。既存8列表とは列構成が
+   異なるため独立したwidth配分を持つ(既存min-widthより狭くてよい列が
+   多いため、既定のfloating panel幅でも実用的に見えるよう詰める)。 */
+.estimate-detail__table--rule-result {
+  min-width: 560px;
+}
+
+.estimate-detail__col-rr-code {
+  width: 12%;
+  white-space: nowrap;
+}
+
+.estimate-detail__col-rr-name {
+  width: 22%;
+}
+
+.estimate-detail__col-rr-qty {
+  width: 8%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.estimate-detail__col-rr-unit {
+  width: 12%;
+  white-space: nowrap;
+}
+
+.estimate-detail__col-rr-factor {
+  width: 24%;
+  white-space: nowrap;
+}
+
+.estimate-detail__col-rr-price {
+  width: 12%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.estimate-detail__col-rr-method {
+  width: 10%;
+  white-space: nowrap;
+}
+
+.estimate-detail__reason-button {
+  margin-left: 0.3rem;
+  font-size: 0.72rem;
+  padding: 0.05rem 0.25rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+}
+
+.estimate-detail__reason-button:hover {
+  background: #e2e8f0;
+}
+
 /* 状態記号の凡例。スクロール領域の外に置き、常に見えるようにする (指示10章)。 */
 .estimate-detail__legend {
   flex-shrink: 0;

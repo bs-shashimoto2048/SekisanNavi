@@ -60,6 +60,12 @@ class EstimateResultOut(BaseModel):
     price: float | None
     labor: float | None
     status: str
+    # Issue #40 Phase 4: 係数編集UIが候補値を知るためのAPI専用フィールド
+    # (`estimate_results`自体には保存しない。`source_rule_id`が指す
+    # `estimate_rule_masters.allowed_factors`をrouter側で都度引く。
+    # `app/api/routers/estimate_results.py::_result_out`参照)。
+    # 未設定(候補未定義=自由入力)、または`source_rule_id`自体がnullの場合はnull。
+    allowed_factors: list[float] | None = None
     evidence: list[EstimateResultEvidenceOut] = []
 
 
