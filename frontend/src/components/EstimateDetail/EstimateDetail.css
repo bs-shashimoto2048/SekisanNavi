@@ -387,6 +387,26 @@
   background: #e2e8f0;
 }
 
+/* [Issue #40 Phase 5] 新旧経路の重複、または盤所属tie判定により、機械的に
+   一意へ統合できなかった行(`status === 'needs_review'`)の可視化。判定
+   タブの軸(判定方法)とは独立した警告のため、タブ分けはせず行内バッジで
+   気づけるようにする(指示13章)。 */
+.estimate-detail__row--needs-review {
+  background: #fff7ed;
+}
+
+.estimate-detail__row--needs-review:hover {
+  background: #ffedd5;
+}
+
+.estimate-detail__needs-review-badge {
+  margin-left: 0.3rem;
+  font-size: 0.72rem;
+  color: #c2410c;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 /* 状態記号の凡例。スクロール領域の外に置き、常に見えるようにする (指示10章)。 */
 .estimate-detail__legend {
   flex-shrink: 0;
