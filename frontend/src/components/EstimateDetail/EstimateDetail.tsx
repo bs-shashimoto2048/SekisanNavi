@@ -12,9 +12,12 @@ import './EstimateDetail.css'
  * (`理由`ボタンのtitle)側で確認できるようにする。
  *
  * - `all`: 全EstimateResult(絞り込みなし)。
- * - `design_data`/`drawing_judgment`/`needs_confirmation`:
- *   `EstimateResult.judgment_method`のいずれかで絞り込む
- *   (`設計データ`/`図面判定`/`要確認`の3軸、指示1章)。
+ * - `design_data`/`drawing_judgment`:
+ *   `EstimateResult.judgment_method`で絞り込む(`設計データ`/`図面判定`、指示1章)。
+ * - `needs_confirmation`: `judgment_method === 'needs_confirmation'`に加え、
+ *   新旧同一コード衝突で`status === 'needs_review'`となった行も対象とする
+ *   (衝突行は`judgment_method`が`drawing_judgment`等のままのため)。
+ *   衝突行は元の判定方法タブにも従来どおり残る(両タブに重複して表示される)。
  * - `overridden`: `factor_overridden === true`の行のみ(「修正あり」、指示6章。
  *   将来`quantity_overridden`等の手修正フラグが増えた場合もここに合流させる
  *   想定)。
@@ -28,6 +31,18 @@ const DETAIL_TABS: { value: DetailTabFilter; label: string }[] = [
   { value: 'needs_confirmation', label: '要確認' },
   { value: 'overridden', label: '修正あり' },
 ]
+
+/** 行が指定タブ(`all`以外)の対象かどうか。タブ件数と表示行の両方で使う。 */
+function matchesDetailTab(result: EstimateResult, tab: Exclude<DetailTabFilter, 'all'>): boolean {
+  switch (tab) {
+    case 'overridden':
+      return result.factor_overridden
+    case 'needs_confirmation':
+      return result.status === 'needs_review' || result.judgment_method === 'needs_confirmation'
+    default:
+      return result.judgment_method === tab
+  }
+}
 
 const MISSING_VALUE_PLACEHOLDER = '-'
 
@@ -118,24 +133,17 @@ export function EstimateDetail({
   onResetResultFactor = () => {},
   onFocusResultEvidence = () => {},
 }: Props) {
+  // タブ件数と表示行は同じ判定関数(matchesDetailTab)で求め、両者がずれないようにする。
   const counts: Record<DetailTabFilter, number> = {
     all: results.length,
-    design_data: 0,
-    drawing_judgment: 0,
-    needs_confirmation: 0,
-    overridden: 0,
-  }
-  for (const r of results) {
-    counts[r.judgment_method] += 1
-    if (r.factor_overridden) counts.overridden += 1
+    design_data: results.filter((r) => matchesDetailTab(r, 'design_data')).length,
+    drawing_judgment: results.filter((r) => matchesDetailTab(r, 'drawing_judgment')).length,
+    needs_confirmation: results.filter((r) => matchesDetailTab(r, 'needs_confirmation')).length,
+    overridden: results.filter((r) => matchesDetailTab(r, 'overridden')).length,
   }
 
   const visibleResults =
-    tabFilter === 'all'
-      ? results
-      : tabFilter === 'overridden'
-        ? results.filter((r) => r.factor_overridden)
-        : results.filter((r) => r.judgment_method === tabFilter)
+    tabFilter === 'all' ? results : results.filter((r) => matchesDetailTab(r, tabFilter))
 
   return (
     <section className="estimate-detail">

@@ -144,7 +144,7 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     expect(screen.getByText('B')).toBeInTheDocument()
   })
 
-  it('"要確認" tab filters to judgment_method === needs_confirmation only', () => {
+  it('"要確認" tab still shows judgment_method === needs_confirmation rows (and hides ordinary rows)', () => {
     const results = [
       makeResult({ id: 1, code: 'A', judgment_method: 'drawing_judgment' }),
       makeResult({ id: 2, code: 'B', judgment_method: 'needs_confirmation' }),
@@ -152,6 +152,41 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     renderDetail({ results, tabFilter: 'needs_confirmation' })
     expect(screen.queryByText('A')).not.toBeInTheDocument()
     expect(screen.getByText('B')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^要確認/ }).textContent).toContain('1')
+  })
+
+  it('"要確認" tab also shows status === needs_review rows whose judgment_method is drawing_judgment (新旧同一コード衝突)', () => {
+    const results = [
+      makeResult({ id: 1, code: 'A', judgment_method: 'drawing_judgment', status: 'auto' }),
+      makeResult({ id: 2, code: 'B', judgment_method: 'drawing_judgment', status: 'needs_review' }),
+      makeResult({ id: 3, code: 'C', judgment_method: 'needs_confirmation', status: 'auto' }),
+    ]
+    renderDetail({ results, tabFilter: 'needs_confirmation' })
+    expect(screen.queryByText('A')).not.toBeInTheDocument()
+    expect(screen.getByText('B')).toBeInTheDocument()
+    expect(screen.getByText('C')).toBeInTheDocument()
+    // タブ件数も表示条件と同じ(2件)
+    expect(screen.getByRole('tab', { name: /^要確認/ }).textContent).toContain('2')
+  })
+
+  it('counts a row that is both needs_review and needs_confirmation only once in the "要確認" tab', () => {
+    const results = [makeResult({ id: 1, code: 'A', judgment_method: 'needs_confirmation', status: 'needs_review' })]
+    renderDetail({ results, tabFilter: 'needs_confirmation' })
+    expect(screen.getByRole('tab', { name: /^要確認/ }).textContent).toMatch(/要確認\s*1$/)
+  })
+
+  it('keeps needs_review rows in their own judgment_method tab too, without affecting other tab counts', () => {
+    const results = [
+      makeResult({ id: 1, code: 'A', judgment_method: 'drawing_judgment', status: 'needs_review' }),
+      makeResult({ id: 2, code: 'B', judgment_method: 'design_data', status: 'auto' }),
+    ]
+    renderDetail({ results, tabFilter: 'drawing_judgment' })
+    expect(screen.getByText('A')).toBeInTheDocument()
+    expect(screen.queryByText('B')).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^全て/ }).textContent).toContain('2')
+    expect(screen.getByRole('tab', { name: /^設計データ/ }).textContent).toContain('1')
+    expect(screen.getByRole('tab', { name: /^図面判定/ }).textContent).toContain('1')
+    expect(screen.getByRole('tab', { name: /^要確認/ }).textContent).toContain('1')
   })
 
   it('"修正あり" tab filters to factor_overridden === true regardless of judgment_method', () => {
