@@ -8,7 +8,7 @@
 // `category`文字列をハードコードせずBackendの順序をそのまま使うのとは異なり、
 // enum値自体は`types/domain.ts`の型定義に固定されているため、ここでの
 // ラベル対応表は安全に固定できる)。
-import type { ApplicableUnit, EvidenceUsage, JudgmentScope } from '../types/domain'
+import type { ApplicableUnit, EvidenceUsage, JudgmentMethod, JudgmentScope } from '../types/domain'
 
 export const USAGE_LABELS: Record<EvidenceUsage, string> = {
   estimate_target: '積算対象',
@@ -23,6 +23,15 @@ export const JUDGMENT_SCOPE_LABELS: Record<JudgmentScope, string> = {
   drawing: '図面全体',
   product: '製番全体',
   design_data: '設計データ',
+}
+
+// Issue #40 Phase 4: 積算明細のルール結果行で判定方法を表示する際に使う
+// (`app/domain/estimate_rules.py::JudgmentMethod`のUI表示規則そのもの、
+// Issue #40 1章「設計データ/図面判定/要確認」)。
+export const JUDGMENT_METHOD_LABELS: Record<JudgmentMethod, string> = {
+  design_data: '設計データ',
+  drawing_judgment: '図面判定',
+  needs_confirmation: '要確認',
 }
 
 export const APPLICABLE_UNIT_LABELS: Record<ApplicableUnit, string> = {
@@ -45,4 +54,8 @@ export function judgmentScopeLabel(scope: JudgmentScope): string {
 
 export function applicableUnitLabel(unit: ApplicableUnit): string {
   return APPLICABLE_UNIT_LABELS[unit] ?? unit
+}
+
+export function judgmentMethodLabel(method: JudgmentMethod): string {
+  return JUDGMENT_METHOD_LABELS[method] ?? method
 }

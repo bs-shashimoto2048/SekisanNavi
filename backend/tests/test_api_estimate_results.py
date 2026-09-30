@@ -300,6 +300,23 @@ def test_reset_factor_endpoint_unaffected_by_allowed_factors(client, monkeypatch
     assert res.json()["factor_overridden"] is False
 
 
+def test_estimate_result_exposes_allowed_factors_from_source_rule(client, monkeypatch, tmp_path, db_path):
+    """Issue #40 Phase 4: 係数編集UIが候補値を表示できるよう、
+    `source_rule_id`が指すルールの`allowed_factors`をAPI応答へ展開する。"""
+    _setup_product_and_rule_with_allowed_factors(client, monkeypatch, tmp_path, db_path, [0.5, 0.7, 1.0])
+    evaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    assert evaluated["results"][0]["allowed_factors"] == [0.5, 0.7, 1.0]
+
+    listed = client.get("/api/products/A1GV2421/estimate-results").json()
+    assert listed[0]["allowed_factors"] == [0.5, 0.7, 1.0]
+
+
+def test_estimate_result_allowed_factors_is_null_when_rule_has_no_candidates(client, monkeypatch, tmp_path, db_path):
+    _setup_product_and_rule(client, monkeypatch, tmp_path, db_path)
+    evaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    assert evaluated["results"][0]["allowed_factors"] is None
+
+
 def test_list_estimate_results_filters_by_detection_id(client, monkeypatch, tmp_path, db_path):
     """Issue #40 Phase 3: 根拠BBox→関係する積算結果(detection_idでの絞り込み)。"""
     detection, _ = _setup_product_and_rule(client, monkeypatch, tmp_path, db_path)

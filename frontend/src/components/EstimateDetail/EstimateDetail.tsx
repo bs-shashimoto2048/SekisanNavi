@@ -1,21 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { DetectionStatus } from '../../types/domain'
+import type { DetectionStatus, EstimateMasterItem, EstimateResult } from '../../types/domain'
 import type { EstimateDetailItem, EstimateSource, EstimateTarget } from '../../types/estimateAggregation'
+import { applicableUnitLabel, judgmentMethodLabel } from '../../domain/drawingEvidencePresentation'
+import { EstimateResultFactorCell } from './EstimateResultFactorCell'
 import './EstimateDetail.css'
 
 /** 積算明細の情報源フィルタ。「全て」と、実データでは常に0件になる「設計情報」
  * を含むため、実データのみを表す`EstimateSource`とは別のUI専用の型として定義する。
- * App.tsx側が所属変更追従(指示12章)で強制的に切り替えられるよう、外部へ公開する。 */
-export type DetailSourceFilter = 'all' | EstimateSource | 'design_data'
+ * App.tsx側が所属変更追従(指示12章)で強制的に切り替えられるよう、外部へ公開する。
+ *
+ * [Issue #40 Phase 4] `'rule_result'`は新しいEstimateResultモデル(図面情報→
+ * ルール評価器が導出した積算結果)を表示するための専用タブ。既存の
+ * Detectionベースの行(`EstimateDetailItem`)とは列構成が大きく異なるため、
+ * 同じ表へ無理に統合せず、独立したタブ・別の表として表示する
+ * (指示8章「既存明細を突然非表示にしない・古いBBoxデータを消さない」)。 */
+export type DetailSourceFilter = 'all' | EstimateSource | 'design_data' | 'rule_result'
 
 const SOURCE_TABS: { value: DetailSourceFilter; label: string }[] = [
   { value: 'all', label: '全て' },
   { value: 'ai', label: 'AI' },
   { value: 'design_data', label: '設計情報' },
   { value: 'manual', label: 'マニュアル' },
+  { value: 'rule_result', label: 'ルール結果' },
 ]
 
 const MISSING_VALUE_PLACEHOLDER = '-'
+
+/** `masterItemById`省略時の既定値。モジュールスコープの固定参照にすることで、
+ * 呼び出し元が省略するたびに新しい空Mapが再生成されるのを避ける。 */
+const EMPTY_MASTER_ITEM_MAP = new Map<number, EstimateMasterItem>()
 
 /**
  * Detection.statusを○/△/×の3記号へ変換する (盤フォーカス・積算明細再設計 指示2章)。
@@ -139,6 +152,22 @@ interface Props {
   /** 編集直後、一時的に強調・自動スクロールする対象のDetection id (指示5章/13章)。
    * nullの間は何もしない。強調の解除(タイマー)はApp.tsx側が行う。 */
   editFollowDetectionId?: number | null
+  /** [Issue #40 Phase 4] 「ルール結果」タブに表示するEstimateResult一覧。
+   * 既に選択中の対象(盤/製品全体)で絞り込み済みのものを渡す(App.tsx側の
+   * 責務。既存の`detailItems`が`itemsForTarget`でフィルタされているのと
+   * 同じ設計)。省略時は空配列(既存の呼び出し元・テストへの影響を避ける)。 */
+  ruleResults?: EstimateResult[]
+  /** コード→品名解決用 (積算コードMaster、既存の`masterItemById`をそのまま
+   * 渡す)。EstimateResult自体は品名を持たず`master_item_id`のみ持つため。 */
+  masterItemById?: Map<number, EstimateMasterItem>
+  /** 係数の手修正 (Issue #40 7-3章)。API呼び出し・状態更新はApp.tsx側の責務。 */
+  onOverrideResultFactor?: (result: EstimateResult, newFactor: number) => void
+  /** 「初期値へ戻す」操作 (Issue #40 7-3章)。 */
+  onResetResultFactor?: (result: EstimateResult) => void
+  /** 行のHover/クリックで根拠BBoxをViewer上に強調する (Issue #40 Phase 3の
+   * `handleFocusResultEvidence`をそのまま再利用する想定)。設計データのみの
+   * 行(`evidence`にdetection_idが無い)では何も起きない。 */
+  onFocusResultEvidence?: (result: EstimateResult) => void
 }
 
 /**
@@ -184,6 +213,11 @@ export function EstimateDetail({
   sourceFilter,
   onSourceFilterChange,
   editFollowDetectionId = null,
+  ruleResults = [],
+  masterItemById = EMPTY_MASTER_ITEM_MAP,
+  onOverrideResultFactor = () => {},
+  onResetResultFactor = () => {},
+  onFocusResultEvidence = () => {},
 }: Props) {
   // ソート列/方向は「ユーザーが選んだ表示上の好み」であり、データ(App.tsx側の状態)
   // とは無関係のため、このコンポーネント自身のuseStateとして持つ (指示14章: 編集
@@ -203,16 +237,23 @@ export function EstimateDetail({
   )
 
   const counts = useMemo(() => {
-    const c: Record<DetailSourceFilter, number> = { all: itemsForTarget.length, ai: 0, design_data: 0, manual: 0 }
+    const c: Record<DetailSourceFilter, number> = {
+      all: itemsForTarget.length,
+      ai: 0,
+      design_data: 0,
+      manual: 0,
+      rule_result: ruleResults.length,
+    }
     for (const item of itemsForTarget) c[item.source] += 1
     return c
-  }, [itemsForTarget])
+  }, [itemsForTarget, ruleResults])
 
   const visibleItems = useMemo(() => {
     if (sourceFilter === 'all') return itemsForTarget
     // 'design_data'は実データに対応するsource_typeが存在しないため、常に0件になる
     // (実データから判定できない情報源を仮に割り当てない方針)。
-    if (sourceFilter === 'design_data') return []
+    // 'rule_result'は別の表(EstimateResult専用)で表示するため、ここでは常に空。
+    if (sourceFilter === 'design_data' || sourceFilter === 'rule_result') return []
     return itemsForTarget.filter((item) => item.source === sourceFilter)
   }, [itemsForTarget, sourceFilter])
 
@@ -271,6 +312,15 @@ export function EstimateDetail({
         </div>
       </div>
 
+      {sourceFilter === 'rule_result' ? (
+        <EstimateResultTable
+          results={ruleResults}
+          masterItemById={masterItemById}
+          onOverrideResultFactor={onOverrideResultFactor}
+          onResetResultFactor={onResetResultFactor}
+          onFocusResultEvidence={onFocusResultEvidence}
+        />
+      ) : (
       <div className="estimate-detail__table-scroll" ref={tableScrollRef}>
         <table className="estimate-detail__table">
           <thead>
@@ -367,8 +417,115 @@ export function EstimateDetail({
           </tbody>
         </table>
       </div>
+      )}
 
-      <p className="estimate-detail__legend">○ 確定　△ 要確認　× 不備</p>
+      {sourceFilter !== 'rule_result' && (
+        <p className="estimate-detail__legend">○ 確定　△ 要確認　× 不備</p>
+      )}
     </section>
+  )
+}
+
+function formatResultPrice(price: number | null): string {
+  // 指示10章: 不明なpriceを0円にしない・未確定計算式を推測しない。NULLは「-」。
+  if (price == null) return MISSING_VALUE_PLACEHOLDER
+  return `¥${price.toLocaleString('ja-JP')}`
+}
+
+interface EstimateResultTableProps {
+  results: EstimateResult[]
+  masterItemById: Map<number, EstimateMasterItem>
+  onOverrideResultFactor: (result: EstimateResult, newFactor: number) => void
+  onResetResultFactor: (result: EstimateResult) => void
+  onFocusResultEvidence: (result: EstimateResult) => void
+}
+
+/**
+ * 積算明細「ルール結果」タブの表 (Issue #40 Phase 4)。
+ *
+ * 既存のDetectionベースの表(8列、`EstimateDetail`本体側)とは列構成が
+ * 大きく異なるため、意図的に別の`<table>`として実装している(指示2章
+ * 「既存列との重複を避けてレイアウトを再整理して構わない」)。
+ *
+ * 列: コード/品名/数量/適用単位/係数/金額/判定方法 の7列(指示2章の最低限)。
+ * 判定理由(`judgment_reason`)は常時表示せず、値がある場合のみ小さな
+ * 「理由」ボタンのtitleで確認できるようにする(指示6章「常時長文表示は
+ * 不要」)。行のHoverで根拠BBoxを強調する(`onFocusResultEvidence`、
+ * Phase 3の`handleFocusResultEvidence`をそのまま利用。設計データのみの
+ * 行はevidenceにdetection_idが無いため何も起きない。指示7章)。
+ */
+function EstimateResultTable({
+  results,
+  masterItemById,
+  onOverrideResultFactor,
+  onResetResultFactor,
+  onFocusResultEvidence,
+}: EstimateResultTableProps) {
+  return (
+    <div className="estimate-detail__table-scroll">
+      <table className="estimate-detail__table estimate-detail__table--rule-result">
+        <thead>
+          <tr>
+            <th className="estimate-detail__col-rr-code">コード</th>
+            <th className="estimate-detail__col-rr-name">品名</th>
+            <th className="estimate-detail__col-rr-qty">数量</th>
+            <th className="estimate-detail__col-rr-unit">適用単位</th>
+            <th className="estimate-detail__col-rr-factor">係数</th>
+            <th className="estimate-detail__col-rr-price">金額</th>
+            <th className="estimate-detail__col-rr-method">判定方法</th>
+          </tr>
+        </thead>
+        <tbody>
+          {results.length === 0 && (
+            <tr>
+              <td className="estimate-detail__empty" colSpan={7}>
+                ルール結果がありません
+              </td>
+            </tr>
+          )}
+          {results.map((result) => {
+            const itemName =
+              result.master_item_id != null ? (masterItemById.get(result.master_item_id)?.category ?? null) : null
+            return (
+              <tr
+                key={result.id}
+                className="estimate-detail__row"
+                onMouseEnter={() => onFocusResultEvidence(result)}
+              >
+                <td className="estimate-detail__col-rr-code">{result.code}</td>
+                <td className="estimate-detail__col-rr-name">{itemName ?? MISSING_VALUE_PLACEHOLDER}</td>
+                <td className="estimate-detail__col-rr-qty">{result.quantity}</td>
+                <td className="estimate-detail__col-rr-unit">
+                  {result.applicable_unit != null
+                    ? applicableUnitLabel(result.applicable_unit)
+                    : MISSING_VALUE_PLACEHOLDER}
+                </td>
+                <td className="estimate-detail__col-rr-factor">
+                  <EstimateResultFactorCell
+                    result={result}
+                    onOverride={(newFactor) => onOverrideResultFactor(result, newFactor)}
+                    onReset={() => onResetResultFactor(result)}
+                  />
+                </td>
+                <td className="estimate-detail__col-rr-price">{formatResultPrice(result.price)}</td>
+                <td className="estimate-detail__col-rr-method">
+                  <span>{judgmentMethodLabel(result.judgment_method)}</span>
+                  {result.judgment_reason != null && (
+                    <button
+                      type="button"
+                      className="estimate-detail__reason-button"
+                      title={result.judgment_reason}
+                      aria-label="判定理由"
+                    >
+                      理由
+                    </button>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }

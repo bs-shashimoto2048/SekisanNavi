@@ -18,6 +18,7 @@ from app.repositories.estimate_results import (
     reset_factor_to_initial,
     set_current_factor,
 )
+from app.repositories.estimate_rule_masters import get_allowed_factors
 from app.repositories.system_settings import get_data_source_root
 from app.schemas.estimate_rules import (
     DrawingEvidenceTypeOut,
@@ -43,9 +44,14 @@ def _evidence_out(evidence: list[EstimateResultEvidence]) -> list[EstimateResult
     return [EstimateResultEvidenceOut(**e.__dict__) for e in evidence]
 
 
-def _result_out(result) -> EstimateResultOut:
+def _result_out(conn: sqlite3.Connection, result) -> EstimateResultOut:
     data = {k: v for k, v in result.__dict__.items() if k != "evidence"}
-    return EstimateResultOut(**data, evidence=_evidence_out(result.evidence))
+    allowed_factors = (
+        get_allowed_factors(conn, result.source_rule_id) if result.source_rule_id is not None else None
+    )
+    return EstimateResultOut(
+        **data, allowed_factors=allowed_factors, evidence=_evidence_out(result.evidence)
+    )
 
 
 @evidence_types_router.get("", response_model=list[DrawingEvidenceTypeOut])
@@ -70,7 +76,7 @@ def read_estimate_results(
     絞り込む (Issue #40 Phase 3「根拠BBox→関係する積算結果」)。
     """
     results = list_results_for_product(conn, product_no=product_no, detection_id=detection_id)
-    return [_result_out(r) for r in results]
+    return [_result_out(conn, r) for r in results]
 
 
 @router.post("/{product_no}/estimate-results/evaluate", response_model=EstimateResultEvaluateOut)
@@ -92,7 +98,7 @@ def evaluate_estimate_results(
 
     results = replace_results_for_product(conn, product_no=product_no, candidates=outcome.candidates)
     return EstimateResultEvaluateOut(
-        results=[_result_out(r) for r in results],
+        results=[_result_out(conn, r) for r in results],
         skipped_rule_master_ids=outcome.skipped_rule_master_ids,
     )
 
@@ -127,7 +133,7 @@ def override_estimate_result_factor(
         raise HTTPException(status_code=422, detail=str(e)) from e
     if result is None:
         raise HTTPException(status_code=404, detail="指定された積算結果が見つかりません。")
-    return _result_out(result)
+    return _result_out(conn, result)
 
 
 @router.post(
@@ -144,4 +150,4 @@ def reset_estimate_result_factor(
     result = reset_factor_to_initial(conn, product_no=product_no, result_id=result_id)
     if result is None:
         raise HTTPException(status_code=404, detail="指定された積算結果が見つかりません。")
-    return _result_out(result)
+    return _result_out(conn, result)

@@ -424,6 +424,10 @@ export interface EstimateResult {
   price: number | null
   labor: number | null
   status: EstimateResultStatus
+  /** 許容係数候補 (Issue #40 Phase 4)。`source_rule_id`が指すルールマスタの
+   * `allowed_factors`をAPI応答時に展開したもの。未設定(候補未定義=自由入力)
+   * の場合はnull。`source_rule_id`自体がnullの場合も常にnull。 */
+  allowed_factors: number[] | null
   evidence: EstimateResultEvidence[]
 }
 
