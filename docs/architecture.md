@@ -1740,15 +1740,33 @@ Backend側の互換レイヤで統合し、Frontend側のUIも`EstimateResult`�
                                           (legacy_detection_adapter.py)  新旧コード衝突→needs_review付与)
 ```
 
-- **評価器(`app/services/estimate_rule_evaluator.py`、Phase 2〜3、Phase 6-Eで
-  拡張)**: 図面情報panel(Phase 3)経由で作られた`evidence_type_key`付き
+- **評価器(`app/services/estimate_rule_evaluator.py`、Phase 2〜3、Phase 6-E/
+  6-Fで拡張)**: 図面情報panel(Phase 3)経由で作られた`evidence_type_key`付き
   Detection、および`product_df`/`estcode_df`由来の設計データを根拠に、
   `estimate_rule_masters`の成立条件を評価し`EstimateResultCandidate`を
   組み立てる。
   - 判定条件(`StandardCondition`)の設計データ比較演算子は、Phase 6-Eで
     `starts_with`/`in`を追加した(`==`/`!=`/`>=`/`<=`/`>`/`<`に加え、前方
-    一致・複数候補値のいずれかを表現できる。`design_data_conditions`は
-    引き続きAND結合のみでOR結合は持たない)。
+    一致・複数候補値のいずれかを表現できる)。Phase 6-Fでは
+    `design_data_any_of`(ANDグループのリスト、いずれか1グループが成立すれば
+    よいOR表現)を追加し、「`model starts_with "IS"` **または**
+    `model starts_with "OS"`」のような資料どおりの条件を1つの
+    `StandardCondition`で表現できるようになった(`design_data_conditions`
+    (常時AND)と`design_data_any_of`(OR)を組み合わせられる。OR結合は
+    「ANDグループのOR」という1段のみで、それ以上のネストは持たない)。
+    既存DBに保存済みの旧JSON(`design_data_any_of`キーを持たない)はそのまま
+    「OR制約なし」としてパースされ、後方互換性を壊さない
+    (`app/repositories/estimate_rule_masters.py::_parse_condition`/
+    `_serialize_condition`)。
+  - 判定根拠の記録(`EvidenceRef.design_data_ref`、Phase 6-B)も、OR条件を
+    使ったルールでは「どのOR枝が成立したか(`matched`)・実際値」を含む
+    `any_of`配列をJSONへ追加する(OR条件を使わないルールは従来通り
+    `any_of`キー無し)。確定時のsnapshot
+    (`estimate_confirmation_result_evidence.design_data_ref`)はこの文字列を
+    そのままコピーするだけの既存設計のため、確定後もOR条件の説明可能性が
+    保たれる(Phase 6-F検証で確認済み)。Frontend側
+    (`frontend/src/domain/drawingEvidencePresentation.ts::
+    formatDesignDataAnyOfGroups`)もOR各枝を「○/×」付きの日本語行へ整形する。
   - 判定範囲(`JudgmentScope`)は、Phase 2の`PANEL`/`DESIGN_DATA`に加え
     Phase 6-Eで`DRAWING`(1図面ページ単位)/`PRODUCT`(製番全体単位)を
     追加したが、いずれも「図面情報の存在判定のみ」(`design_data_conditions`
@@ -1759,7 +1777,13 @@ Backend側の互換レイヤで統合し、Frontend側のUIも`EstimateResult`�
     は`DesignDataContext`まで到達し、`StandardCondition`から参照可能だが、
     業務的な意味づけ(どの積算コードに対応するか等)は未確定のまま。
   - 対応状況の一覧(`QuantityMethod`/`JudgmentScope`/`CalcType`それぞれ
-    完全実装/部分実装/enumのみ)はIssue #40 Phase 6-E報告コメント参照。
+    完全実装/部分実装/enumのみ)はIssue #40 Phase 6-E/6-F報告コメント参照。
+  - **本番投入候補マニフェスト(Phase 6-F新設)**: `backend/data_candidates/
+    phase6f_drawing_evidence_types.json`/`phase6f_estimate_rules.json`に、
+    実マスタ投入候補を`status`(ready/needs_business_confirmation/blocked)
+    付きで整理している(本番seedではなく自動ロードもしない、レビュー専用。
+    `docs/master-candidate-status.md`参照)。構造検証は
+    `backend/tools/validate_candidate_manifests.py`で行う。
 - **旧Detection互換レイヤ(`app/services/legacy_detection_adapter.py`、
   Phase 5新設)**: `master_item_id`直結の旧Manual/AI BBoxを、削除・変更せず
   そのまま保持した状態で`EstimateResultCandidate`へ変換する読み取り専用の

@@ -141,12 +141,14 @@
   スクリプト(`backend/tools/seed_verification_evidence_fixtures.py`)で動作
   確認を行ったが、本番DBへは一切投入していない(上記「図面情報マスタは
   本番データで未投入」の状況は変わらない)。
-- **`StandardCondition`はAND結合のみで、OR結合を表現できない**: Phase 6-Eで
-  `starts_with`/`in`演算子を追加し、「型式がIS系」等の前方一致・複数候補値を
-  表現できるようになったが(`app.domain.estimate_rules.StandardConditionField`)、
-  「IS系**または**OS系」のようなOR条件は1つの`StandardCondition`では表現
-  できない(`design_data_conditions`は常にAND)。18322(盤内通路IS/OS系)の
-  検証fixtureも`model starts_with "IS"`のみで、OS系は対象外のまま。
+- **[2026-10 Phase 6-Fで解消済み] `StandardCondition`のOR結合は未対応だった**:
+  本節はPhase 6-E時点の記述だったが、Phase 6-Fで`design_data_any_of`
+  (ANDグループのリスト、いずれか1グループが成立すればよいOR表現)を追加した。
+  「IS系**または**OS系」を1つの`StandardCondition`で正確に表現でき、
+  18322(盤内通路IS/OS系)の検証fixtureも`model starts_with "IS"`固定から
+  `design_data_any_of`によるOR表現へ置き換えた(`docs/architecture.md`参照)。
+  ただしOR結合は「ANDグループのOR」という1段のみで、それ以上複雑な
+  OR/NOTの組合せ・ネストは引き続き持たない。
 - **estcode_df.csvの追加19列は「読み込めるだけ」で業務ロジックには未接続**:
   Phase 6-Eで`PANEL`/`TRANS`/`IN_PANEL`/`SHIELD`/`DOOR_FRONT`/`DOOR_BACK`/
   `DOOR_STACK`/`DOOR_SIDE`/`DOOR_SMALL`/`FAN_ROOF`/`FAN_DOOR`/`MAIN_LINE`/
@@ -184,6 +186,25 @@
   `DIFF_FROM_STANDARD`/`CUSTOM`、`ADD`/`SUBTRACT`/`MULTIPLY_PRICE`/
   `MULTIPLY_LABOR`/`MULTIPLY_BOTH`/`CUSTOM`)。詳細な対応状況はIssue #40
   Phase 6-E報告コメントの一覧表を参照。
+
+## 本番投入候補マニフェスト (Issue #40 Phase 6-F) に伴う既知の制約
+
+- **候補マニフェストは本番seedではなく、`ready`判定の候補も0件**:
+  `backend/data_candidates/phase6f_drawing_evidence_types.json`(16件)・
+  `phase6f_estimate_rules.json`(11件)は、Phase 6-Dで整理した候補を機械可読な
+  形へ整理したレビュー専用ファイルであり、アプリ起動パスから自動ロードされ
+  ない。2026-10時点で`status=ready`の候補は1件も無く、全候補が
+  `needs_business_confirmation`または`blocked`である(詳細は
+  `docs/master-candidate-status.md`参照)。
+- **design_data_ref/confirmation snapshotはOR条件を説明可能だが、UI表示は
+  テキスト(`title`属性)のみ**: `app.services.estimate_rule_evaluator.
+  _build_design_data_ref`が出力するJSONに`any_of`(各OR枝の成立有無・実際値)
+  を追加し、`estimate_confirmation_result_evidence.design_data_ref`への
+  snapshotコピー(確定時、文字列をそのままコピーするだけの既存機構)でも
+  問題なく保持されることを検証済み。Frontend側(`drawingEvidencePresentation.ts::
+  formatDesignDataAnyOfGroups`)も日本語化に対応したが、`EstimateDetail`の
+  根拠詳細表示(ボタンの`title`属性)への追加のみで、専用のビジュアルUIは
+  作っていない(指示「UIは今回大きく変えなくてよい」のため)。
 
 ## その他、コードから確認できる制約
 

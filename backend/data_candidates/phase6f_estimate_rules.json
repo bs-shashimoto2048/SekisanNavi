@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "generated_by": "Issue #40 Phase 6-D/6-F",
+  "note": "これは本番seedではない。backend/db/seed.py・master_importer.py等から自動ロードされない、レビュー用の候補マニフェストである。condition構造はapp.domain.estimate_rules.StandardCondition(Phase 6-FでOR表現design_data_any_ofを追加)のJSON表現と同じ形。本番投入可否の最終判断はPhase 6-F報告(Issue #40)の本番投入判定表、および業務側確認を経て別途行う。実データの価格・工数等の実数値はここに一切含めない(unit_price/unit_labor/allowed_factorsの具体値も含めない)。",
+  "status_definitions": {
+    "ready": "資料の成立条件を技術的に完全表現でき、評価器(app/services/estimate_rule_evaluator.py)が対応する範囲(judgment_scope/quantity_method/calc_type)のみで、業務的な簡略化・未確認事項が無い",
+    "needs_business_confirmation": "技術的には動作するが、資料の条件の一部を簡略化している、複数解釈がある、または対応するevidence type側の業務判断が必要",
+    "blocked": "必要な判定ロジック・データソース・評価器機能のいずれかが欠けており、現時点では実装・投入ができない"
+  },
+  "candidates": [
+    {
+      "code": "18302",
+      "name": "側面扉(追加)",
+      "evidence_type_keys": ["side_door"],
+      "judgment_scope": "panel",
+      "judgment_method": "drawing_judgment",
+      "applicable_unit": "location",
+      "quantity_method": "per_evidence",
+      "calc_type": "direct",
+      "condition": {
+        "required_evidence_types": ["side_door"],
+        "design_data_conditions": [],
+        "design_data_any_of": []
+      },
+      "initial_factor": 1.0,
+      "allowed_factors": null,
+      "source_refs": ["積算コードPDF『18302側面扉（追加）.pdf』"],
+      "status": "needs_business_confirmation",
+      "blocker": "標準含有枚数との差分(超過分のみ加算)算出ロジックが未実装。単純な存在判定のみでは、既に箱コードへ含まれる標準扉まで二重に計上する可能性がある。"
+    },
+    {
+      "code": "18311",
+      "name": "換気扇上部取付",
+      "evidence_type_keys": ["roof_fan_top"],
+      "judgment_scope": "panel",
+      "judgment_method": "drawing_judgment",
+      "applicable_unit": "location",
+      "quantity_method": "per_evidence",
+      "calc_type": "direct",
+      "condition": {
+        "required_evidence_types": ["roof_fan_top"],
+        "design_data_conditions": [],
+        "design_data_any_of": []
+      },
+      "initial_factor": 1.0,
+      "allowed_factors": null,
+      "source_refs": ["積算コードPDF『18311換気扇上部取付.pdf』"],
+      "status": "needs_business_confirmation",
+      "blocker": "roof_fan/roof_fan_l/roof_fan_rの3 AI classをどう1つの図面情報へ統合するか未確定。統合方法次第で数量(台数)の数え方が変わる。"
+    },
+    {
+      "code": "18305",
+      "name": "小扉(屋内操作用)",
+      "evidence_type_keys": ["small_door"],
+      "judgment_scope": "panel",
+      "judgment_method": "needs_confirmation",
+      "applicable_unit": "location",
+      "quantity_method": "per_evidence",
+      "calc_type": "direct",
+      "condition": {
+        "required_evidence_types": ["small_door"],
+        "design_data_conditions": [],
+        "design_data_any_of": []
+      },
+      "initial_factor": 1.0,
+      "allowed_factors": null,
+      "source_refs": ["積算コードPDF『18305小扉(屋内操作用).pdf』", "積算コードPDF『18306小扉(屋外操作用).pdf』"],
+      "status": "blocked",
+      "blocker": "屋内(18305)/屋外(18306)のどちらに対応するか、資料から判別できない。誤ったコードを自動選択するリスクがあるため投入不可。"
+    },
+    {
+      "code": "18323",
+      "name": "VCT架台",
+      "evidence_type_keys": ["vct", "ch"],
+      "judgment_scope": "panel",
+      "judgment_method": "needs_confirmation",
+      "applicable_unit": "unit",
+      "quantity_method": "per_condition_group",
+      "calc_type": "direct",
+      "condition": {
+        "required_evidence_types": ["vct", "ch"],
+        "design_data_conditions": [],
+        "design_data_any_of": []
+      },
+      "initial_factor": 1.0,
+      "allowed_factors": null,
+      "source_refs": ["積算コードPDF『18323VCT架台.pdf』"],
+      "status": "blocked",
+      "blocker": "本来の成立条件(CHがVCTの上にあれば成立)に必要な位置関係判定(JudgmentScope.POSITION)が評価器に未実装。現状の「同一盤内に両方存在するか」のみの判定では過大計上になる。"
+    },
+    {
+      "code": "18322",
+      "name": "盤内通路(IS,OS系)",
+      "evidence_type_keys": [],
+      "judgment_scope": "design_data",
+      "judgment_method": "needs_confirmation",
+      "applicable_unit": "location",
+      "quantity_method": "per_condition_group",
+      "calc_type": "direct",
+      "condition": {
+        "required_evidence_types": [],
+        "design_data_conditions": [],
+        "design_data_any_of": [
+          [{ "field": "model", "operator": "starts_with", "value": "IS" }],
+          [{ "field": "model", "operator": "starts_with", "value": "OS" }]
+        ]
+      },
+      "initial_factor": 1.0,
+      "allowed_factors": null,
+      "source_refs": ["積算コードPDF『18321-322盤内通路.pdf』(「18321=IA,OA」「18322=IS,OS」)"],
+      "status": "needs_business_confirmation",
+      "blocker": "Phase 6-Fで資料どおりのOR条件(IS*またはOS*)を技術的に表現できるようになったが、型式だけで盤内通路スペースの有無・コード要否を断定してよいかは業務未確認(資料内に「×」の非該当例も複数ある)。"
+    },
+    {
+      "code": "18321",
+      "name": "盤内通路(IA,OA系)",
+      "evidence_type_keys": [],
+      "judgment_scope": "design_data",
+      "judgment_method": "needs_confirmation",
+      "applicable_unit": "location",
+      "quantity_method": "per_condition_group",
+      "calc_type": "direct",
+      "condition": {
+        "required_evidence_types": [],
+        "design_data_conditions": [],
+        "design_data_any_of": [
+          [{ "field": "model", "operator": "starts_with", "value": "IA" }],
+          [{ "field": "model", "operator": "starts_with", "value": "OA" }]
+        ]
+      },
+      "initial_factor": 1.0,
+      "allowed_factors": null,
+      "source_refs": ["積算コードPDF『18321-322盤内通路.pdf』(「18321=IA,OA」「18322=IS,OS」)"],
+      "status": "blocked",
+      "blocker": "18322と同じ業務未確認に加え、IA/OA系のMODEL文字列パターンが実データで一度も確認できていない(確認済みはIS2のみ)。検証用DBコピーでの動作確認も未実施。"
+    },
+    {
+      "code": "18101-18115",
+      "name": "底板(なしの場合減額)",
+      "evidence_type_keys": [],
+      "judgment_scope": "design_data",
+      "judgment_method": "design_data",
+      "applicable_unit": "location",
+      "quantity_method": "per_evidence",
+      "calc_type": "direct",
+      "condition": null,
+      "initial_factor": 1.0,
+      "allowed_factors": null,
+      "source_refs": [
+        "積算コードPDF『18101- 底板 なしの場合減額.pdf』",
+        "対応仕分けExcel(20250707_A製品自動化検討_対応仕分け.xlsx, プログラム対応リストシート: 対象コード18101〜18115、「STEEL-BOTTOMが底板の情報」「.boxspec」「.baninf」「ZUMEI」参照)"
+      ],
+      "status": "blocked",
+      "blocker": "判定に必要な.boxspec(STEEL-BOTTOM列)/.baninf(ZUMEI列)ファイルが、Sekisan Naviの現行データ参照ルート(data_source_root)配下には存在しない(Phase 6-E調査、実製番A1GV2421で確認)。新規データソースへの接続自体が前提となり、現状のapp/services/estcode_df.py/product_df.pyでは対応不可。W/D寸法帯ごとのコード選定テーブルの実体も資料からは未確認。"
+    },
+    {
+      "code": "18501-18521",
+      "name": "金網",
+      "evidence_type_keys": [],
+      "judgment_scope": "panel",
+      "judgment_method": "drawing_judgment",
+      "applicable_unit": "face",
+      "quantity_method": "per_evidence",
+      "calc_type": "direct",
+      "condition": null,
+      "initial_factor": 1.0,
+      "allowed_factors": null,
+      "source_refs": [
+        "積算コードPDF『18501-521金網.pdf』",
+        "対応仕分けExcel(プログラム対応リストシート: 対象コード18501〜18521)"
+      ],
+      "status": "blocked",
+      "blocker": "18501〜18519の個別コードとサイズ/枚数の対応表が資料に無く、どのコードを選ぶべきか機械的に判定できない。"
+    },
+    {
+      "code": "19959-19962",
+      "name": "箱体価格倍率(ドブ漬/鋼板厚)",
+      "evidence_type_keys": [],
+      "judgment_scope": "product",
+      "judgment_method": "needs_confirmation",
+      "applicable_unit": "product",
+      "quantity_method": "per_product",
+      "calc_type": "multiply_price",
+      "condition": null,
+      "initial_factor": null,
+      "allowed_factors": null,
+      "source_refs": ["積算コードPDF『19959箱体ﾄﾞﾌﾞ漬(HDZ).pdf』『19961鋼板厚全てt3.2.pdf』『19962鋼板厚ﾄﾞｱのみt3.2.pdf』"],
+      "status": "blocked",
+      "blocker": "評価器が`quantity_method=per_product`/`calc_type=multiply_price`のいずれも未実装(app/services/estimate_rule_evaluator.pyがDIRECT以外のcalc_typeを計算しない設計のため)。倍率の数値根拠も未確認。"
+    },
+    {
+      "code": "44241-44833",
+      "name": "主回路銅帯 入力係数",
+      "evidence_type_keys": [],
+      "judgment_scope": "panel",
+      "judgment_method": "needs_confirmation",
+      "applicable_unit": "other",
+      "quantity_method": "custom",
+      "calc_type": "custom",
+      "condition": null,
+      "initial_factor": null,
+      "allowed_factors": null,
+      "source_refs": [
+        "『Ａ製品入力主回路銅帯の入力係数設定.pdf』",
+        "対応仕分けExcel(保留シート: コード44241/44833、理由「単結はAIで各盤との紐付けが難しいためプログラム対応を検討中」)"
+      ],
+      "status": "blocked",
+      "blocker": "資料自身が「保留」区分。作業者が図を参照しながら係数を手入力する運用のため、Phase 5以降のcustom handler機構が前提。2資料間で運用像が完全には一致しない(Phase 1報告8章)という未解消の矛盾もある。"
+    },
+    {
+      "code": "18304",
+      "name": "背面扉ナシ・ビス止め",
+      "evidence_type_keys": [],
+      "judgment_scope": "panel",
+      "judgment_method": "needs_confirmation",
+      "applicable_unit": "location",
+      "quantity_method": "per_evidence",
+      "calc_type": "direct",
+      "condition": null,
+      "initial_factor": 1.0,
+      "allowed_factors": null,
+      "source_refs": [
+        "積算コードPDF『18304背面扉ﾅｼ・ﾋﾞｽ止め.pdf』(成立条件テキストの記載が断片的)",
+        "対応仕分けExcel(保留シート: コード18304、理由「ISなど？特定の箱体かつ、現状この辺の箱体の情報がそもそもほとんどない」「外形図(2)or背面図からしか確認できない」)"
+      ],
+      "status": "blocked",
+      "blocker": "資料自身が「保留」区分。成立条件の情報がほとんど無い。"
+    }
+  ]
+}

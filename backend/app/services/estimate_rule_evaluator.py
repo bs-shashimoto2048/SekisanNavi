@@ -50,6 +50,7 @@ from app.domain.estimate_rules import (
     ProcessingMode,
     QuantityMethod,
     StandardCondition,
+    StandardConditionField,
 )
 from app.domain.models import Detection
 from app.repositories.detections import list_detections
@@ -113,39 +114,75 @@ class EvaluationOutcome:
     skipped_rule_master_ids: list[int] = field(default_factory=list)
 
 
+def _field_condition_holds(c: StandardConditionField, ctx: DesignDataContext) -> bool:
+    actual = getattr(ctx, c.field, None)
+    op = _OPERATORS.get(c.operator)
+    return op is not None and op(actual, c.value)
+
+
 def _design_data_conditions_hold(condition: StandardCondition, ctx: DesignDataContext) -> bool:
+    """`design_data_conditions`(AND)と`design_data_any_of`(OR、Issue #40
+    Phase 6-F追加)の両方を評価する。
+
+    - `design_data_conditions`は全件成立が必要(AND)。
+    - `design_data_any_of`が空でなければ、そのうち**少なくとも1グループ**
+      (グループ内はAND)が成立している必要がある(OR)。空の場合はOR制約
+      なし(Phase 6-E以前と同じ挙動、後方互換)。
+    """
     for c in condition.design_data_conditions:
-        actual = getattr(ctx, c.field, None)
-        op = _OPERATORS.get(c.operator)
-        if op is None or not op(actual, c.value):
+        if not _field_condition_holds(c, ctx):
+            return False
+    if condition.design_data_any_of:
+        if not any(all(_field_condition_holds(c, ctx) for c in group) for group in condition.design_data_any_of):
             return False
     return True
 
 
 def _build_design_data_ref(panel_key: str, condition: StandardCondition, ctx: DesignDataContext) -> str:
     """設計データ根拠(`EvidenceRef.design_data_ref`)のJSON文字列を組み立てる
-    (Issue #40 Phase 6-B)。
+    (Issue #40 Phase 6-B、Phase 6-FでOR(`design_data_any_of`)対応を追加)。
 
     「判定に実際に使った項目だけ」を保存する方針のため、
-    `condition.design_data_conditions`(このルールが実際に評価した
-    field/operator/valueの組)だけを対象にし、`DesignDataContext`が持つ
-    他の設計データ値(条件に使われていないフィールド)は含めない。
-    `actual_value`は判定時点の`ctx`から取得した実際の値であり、再評価の
-    たびに最新値で作り直される(`estimate_results`/`estimate_result_evidence`
-    自体が現在状態のテーブルであるため。過去の判定根拠を遡って確認したい
-    場合は、確定snapshot(`estimate_confirmation_result_evidence`、Issue #40
-    Phase 6-A)側へ確定時点の値をコピーする)。
+    `condition.design_data_conditions`/`design_data_any_of`(このルールが
+    実際に評価したfield/operator/valueの組)だけを対象にし、
+    `DesignDataContext`が持つ他の設計データ値(条件に使われていない
+    フィールド)は含めない。`actual_value`は判定時点の`ctx`から取得した
+    実際の値であり、再評価のたびに最新値で作り直される
+    (`estimate_results`/`estimate_result_evidence`自体が現在状態の
+    テーブルであるため。過去の判定根拠を遡って確認したい場合は、確定snapshot
+    (`estimate_confirmation_result_evidence`、Issue #40 Phase 6-A)側へ
+    確定時点の値をコピーする)。
+
+    **後方互換性**: `design_data_any_of`が空の場合、出力JSONは
+    Phase 6-B時点と全く同じ形(`{"panel": ..., "conditions": [...]}`、
+    `any_of`キー無し)になる。`any_of`キーを追加するのは、このルールが
+    実際にOR条件を持つ場合のみ(Phase 6-A/Bの確定snapshot
+    (`estimate_confirmation_result_evidence.design_data_ref`)はこの文字列を
+    そのままコピーするだけなので、ここでの形を守れば確定snapshot側の互換性も
+    自動的に保たれる)。
     """
-    conditions = [
-        {
+
+    def _condition_dict(c: StandardConditionField) -> dict:
+        return {
             "field": c.field,
             "operator": c.operator,
             "expected_value": c.value,
             "actual_value": getattr(ctx, c.field, None),
         }
-        for c in condition.design_data_conditions
-    ]
-    return json.dumps({"panel": panel_key, "conditions": conditions}, ensure_ascii=False)
+
+    payload: dict = {
+        "panel": panel_key,
+        "conditions": [_condition_dict(c) for c in condition.design_data_conditions],
+    }
+    if condition.design_data_any_of:
+        payload["any_of"] = [
+            {
+                "matched": all(_field_condition_holds(c, ctx) for c in group),
+                "conditions": [_condition_dict(c) for c in group],
+            }
+            for group in condition.design_data_any_of
+        ]
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def _panel_evidence_by_type(

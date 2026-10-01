@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "generated_by": "Issue #40 Phase 6-D/6-F",
+  "note": "これは本番seedではない。backend/db/seed.py・master_importer.py等から自動ロードされない、レビュー用の候補マニフェストである。本番投入可否の最終判断はPhase 6-F報告(Issue #40)の本番投入判定表、および業務側確認を経て別途行う。実データの価格・工数等の実数値はここに一切含めない。",
+  "status_definitions": {
+    "ready": "資料の成立条件を技術的に完全表現でき、評価器(app/services/estimate_rule_evaluator.py)が対応する範囲(judgment_scope/quantity_method/calc_type)のみで、業務的な簡略化・未確認事項が無い",
+    "needs_business_confirmation": "技術的には動作するが、資料の条件の一部を簡略化している、複数解釈がある、またはAI class統合方法等の業務判断が必要",
+    "blocked": "対応コードの確定・必要な判定ロジック・データソースのいずれかが欠けており、現時点では実装・投入ができない"
+  },
+  "candidates": [
+    {
+      "key": "side_door",
+      "display_name": "側面扉",
+      "category": "扉",
+      "usage": "estimate_target",
+      "judgment_scope": "panel",
+      "ai_class_keys": ["sidedoor_l", "sidedoor_r"],
+      "related_codes": ["18302", "18330"],
+      "source_refs": [
+        "積算コードPDF『18302側面扉（追加）.pdf』",
+        "積算コードPDF『18330側面扉(無).pdf』",
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート)"
+      ],
+      "status": "needs_business_confirmation",
+      "blocker": "18302は箱コード標準含有枚数との差分(超過分のみ加算)が本来の条件だが、現行の検証用fixtureは単純な存在判定のみで過大計上の可能性がある。18330の「箱体OS左右盤の場合は標準含有のため計上しない」除外条件も未実装。",
+      "notes": "Phase 6-D/6-E/6-Fで動作確認済み(検証用DBコピー上)。衝突検出(既存Manual BBoxとの新旧重複)も確認済み。"
+    },
+    {
+      "key": "narrow_door",
+      "display_name": "観音扉(狭幅)",
+      "category": "扉",
+      "usage": "estimate_target",
+      "judgment_scope": "panel",
+      "ai_class_keys": ["narrow_door"],
+      "related_codes": [],
+      "source_refs": [
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「観音扉(狭幅)」条件・備考「盤幅1,100mm以下のもののみを対象」)",
+        "積算コードPDF『18303両開扉.pdf』(「W=1100以下の箱コードには正面扉1枚しか含まれていない」と記載があるが、narrow_doorクラスへの明示的な対応付けは無い)"
+      ],
+      "status": "blocked",
+      "blocker": "narrow_door(AI class)と18303(両開扉)の対応は推定であり、資料上に明示的な対応付けが無い。コードマッピング自体が未確定。"
+    },
+    {
+      "key": "small_door",
+      "display_name": "小扉",
+      "category": "扉",
+      "usage": "estimate_target",
+      "judgment_scope": "panel",
+      "ai_class_keys": ["small_door"],
+      "related_codes": ["18305", "18306"],
+      "source_refs": [
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「小扉」条件・備考「外形図記載と正面図(詳細)記載の2パターンあり」)",
+        "積算コードPDF『18305小扉(屋内操作用).pdf』",
+        "積算コードPDF『18306小扉(屋外操作用).pdf』"
+      ],
+      "status": "blocked",
+      "blocker": "18305(屋内)/18306(屋外)のどちらに対応するかを、資料(両PDFとも成立条件テキスト無し)からは判別できない。"
+    },
+    {
+      "key": "stack_doors",
+      "display_name": "段積扉",
+      "category": "扉",
+      "usage": "estimate_target",
+      "judgment_scope": "panel",
+      "ai_class_keys": ["2doors", "3doors"],
+      "related_codes": [],
+      "source_refs": [
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「段積扉(2枚)」「段積扉(3枚)」)",
+        "積算コードPDF『18307扉上下２段.pdf』『18329扉上下３段.pdf』(2doors/3doorsクラスへの明示的な対応付けは無い)"
+      ],
+      "status": "blocked",
+      "blocker": "2doors/3doors(AI class)と18307/18329の対応は推定であり、資料上に明示的な対応付けが無い。"
+    },
+    {
+      "key": "roof_fan_top",
+      "display_name": "換気扇(天井取付)",
+      "category": "換気",
+      "usage": "estimate_target",
+      "judgment_scope": "panel",
+      "ai_class_keys": ["roof_fan", "roof_fan_l", "roof_fan_r"],
+      "related_codes": ["18311"],
+      "source_refs": [
+        "積算コードPDF『18311換気扇上部取付.pdf』",
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: roof_fan「正面図」/roof_fan_l「左側面図」/roof_fan_r「右側面図」)"
+      ],
+      "status": "needs_business_confirmation",
+      "blocker": "roof_fan/roof_fan_l/roof_fan_rの3クラス(正面/左側面/右側面から見た同一の換気扇)をどう1つの図面情報へ統合するか未確定。統合せず3クラスを独立に数えると、1台の換気扇を複数回カウントする可能性がある。",
+      "notes": "Phase 6-D/6-E/6-Fでは`roof_fan`クラスのみを対象にした簡略版で動作確認済み(検証用DBコピー上、同種BBox複数→数量複数、衝突検出も確認)。"
+    },
+    {
+      "key": "door_fan",
+      "display_name": "換気扇(扉取付)",
+      "category": "換気",
+      "usage": "estimate_target",
+      "judgment_scope": "panel",
+      "ai_class_keys": ["door_fan"],
+      "related_codes": [],
+      "source_refs": [
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「換気扇（扉）」条件・備考「正背中図（基本的に背面のみ）」)",
+        "積算コードPDF『18312換気扇側面取付.pdf』(door_fanクラスへの明示的な対応付けは無い)"
+      ],
+      "status": "blocked",
+      "blocker": "door_fan(AI class、扉取付の換気扇)と18312(側面取付)の対応は名称が一致せず、資料上の明示的な対応付けが無い。"
+    },
+    {
+      "key": "vct",
+      "display_name": "VCT",
+      "category": "受電機器",
+      "usage": "condition",
+      "judgment_scope": "panel",
+      "ai_class_keys": ["vct_stand"],
+      "related_codes": ["18323"],
+      "source_refs": [
+        "積算コードPDF『18323VCT架台.pdf』",
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: vct_stand「種類多めに。但し取得条件きついのでザックリでいい」)"
+      ],
+      "status": "blocked",
+      "blocker": "18323の成立条件(CHがVCTの上にあれば成立)に必要な位置関係判定(JudgmentScope.POSITION)が評価器に未実装(Phase 6-E/6-Fで幾何predicate `app/domain/geometry.py` は用意したが実ルールへは未接続)。"
+    },
+    {
+      "key": "ch",
+      "display_name": "CH(ケーブルヘッド)",
+      "category": "受電機器",
+      "usage": "condition",
+      "judgment_scope": "panel",
+      "ai_class_keys": [],
+      "related_codes": ["18323"],
+      "source_refs": [
+        "積算コードPDF『18323VCT架台.pdf』"
+      ],
+      "status": "blocked",
+      "blocker": "対応する既存AI検出classが資料(AI対応リストExcel)から特定できない。加えて18323同様、position scope未実装のため成立条件を正しく表現できない。"
+    },
+    {
+      "key": "transformer",
+      "display_name": "トランス",
+      "category": "受電機器",
+      "usage": "both",
+      "judgment_scope": "panel",
+      "ai_class_keys": ["transformer"],
+      "related_codes": ["18313", "18314"],
+      "source_refs": [
+        "積算コードPDF『18313-314ﾄﾗﾝｽ架台(ﾁｬﾝﾈﾙﾍﾞｰｽ).pdf』",
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「トランス」)"
+      ],
+      "status": "blocked",
+      "blocker": "18313/18314の使い分け基準が資料から読み取れない(赤枠は「18313,14」併記のみ)。特定メーカー向け個別仕様図が混在しており一般化にも注意が必要。"
+    },
+    {
+      "key": "panel_internal",
+      "display_name": "内部パネル",
+      "category": "内部機器",
+      "usage": "both",
+      "judgment_scope": "panel",
+      "ai_class_keys": ["panel"],
+      "related_codes": ["18001", "18016"],
+      "source_refs": [
+        "積算コードPDF『18001-16内部ﾊﾟﾈﾙ.pdf』",
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「内部パネル」備考「ここでいうパネルは操作+MCCB」)"
+      ],
+      "status": "blocked",
+      "blocker": "18001〜18016の16コードを1枚のPDFにまとめているが、個々のコードの判定基準が資料から読み取れない。"
+    },
+    {
+      "key": "rotate_panel",
+      "display_name": "回転パネル",
+      "category": "内部機器",
+      "usage": "estimate_target",
+      "judgment_scope": "panel",
+      "ai_class_keys": ["rotate_panel"],
+      "related_codes": ["18319"],
+      "source_refs": [
+        "積算コードPDF『18319内部ﾊﾟﾈﾙ回転.pdf』",
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「回転パネル」)"
+      ],
+      "status": "blocked",
+      "blocker": "「回転」という動作機構は静止図面だけでは判別が困難と資料調査で判明している。"
+    },
+    {
+      "key": "partition",
+      "display_name": "仕切り板",
+      "category": "内部機器",
+      "usage": "both",
+      "judgment_scope": "panel",
+      "ai_class_keys": ["partition"],
+      "related_codes": ["18201", "18308", "18309"],
+      "source_refs": [
+        "積算コードPDF『18201-214仕切り板.pdf』『18308仕切り2段積.pdf』『18309仕切り3段積.pdf』",
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「仕切り板記号」)"
+      ],
+      "status": "blocked",
+      "blocker": "18201-214PDFのファイル名範囲(〜214)と実際の記載内容(1条件のみ)が一致しておらず、抜粋資料の可能性がある。2段/3段の判別規則も解釈の域を出ない。"
+    },
+    {
+      "key": "stack_plate",
+      "display_name": "段積み板",
+      "category": "内部機器",
+      "usage": "estimate_target",
+      "judgment_scope": "panel",
+      "ai_class_keys": ["stack_plate"],
+      "related_codes": ["18308", "18309"],
+      "source_refs": [
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「段積み板」備考「前後レール含む」)"
+      ],
+      "status": "blocked",
+      "blocker": "18308/18309との対応は推定であり、資料上に明示的な対応付けが無い。"
+    },
+    {
+      "key": "drawer_device",
+      "display_name": "引出装置",
+      "category": "内部機器",
+      "usage": "estimate_target",
+      "judgment_scope": "panel",
+      "ai_class_keys": ["drawer_device"],
+      "related_codes": ["18310"],
+      "source_refs": [
+        "積算コードPDF『18310引出機器VCB･VT・LA・ZPC(IA・OAのみ).pdf』(「箱体IA・OAの場合のみ」「1台につき1コード選択」)",
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「引出装置」備考「対象機器全て用意するIA/OA型(VCB･VT・LA・ZPC)」)"
+      ],
+      "status": "needs_business_confirmation",
+      "blocker": "箱体型式がIA/OAかどうかという設計データ条件との組合せ(evidence+design_data AND)はPhase 6-Eで技術的には表現可能になったが、IA/OA製品のMODEL列の実際の文字列パターンが実データで未確認(A1GV2421はIS系のみ確認済み)。"
+    },
+    {
+      "key": "bus_duct",
+      "display_name": "バスダクト",
+      "category": "配線",
+      "usage": "estimate_target",
+      "judgment_scope": "panel",
+      "ai_class_keys": ["bus_duct"],
+      "related_codes": ["18317"],
+      "source_refs": [
+        "積算コードPDF『18317ﾊﾞｽﾀﾞｸﾄ.pdf』(非該当例のみ確認、肯定例の記載なし)",
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「バスダクト」備考「未知のため種類多く用意する」)"
+      ],
+      "status": "blocked",
+      "blocker": "成立条件の積極的な記載が資料に無く、非該当(×)例しか確認できていない。"
+    },
+    {
+      "key": "passage",
+      "display_name": "盤内通路",
+      "category": "構造",
+      "usage": "both",
+      "judgment_scope": "design_data",
+      "ai_class_keys": ["passage"],
+      "related_codes": ["18321", "18322"],
+      "source_refs": [
+        "積算コードPDF『18321-322盤内通路.pdf』(「18321=IA,OA」「18322=IS,OS」)",
+        "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「盤内通路」)"
+      ],
+      "status": "needs_business_confirmation",
+      "blocker": "型式(IS/OS系かIA/OA系か)のみで盤内通路スペースの有無・コード要否を断定してよいかが資料からは確認できない(資料内に「×」の非該当例も複数ある)。18322側はPhase 6-FでOR条件(IS*またはOS*)により技術的には表現可能になったが、この業務判断が未確認のため投入しない。"
+    }
+  ]
+}

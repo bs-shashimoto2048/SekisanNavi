@@ -337,6 +337,43 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     expect(button.title).not.toContain('ban_d')
   })
 
+  it('[Issue #40 Phase 6-F] shows OR condition (design_data_any_of) branches with matched/unmatched markers', () => {
+    renderDetail({
+      results: [
+        makeResult({
+          evidence: [
+            {
+              id: 1,
+              evidence_kind: 'design_data',
+              detection_id: null,
+              design_data_ref: JSON.stringify({
+                panel: '1:1',
+                conditions: [],
+                any_of: [
+                  {
+                    matched: true,
+                    conditions: [
+                      { field: 'model', operator: 'starts_with', expected_value: 'IS', actual_value: 'IS2' },
+                    ],
+                  },
+                  {
+                    matched: false,
+                    conditions: [
+                      { field: 'model', operator: 'starts_with', expected_value: 'OS', actual_value: 'IS2' },
+                    ],
+                  },
+                ],
+              }),
+            },
+          ],
+        }),
+      ],
+    })
+    const button = screen.getByRole('button', { name: '根拠' })
+    expect(button.title).toContain('○ 型式: IS2 が "IS" で始まる')
+    expect(button.title).toContain('× 型式: IS2 が "OS" で始まる')
+  })
+
   it('[Issue #40 Phase 6-B] falls back to a plain "設計データ" label for pre-Phase-6-B design_data_ref values ({"panel": "..."} only)', () => {
     renderDetail({
       results: [

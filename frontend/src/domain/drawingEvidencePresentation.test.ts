@@ -3,6 +3,7 @@ import {
   applicableUnitLabel,
   designDataFieldLabel,
   designDataOperatorLabel,
+  formatDesignDataAnyOfGroups,
   formatDesignDataCondition,
   judgmentMethodLabel,
   judgmentScopeLabel,
@@ -131,5 +132,84 @@ describe('design_data_ref presentation (Issue #40 Phase 6-B: 内部field名を�
     expect(
       formatDesignDataCondition({ field: 'ban_w', operator: '>=', expected_value: 900, actual_value: null }),
     ).toBe('幅: 不明 ≥ 900')
+  })
+
+  it('[Issue #40 Phase 6-E] formats starts_with as a natural Japanese sentence, not a symbol', () => {
+    expect(
+      formatDesignDataCondition({ field: 'model', operator: 'starts_with', expected_value: 'IS', actual_value: 'IS2' }),
+    ).toBe('型式: IS2 が "IS" で始まる')
+  })
+
+  it('[Issue #40 Phase 6-E] formats in with the candidate list, not a symbol', () => {
+    expect(
+      formatDesignDataCondition({
+        field: 'model',
+        operator: 'in',
+        expected_value: ['IS1', 'IS2', 'OS1'],
+        actual_value: 'IS2',
+      }),
+    ).toBe('型式: IS2 が [IS1, IS2, OS1] のいずれか')
+  })
+})
+
+describe('design_data_ref OR (any_of) presentation (Issue #40 Phase 6-F指示B)', () => {
+  it('parses a design_data_ref with any_of groups', () => {
+    const ref = parseDesignDataRef(
+      JSON.stringify({
+        panel: '1:1',
+        conditions: [],
+        any_of: [
+          {
+            matched: true,
+            conditions: [{ field: 'model', operator: 'starts_with', expected_value: 'IS', actual_value: 'IS2' }],
+          },
+          {
+            matched: false,
+            conditions: [{ field: 'model', operator: 'starts_with', expected_value: 'OS', actual_value: 'IS2' }],
+          },
+        ],
+      }),
+    )
+    expect(ref?.any_of).toHaveLength(2)
+    expect(ref?.any_of?.[0].matched).toBe(true)
+    expect(ref?.any_of?.[1].matched).toBe(false)
+  })
+
+  it('omits any_of (undefined) for a design_data_ref without OR conditions (Phase 6-E以前との後方互換)', () => {
+    const ref = parseDesignDataRef(JSON.stringify({ panel: '1:1', conditions: [] }))
+    expect(ref?.any_of).toBeUndefined()
+  })
+
+  it('still parses a pre-Phase-6-B design_data_ref ({"panel": "..."} only) without any_of', () => {
+    const ref = parseDesignDataRef('{"panel": "1:1"}')
+    expect(ref).toEqual({ panel: '1:1', conditions: [] })
+    expect(ref?.any_of).toBeUndefined()
+  })
+
+  it('formats any_of groups with a matched/unmatched marker per group', () => {
+    const lines = formatDesignDataAnyOfGroups([
+      {
+        matched: true,
+        conditions: [{ field: 'model', operator: 'starts_with', expected_value: 'IS', actual_value: 'IS2' }],
+      },
+      {
+        matched: false,
+        conditions: [{ field: 'model', operator: 'starts_with', expected_value: 'OS', actual_value: 'IS2' }],
+      },
+    ])
+    expect(lines).toEqual(['○ 型式: IS2 が "IS" で始まる', '× 型式: IS2 が "OS" で始まる'])
+  })
+
+  it('joins multiple AND conditions within one OR group with "かつ"', () => {
+    const lines = formatDesignDataAnyOfGroups([
+      {
+        matched: true,
+        conditions: [
+          { field: 'model', operator: 'starts_with', expected_value: 'IS', actual_value: 'IS2' },
+          { field: 'ban_w', operator: '>=', expected_value: 900, actual_value: 1200 },
+        ],
+      },
+    ])
+    expect(lines).toEqual(['○ 型式: IS2 が "IS" で始まる かつ 幅: 1200 ≥ 900'])
   })
 })

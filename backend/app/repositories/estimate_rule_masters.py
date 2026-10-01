@@ -29,6 +29,14 @@ _COLUMNS = """
 
 
 def _parse_condition(raw: str | None) -> StandardCondition | None:
+    """`judgment_condition`(JSON文字列)をパースする。
+
+    Issue #40 Phase 6-Fで`design_data_any_of`(OR表現)を追加したが、
+    このキーを持たない旧JSON(Phase 6-E以前にDBへ保存済みの行)は
+    `data.get("design_data_any_of", [])`により空リストとして扱われ、
+    `StandardCondition.design_data_any_of=[]`(OR制約なし、従来通りAND
+    のみ)として問題なくパースできる(完全な後方互換性)。
+    """
     if raw is None:
         return None
     data = json.loads(raw)
@@ -38,21 +46,40 @@ def _parse_condition(raw: str | None) -> StandardCondition | None:
             StandardConditionField(field=c["field"], operator=c["operator"], value=c["value"])
             for c in data.get("design_data_conditions", [])
         ],
+        design_data_any_of=[
+            [
+                StandardConditionField(field=c["field"], operator=c["operator"], value=c["value"])
+                for c in group
+            ]
+            for group in data.get("design_data_any_of", [])
+        ],
     )
 
 
 def _serialize_condition(condition: StandardCondition | None) -> str | None:
+    """`judgment_condition`をJSON文字列へ直列化する。
+
+    Issue #40 Phase 6-F: `design_data_any_of`が空の場合(OR条件を持たない
+    ルール、Phase 6-E以前からある全ルールが該当)は、このキー自体を出力
+    しない。これにより、OR条件を使わないルールのJSON表現はPhase 6-E以前と
+    完全に同じバイト列になり、既存DBとの差分を生まない(明示的な後方互換
+    設計)。
+    """
     if condition is None:
         return None
-    return json.dumps(
-        {
-            "required_evidence_types": condition.required_evidence_types,
-            "design_data_conditions": [
-                {"field": c.field, "operator": c.operator, "value": c.value}
-                for c in condition.design_data_conditions
-            ],
-        }
-    )
+    payload: dict = {
+        "required_evidence_types": condition.required_evidence_types,
+        "design_data_conditions": [
+            {"field": c.field, "operator": c.operator, "value": c.value}
+            for c in condition.design_data_conditions
+        ],
+    }
+    if condition.design_data_any_of:
+        payload["design_data_any_of"] = [
+            [{"field": c.field, "operator": c.operator, "value": c.value} for c in group]
+            for group in condition.design_data_any_of
+        ]
+    return json.dumps(payload)
 
 
 def _row_to_rule_master(row: sqlite3.Row) -> EstimateRuleMaster:
