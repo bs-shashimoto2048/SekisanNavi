@@ -35,6 +35,7 @@ vi.mock('./components/DrawingViewer/DrawingCanvas', () => ({
     selectedDetectionLabel,
     onDeleteSelectedDetection,
     onBackgroundClick,
+    onCreateBBox,
   }: {
     title?: string
     children?: ReactNode
@@ -42,6 +43,7 @@ vi.mock('./components/DrawingViewer/DrawingCanvas', () => ({
     selectedDetectionLabel?: string | null
     onDeleteSelectedDetection?: () => void
     onBackgroundClick?: () => void
+    onCreateBBox?: (rect: { x: number; y: number; w: number; h: number }) => void
   }) => (
     <div data-testid="drawing-canvas-stub" data-bbox-add-mode={String(!!bboxAddMode)}>
       {/* Viewer上部1行化 指示2章: 実DrawingCanvasでは図面名(title)がtoolbar内に
@@ -56,6 +58,13 @@ vi.mock('./components/DrawingViewer/DrawingCanvas', () => ({
           Appからの伝播確認が目的のためここでは単純なボタンで代替する。 */}
       <button type="button" onClick={onBackgroundClick}>
         背景クリック
+      </button>
+      {/* [Issue #40 Phase 6-C] 実DrawingCanvasはマウスdragで矩形を確定するが、
+          このstubではその座標計算ロジックを再現せず、固定矩形で
+          `onCreateBBox`(= `handleCreateEvidenceBBox`/`handleCreateManualBBox`)を
+          直接呼べるボタンで代替する(Appからの伝播確認が目的のため)。 */}
+      <button type="button" onClick={() => onCreateBBox?.({ x: 0.2, y: 0.2, w: 0.1, h: 0.1 })}>
+        BBoxドラッグ作成
       </button>
       {children}
     </div>
@@ -1052,6 +1061,8 @@ describe('App: 積算コードMaster行選択 → Manual BBox追加モード (Ph
 
   it('toggles bboxAddMode on row select/re-click/switch, and keeps selection after a BBox is added', async () => {
     render(<App />)
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
 
     const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
     const row11002 = screen.getByText('11002').closest('tr') as HTMLElement
@@ -1078,6 +1089,207 @@ describe('App: 積算コードMaster行選択 → Manual BBox追加モード (Ph
       expect(row11001.className).not.toContain('master-picker__row--selected')
     })
     expect(drawingCanvasStub().dataset.bboxAddMode).toBe('true')
+  })
+})
+
+describe('App: 図面情報→BBox作成 (Issue #40 Phase 6-C指示3章/4章)', () => {
+  function drawingCanvasStub() {
+    return screen.getByTestId('drawing-canvas-stub')
+  }
+
+  const sideDoorEvidenceType = {
+    id: 1,
+    key: 'side_door',
+    display_name: '側面扉',
+    category: '建具',
+    usage: 'estimate_target' as const,
+    default_judgment_scope: 'panel' as const,
+    description: null,
+    enabled: true,
+  }
+
+  afterEach(async () => {
+    // [Issue #40 Phase 6-C] App.tsx自身(evidenceDisplayNameByKey用)と
+    // DrawingEvidencePanel自身の、2箇所から独立にfetchDrawingEvidenceTypes()が
+    // 呼ばれるため、呼ばれる回数に依存しない`mockResolvedValue`(persistent)を
+    // 使う。他のdescribeブロックへ影響を残さないよう、既定値(空配列)へ戻す。
+    const { fetchDrawingEvidenceTypes } = await import('./api/client')
+    vi.mocked(fetchDrawingEvidenceTypes).mockResolvedValue([])
+    // DrawingEvidencePanelの「最近使用」はlocalStorageへ永続化されるため
+    // (`sekisanNavi.drawingEvidencePanel.recentKeys`)、テスト間で選択履歴が
+    // 残って後続テストの行(通常行+最近使用chipの2つ)が曖昧にならないよう消す。
+    window.localStorage.clear()
+  })
+
+  it('[PR #47レビュー指摘対応] does not surface a failed evidenceDisplayNameByKey fetch as the common App error banner, and the Viewer/既存panelはそのまま使える', async () => {
+    const { fetchDrawingEvidenceTypes } = await import('./api/client')
+    // App.tsx自身の取得(BBoxラベル解決用)だけを失敗させる。
+    // DrawingEvidencePanel自身の取得(1回目相当)は成功値を返す想定だが、
+    // どちらが先に呼ばれても同じ結果になるよう、両方の呼び出しを
+    // 「1回目reject・以降は空配列で継続」という設定にする
+    // (`mockResolvedValue`のデフォルトへの後方互換は`afterEach`が担保)。
+    vi.mocked(fetchDrawingEvidenceTypes).mockRejectedValueOnce(new Error('network error'))
+
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
+
+    // App共通のerror bannerは表示されない(`app-layout__error`)。
+    expect(document.querySelector('.app-layout__error')).not.toBeInTheDocument()
+
+    // 既存のViewer/floating panelは通常どおり使える(回帰無し、部品台帳は
+    // Phase 6-Cで既定非表示へ変更済みのため、既定表示中のpanelで確認する)。
+    expect(screen.getByRole('heading', { name: '積算明細' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
+    const thumbnail = await screen.findByRole('img', { name: 'P16' })
+    fireEvent.click(thumbnail)
+    await screen.findByTitle(/roof_fan/)
+  })
+
+  it('[PR #47レビュー指摘対応] falls back to class_name when evidenceDisplayNameByKey could not be fetched (App側取得失敗を模す)', async () => {
+    const { fetchDrawingEvidenceTypes } = await import('./api/client')
+    // App.tsx自身・DrawingEvidencePanel自身の両方のfetchDrawingEvidenceTypes()を
+    // 失敗させる(evidenceDisplayNameByKeyが確実に空Mapのまま継続する状況を
+    // 作る)。既存のevidence_type_key付きfixtureを使い、ラベル解決自体は
+    // `DetectionOverlay.test.tsx`側で既に単体検証済みのため、ここでは
+    // App.tsx統合レベルで「クラッシュせず、class_nameがそのままラベルに
+    // 出ること」のみを確認する。
+    vi.mocked(fetchDrawingEvidenceTypes).mockRejectedValue(new Error('network error'))
+    const evidenceDetection: Detection = {
+      id: 400,
+      drawing_page_id: 1, // pageOutline(P16)
+      panel_id: null,
+      class_name: 'side_door',
+      bbox_x: 0.6,
+      bbox_y: 0.6,
+      bbox_w: 0.05,
+      bbox_h: 0.05,
+      confidence: null,
+      status: 'reviewed',
+      source_type: 'manual',
+      master_item_id: null,
+      leader_label_x: null,
+      leader_label_y: null,
+      master_item_category: null,
+      master_item_model: null,
+      master_item_code: null,
+      evidence_type_key: 'side_door',
+    }
+    seedLiveDetections([detectionOnOutline, masterLinkedDetectionOnOutline, evidenceDetection])
+
+    render(<App />)
+    const thumbnail = await screen.findByRole('img', { name: 'P16' })
+    fireEvent.click(thumbnail)
+    await screen.findByTitle(/roof_fan/)
+
+    // クラッシュせず、evidence_type_key BBoxはclass_name(side_door)のまま
+    // 表示される(evidenceDisplayNameByKeyが空Mapのため、図面情報名への
+    // 解決ができず安全にfallbackする)。
+    await waitFor(() => {
+      const labels = Array.from(document.querySelectorAll('.detection-overlay__label')).map((el) => el.textContent)
+      expect(labels.some((l) => l?.includes('side_door'))).toBe(true)
+    })
+    expect(document.querySelector('.app-layout__error')).not.toBeInTheDocument()
+  })
+
+  it('selecting a 図面情報 row enables bboxAddMode and shows the "次の操作" prompt', async () => {
+    const { fetchDrawingEvidenceTypes } = await import('./api/client')
+    vi.mocked(fetchDrawingEvidenceTypes).mockResolvedValue([sideDoorEvidenceType])
+    render(<App />)
+    const row = await screen.findByRole('button', { name: /側面扉/ })
+    fireEvent.click(row)
+
+    expect(screen.getByText(/選択中: 側面扉 — 図面上を囲んで追加/)).toBeInTheDocument()
+    await waitFor(() => expect(drawingCanvasStub().dataset.bboxAddMode).toBe('true'))
+  })
+
+  it('creates an evidence BBox via createEvidenceDetection with the selected key, and shows it with the Japanese display name (not the raw key)', async () => {
+    const { fetchDrawingEvidenceTypes, createEvidenceDetection } = await import('./api/client')
+    vi.mocked(fetchDrawingEvidenceTypes).mockResolvedValue([sideDoorEvidenceType])
+    const createdDetection: Detection = {
+      id: 300,
+      drawing_page_id: 2, // pageFoundation(P18)、既定表示中のページ
+      panel_id: null,
+      class_name: 'side_door',
+      bbox_x: 0.2,
+      bbox_y: 0.2,
+      bbox_w: 0.1,
+      bbox_h: 0.1,
+      confidence: null,
+      status: 'reviewed',
+      source_type: 'manual',
+      master_item_id: null,
+      leader_label_x: null,
+      leader_label_y: null,
+      master_item_category: null,
+      master_item_model: null,
+      master_item_code: null,
+      evidence_type_key: 'side_door',
+    }
+    vi.mocked(createEvidenceDetection).mockResolvedValueOnce(createdDetection)
+
+    render(<App />)
+    const row = await screen.findByRole('button', { name: /側面扉/ })
+    fireEvent.click(row)
+    await waitFor(() => expect(drawingCanvasStub().dataset.bboxAddMode).toBe('true'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'BBoxドラッグ作成' }))
+
+    await waitFor(() =>
+      expect(createEvidenceDetection).toHaveBeenCalledWith(
+        expect.objectContaining({ evidence_type_key: 'side_door' }),
+      ),
+    )
+    // ラベルは積算コード/内部key(class_name='side_door')ではなく、図面情報の
+    // 日本語表示名(側面扉)で表示される(指示4章)。
+    await waitFor(() => {
+      const labels = Array.from(document.querySelectorAll('.detection-overlay__label')).map((el) => el.textContent)
+      expect(labels.some((l) => l?.includes('側面扉'))).toBe(true)
+      expect(labels.some((l) => l === 'side_door')).toBe(false)
+    })
+  })
+})
+
+describe('App: 積算結果の増減toast (Issue #40 8章のtoast機構、Issue #40 Phase 6-C指示5章/12章でApp level検証を追加)', () => {
+  async function navigateToOutlinePage() {
+    const thumbnail = await screen.findByRole('img', { name: 'P16' })
+    fireEvent.click(thumbnail)
+    await screen.findByTitle(/roof_fan/)
+  }
+
+  it('shows a "+" toast when a new Manual BBox creates a new EstimateResult after re-evaluation', async () => {
+    render(<App />)
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
+    const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
+    fireEvent.click(row11001)
+    await waitFor(() => expect(screen.getByTestId('drawing-canvas-stub').dataset.bboxAddMode).toBe('true'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'BBoxドラッグ作成' }))
+
+    await waitFor(() => {
+      const toastStack = document.querySelector('.app-layout__rule-toast-stack') as HTMLElement
+      expect(toastStack).not.toBeNull()
+      expect(within(toastStack).getByText(/＋/)).toBeInTheDocument()
+    })
+  })
+
+  it('shows a "－" toast when deleting a Detection removes its EstimateResult after re-evaluation', async () => {
+    render(<App />)
+    await navigateToOutlinePage()
+
+    // masterLinkedDetectionOnOutline(18999)はmaster_item_idに紐づくため通常時は
+    // 引出線のみ表示される(本体BBoxは選択中のみ表示)。
+    fireEvent.click(screen.getByRole('button', { name: '18999 テスト品目' }))
+    const deleteButton = await screen.findByRole('button', { name: 'BBox削除' })
+    await waitFor(() => expect(deleteButton).not.toBeDisabled())
+
+    fireEvent.click(deleteButton)
+
+    await waitFor(() => {
+      const toastStack = document.querySelector('.app-layout__rule-toast-stack') as HTMLElement
+      expect(toastStack).not.toBeNull()
+      expect(within(toastStack).getByText(/－/)).toBeInTheDocument()
+    })
   })
 })
 
@@ -1134,6 +1346,8 @@ describe('App: BBox削除 (Phase 1.7)', () => {
     // 部品台帳のカテゴリ選択select(SELECT要素、ガード対象に含まれる)を使う。
     const { deleteDetection } = await import('./api/client')
     render(<App />)
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     await navigateToOutlinePage()
     fireEvent.click(screen.getByTitle(/roof_fan/))
     await waitFor(() => expect(screen.getByRole('button', { name: 'BBox削除' })).not.toBeDisabled())
@@ -1255,6 +1469,8 @@ describe('App: 左ペインのリサイズ・右ペイン廃止 (UIレイアウ�
 
   it('keeps EstimateMasterPicker inside MainArea, which is now the sole child of .app-workspace', async () => {
     await renderApp()
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     const workspace = document.querySelector('.app-workspace') as HTMLElement
     const mainArea = document.querySelector('.app-workspace__main') as HTMLElement
     const master = document.querySelector('.master-picker') as HTMLElement
@@ -1404,6 +1620,8 @@ describe('App: 積算コードMasterのfloating panel化 (Issue #19 追加修正
 
   it('renders EstimateMasterPicker inside .floating-panel--master, not as a fixed bottom row', async () => {
     await renderApp()
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     expect(screen.queryByRole('separator', { name: '積算コードMasterの高さを変更' })).not.toBeInTheDocument()
 
     const masterFloat = document.querySelector('.floating-panel--master') as HTMLElement
@@ -1415,21 +1633,24 @@ describe('App: 積算コードMasterのfloating panel化 (Issue #19 追加修正
     expect(await within(masterFloat).findByText('11001')).toBeInTheDocument()
   })
 
-  it('shows 部品台帳 by default, and can be hidden/shown via its toggle', async () => {
+  it('hides 部品台帳 by default (Issue #40 Phase 6-C指示1章: 補助機能として既定OFF), and can be shown/hidden via its toggle', async () => {
     await renderApp()
     const toggle = screen.getByRole('button', { name: '部品台帳' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    expect(document.querySelector('.floating-panel--master')).not.toBeInTheDocument()
+
+    fireEvent.click(toggle)
+    expect(document.querySelector('.floating-panel--master')).toBeInTheDocument()
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
 
     fireEvent.click(toggle)
     expect(document.querySelector('.floating-panel--master')).not.toBeInTheDocument()
-    expect(toggle).toHaveAttribute('aria-pressed', 'false')
-
-    fireEvent.click(toggle)
-    expect(document.querySelector('.floating-panel--master')).toBeInTheDocument()
   })
 
   it('does not affect Master item selection / BBox add mode wiring (既存連携にregressionがない)', async () => {
     await renderApp()
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
     fireEvent.click(row11001)
     await waitFor(() => expect(row11001.className).toContain('master-picker__row--selected'))
@@ -1455,6 +1676,8 @@ describe('App: 積算コードMasterのfloating panel化 (Issue #19 追加修正
 
   it('gives the master floating panel its own kind別 outer border/heading theme, while sharing the same shell shape as the info panels (Issue #34)', async () => {
     await renderApp()
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     const masterFloat = document.querySelector('.floating-panel--master') as HTMLElement
     const infoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
 
@@ -1536,7 +1759,7 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
     await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
   }
 
-  it('renders the 3 panel toggles inside the edit toolbar (not as a floating bar over the Viewer), in 盤情報→積算集約→積算明細 order', async () => {
+  it('renders the panel toggles inside the edit toolbar (not as a floating bar over the Viewer), in 図面情報→盤情報→積算集約→積算明細→部品台帳→操作ガイド order (Issue #40 Phase 6-C指示2章)', async () => {
     await renderApp()
     const toolbar = document.querySelector('.app-layout__edit-toolbar') as HTMLElement
     const toggleGroup = document.querySelector('.panel-visibility-toggles') as HTMLElement
@@ -1547,24 +1770,21 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
 
     const buttons = within(toggleGroup).getAllByRole('button')
     // 追加UI修正指示1章: ボタン表示文字はON/OFFに関わらず常に固定ラベル。
-    // [追加修正] 積算コードMasterのfloating panel化に伴い、区切り線を挟んで
-    // 4つ目のトグルが末尾へ追加された。UI名称は「部品台帳」(指示1章)。
-    // [Issue #31] Viewer内「操作ガイド」トグルが先頭(盤情報の手前)へ
-    // 区切り線付きで追加された。操作ガイドは既定非表示のため、他4panelとは
-    // 別にaria-pressedを検証する。
-    // [Issue #40 Phase 3] 「図面情報」トグルが末尾へ追加された。既存Manual BBox
-    // 主導線を壊さないため既定非表示(操作ガイドと同様に別途検証する)。
+    // [Issue #40 Phase 6-C指示1章/2章] 新ワークフローに合わせ表示順・既定値を
+    // 整理した: 図面情報(既定ON、主導線)/盤情報/積算集約/積算明細(既定ON)/
+    // 部品台帳(既定OFF、補助機能)/操作ガイド(既定OFF、クイックリファレンス)。
     expect(buttons.map((b) => b.textContent)).toEqual([
-      '操作ガイド',
+      '図面情報',
       '盤情報',
       '積算集約',
       '積算明細',
       '部品台帳',
-      '図面情報',
+      '操作ガイド',
     ])
-    expect(buttons[0].getAttribute('aria-pressed')).toBe('false')
-    expect(buttons.slice(1, -1).every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true)
-    expect(buttons[buttons.length - 1].getAttribute('aria-pressed')).toBe('false')
+    expect(buttons[0].getAttribute('aria-pressed')).toBe('true') // 図面情報
+    expect(buttons.slice(1, 4).every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true) // 盤情報/積算集約/積算明細
+    expect(buttons[4].getAttribute('aria-pressed')).toBe('false') // 部品台帳
+    expect(buttons[5].getAttribute('aria-pressed')).toBe('false') // 操作ガイド
   })
 
   it('gives the panel-visibility toggles a filled ON vs. muted OFF look, distinct from Undo/Redo (追加UI修正指示2章、Issue #34でkind別theme化)', async () => {
@@ -1869,10 +2089,11 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     // 幅500px([Issue #36] kind別初期幅、480→500へ調整済み)・コンテナ1200pxに
     // 対し、右端から20pxのマージンで右寄せされている(1200 - 20 - 500 = 680)。
     expect(reshown.style.left).toBe('680px')
-    // 積み重ねの段数は「表示中panelの固定宣言順(盤情報→積算集約→積算明細→
-    // 部品台帳)における自分の順位」で決まる(他panelの表示ON/OFF状況に
-    // かかわらず、積算集約は常に2段目=段数1)。48 + 1 * 40 = 88。
-    expect(reshown.style.top).toBe('88px')
+    // 積み重ねの段数は「表示中panelの固定宣言順(Issue #40 Phase 6-Cで
+    // 図面情報→盤情報→積算集約→積算明細→部品台帳へ変更)における自分の順位」
+    // で決まる。図面情報・盤情報は既定表示ONのため、積算集約は3段目=段数2。
+    // 48 + 2 * 40 = 128。
+    expect(reshown.style.top).toBe('128px')
   })
 
   it('[Issue #36] gives 積算集約 an initial width of 500px (up from 480px, to fit the 1行compact row at the panel既定幅)', async () => {
@@ -1928,8 +2149,11 @@ describe('App: floating panelの初期配置(右端寄せ・積み重ね)とView
     await renderApp()
     setViewerWrapRect(1600, 900)
 
-    // 4panelすべてOFFにしてから、1つずつONにして積み重ねを確認する。
-    for (const name of ['盤情報', '積算集約', '積算明細', '部品台帳']) {
+    // 5panelすべてOFFにしてから、1つずつONにして積み重ねを確認する
+    // (Issue #40 Phase 6-Cで「図面情報」が既定表示ONへ変わったため、
+    // こちらも明示的にOFFにする。「部品台帳」は既定表示OFFへ変わったため
+    // 元々OFFであり、ここではクリックしない)。
+    for (const name of ['図面情報', '盤情報', '積算集約', '積算明細']) {
       fireEvent.click(screen.getByRole('button', { name }))
     }
     expect(document.querySelectorAll('.floating-panel')).toHaveLength(0)
@@ -2126,13 +2350,15 @@ describe('App: Viewer内「操作ガイド」floating panel (Issue #31)', () => 
     await renderApp()
     setViewerWrapRect(1600, 900)
 
-    // 既存4panelは初期mount時(コンテナ実寸0x0)に一度だけ配置計算されているため、
+    // 既存panelは初期mount時(コンテナ実寸0x0)に一度だけ配置計算されているため、
     // stub適用後の値で検証するには一度OFF→ONにして「表示された瞬間」の計算を
     // 作り直す必要がある(既存のIssue #25テストと同じ手順)。操作ガイドは
-    // この4panelとは無関係にstackIndexが常に0になる設計なので、先にON/OFFを
-    // 済ませてから最後に操作ガイドを表示しても、検証したい「既存4panelの
-    // 積み重ねが乱れないこと」自体には影響しない。
-    for (const name of ['盤情報', '積算集約', '積算明細', '部品台帳']) {
+    // この5panelとは無関係にstackIndexが常に0になる設計なので、先にON/OFFを
+    // 済ませてから最後に操作ガイドを表示しても、検証したい「既存panelの
+    // 積み重ねが乱れないこと」自体には影響しない。[Issue #40 Phase 6-C]
+    // 「図面情報」も既定表示ONへ変わったため、他panelと同様に一度OFFにする
+    // (盤情報/積算集約の相対的な積み重ね段数(1段目/2段目)を検証したいため)。
+    for (const name of ['図面情報', '盤情報', '積算集約', '積算明細', '部品台帳']) {
       fireEvent.click(screen.getByRole('button', { name }))
     }
     for (const name of ['盤情報', '積算集約']) {
@@ -2249,6 +2475,8 @@ describe('App: floating panelの枠線強化 (Issue #19 追加UI修正指示4章
   it('gives each of the 5 floating panels its own kind別 outer border theme (Issue #34, replaces the old "same border for all 3" assumption)', async () => {
     await renderApp()
     fireEvent.click(screen.getByRole('button', { name: '操作ガイド' }))
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     const kinds = ['guide', 'panelInfo', 'aggregation', 'detail', 'master']
     const accents = kinds.map(
       (kind) => getComputedStyle(document.querySelector(`.floating-panel--${kind}`) as HTMLElement).getPropertyValue('--panel-accent'),
@@ -2293,6 +2521,8 @@ describe('App: FloatingPanelのkind別theme・最前面強調 (Issue #34)', () =
   it('gives each of the 5 floating panel headings a distinct kind別 --panel-accent-bg (headingがkind別themeを参照/反映している)', async () => {
     await renderApp()
     fireEvent.click(screen.getByRole('button', { name: '操作ガイド' }))
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
 
     const headingByKind: Record<string, RegExp> = {
       guide: /操作ガイド/,
@@ -2328,6 +2558,8 @@ describe('App: FloatingPanelのkind別theme・最前面強調 (Issue #34)', () =
 
   it('marks only one panel as front (floating-panel--front) at a time, and moves it when another panel is clicked', async () => {
     await renderApp()
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     const panelInfoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
     const aggregationFloat = document.querySelector('.floating-panel--aggregation') as HTMLElement
     const detailFloat = document.querySelector('.floating-panel--detail') as HTMLElement
@@ -2544,6 +2776,8 @@ describe('App: 積算コード選択中の盤領域の扱い (Phase 1.10 UI改�
 
   it('does not show the panel Tooltip on hover while a Master row is selected (要件4/5)', async () => {
     render(<App />)
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     await navigateToOutlinePage()
 
     const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
@@ -2558,6 +2792,8 @@ describe('App: 積算コード選択中の盤領域の扱い (Phase 1.10 UI改�
 
   it('shows the panel Tooltip on hover again once the Master row is deselected', async () => {
     render(<App />)
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     await navigateToOutlinePage()
 
     const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
@@ -2573,6 +2809,8 @@ describe('App: 積算コード選択中の盤領域の扱い (Phase 1.10 UI改�
 
   it('keeps the panel border/label visible but disables its pointer-events while a Master row is selected, so a Viewer drag reaches DrawingCanvas for Manual BBox creation (要件6/7)', async () => {
     render(<App />)
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     await navigateToOutlinePage()
 
     const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
@@ -2587,6 +2825,8 @@ describe('App: 積算コード選択中の盤領域の扱い (Phase 1.10 UI改�
 
   it('clicking a panel area while a Master row is selected does not change selectedPanel (BBox作業を優先する)', async () => {
     render(<App />)
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     await navigateToOutlinePage()
 
     const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
@@ -2661,6 +2901,8 @@ describe('App: Escキーによる編集モード解除 (Phase 1.11 UI改修指�
 
   it('積算コードMaster選択中にEscを押すと、Master選択・BBox追加モードを解除する', async () => {
     render(<App />)
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
     fireEvent.click(row11001)
     await waitFor(() => expect(drawingCanvasStub().dataset.bboxAddMode).toBe('true'))
@@ -2684,6 +2926,8 @@ describe('App: Escキーによる編集モード解除 (Phase 1.11 UI改修指�
 
   it('BBox編集中とMaster選択中が両方アクティブな場合、1回目のEscはBBox編集のみ解除し、Master選択は残す (優先順位)', async () => {
     render(<App />)
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     await navigateToOutlinePage()
 
     const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
@@ -2710,6 +2954,8 @@ describe('App: Escキーによる編集モード解除 (Phase 1.11 UI改修指�
     // 同じ「入力要素にフォーカスがあってもEscは効く」ことを、部品台帳の
     // カテゴリ選択select(SELECT要素)で検証する。
     render(<App />)
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
     fireEvent.click(row11001)
     await waitFor(() => expect(row11001.className).toContain('master-picker__row--selected'))
@@ -2723,6 +2969,8 @@ describe('App: Escキーによる編集モード解除 (Phase 1.11 UI改修指�
 
   it('SystemSettingsモーダルが開いている間はEscで編集モードを解除しない (将来のModal自身のEsc処理と競合しない。指示書3章)', async () => {
     render(<App />)
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
     fireEvent.click(row11001)
     await waitFor(() => expect(row11001.className).toContain('master-picker__row--selected'))
@@ -2736,6 +2984,8 @@ describe('App: Escキーによる編集モード解除 (Phase 1.11 UI改修指�
 
   it('HelpPdfModalが開いている間はEscで編集モードを解除しない (Issue #19 Phase 3、SystemSettingsと同じ方針)', async () => {
     render(<App />)
+    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
+    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
     const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
     fireEvent.click(row11001)
     await waitFor(() => expect(row11001.className).toContain('master-picker__row--selected'))

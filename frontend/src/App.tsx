@@ -8,6 +8,7 @@ import {
   evaluateEstimateResults,
   fetchDetectedPreview,
   fetchDetections,
+  fetchDrawingEvidenceTypes,
   fetchDrawingPages,
   fetchEstimatePanels,
   fetchEstimateResults,
@@ -195,6 +196,10 @@ function App() {
   // 独自に全件取得しているが、責務が異なるためここでは別途取得する
   // (App.tsx側はHover表示用のMap、EstimateMasterPicker側はMaster一覧UI用)。
   const [masterItemById, setMasterItemById] = useState<Map<number, EstimateMasterItem>>(new Map())
+  // [Issue #40 Phase 6-C指示4章] 図面情報key→日本語表示名のMap。Viewer上の
+  // evidence_type_key経由BBoxラベルの解決に使う(`masterItemById`と同じ
+  // 「App.tsx側でHover/ラベル表示用に別途全件取得する」パターン)。
+  const [evidenceDisplayNameByKey, setEvidenceDisplayNameByKey] = useState<Map<string, string>>(new Map())
 
   // 中央Viewerで選択中のproduct_df盤 (Phase 1.9)。Detection/BBoxの選択状態
   // (selectedDetectionId) とは独立した概念として管理する (要件5)。キー単体では
@@ -212,6 +217,11 @@ function App() {
   // 引出線hover(`hoveredDetectionId`, DrawingViewer.tsx内で管理)とは別状態として
   // 持つ (指示21章: 混同しない)。
   const [detailHoveredDetectionId, setDetailHoveredDetectionId] = useState<number | null>(null)
+  // [Issue #40 Phase 6-C指示7章] 積算明細(③)の行クリックで選択した
+  // EstimateResult id (persistent)。`detailHoveredDetectionId`(hoverの一時
+  // 強調)とは独立の状態として持つ(指示: 「hover強調との競合を避ける」)。
+  // 同じ行の再クリックで解除、別の行クリックで切り替える。
+  const [detailSelectedResultId, setDetailSelectedResultId] = useState<number | null>(null)
   // 積算明細(③)のタブ (Issue #40 Phase 5: 全て/設計データ/図面判定/要確認/
   // 修正あり。判定方法+手修正状態の軸であり、対象(盤/製品全体)の切替とは
   // 独立)。EstimateDetail内部stateではなくApp.tsx側で持つ (Phase 4以前からの
@@ -302,19 +312,20 @@ function App() {
   const [panelInfoFloatingVisible, setPanelInfoFloatingVisible] = useState(true)
   const [estimateAggregationFloatingVisible, setEstimateAggregationFloatingVisible] = useState(true)
   const [estimateDetailFloatingVisible, setEstimateDetailFloatingVisible] = useState(true)
-  // [追加修正: 積算コードMasterのfloating panel化] 従来はMainArea下段に
-  // PaneSplitterで手動リサイズしながら常設していたが、他3panelと同じ
-  // floating panelへ移行した。表示/非表示の考え方(初期値true、セッション内
-  // のみ保持)も他3panelと揃える。
-  const [estimateMasterFloatingVisible, setEstimateMasterFloatingVisible] = useState(true)
+  // [Issue #40 Phase 6-C指示1章] 「部品台帳」は新ワークフローでは補助機能の
+  // 位置づけへ変更し、既定非表示にした(主導線は「図面情報」。部品台帳機能
+  // 自体・旧master_item_id直結BBox互換は削除していない。作業者は
+  // `PanelVisibilityToggles`からいつでも表示できる)。
+  const [estimateMasterFloatingVisible, setEstimateMasterFloatingVisible] = useState(false)
   // [Issue #31] Viewer内「操作ガイド」floating panel。既存4panelとは異なり、
   // 既定は非表示(指示B-4: 「デフォルトは非表示」)。表示ON/OFFの考え方
   // (セッション内のみ保持、localStorage永続化なし)自体は他4panelと揃える。
   const [viewerGuideVisible, setViewerGuideVisible] = useState(false)
-  // [Issue #40 Phase 3] 「図面情報」floating panel。新しいBBox作成の主導線だが、
-  // 導入初回は既存5panelの右端カスケード積み重ね・初期配置テスト群を不用意に
-  // 壊さないよう、guideと同じく既定非表示にする(ユーザーが明示的にONにする)。
-  const [drawingEvidenceFloatingVisible, setDrawingEvidenceFloatingVisible] = useState(false)
+  // [Issue #40 Phase 6-C指示1章] 「図面情報」floating panel。新しいBBox作成の
+  // 主導線であり、新ワークフローの起点であるため既定表示ONへ変更した
+  // (Phase 3導入時は既存panel群への影響を避けるため既定OFFだったが、
+  // Phase 6-Cで主導線として正式に格上げする)。
+  const [drawingEvidenceFloatingVisible, setDrawingEvidenceFloatingVisible] = useState(true)
 
   // floating panel(盤情報/積算集約/積算明細/積算コードMaster)の位置・大きさ
   // ([追加修正] ドラッグ移動・リサイズ対応)。`FloatingPanel`コンポーネント
@@ -338,22 +349,21 @@ function App() {
   const viewerWrapRef = useRef<HTMLDivElement>(null)
 
   // [Issue #25] 現在表示中のfloating panel種別一覧(固定の宣言順:
-  // 盤情報→積算集約→積算明細→部品台帳)。`FloatingPanel`が「表示ONにした
+  // 図面情報→盤情報→積算集約→積算明細→部品台帳。Issue #40 Phase 6-Cで
+  // `PanelVisibilityToggles`の表示順と揃えた)。`FloatingPanel`が「表示ONにした
   // 瞬間、自分より前に何枚表示中か」を数えて初期配置(右端寄せ+積み重ね)の
-  // 段数を決めるために使う。表示ON/OFFの4state以外には一切依存しない。
+  // 段数を決めるために使う。表示ON/OFFの5state以外には一切依存しない。
   // [Issue #31] 操作ガイド(`viewerGuideVisible`)はこの配列へ意図的に含めない
   // (右端カスケードの積み重ね対象外、常にViewer左上へ単独配置するため。
   // `FloatingPanel.tsx`の`visibleKinds`コメント参照)。
   const visibleFloatingKinds = useMemo<FloatingPanelKind[]>(() => {
     const kinds: FloatingPanelKind[] = []
+    // [Issue #40 Phase 6-C] 新ワークフローの主導線のため先頭にする。
+    if (drawingEvidenceFloatingVisible) kinds.push('drawingEvidence')
     if (panelInfoFloatingVisible) kinds.push('panelInfo')
     if (estimateAggregationFloatingVisible) kinds.push('aggregation')
     if (estimateDetailFloatingVisible) kinds.push('detail')
     if (estimateMasterFloatingVisible) kinds.push('master')
-    // [Issue #40 Phase 3] 図面情報も業務情報/作業ツールpanelと同じ右端
-    // カスケードへ参加させる(宣言順の末尾に追加。既存4panelの積み重ね段数
-    // 計算には一切影響しない、追加のみ)。
-    if (drawingEvidenceFloatingVisible) kinds.push('drawingEvidence')
     return kinds
   }, [
     panelInfoFloatingVisible,
@@ -519,6 +529,30 @@ function App() {
       .catch((e: unknown) => setError(describeFetchError(e, '部品台帳を取得できませんでした')))
   }, [])
 
+  // [Issue #40 Phase 6-C指示4章] 図面情報マスタ全件をkey引きの表示名Mapとして
+  // 取得する(`DrawingEvidencePanel`も独自に全件取得しているが、責務が異なる
+  // ため別々に取得する。上記`masterItemById`と同じ考え方)。製番に依存しない
+  // マスタデータのため、初回1回だけ取得する。Viewer上のBBoxラベルを
+  // 積算コード/内部keyではなく図面情報の日本語表示名にするために使う。
+  //
+  // [PR #47レビュー指摘対応] この取得はBBoxラベルの表示名解決という補助的な
+  // 用途に過ぎず、失敗しても`DetectionOverlay`側は既に`class_name`
+  // (内部key)へ安全にfallbackできる設計になっている。そのため、ここでの
+  // 失敗をApp共通の`error`(Viewer全体のエラーバナー)へは入れない
+  // (補助的なラベル解決の失敗で、BBox編集等の既存作業全体に影響を
+  // 波及させないため)。取得エラー自体の表示は、同じデータを独自に
+  // 取得・表示する`DrawingEvidencePanel`側の既存エラー表示に委ねる。
+  useEffect(() => {
+    fetchDrawingEvidenceTypes()
+      .then((types) => {
+        setEvidenceDisplayNameByKey(new Map(types.map((t) => [t.key, t.display_name])))
+      })
+      .catch(() => {
+        // 失敗時はevidenceDisplayNameByKeyを初期値(空Map)のまま維持する
+        // (BBoxラベルは呼び出し側で`class_name`へfallbackする)。
+      })
+  }, [])
+
   // 選択中Detectionに紐づく盤情報を取得
   useEffect(() => {
     const detection = detections.find((d) => d.id === selectedDetectionId)
@@ -622,6 +656,14 @@ function App() {
     [estimateResults],
   )
 
+  // [Issue #40 Phase 6-C指示6章] 係数または数量が手修正されている積算結果の件数
+  // (積算明細「修正あり」タブと同じ判定、`EstimateDetail.tsx::matchesDetailTab`
+  // の'overridden'caseと同一条件)。積算集約の「修正あり N」小表示に使う。
+  const estimateResultOverriddenCount = useMemo(
+    () => estimateResults.filter((r) => r.factor_overridden || r.quantity_overridden).length,
+    [estimateResults],
+  )
+
   // 要確認(BBox所属判定でtieになった項目)の対象と件数 (指示7章)。0件になれば
   // 警告バナーは自動的に非表示になる(JSX側で`tieDetailCount > 0`のみ描画するため)。
   const tieTarget = useMemo(
@@ -676,6 +718,15 @@ function App() {
     return estimateResults.filter((r) => r.evidence.some((ev) => ev.detection_id === selectedDetectionId))
   }, [estimateResults, selectedDetectionId])
 
+  // [Issue #40 Phase 6-C指示8章] 上記と同じ逆引きのid集合版。積算明細側で
+  // 「選択中BBoxに関係する結果」を見つけやすくする導線に使う
+  // (既存のdetection_id→EstimateResult機構をそのまま再利用し、「BBox=コード」
+  // という旧方式には戻さない)。
+  const relatedToSelectedBboxResultIds = useMemo(
+    () => new Set(relatedEstimateResultsForSelectedDetection.map((r) => r.id)),
+    [relatedEstimateResultsForSelectedDetection],
+  )
+
   // [Issue #40 Phase 3] 積算結果→根拠BBox強調。既存の`flashDetection`(点滅表示、
   // 選択状態は変更しない)をそのまま再利用し、1件の積算結果が複数の根拠BBoxを
   // 持つ場合は全てを順に強調する。
@@ -685,6 +736,26 @@ function App() {
     }
   }
 
+  // [Issue #40 Phase 6-C指示7章] 積算明細の行クリックで根拠BBoxを持続強調する。
+  // 同じ行の再クリックで解除、別の行クリックで選択を切り替える
+  // (「別行選択で更新/再クリック・解除操作でクリア」)。設計データのみの行
+  // (detection_idを持つevidenceが無い)はViewer側で強調対象が空集合になるだけで、
+  // 行選択自体はエラーにしない(指示: 「設計データのみresultではBBox強調なし」)。
+  function handleSelectEstimateDetailRow(result: EstimateResult) {
+    setDetailSelectedResultId((prev) => (prev === result.id ? null : result.id))
+  }
+
+  // 現在選択中のEstimateResultの根拠detection id集合(Viewer側のBBox持続強調に使う)。
+  const detailSelectedDetectionIds = useMemo(() => {
+    const result = estimateResults.find((r) => r.id === detailSelectedResultId)
+    const ids = new Set<number>()
+    if (result == null) return ids
+    for (const ev of result.evidence) {
+      if (ev.detection_id != null) ids.add(ev.detection_id)
+    }
+    return ids
+  }, [estimateResults, detailSelectedResultId])
+
   // [Issue #40 Phase 6-A指示A-1] 確定ボタンの「要確認タブで確認する」リンクから
   // 呼ぶ。要確認行は対象(盤/製品全体)を問わず存在しうるため、積算集約の対象は
   // 「総合計」(フィルタなし)へ戻した上で、積算明細のタブを「要確認」へ切り替える
@@ -693,6 +764,13 @@ function App() {
   function handleNavigateToNeedsReview() {
     setSelectedEstimateTargetId(null)
     setEstimateDetailTabFilter('needs_confirmation')
+  }
+
+  // [Issue #40 Phase 6-C指示6章] 積算集約の「修正あり N」小表示から、積算明細の
+  // 「修正あり」タブへ誘導する(`handleNavigateToNeedsReview`と同じ考え方)。
+  function handleNavigateToOverridden() {
+    setSelectedEstimateTargetId(null)
+    setEstimateDetailTabFilter('overridden')
   }
 
   // [Issue #40 Phase 4/5] 積算明細向けに、選択中の対象(盤/製品全体/総合計/
@@ -809,6 +887,7 @@ function App() {
     setHighlightedDetectionId(null)
     setSelectedPanel(null)
     setDetailHoveredDetectionId(null)
+    setDetailSelectedResultId(null)
   }, [visiblePageNos, selectedProductPageNo, productPages])
 
   function handleSelectDetection(detectionId: number) {
@@ -1044,6 +1123,7 @@ function App() {
     setHighlightedDetectionId(null)
     setSelectedPanel(null)
     setDetailHoveredDetectionId(null)
+    setDetailSelectedResultId(null)
   }
 
   // 製番切替 (Phase 1.8)。ProductSelectorから呼ばれる。ページ選択・BBox選択・
@@ -1057,6 +1137,7 @@ function App() {
     setHighlightedDetectionId(null)
     setSelectedPanel(null)
     setDetailHoveredDetectionId(null)
+    setDetailSelectedResultId(null)
     setSelectedEstimateTargetId(null)
     // 指示6章: 製番変更時はUndo/Redo履歴・編集順メタ情報をクリアする
     // (別製番ではDetection idの意味が変わるため、古い履歴を持ち越さない)。
@@ -1663,6 +1744,8 @@ function App() {
                 }}
                 onDeselectDetection={handleDeselectDetection}
                 detailHoveredDetectionId={detailHoveredDetectionId}
+                detailSelectedDetectionIds={detailSelectedDetectionIds}
+                evidenceDisplayNameByKey={evidenceDisplayNameByKey}
                 focusPanel={viewerFocusPanel}
               />
               <FloatingPanel
@@ -1698,6 +1781,8 @@ function App() {
                   productNo={activeProductNo}
                   needsReviewCount={estimateResultNeedsReviewCount}
                   onNavigateToNeedsReview={handleNavigateToNeedsReview}
+                  overriddenCount={estimateResultOverriddenCount}
+                  onNavigateToOverridden={handleNavigateToOverridden}
                 />
               </FloatingPanel>
               <FloatingPanel
@@ -1719,6 +1804,9 @@ function App() {
                   onOverrideResultQuantity={handleOverrideEstimateResultQuantity}
                   onResetResultQuantity={handleResetEstimateResultQuantity}
                   onFocusResultEvidence={handleFocusResultEvidence}
+                  selectedResultId={detailSelectedResultId}
+                  onSelectResultRow={handleSelectEstimateDetailRow}
+                  relatedToSelectedBboxResultIds={relatedToSelectedBboxResultIds}
                 />
               </FloatingPanel>
               {/* [追加修正: 積算コードMasterのfloating panel化] 従来は

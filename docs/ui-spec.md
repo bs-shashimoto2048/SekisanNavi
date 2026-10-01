@@ -259,6 +259,32 @@ Viewerの**右端に寄せて**配置する(`left = container.width - SIDE_MARGI
 rectから再算出していたため、一時的なclampが「下端に確定配置した」かのように
 扱われてしまう不具合があった)。
 
+### [2026-10 Issue #40 Phase 6-C] 表示順・既定表示の見直し(新ワークフロー統合)
+
+Phase 3で追加した「図面情報」(`DrawingEvidencePanel`、11章参照)を新UIの
+主導線として格上げし、旧来の「部品台帳」(7章)を積算コードを直接指定したい
+場合の補助機能へ位置づけ直した。これに伴い、表示トグル(`PanelVisibilityToggles`)
+の並び順・既定表示を以下のとおり変更した。
+
+- **表示順**: 「図面情報 / 盤情報 / 積算集約 / 積算明細 / 部品台帳 / 操作ガイド」
+  (旧: 「操作ガイド / 盤情報 / 積算集約 / 積算明細 / 部品台帳 / 図面情報」)。
+  新ワークフロー(図面を見る→図面情報を選ぶ→BBox作成→積算結果確認)の順に
+  沿わせるため、主導線の「図面情報」を先頭、業務情報3panelを中央、補助ツールの
+  「部品台帳」をその後方、操作方法のクイックリファレンスである「操作ガイド」を
+  末尾に配置する。
+- **既定表示**: 「図面情報」は既定ON(旧: OFF。Phase 3導入時は既存panel群への
+  影響を避けるためOFFだったが、Phase 6-Cで主導線として正式運用する)。
+  「部品台帳」は既定OFF(旧: ON。1024px/1600pxの実ブラウザ確認の結果、
+  既定非表示でも作業性を損なわないと判断し採用した。部品台帳機能自体・
+  旧`master_item_id`直結BBox互換は削除していない)。「盤情報」「積算集約」
+  「積算明細」「操作ガイド」の既定表示は変更していない。
+- 右端カスケードの初期配置順(`FloatingPanel.tsx`の`visibleFloatingKinds`)も
+  表示トグルの並びと一致させるため、「図面情報→盤情報→積算集約→積算明細→
+  部品台帳」の順へ変更した(操作ガイドは従来通りこの配列に含めず、常に
+  Viewer左上へ単独配置する)。
+- ドラッグ移動・リサイズ・前面化・透過度・Viewerリサイズ追従の各仕組み自体は
+  変更していない(既定値・並び順のみの変更)。
+
 ### ドラッグ移動・リサイズ (2026-09 Issue #19 追加修正)
 
 作業者が図面上の邪魔にならない位置・大きさへfloating panel(盤情報・積算集約・
@@ -425,13 +451,23 @@ Pan・Fit・BBox選択/移動/リサイズ/追加・ラベル移動・元に戻�
 積算集約→積算明細→部品台帳)による段数カウントに一切参加せず、逆に
 既存4panelの積み重ねも操作ガイドの表示/非表示によって変化しない。
 
-**表示トグル**: `PanelVisibilityToggles`の一覧**先頭**に、区切り線を挟んで
+**表示トグル**: `PanelVisibilityToggles`の一覧に、区切り線を挟んで
 「操作ガイド」ボタンを独立配置した(既存の情報系3panel・部品台帳のいずれの
 グループとも異なる役割のため)。配色はニュートラルなグレー系
 (`.panel-visibility-toggles__button--guide`、OFF:枠`#9ca3af`/背景`#f3f4f6`/
 文字`#374151`、ON:塗りつぶし`#4b5563`)とし、既存のviolet系(情報系3panel)・
 slate系(部品台帳)のいずれとも重ならないようにしている。既定は**非表示**
-(`guideVisible=false`、既存4panelは引き続き既定ON)。
+(`guideVisible=false`)。**[2026-10 Issue #40 Phase 6-C]** 配置は一覧**先頭**
+(導入当初)から**末尾**へ変更した(1.7章の新表示順「図面情報/盤情報/
+積算集約/積算明細/部品台帳/操作ガイド」参照。操作方法のクイック
+リファレンスという役割上、主要な作業導線より後ろに置く方が自然と判断した)。
+
+**[2026-10 Issue #40 Phase 6-C] 内容の更新**: 新ワークフロー(図面情報を選ぶ
+→図面を囲む→積算結果を確認→必要なら数量/係数を修正→要確認を解消→確定)を
+「基本の流れ」として表の最上部に追加した。「基本操作」表のBBox追加行は
+「部品台帳で部品選択」から「図面情報で項目選択」へ更新し、「画面を見る」の
+一覧には図面情報を先頭に追加、部品台帳の説明に「(補助)」を明記した
+(11章・7章参照)。
 
 **drag/resize/前面化/透過度は既存の仕組みをそのまま再利用**: `FloatingPanel`
 のdrag・resize・前面化・clamp・resize追従・`--floating-panel-bg-alpha`
@@ -1311,6 +1347,23 @@ compact row(`estimate-aggregation__compact-row`)へ統合**した。panel既定�
 - **要確認**: BBox所属判定 (`architecture.md`参照) で複数の盤と同一の最大交差
   面積になり、機械的に一意へ決定できなかった積算コードの集計。
 
+### 「要確認 N」「修正あり N」小表示 (2026-10 Issue #40 Phase 6-C)
+
+compact row内(確定/履歴ボタンの直後、折り返し専用の案内文より前)に、
+現在の製番の`status=needs_review`件数(`要確認`)・`factor_overridden OR
+quantity_overridden`件数(`修正あり`)をpill button(`estimate-aggregation__
+status-badge`)として表示する。いずれも該当件数が0件の間は描画自体をしない
+(高さ抑制優先、常時の警告表示にしない。指示6章)。クリックすると
+`EstimateDetail`の対応タブ(`needs_confirmation`/`overridden`)へ切り替わり、
+対象(総合計/製品全体/個別盤/要確認)も総合計へ戻す(`App.tsx`の
+`handleNavigateToNeedsReview`/`handleNavigateToOverridden`、前者は
+Phase 6-A指示A-1由来の既存実装を再利用、後者を今回新設)。
+
+既存の「要確認の積算結果がN件残っているため確定できません」という
+ブロック時の警告文(`EstimateConfirmationAction`内、確定不可時のみ表示)とは
+独立した表示であり、この小表示は確定可否に関わらず(=まだ要確認が解消されて
+いなくても)常に件数が見える。
+
 ### 積算確定 (Issue #4 Phase B-3、最小UI)
 
 見出し直下の1行compact row(上記「1行compact化」参照)内に、
@@ -1451,9 +1504,10 @@ panel自体の幅がViewer右ペイン常設時より狭くなりがちなため
     `architecture.md`参照)。`judgment_method`の「要確認(needs_confirmation)」
     とは別の軸である点に注意(判定方法自体が未確定/低信頼度なケースと、
     所属・重複が一意に決まらないケースは意味が異なる)。
-  - 「修正あり」タブは`factor_overridden === true`で絞り込む(将来
-    `quantity_overridden`等の手修正フラグが増えても同じタブへ集約できる
-    設計)。
+  - 「修正あり」タブは`factor_overridden === true OR quantity_overridden
+    === true`で絞り込む(**[2026-10 Issue #40 Phase 6-C]** 数量override
+    (Phase 6後半)の実装に伴い、係数のみ/数量のみ/両方いずれの手修正も
+    このタブへ集約する。両方修正されている行も1行としてのみ表示する)。
 - **標準7列**: コード / 内容 / 数量 / 適用単位 / 係数 / 金額 / 判定、を既定幅
   1行表示の基本とする。係数セルはPhase 4の`EstimateResultFactorCell`を
   そのまま再利用し、この場でオーバーライド・初期値へ戻す操作ができる。
@@ -1470,6 +1524,23 @@ panel自体の幅がViewer右ペイン常設時より狭くなりがちなため
   (`onFocusResultEvidence`、Phase 3/4から引き継いだ`flashDetection`をその
   まま再利用)。設計データのみの結果(根拠BBoxを持たない行)はHoverしても
   Viewer強調は発生しない。
+- **[2026-10 Issue #40 Phase 6-C] 行クリックによる持続選択**: 上記Hover
+  (一時的、`detailHoveredDetectionId`系統)とは独立した状態として、行の
+  クリックで`detailSelectedResultId`(App.tsx)をトグルする(同じ行の
+  再クリックで解除、別行クリックで切り替え)。選択中の行は
+  `estimate-detail__row--selected`(teal系box-shadow)で持続的に強調され、
+  対応するViewer側BBoxも`detection-overlay__bbox--detail-selected`
+  (teal破線、`master_item_id`直結の通常非表示BBoxも含めて強制描画)で
+  持続強調される。設計データのみの行(根拠detectionを持たない)を選択しても
+  Viewer側の強調対象は空集合になるだけで、行選択自体はエラーにしない。
+- **[2026-10 Issue #40 Phase 6-C] BBox→結果の逆引き導線**: Viewerで選択中の
+  BBox(`selectedDetectionId`)に関係するEstimateResultの行には
+  `estimate-detail__row--bbox-related`(青系box-shadow)を付ける
+  (既存のdetection_id→EstimateResult逆引き、Phase 3の
+  `relatedEstimateResultsForSelectedDetection`をそのまま再利用。「BBox=
+  積算コード」という旧方式には戻していない)。選択中タブに該当行が無い場合は
+  何も表示しない。`--selected`と同時に成立する場合は専用の合成ルール
+  (両方のbox-shadowを併記)で両方の強調を保つ。
 - **[既知の簡略化]** 旧UIが持っていた「明細行の図面リンクをクリックすると
   対象ページへ自動遷移する」機構は廃止した。EstimateResultは複数ページ・
   複数BBoxにまたがる根拠を持ちうるため(旧「1行=1 Detection=1ページ」という
@@ -1527,6 +1598,13 @@ Tree表示)は、実データによる`EstimateAggregation`(5.5)・`EstimateDeta
 (現時点では本節のみを更新し、他の古い記述は対象外としている)。
 
 ## 7. EstimateMasterPicker (部品台帳) — Phase 1.6で刷新、Phase 1.7で実データ対応、2026-09 Issue #19追加修正でfloating panel化
+
+**[2026-10 Issue #40 Phase 6-C] 位置づけの変更**: 新UIの主導線は11章の
+「図面情報」(`DrawingEvidencePanel`)へ移った。本componentは、積算コードを
+直接指定したい場合のための**補助機能**という位置づけに変わった(機能自体・
+`master_item_id`直結BBoxとの互換は一切削除していない)。表示トグルの既定値も
+ON→OFFへ変更した(1.7章参照)。以下、Phase 1.6〜Issue #19時点の記述は
+componentの内部仕様としてそのまま有効。
 
 **[2026-09 Issue #19 追加修正]** 従来はMainArea下段に常設(PaneSplitterで
 高さ手動リサイズ)されていたが、盤情報・積算集約・積算明細と同じ
@@ -1705,3 +1783,50 @@ BBox追加対象を選ぶという**作業ツール**であるため、同じ見
   実YOLO推論・本番積算Ruleは引き続きスコープ外 (Phase 1.11指示書冒頭でも明記)
 
 これらは `implementation-plan.md` の「Phase 2以降」に候補として記載する。
+
+## 11. DrawingEvidencePanel (図面情報) — Issue #40 Phase 3で新設、Phase 6-Cで新UIの主導線化
+
+**[これまで本ドキュメントに記載が無かったため、本節で新規に記載する]**
+Phase 3で導入した「図面情報」floating panel (`DrawingEvidencePanel.tsx`) は、
+作業者が図面上で見えている「意味」(側面扉・換気扇・VCTなど)を選ぶための窓口。
+既存の「部品台帳」(積算コードをMasterから直接選ぶ、7章)とは異なり、
+**積算コードそのものはここでは選ばせない**(選んだ図面情報を元に、ルール
+評価器(`architecture.md`参照)が積算コードを導出する)。
+
+- **表示項目**: 図面情報名(`display_name`)・カテゴリ(`category`、プルダウンで
+  絞り込み)・用途(`usage`: 積算対象/判定条件/両方)・判定範囲
+  (`default_judgment_scope`: 位置/範囲/盤全体/図面全体/製番全体/設計データ)・
+  説明(`description`)・最近使用、をcompactな一覧として表示する。内部enum値は
+  `drawingEvidencePresentation.ts`で日本語ラベルへ変換して表示し、英語のenum
+  文字列をそのまま出さない。
+- **最近使用**: 直近で選んだ図面情報keyを最大5件、localStorage
+  (`sekisanNavi.drawingEvidencePanel.recentKeys`、per-viewerの利便性情報で
+  Backend同期はしない)へ保持し、一覧の上部にchip表示する。
+- **選択時のフィードバック**: 行を選ぶと、一覧下部に「選択中: {display_name} —
+  図面上を囲んで追加」という次操作を明示する文言を表示する(**[2026-10
+  Issue #40 Phase 6-C追加]** 「次は何をすればよいか」を迷わせないための
+  改善。以前は「選択中: {display_name}」のみだった)。
+- **BBox作成**: 選択中は`App.tsx`の`bboxAddMode`がtrueになり(`selectedMasterItemId`
+  と同時に選択状態になることはない、一方を選ぶと他方を解除する)、図面上の
+  ドラッグで`createEvidenceDetection`(`evidence_type_key`付きのDetection)を
+  呼ぶ。登録後、ルール評価器を再実行し(`reevaluateEstimateResults`)、
+  積算結果の増減をtoastで通知する(下記「積算結果toast」、8章)。
+- **[2026-10 Issue #40 Phase 6-C] BBoxの見え方**: `evidence_type_key`経由で
+  作成したBBoxは、`master_item_id`直結の旧Manual BBox(通常非表示、7章)とは
+  異なり、**常時表示**される(新ワークフローの主要な作業対象であるため)。
+  ラベルは積算コード/内部key(`class_name`、Backend側で`evidence_type_key`を
+  そのままコピーしたもの)ではなく、図面情報の日本語表示名を優先する
+  (`DetectionOverlay.tsx`の`evidenceDisplayNameByKey`、`App.tsx`が
+  `fetchDrawingEvidenceTypes()`から構築するMapを渡す。該当keyが見つからない
+  場合のみ`class_name`へfallbackする、値を推測で補完しない)。AI/手動の
+  取得元はラベルには出さず、従来通りtitle属性(hover)で確認する。設計データ
+  のみで判定される結果はそもそもBBox/Detectionを持たないため、この一覧にも
+  Viewer上にも現れない(Phase 3の既存設計をそのまま維持)。
+- **根拠→結果の双方向導線**: Viewerで選択中のBBox(`selectedDetectionId`)に
+  関係するEstimateResultがある場合、`relatedResults`/`onFocusResult`
+  propsを通じて本panel内に一覧表示する(Phase 3導入、既存のまま)。
+  **[2026-10 Issue #40 Phase 6-C]** 同じ逆引きを使って、積算明細
+  (`EstimateDetail`、5.6章)側でも対応する行を強調する導線を追加した
+  (「BBox=積算コード」という旧方式には戻していない)。
+- **旧Manual BBox互換**: `master_item_id`直結の部品台帳経由BBox作成・表示・
+  編集ロジックには一切変更を加えていない。

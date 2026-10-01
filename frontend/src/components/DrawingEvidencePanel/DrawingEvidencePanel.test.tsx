@@ -134,4 +134,15 @@ describe('DrawingEvidencePanel (Issue #40 Phase 3: 図面情報floating panel)',
     await screen.findByText('VCT')
     expect(screen.queryByText('最近使用')).not.toBeInTheDocument()
   })
+
+  it('[PR #47レビュー指摘対応] falls back to the empty-list message (its existing, unchanged behavior) when its own fetchDrawingEvidenceTypes() rejects, without crashing', async () => {
+    vi.mocked(fetchDrawingEvidenceTypes).mockImplementationOnce(() => Promise.reject(new Error('network error')))
+    render(<DrawingEvidencePanel selectedKey={null} onSelectKey={() => {}} />)
+
+    // 失敗時もクラッシュせず、既存の「0件」fallback表示(該当する図面情報が
+    // ありません)がそのまま出る(このcomponent自身の挙動は今回変更していない。
+    // App.tsx側の責務(App共通errorへ入れない)とは独立した確認)。
+    expect(await screen.findByText('該当する図面情報がありません')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '図面情報' })).toBeInTheDocument()
+  })
 })

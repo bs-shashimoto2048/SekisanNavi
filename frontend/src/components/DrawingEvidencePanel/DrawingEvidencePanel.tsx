@@ -87,6 +87,14 @@ export function DrawingEvidencePanel({
       .then((types) => {
         setAllTypes(types)
       })
+      .catch(() => {
+        // [PR #47レビュー指摘対応] このcomponent自身の取得失敗時の表示
+        // (`allTypes`を更新しない=既存の「該当する図面情報がありません」
+        // 0件fallbackのまま)は変更していない。この`.catch`は、未処理の
+        // promise rejectionとしてconsoleへ出てしまう(実ブラウザでは
+        // "Uncaught (in promise)"になる)のを防ぐためだけに追加したもので、
+        // 新しいエラー表示・挙動の変更は一切加えていない。
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -223,8 +231,11 @@ export function DrawingEvidencePanel({
 
       {selectedType != null && (
         <div className="drawing-evidence-panel__selected">
+          {/* [Issue #40 Phase 6-C指示3章] 選択後に次の操作(図面上を囲んで追加)を
+              明示し、新ワークフローの「図面情報を選ぶ→図面を囲む」という流れを
+              迷わず続けられるようにする。 */}
           <div className="drawing-evidence-panel__selected-title">
-            選択中: {selectedType.display_name}
+            選択中: {selectedType.display_name} — 図面上を囲んで追加
           </div>
           <div className="drawing-evidence-panel__selected-meta">
             用途: {usageLabel(selectedType.usage)} ／ 判定範囲:{' '}

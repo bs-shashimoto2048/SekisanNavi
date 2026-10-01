@@ -120,6 +120,17 @@ interface Props {
    * `handleFocusResultEvidence`をそのまま再利用する想定)。設計データのみの
    * 行(`evidence`にdetection_idが無い)では何も起きない(指示7章/8章)。 */
   onFocusResultEvidence?: (result: EstimateResult) => void
+  /** [Issue #40 Phase 6-C指示7章] 行クリックで選択中のEstimateResult id
+   * (persistent)。`onFocusResultEvidence`(hoverの一時強調)とは独立した
+   * 選択状態で、選択中の行はViewer上のBBoxが持続強調される(App.tsx側の責務)。 */
+  selectedResultId?: number | null
+  /** 行クリック時に呼ばれる(指示7章)。同じ行の再クリックでの解除・別行への
+   * 切り替えはApp.tsx側(`handleSelectEstimateDetailRow`)が担う。 */
+  onSelectResultRow?: (result: EstimateResult) => void
+  /** [Issue #40 Phase 6-C指示8章] Viewerで選択中のBBoxに関係するEstimateResultの
+   * id集合。該当する行を視覚的に区別し、「根拠→結果」の導線にする
+   * (既存のdetection_id→EstimateResult機構をApp.tsx側で再利用して渡される)。 */
+  relatedToSelectedBboxResultIds?: Set<number>
 }
 
 /**
@@ -150,6 +161,9 @@ export function EstimateDetail({
   onOverrideResultQuantity = () => {},
   onResetResultQuantity = () => {},
   onFocusResultEvidence = () => {},
+  selectedResultId = null,
+  onSelectResultRow = () => {},
+  relatedToSelectedBboxResultIds,
 }: Props) {
   // タブ件数と表示行は同じ判定関数(matchesDetailTab)で求め、両者がずれないようにする。
   const counts: Record<DetailTabFilter, number> = {
@@ -221,9 +235,21 @@ export function EstimateDetail({
                   key={result.id}
                   className={
                     'estimate-detail__row' +
-                    (result.status === 'needs_review' ? ' estimate-detail__row--needs-review' : '')
+                    (result.status === 'needs_review' ? ' estimate-detail__row--needs-review' : '') +
+                    (result.id === selectedResultId ? ' estimate-detail__row--selected' : '') +
+                    (relatedToSelectedBboxResultIds?.has(result.id)
+                      ? ' estimate-detail__row--bbox-related'
+                      : '')
                   }
                   onMouseEnter={() => onFocusResultEvidence(result)}
+                  onClick={(e) => {
+                    // [Issue #40 Phase 6-C指示7章] 数量/係数セルの入力・
+                    // 理由/根拠ボタン等、行内の操作要素をクリックした場合は
+                    // 行選択を発火させない(既存のoverride操作等と競合しない
+                    // ようにするためのガード)。
+                    if ((e.target as HTMLElement).closest('button, input, select')) return
+                    onSelectResultRow(result)
+                  }}
                 >
                   <td className="estimate-detail__col-rr-code">{result.code}</td>
                   <td className="estimate-detail__col-rr-name">{content ?? MISSING_VALUE_PLACEHOLDER}</td>

@@ -1787,16 +1787,137 @@ Backend側の互換レイヤで統合し、Frontend側のUIも`EstimateResult`�
 
 ### 既知の未確定事項・Phase 6以降の課題
 
-- **積算確定(EstimateConfirmation)は未移行**: `estimate_confirmation_builder.py`
-  は引き続き`detections`(旧Detection単位)からsnapshotを組み立てる。Phase 5
-  では確定・確定履歴の既存動作を壊さないことのみを確認しており、確定対象を
-  EstimateResultベースへ移行するかどうかはPhase 6以降の検討課題(`data-model.md`
-  6.6章の追記参照)。
+- **[2026-10時点で解消済み] 積算確定(EstimateConfirmation)のEstimateResultベース
+  移行**: Phase 5時点では未移行(本節執筆時点の記述)だったが、Phase 6-A
+  (34章参照)で`estimate_confirmation_builder.py`を`estimate_results`から
+  直接組み立てる方式へ移行済み。
 - **新旧コード衝突のneeds_review化は暫定運用**: 「同一コードが新方式・旧方式
   両方から算出された場合にdedupeせずneeds_reviewとして残す」という方針は、
   正しい統合方法(どちらを採用すべきか、あるいは別結果として両方残すべきか)
-  についての業務ルールが確定するまでの暫定対応であり、Issue #40で継続検討する。
-- **設計データ根拠の詳細表示は未実装**: 積算明細の「根拠」ボタンは、BBox根拠
-  についてはAI/手動の取得元まで表示するが、設計データ根拠については現在の
-  `estimate_result_evidence.design_data_ref`(盤キー等の簡易JSON)からは
-  実際の判定値(型式/幅/奥行等)を復元できないため、値までは表示していない。
+  についての業務ルールが確定するまでの暫定対応であり、Issue #40で継続検討する
+  (2026-10時点でも未解決)。
+- **[2026-10時点で解消済み] 設計データ根拠の詳細表示**: Phase 5時点では
+  未実装(本節執筆時点の記述)だったが、Phase 6-B(34章参照)で
+  `design_data_ref`を拡張し、判定に実際に使った条件(field/operator/
+  expected_value/actual_value)を保持・日本語表示するようになった。
+
+## 34. 積算確定のEstimateResultベース移行・数量override (Issue #40 Phase 6-A/B/後半)
+
+**[本節はPhase 6-A/B/後半のmerge後に遡って追記したものであり、各PRの
+Issue報告コメントに記載した詳細の要約に留める。設計の一次情報は
+`docs/decision-snapshot-design.md`・`data-model.md` 6.7章・各PRのIssueコメント
+を参照すること。]**
+
+- **確定(EstimateConfirmation)のEstimateResultベース移行(Phase 6-A)**:
+  `estimate_confirmation_builder.py`を、`detections`テーブル直接参照から
+  `estimate_results`テーブル参照へ切り替えた。`status=needs_review`の
+  EstimateResultが1件でも存在する間は確定操作自体を拒否する(部分確定・
+  黙った除外をしない)。確定snapshot(`estimate_confirmation_items`)へ
+  `current_factor`/`factor_overridden`等のoverride状態・`judgment_method`等の
+  判定情報を追加し、複数evidence(BBox根拠・設計データ根拠)を
+  `estimate_confirmation_result_evidence`(新設)で保持する。旧Detectionベースの
+  過去snapshotとの後方互換(新列はNULLのまま安全に読める)を維持する。
+- **design_data_refの拡張(Phase 6-B)**: 設計データ判定の根拠(`design_data_ref`)
+  を、盤キーのみの簡易JSONから、判定に実際に使ったfield/operator/
+  expected_value/actual_valueを含む構造へ拡張した。Frontend側は
+  `drawingEvidencePresentation.ts`で「幅: 1200 ≥ 900」のような日本語の
+  条件式へ整形する。
+- **数量override(Phase 6後半)**: 係数override(`initial_factor`/
+  `current_factor`/`factor_overridden`)と同じ設計で、数量にも
+  `initial_quantity`/`current_quantity`/`quantity_overridden`/
+  `quantity_override_reason`/`quantity_updated_at`/`quantity_updated_by`を
+  追加した。既存の`estimate_results.quantity`列は「計算に使う現在の数量」を
+  表す列のまま意味を変えず、`current_quantity`と常に同じ値になるよう
+  repository層が同期させる(既存の集約・表示コードが無改修で手修正を反映する
+  ための設計)。再評価時の保護ロジックは係数と同一(`quantity_overridden=1`の
+  行はUPDATE文のSET対象から外すことで、追加の分岐なしに保持される)。
+- **migration**: 0010(確定snapshot拡張、`.py`+明示的`BEGIN`/`COMMIT`/
+  `ROLLBACK`)・0011(数量override列追加)。0010は当初`.sql`
+  (`executescript()`)で実装していたが、SQLiteの`executescript()`が各DDL文を
+  個別にオートコミットするため、複数文からなるmigrationが途中で失敗すると
+  中途半端なschemaが残りうるというレビュー指摘を受け、`.py`+明示的
+  transaction方式へ修正した。以降の複数DDL文を含むmigrationはこの方式を
+  踏襲する(5章参照)。
+
+## 35. 新ワークフローUI統合 (Issue #40 Phase 6-C)
+
+Phase 2〜6後半で整備した新仕様(図面情報→ルール評価→EstimateResult、
+係数/数量override、確定snapshot)を、作業者が迷わず使える主操作フロー
+(図面を見る→図面情報を選ぶ→根拠BBox作成→自動再評価→積算結果確認→
+必要なら数量/係数修正→要確認解消→確定)へ統合した。**BackendはUIのための
+変更であり、この回では変更していない**(API不足は確認されなかった)。
+詳細なUI仕様は`docs/ui-spec.md` 1.7章・5.5章・5.6章・11章、操作手順は
+`docs/user-guide.md`を参照。本節はFrontendのデータフロー・状態管理の
+観点のみ記す。
+
+### 表示順・既定表示の変更
+
+`PanelVisibilityToggles`の並び順を「図面情報/盤情報/積算集約/積算明細/
+部品台帳/操作ガイド」へ変更し、`FloatingPanel.tsx`の`visibleFloatingKinds`
+(右端カスケードの段数計算に使う固定宣言順)も同じ順へ揃えた。既定表示を
+図面情報=ON(旧OFF)・部品台帳=OFF(旧ON)へ変更した。いずれも`App.tsx`の
+`useState`初期値のみの変更で、`FloatingPanel`のdrag/resize/前面化/
+透過度/Viewerリサイズ追従の仕組み自体には変更を加えていない。
+
+### BBoxラベルの図面情報名解決
+
+`evidence_type_key`経由のBBox(`Detection.class_name`はBackend側で
+`evidence_type_key`をそのままコピーした内部key文字列)のラベルを、
+内部keyではなく図面情報の日本語表示名にするため、`App.tsx`が
+`fetchDrawingEvidenceTypes()`から`Map<string, string>`
+(`evidenceDisplayNameByKey`)を構築し、`DrawingViewer`→`DetectionOverlay`へ
+props経由で渡す(`masterItemById`をHover Tooltip用に別途全件取得している
+既存パターンと同じ考え方)。`DetectionOverlay`は`detection.evidence_type_key
+!= null`の場合のみこのMapを参照し、該当keyが見つからない場合は
+`class_name`(内部key)へfallbackする(値を推測で補完しない)。
+`master_item_id`直結の旧Manual BBoxにはこの解決ロジックは適用されない
+(`evidence_type_key`が常にnullのため)。
+
+### 積算明細の行クリックによる持続選択とBBox双方向導線
+
+既存の行Hover強調(`detailHoveredDetectionId`、一時的な`flashDetection`
+経由)とは独立に、`App.tsx`が`detailSelectedResultId`(選択中のEstimateResult
+id、persistent)を保持する。行クリックでトグル(同じ行の再クリックで解除、
+別行クリックで切り替え)し、選択中resultのevidence一覧から
+`detailSelectedDetectionIds`(`Set<number>`、複数BBoxを持つ結果に対応)を
+導出して`DetectionOverlay`へ渡す。`DetectionOverlay`側は、
+`master_item_id`直結のBBoxを通常時非表示にする既存の条件分岐
+(選択中/引出線hover中/積算明細hover中/一時強調中のいずれか)へ、この
+persistent選択状態を追加の条件として組み込んでいる(既存条件はいずれも
+変更していない、追加のみ)。
+
+逆方向(BBox→積算明細)の導線は、Phase 3で既に算出していた
+`relatedEstimateResultsForSelectedDetection`(`selectedDetectionId`に
+関係するEstimateResultの逆引き)をそのまま再利用し、そのid集合
+(`relatedToSelectedBboxResultIds`)を`EstimateDetail`へ渡して該当行へ
+視覚的なマーカー(box-shadow)を付けるだけに留めている。自動タブ切替や
+自動スクロールは行わない(既存のタブ・対象絞り込みの挙動に影響を与えない
+ための意図的な選択)。
+
+### 積算集約の状態サマリ小表示
+
+`EstimateAggregation`へ`overriddenCount`/`onNavigateToOverridden`propsを
+追加し、既存の`needsReviewCount`/`onNavigateToNeedsReview`(Phase 6-A指示
+A-1由来)と並べて「要確認 N」「修正あり N」のpill buttonを表示する
+(該当件数が0の間は描画しない)。いずれも`App.tsx`側で
+`estimateResults`から都度算出するだけの派生値であり、新しいAPI呼び出しは
+追加していない。クリック時の遷移(`setEstimateDetailTabFilter`/
+`setSelectedEstimateTargetId`)も、既存の`handleNavigateToNeedsReview`と
+同じパターンの新規ハンドラ(`handleNavigateToOverridden`)で実現している。
+
+### 既存の積算結果toast機構はそのまま流用
+
+「BBox追加/削除でtoast表示」の機構(`diffAndToastEstimateResults`、
+Issue #40 8章・Phase 3で導入)は本フェーズで変更していない。`estimateResults`
+の再評価前後を`result_key`で突き合わせ、追加/削除/係数変化のみtoastへ積む
+設計のため、差分が無い再評価では何もtoastされない。「図面情報」経由の
+BBox作成もこの既存機構へそのまま乗る(作成後に`reevaluateEstimateResults()`
+を呼ぶだけで、toast自体の実装には一切手を入れていない)。
+
+### 操作ガイドの内容更新
+
+`ViewerGuide.tsx`の内容を新ワークフローに合わせて更新した(6ステップの
+「基本の流れ」を追加、BBox追加操作の説明を「部品台帳で部品選択」から
+「図面情報で項目選択」へ変更、画面一覧に図面情報を先頭追加・部品台帳に
+「(補助)」を明記)。component自体の構造(`FloatingPanel`シェル・
+drag/resize等)は変更していない。
