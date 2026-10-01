@@ -86,18 +86,19 @@
   別結果として両方残すべきかの業務ルールが確定していない。Phase 5では
   推測でdedupeせず、両方を`status=needs_review`として残す暫定対応にとどめて
   いる(`docs/architecture.md` 33章、`docs/data-model.md` 6.7章)。
-- **積算確定(EstimateConfirmation)は未移行**: 確定・確定履歴は引き続き
-  `detections`(旧Detection単位)からsnapshotを組み立てる(`estimate_confirmation_
-  builder.py`)。EstimateResultベースへの移行はPhase 6以降の検討課題
-  (`docs/data-model.md` 6.6章末尾の追記参照)。
-- **設計データ根拠の判定値は表示していない**: 積算明細の「根拠」ボタンは、
-  BBox根拠のAI/手動取得元は表示するが、設計データ根拠については
-  `estimate_result_evidence.design_data_ref`(盤キー等の簡易JSONのみ)から
-  実際の判定値(型式/幅/奥行等)を復元できないため、値の表示は行っていない。
-- **数量の手修正は未実装**: 積算結果の`quantity`は評価器の自動算定値を正本
-  とし、Phase 5では手修正UIを実装していない(業務ルール未確定のため。将来
-  `initial_quantity`/`current_quantity`/`quantity_overridden`を持てる拡張
-  余地は`estimate_results`のテーブル設計上壊していない)。
+- **[2026-10時点で解消済み] 積算確定(EstimateConfirmation)は未移行**:
+  本節はPhase 5時点の記述だったが、Phase 6-Aで`estimate_confirmation_builder.py`
+  を`estimate_results`から直接組み立てる方式へ移行済み
+  (`docs/architecture.md` 34章)。
+- **[2026-10時点で解消済み] 設計データ根拠の判定値は表示していない**:
+  本節はPhase 5時点の記述だったが、Phase 6-Bで`design_data_ref`を拡張し、
+  判定に実際に使った条件(field/operator/expected_value/actual_value)を
+  日本語の条件式として表示するようになった(`docs/architecture.md` 34章)。
+- **[2026-10時点で解消済み] 数量の手修正は未実装**: 本節はPhase 5時点の
+  記述だったが、Phase 6後半で`initial_quantity`/`current_quantity`/
+  `quantity_overridden`/`quantity_override_reason`/`quantity_updated_at`/
+  `quantity_updated_by`を実装し、係数と同じ考え方の手修正UIを提供する
+  ようになった(`docs/architecture.md` 34章)。
 - **積算明細の「明細行クリックで対象ページへ自動遷移する」機構は廃止**:
   EstimateResultは複数ページ/複数BBoxにまたがる根拠を持ちうるため(旧
   「1行=1 Detection=1ページ」という前提が成り立たなくなったため)、Phase 4
@@ -107,6 +108,31 @@
   Viewer側のBBoxを一時強調する機構(`flashDetection`)はPhase 5でも維持して
   いるが、積算明細側の対応する行を同時に一時強調していた旧機構(1行=1
   Detection前提)は、明細行の全面書き換えに伴い実装していない。
+
+## 新ワークフローUI統合 (Issue #40 Phase 6-C) に伴う既知の制約
+
+- **図面情報マスタ(`drawing_evidence_types`)は本番データで未投入**: 本番DB
+  (`backend/data/sekisan_navi.db`)を調査した時点(2026-10)で
+  `GET /api/drawing-evidence-types`は空配列を返す(テーブル自体は0007/0008の
+  migrationで作成済みだが、行が1件も投入されていない)。そのため、現状の
+  本番データでは「図面情報」floating panelを開いても選べる項目が無く、
+  新ワークフローの主導線を実際に使うには、別途`drawing_evidence_types`・
+  対応する`estimate_rule_masters`へ実データを投入する運用作業が必要になる
+  (投入手順・投入すべきマスタデータの確定自体は今回のスコープ外)。
+- **新旧同一コード衝突のdedupe方針は引き続き未確定**: 33章の暫定対応
+  (dedupeせず両方をneeds_reviewとして残す)は本フェーズでも変更していない。
+  「要確認」件数の可視化(積算集約の小表示)は改善したが、解消すべき
+  判定自体の業務ルールは確定していない。
+- **行クリックの持続選択・BBox導線はタブ横断では機能しない**: 積算明細の
+  行クリック選択(`detailSelectedResultId`)・BBoxからの逆引き強調
+  (`relatedToSelectedBboxResultIds`)は、いずれも現在表示中のタブに対象行が
+  含まれている場合のみ見える。タブを自動的に切り替える・該当行まで
+  自動スクロールする機能は意図的に実装していない(既存のタブ・対象絞り込みの
+  挙動を変えないため)。
+- **部品台帳の既定非表示は実ブラウザ確認の結果による判断**: 1024px/1600pxの
+  実ブラウザ確認で作業性を損なわないことを確認したうえで採用したが、
+  実際の長期運用での使用感(部品台帳を頻繁に使う作業者がいるか等)は
+  未検証。
 
 ## その他、コードから確認できる制約
 
