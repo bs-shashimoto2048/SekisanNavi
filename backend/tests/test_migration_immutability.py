@@ -103,12 +103,13 @@ def test_0009_alone_adds_columns_to_a_db_where_0008_was_applied_without_them(tmp
         assert "unit_labor" not in columns_before
 
     applied = run_migrations(db_path)
-    # [Issue #40 Phase 6-A] 0010新設により、legacy 0008からの追いつき適用では
-    # 0009に続けて0010も未適用のため、この1回のrun_migrations()呼び出しで
-    # 両方とも順に適用される。
+    # [Issue #40 Phase 6-A/6後半] 0010・0011新設により、legacy 0008からの
+    # 追いつき適用では0009に続けて0010・0011も未適用のため、この1回の
+    # run_migrations()呼び出しで3つとも順に適用される。
     assert applied == [
         "0009_estimate_results_unit_price_labor.py",
         "0010_estimate_confirmation_result_snapshot.py",
+        "0011_estimate_quantity_override.py",
     ]
 
     with get_connection(db_path) as conn:

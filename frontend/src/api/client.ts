@@ -336,4 +336,27 @@ export function resetEstimateResultFactor(productNo: string, resultId: number): 
   )
 }
 
+/** 積算結果1件の数量を手修正する (Issue #40 Phase 6後半)。以後の再評価でも
+ * この値を保持する(`overrideEstimateResultFactor`と同じ考え方)。`reason`は
+ * 必須(指示4章)。 */
+export function overrideEstimateResultQuantity(
+  productNo: string,
+  resultId: number,
+  input: { current_quantity: number; reason: string; updated_by?: string },
+): Promise<EstimateResult> {
+  return sendJson(
+    `/api/products/${encodeURIComponent(productNo)}/estimate-results/${resultId}/quantity`,
+    'PATCH',
+    input,
+  )
+}
+
+/** 積算結果1件の数量を「初期値へ戻す」(Issue #40 Phase 6後半)。以後の
+ * 再評価では最新の自動算定値へ再び追従するようになる。 */
+export function resetEstimateResultQuantity(productNo: string, resultId: number): Promise<EstimateResult> {
+  return postJsonNoBody(
+    `/api/products/${encodeURIComponent(productNo)}/estimate-results/${resultId}/reset-quantity`,
+  )
+}
+
 export { ApiError }

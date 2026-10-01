@@ -62,6 +62,25 @@ function formatConfirmedFactor(item: EstimateConfirmationItem): string {
   return item.factor_overridden ? `${item.current_factor} (手修正)` : `${item.current_factor}`
 }
 
+/** [Issue #40 Phase 6後半指示9章] 数量列の表示。`quantity_overridden`が
+ * null(Phase 6後半以前の過去snapshot)の場合は従来通り`item.quantity`を
+ * そのまま表示し、「(手修正)」も付けない(値を推測で追加しない)。
+ * trueの場合のみ「(手修正)」を添える。 */
+function formatConfirmedQuantity(item: EstimateConfirmationItem): string {
+  return item.quantity_overridden === true ? `${item.quantity} (手修正)` : `${item.quantity}`
+}
+
+/** 数量が手修正されていた行のみ、hover/titleで初期数量/確定数量/理由/
+ * 修正者(存在する場合)を確認できるようにする(指示9章、PR #46レビュー
+ * 指摘対応)。修正日時は内部で保持するのみとし、常時表示には含めない。 */
+function confirmedQuantityTitle(item: EstimateConfirmationItem): string | undefined {
+  if (item.quantity_overridden !== true) return undefined
+  const base = `初期数量: ${item.initial_quantity ?? MISSING_VALUE_PLACEHOLDER}\n確定数量: ${
+    item.current_quantity ?? item.quantity
+  }\n理由: ${item.quantity_override_reason ?? ''}`
+  return item.quantity_updated_by != null ? `${base}\n修正者: ${item.quantity_updated_by}` : base
+}
+
 export function EstimateConfirmationHistory({ productNo }: Props) {
   const [open, setOpen] = useState(false)
   const [listState, setListState] = useState<ListState>({ kind: 'loading' })
@@ -233,7 +252,7 @@ export function EstimateConfirmationHistory({ productNo }: Props) {
                           <tr key={item.id}>
                             <td>{item.code}</td>
                             <td>{formatContent(item)}</td>
-                            <td>{item.quantity}</td>
+                            <td title={confirmedQuantityTitle(item)}>{formatConfirmedQuantity(item)}</td>
                             <td>
                               {item.applicable_unit != null
                                 ? applicableUnitLabel(item.applicable_unit)

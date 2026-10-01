@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { EstimateDetail } from './EstimateDetail'
 import type { Detection, EstimateMasterItem, EstimateResult } from '../../types/domain'
@@ -11,6 +11,12 @@ function makeResult(overrides: Partial<EstimateResult> = {}): EstimateResult {
     master_item_id: 10,
     code: '11001',
     quantity: 1,
+    initial_quantity: 1,
+    current_quantity: 1,
+    quantity_overridden: false,
+    quantity_override_reason: null,
+    quantity_updated_at: null,
+    quantity_updated_by: null,
     applicable_unit: 'face',
     initial_factor: 1.0,
     current_factor: 1.0,
@@ -200,6 +206,38 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     expect(screen.getByRole('tab', { name: /^修正あり/ }).textContent).toContain('1')
   })
 
+  it('"修正あり" tab also includes quantity_overridden === true rows (Issue #40 Phase 6後半指示7章)', () => {
+    const results = [
+      makeResult({ id: 1, code: 'A', factor_overridden: false, quantity_overridden: false }),
+      makeResult({ id: 2, code: 'B', factor_overridden: false, quantity_overridden: true }),
+      makeResult({ id: 3, code: 'C', factor_overridden: true, quantity_overridden: true }),
+    ]
+    renderDetail({ results, tabFilter: 'overridden' })
+    expect(screen.queryByText('A')).not.toBeInTheDocument()
+    expect(screen.getByText('B')).toBeInTheDocument()
+    expect(screen.getByText('C')).toBeInTheDocument()
+    // 両方修正されている行(C)も1行としてのみ数える。
+    expect(screen.getByRole('tab', { name: /^修正あり/ }).textContent).toContain('2')
+  })
+
+  it('calls onOverrideResultQuantity/onResetResultQuantity from the embedded quantity cell', () => {
+    const onOverrideResultQuantity = vi.fn()
+    const onResetResultQuantity = vi.fn()
+    const result = makeResult({ current_quantity: 3, quantity_overridden: true })
+    renderDetail({ results: [result], onOverrideResultQuantity, onResetResultQuantity })
+
+    const input = screen.getByLabelText('数量') as HTMLInputElement
+    fireEvent.change(input, { target: { value: '5' } })
+    fireEvent.blur(input)
+    fireEvent.change(screen.getByLabelText('数量変更の理由'), { target: { value: '現地確認' } })
+    fireEvent.click(screen.getByRole('button', { name: '適用' }))
+    expect(onOverrideResultQuantity).toHaveBeenCalledWith(result, 5, '現地確認')
+
+    const quantityCell = input.closest('.estimate-result-quantity-cell') as HTMLElement
+    fireEvent.click(within(quantityCell).getByRole('button', { name: '初期値へ戻す' }))
+    expect(onResetResultQuantity).toHaveBeenCalledWith(result)
+  })
+
   it('calls onTabFilterChange (not internal state) when a tab is clicked', () => {
     const onTabFilterChange = vi.fn()
     renderDetail({ results: [makeResult()], onTabFilterChange })
@@ -344,7 +382,8 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     renderDetail({ results: [result], onOverrideResultFactor, onResetResultFactor })
     fireEvent.change(screen.getByLabelText('係数'), { target: { value: '0.5' } })
     expect(onOverrideResultFactor).toHaveBeenCalledWith(result, 0.5)
-    fireEvent.click(screen.getByRole('button', { name: '初期値へ戻す' }))
+    const factorCell = screen.getByLabelText('係数').closest('.estimate-result-factor-cell') as HTMLElement
+    fireEvent.click(within(factorCell).getByRole('button', { name: '初期値へ戻す' }))
     expect(onResetResultFactor).toHaveBeenCalledWith(result)
   })
 

@@ -361,3 +361,131 @@ def test_list_estimate_results_filters_by_detection_id(client, monkeypatch, tmp_
         f"/api/products/A1GV2421/estimate-results?detection_id={excluded_detection['id']}"
     ).json()
     assert no_matches == []
+
+
+# --- Issue #40 Phase 6後半: 数量override API ---
+
+
+def test_quantity_override_and_reset_roundtrip(client, monkeypatch, tmp_path, db_path):
+    _setup_product_and_rule(client, monkeypatch, tmp_path, db_path)
+    evaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    result_id = evaluated["results"][0]["id"]
+
+    override_res = client.patch(
+        f"/api/products/A1GV2421/estimate-results/{result_id}/quantity",
+        json={"current_quantity": 5, "reason": "現地確認", "updated_by": "tester"},
+    )
+    assert override_res.status_code == 200
+    overridden = override_res.json()
+    assert overridden["current_quantity"] == 5
+    assert overridden["quantity"] == 5
+    assert overridden["quantity_overridden"] is True
+    assert overridden["quantity_override_reason"] == "現地確認"
+    # PR #46レビュー指摘対応: updated_by指定時はそのまま保存され、
+    # updated_atも保存される。
+    assert overridden["quantity_updated_by"] == "tester"
+    assert overridden["quantity_updated_at"] is not None
+
+    # 再評価しても手修正は保持される(updated_at/byも含む、指示3章)。
+    reevaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    assert reevaluated["results"][0]["current_quantity"] == 5
+    assert reevaluated["results"][0]["quantity_overridden"] is True
+    assert reevaluated["results"][0]["quantity_updated_by"] == "tester"
+    assert reevaluated["results"][0]["quantity_updated_at"] == overridden["quantity_updated_at"]
+
+    reset_res = client.post(f"/api/products/A1GV2421/estimate-results/{result_id}/reset-quantity")
+    assert reset_res.status_code == 200
+    reset_body = reset_res.json()
+    assert reset_body["quantity_overridden"] is False
+    assert reset_body["current_quantity"] == reset_body["initial_quantity"]
+    assert reset_body["quantity_override_reason"] is None
+    # 指示2章「reset時」: updated_at/byもNULLへ戻す。
+    assert reset_body["quantity_updated_at"] is None
+    assert reset_body["quantity_updated_by"] is None
+
+
+def test_quantity_override_allows_explicit_zero(client, monkeypatch, tmp_path, db_path):
+    """指示3章: 明示的な0は許可する。"""
+    _setup_product_and_rule(client, monkeypatch, tmp_path, db_path)
+    evaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    result_id = evaluated["results"][0]["id"]
+
+    res = client.patch(
+        f"/api/products/A1GV2421/estimate-results/{result_id}/quantity",
+        json={"current_quantity": 0, "reason": "在庫充当"},
+    )
+    assert res.status_code == 200
+    assert res.json()["current_quantity"] == 0
+    assert res.json()["quantity_overridden"] is True
+    # 要件1「updated_by未指定ならNULL可」(PR #46レビュー指摘対応)。
+    assert res.json()["quantity_updated_by"] is None
+    assert res.json()["quantity_updated_at"] is not None
+
+
+def test_quantity_override_rejects_negative_value(client, monkeypatch, tmp_path, db_path):
+    _setup_product_and_rule(client, monkeypatch, tmp_path, db_path)
+    evaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    result_id = evaluated["results"][0]["id"]
+
+    res = client.patch(
+        f"/api/products/A1GV2421/estimate-results/{result_id}/quantity",
+        json={"current_quantity": -1, "reason": "test"},
+    )
+    assert res.status_code == 422
+
+
+def test_quantity_override_rejects_nan_and_infinity(client, monkeypatch, tmp_path, db_path):
+    _setup_product_and_rule(client, monkeypatch, tmp_path, db_path)
+    evaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    result_id = evaluated["results"][0]["id"]
+
+    for bad_value in ("NaN", "Infinity", "-Infinity"):
+        res = client.patch(
+            f"/api/products/A1GV2421/estimate-results/{result_id}/quantity",
+            json={"current_quantity": bad_value, "reason": "test"},
+        )
+        assert res.status_code == 422, bad_value
+
+
+def test_quantity_override_requires_non_empty_reason(client, monkeypatch, tmp_path, db_path):
+    """指示4章: 数量変更時は理由入力を必須とする。"""
+    _setup_product_and_rule(client, monkeypatch, tmp_path, db_path)
+    evaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    result_id = evaluated["results"][0]["id"]
+
+    res = client.patch(
+        f"/api/products/A1GV2421/estimate-results/{result_id}/quantity",
+        json={"current_quantity": 5, "reason": ""},
+    )
+    assert res.status_code == 422
+
+
+def test_override_unknown_result_quantity_returns_404(client, monkeypatch, tmp_path, db_path):
+    _setup_product_and_rule(client, monkeypatch, tmp_path, db_path)
+    res = client.patch(
+        "/api/products/A1GV2421/estimate-results/999999/quantity",
+        json={"current_quantity": 5, "reason": "test"},
+    )
+    assert res.status_code == 404
+
+
+def test_quantity_and_factor_overrides_both_survive_independently(client, monkeypatch, tmp_path, db_path):
+    """指示7章の前提: 係数・数量それぞれを独立して手修正できる(両方修正も可)。"""
+    _setup_product_and_rule(client, monkeypatch, tmp_path, db_path)
+    evaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
+    result_id = evaluated["results"][0]["id"]
+
+    client.patch(
+        f"/api/products/A1GV2421/estimate-results/{result_id}/quantity",
+        json={"current_quantity": 3, "reason": "数量変更"},
+    )
+    both_res = client.patch(
+        f"/api/products/A1GV2421/estimate-results/{result_id}",
+        json={"current_factor": 0.5, "reason": "係数変更"},
+    )
+    assert both_res.status_code == 200
+    both = both_res.json()
+    assert both["quantity_overridden"] is True
+    assert both["factor_overridden"] is True
+    assert both["current_quantity"] == 3
+    assert both["current_factor"] == 0.5

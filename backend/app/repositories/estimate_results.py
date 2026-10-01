@@ -55,7 +55,10 @@ class FactorNotAllowedError(Exception):
 
 
 _COLUMNS = """
-    id, product_no, result_key, master_item_id, code, quantity, applicable_unit,
+    id, product_no, result_key, master_item_id, code, quantity,
+    initial_quantity, current_quantity, quantity_overridden, quantity_override_reason,
+    quantity_updated_at, quantity_updated_by,
+    applicable_unit,
     initial_factor, current_factor, factor_overridden, factor_override_reason,
     factor_updated_at, factor_updated_by, judgment_method, judgment_scope,
     target_panel_ban_menno, target_panel_ban_no, target_drawing_page_id,
@@ -71,6 +74,12 @@ def _row_to_result(row: sqlite3.Row) -> EstimateResult:
         master_item_id=row["master_item_id"],
         code=row["code"],
         quantity=row["quantity"],
+        initial_quantity=row["initial_quantity"],
+        current_quantity=row["current_quantity"],
+        quantity_overridden=bool(row["quantity_overridden"]),
+        quantity_override_reason=row["quantity_override_reason"],
+        quantity_updated_at=row["quantity_updated_at"],
+        quantity_updated_by=row["quantity_updated_by"],
         applicable_unit=ApplicableUnit(row["applicable_unit"]) if row["applicable_unit"] else None,
         initial_factor=row["initial_factor"],
         current_factor=row["current_factor"],
@@ -230,7 +239,6 @@ def replace_results_for_product(
         common_params = (
             candidate.master_item_id,
             candidate.code,
-            candidate.quantity,
             candidate.applicable_unit.value if candidate.applicable_unit else None,
             candidate.initial_factor,
             candidate.judgment_method.value,
@@ -254,30 +262,49 @@ def replace_results_for_product(
             #
             # factor_overridden=1の行は current_factor を更新しない(既存値の
             # ままprice/labor再計算に使われる)。0の行は current_factor も
-            # 新しい initial_factor へ追従させる。
+            # 新しい initial_factor へ追従させる。quantity_overridden=1の行も
+            # 同じ考え方でcurrent_quantity/quantityを更新しない
+            # (Issue #40 Phase 6後半、指示2章「自動再評価で手修正値を勝手に
+            # 上書きしない」)。initial_quantityは手修正の有無に関わらず常に
+            # 最新の自動算定値へ更新する(initial_factorと同じ扱い)。
+            # quantity_updated_at/quantity_updated_byはこのUPDATE文のSET対象に
+            # 含めていないため、overridden/非overriddenいずれの行でも常に
+            # 現在値のまま保持される(overridden行はoverride実行時の値を維持、
+            # 非overridden行は常にNULLのまま、PR #46レビュー指摘対応)。
             #
             # Issue #40 Phase 5: statusは`factor_overridden`のような手修正保護
             # 対象ではなく(現時点でstatusを手動変更するAPIは無い)、候補の値で
-            # 毎回上書きしてよい(quantity/judgment_reason等と同じ扱い)。
+            # 毎回上書きしてよい(judgment_reason等と同じ扱い)。
             conn.execute(
                 """
                 UPDATE estimate_results
-                SET master_item_id = ?, code = ?, quantity = ?, applicable_unit = ?,
+                SET master_item_id = ?, code = ?, applicable_unit = ?,
                     initial_factor = ?, judgment_method = ?, judgment_scope = ?,
                     target_panel_ban_menno = ?, target_panel_ban_no = ?,
                     target_drawing_page_id = ?, judgment_reason = ?, source_rule_id = ?,
                     unit_price = ?, unit_labor = ?, status = ?,
                     current_factor = CASE WHEN factor_overridden = 1 THEN current_factor ELSE ? END,
+                    initial_quantity = ?,
+                    current_quantity = CASE WHEN quantity_overridden = 1 THEN current_quantity ELSE ? END,
+                    quantity = CASE WHEN quantity_overridden = 1 THEN quantity ELSE ? END,
                     updated_at = datetime('now')
                 WHERE id = ?
                 """,
-                (*common_params, candidate.status.value, candidate.initial_factor, existing_id),
+                (
+                    *common_params,
+                    candidate.status.value,
+                    candidate.initial_factor,
+                    candidate.quantity,
+                    candidate.quantity,
+                    candidate.quantity,
+                    existing_id,
+                ),
             )
             conn.execute(
                 """
                 UPDATE estimate_results
-                SET price = unit_price * quantity * current_factor,
-                    labor = unit_labor * quantity * current_factor
+                SET price = unit_price * current_quantity * current_factor,
+                    labor = unit_labor * current_quantity * current_factor
                 WHERE id = ?
                 """,
                 (existing_id,),
@@ -287,12 +314,14 @@ def replace_results_for_product(
             cursor = conn.execute(
                 """
                 INSERT INTO estimate_results
-                    (product_no, result_key, master_item_id, code, quantity, applicable_unit,
+                    (product_no, result_key, master_item_id, code, quantity,
+                     initial_quantity, current_quantity, quantity_overridden,
+                     applicable_unit,
                      initial_factor, current_factor, factor_overridden,
                      judgment_method, judgment_scope, target_panel_ban_menno, target_panel_ban_no,
                      target_drawing_page_id, judgment_reason, source_rule_id,
                      unit_price, unit_labor, price, labor, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         ? * ?, ? * ?, ?)
                 """,
                 (
@@ -300,6 +329,8 @@ def replace_results_for_product(
                     candidate.result_key,
                     candidate.master_item_id,
                     candidate.code,
+                    candidate.quantity,
+                    candidate.quantity,
                     candidate.quantity,
                     candidate.applicable_unit.value if candidate.applicable_unit else None,
                     candidate.initial_factor,
@@ -370,7 +401,7 @@ def set_current_factor(
         UPDATE estimate_results
         SET current_factor = ?, factor_overridden = 1, factor_override_reason = ?,
             factor_updated_at = datetime('now'), factor_updated_by = ?,
-            price = unit_price * quantity * ?, labor = unit_labor * quantity * ?,
+            price = unit_price * current_quantity * ?, labor = unit_labor * current_quantity * ?,
             updated_at = datetime('now')
         WHERE id = ? AND product_no = ?
         """,
@@ -395,8 +426,88 @@ def reset_factor_to_initial(
         SET current_factor = initial_factor, factor_overridden = 0,
             factor_override_reason = NULL, factor_updated_at = NULL,
             factor_updated_by = NULL,
-            price = unit_price * quantity * initial_factor,
-            labor = unit_labor * quantity * initial_factor,
+            price = unit_price * current_quantity * initial_factor,
+            labor = unit_labor * current_quantity * initial_factor,
+            updated_at = datetime('now')
+        WHERE id = ? AND product_no = ?
+        """,
+        (result_id, product_no),
+    )
+    if cur.rowcount == 0:
+        return None
+    return get_result(conn, product_no=product_no, result_id=result_id)
+
+
+def set_current_quantity(
+    conn: sqlite3.Connection,
+    *,
+    product_no: str,
+    result_id: int,
+    current_quantity: float,
+    reason: str,
+    updated_by: str | None,
+) -> EstimateResult | None:
+    """数量の手修正 (Issue #40 Phase 6後半)。`quantity_overridden`をTrueにし、
+    以後の再評価(`replace_results_for_product`)からこの値を保護する
+    (`set_current_factor`と同じ考え方)。`quantity`(既存列、常に
+    `current_quantity`と同じ値を保つ)・`price`/`labor`もこの場で再計算する。
+
+    **PR #46レビュー指摘対応**: `factor_updated_at`/`factor_updated_by`と
+    同じ考え方で、override実行時刻(`quantity_updated_at`)・actor
+    (`quantity_updated_by`、未指定ならNULL)を保存する(推奨案A)。
+
+    入力値の妥当性(0以上・NaN/Infinity禁止)はAPIスキーマ
+    (`EstimateResultQuantityOverrideIn`)側で検証済みの前提とし、ここでは
+    再度の検証は行わない(係数overrideが`allowed_factors`の検証をAPI層と
+    repository層の両方で行っているのとは異なり、数量には現時点でそのような
+    追加のビジネスルールが無いため)。
+    """
+    cur = conn.execute(
+        """
+        UPDATE estimate_results
+        SET current_quantity = ?, quantity = ?, quantity_overridden = 1,
+            quantity_override_reason = ?,
+            quantity_updated_at = datetime('now'), quantity_updated_by = ?,
+            price = unit_price * ? * current_factor, labor = unit_labor * ? * current_factor,
+            updated_at = datetime('now')
+        WHERE id = ? AND product_no = ?
+        """,
+        (
+            current_quantity,
+            current_quantity,
+            reason,
+            updated_by,
+            current_quantity,
+            current_quantity,
+            result_id,
+            product_no,
+        ),
+    )
+    if cur.rowcount == 0:
+        return None
+    return get_result(conn, product_no=product_no, result_id=result_id)
+
+
+def reset_quantity_to_initial(
+    conn: sqlite3.Connection, *, product_no: str, result_id: int
+) -> EstimateResult | None:
+    """「初期値へ戻す」操作 (Issue #40 Phase 6後半)。`current_quantity`
+    (および既存列`quantity`)を`initial_quantity`へ戻し、
+    `quantity_overridden`をFalseに、`quantity_override_reason`をNULLに戻す
+    (以後の再評価で最新の自動算定値へ再び追従するようになる)。`price`/
+    `labor`も`initial_quantity`を使って再計算する。
+
+    **PR #46レビュー指摘対応**: `factor_updated_at`/`factor_updated_by`と
+    同じく、`quantity_updated_at`/`quantity_updated_by`もNULLへ戻す。
+    """
+    cur = conn.execute(
+        """
+        UPDATE estimate_results
+        SET current_quantity = initial_quantity, quantity = initial_quantity,
+            quantity_overridden = 0, quantity_override_reason = NULL,
+            quantity_updated_at = NULL, quantity_updated_by = NULL,
+            price = unit_price * initial_quantity * current_factor,
+            labor = unit_labor * initial_quantity * current_factor,
             updated_at = datetime('now')
         WHERE id = ? AND product_no = ?
         """,
@@ -413,5 +524,7 @@ __all__ = [
     "replace_results_for_product",
     "set_current_factor",
     "reset_factor_to_initial",
+    "set_current_quantity",
+    "reset_quantity_to_initial",
     "FactorNotAllowedError",
 ]

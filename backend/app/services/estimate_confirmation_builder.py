@@ -270,6 +270,12 @@ def build_confirmation_items(
                 judgment_reason=result.judgment_reason,
                 source_rule_id=result.source_rule_id,
                 result_status=result.status,
+                initial_quantity=result.initial_quantity,
+                current_quantity=result.current_quantity,
+                quantity_overridden=result.quantity_overridden,
+                quantity_override_reason=result.quantity_override_reason,
+                quantity_updated_at=result.quantity_updated_at,
+                quantity_updated_by=result.quantity_updated_by,
                 evidence=evidence_inputs,
             )
         )

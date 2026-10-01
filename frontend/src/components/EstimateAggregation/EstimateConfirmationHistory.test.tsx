@@ -69,6 +69,12 @@ function makeDetail(overrides: Partial<EstimateConfirmationDetail> = {}): Estima
         judgment_reason: null,
         source_rule_id: null,
         result_status: 'auto',
+        initial_quantity: 1,
+        current_quantity: 1,
+        quantity_overridden: false,
+        quantity_override_reason: null,
+        quantity_updated_at: null,
+        quantity_updated_by: null,
         evidence: [],
       },
     ],
@@ -145,6 +151,66 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
     expect(screen.getByText(/合計 322,000円/)).toBeInTheDocument()
   })
 
+  it('shows "N (手修正)" with initial/current/reason in the title when quantity was manually overridden (Issue #40 Phase 6後半指示9章)', async () => {
+    vi.mocked(listEstimateConfirmations).mockResolvedValue([makeSummary()])
+    vi.mocked(getEstimateConfirmation).mockResolvedValue(
+      makeDetail({
+        items: [
+          {
+            id: 1,
+            detection_id: 101,
+            drawing_page_id: 1,
+            target_id: 'panel:5:5',
+            target_type: 'panel',
+            ban_menno: 5,
+            ban_no: 5,
+            panel_name: 'No.2-1低圧動力盤',
+            master_item_id: 10,
+            code: '11002',
+            category: '箱･単独',
+            model: 'OS2- 916',
+            rating: null,
+            source_type: 'manual',
+            quantity: 4,
+            unit_price: 322000,
+            amount: 1288000,
+            status: 'reviewed',
+            bbox_x: 0.1,
+            bbox_y: 0.1,
+            bbox_w: 0.05,
+            bbox_h: 0.05,
+            page_no: 16,
+            current_factor: 1.0,
+            factor_overridden: false,
+            judgment_method: 'drawing_judgment',
+            applicable_unit: 'unit',
+            judgment_reason: null,
+            source_rule_id: null,
+            result_status: 'auto',
+            initial_quantity: 1,
+            current_quantity: 4,
+            quantity_overridden: true,
+            quantity_override_reason: '現地確認により4台へ変更',
+            quantity_updated_at: '2026-09-04 07:20:00',
+            quantity_updated_by: 'tester',
+            evidence: [],
+          },
+        ],
+      }),
+    )
+    render(<EstimateConfirmationHistory productNo="A1GV2421" />)
+
+    fireEvent.click(screen.getByRole('button', { name: '履歴' }))
+    await screen.findByText('2026-09-04 07:28:06')
+    fireEvent.click(screen.getByText('2026-09-04 07:28:06'))
+
+    const quantityCell = await screen.findByText('4 (手修正)')
+    expect(quantityCell.title).toContain('初期数量: 1')
+    expect(quantityCell.title).toContain('修正者: tester')
+    expect(quantityCell.title).toContain('確定数量: 4')
+    expect(quantityCell.title).toContain('現地確認により4台へ変更')
+  })
+
   it('shows an unknown-price line item as "不明" rather than fabricating a value', async () => {
     vi.mocked(listEstimateConfirmations).mockResolvedValue([makeSummary()])
     vi.mocked(getEstimateConfirmation).mockResolvedValue(
@@ -181,6 +247,12 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
             judgment_reason: null,
             source_rule_id: null,
             result_status: null,
+            initial_quantity: null,
+            current_quantity: null,
+            quantity_overridden: null,
+            quantity_override_reason: null,
+            quantity_updated_at: null,
+            quantity_updated_by: null,
             evidence: [],
           },
         ],

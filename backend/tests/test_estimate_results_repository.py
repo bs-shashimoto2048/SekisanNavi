@@ -16,7 +16,9 @@ from app.repositories.estimate_results import (
     list_results_for_product,
     replace_results_for_product,
     reset_factor_to_initial,
+    reset_quantity_to_initial,
     set_current_factor,
+    set_current_quantity,
 )
 from app.repositories.estimate_rule_masters import create_rule_master
 
@@ -61,6 +63,12 @@ def test_replace_results_creates_new_rows_with_price_and_evidence(db_path):
     assert r.price == 1000.0  # 1000 * 1 * 1.0
     assert len(r.evidence) == 1
     assert r.evidence[0].detection_id == 101
+    # Issue #40 Phase 6後半: 評価器算出直後はinitial_quantity/current_quantity
+    # ともにcandidate.quantityと一致し、手修正なしの状態であること。
+    assert r.initial_quantity == 1
+    assert r.current_quantity == 1
+    assert r.quantity_overridden is False
+    assert r.quantity_override_reason is None
 
 
 def test_replace_results_removes_rows_whose_condition_no_longer_holds(db_path):
@@ -373,3 +381,156 @@ def test_list_results_for_product_filters_by_detection_id_shared_by_multiple_res
         matches = list_results_for_product(conn, product_no="A1GV2421", detection_id=101)
 
     assert {r.code for r in matches} == {"18323", "18500"}
+
+
+# --- Issue #40 Phase 6後半: 数量手修正 (係数overrideと同じ考え方) ---
+
+
+def test_manual_quantity_override_survives_reevaluation(db_path):
+    """指示2章: 同じ結果が再評価後も存続する場合、current_quantityは手修正値を
+    維持し、initial_quantityのみ新しい自動算定値へ更新される。"""
+    from app.db.connection import get_connection
+
+    with get_connection(db_path) as conn:
+        [created] = replace_results_for_product(conn, product_no="A1GV2421", candidates=[_candidate()])
+
+        overridden = set_current_quantity(
+            conn,
+            product_no="A1GV2421",
+            result_id=created.id,
+            current_quantity=5,
+            reason="現地確認により5個へ変更",
+            updated_by="tester",
+        )
+        assert overridden.current_quantity == 5
+        assert overridden.quantity == 5
+        assert overridden.quantity_overridden is True
+        assert overridden.quantity_override_reason == "現地確認により5個へ変更"
+        assert overridden.price == 5000.0  # 1000 * 5 * 1.0
+        # PR #46レビュー指摘対応: override実行時のactor/日時を保存する(推奨案A)。
+        assert overridden.quantity_updated_by == "tester"
+        assert overridden.quantity_updated_at is not None
+
+        # 再評価: initial_quantityが変わった新しい候補が来ても、
+        # current_quantityは保持される(指示2章「自動再評価で手修正値を
+        # 勝手に上書きしない」)。
+        [reevaluated] = replace_results_for_product(
+            conn, product_no="A1GV2421", candidates=[_candidate(quantity=2)]
+        )
+        assert reevaluated.id == created.id
+        assert reevaluated.initial_quantity == 2  # 派生値は更新される
+        assert reevaluated.current_quantity == 5  # 手修正値は保持される
+        assert reevaluated.quantity == 5
+        assert reevaluated.quantity_overridden is True
+        assert reevaluated.quantity_override_reason == "現地確認により5個へ変更"
+        assert reevaluated.price == 5000.0  # 1000 * 5 * 1.0 (保持された数量のまま)
+        # 再評価後もoverride中はquantity_updated_at/byを保持する(指示3章)。
+        assert reevaluated.quantity_updated_by == "tester"
+        assert reevaluated.quantity_updated_at == overridden.quantity_updated_at
+
+
+def test_unoverridden_result_tracks_initial_quantity_on_reevaluation(db_path):
+    """手修正していない結果は、再評価のたびに最新のinitial_quantityへ追従する。"""
+    from app.db.connection import get_connection
+
+    with get_connection(db_path) as conn:
+        replace_results_for_product(conn, product_no="A1GV2421", candidates=[_candidate(quantity=1)])
+        [updated] = replace_results_for_product(
+            conn, product_no="A1GV2421", candidates=[_candidate(quantity=3)]
+        )
+
+    assert updated.initial_quantity == 3
+    assert updated.current_quantity == 3
+    assert updated.quantity == 3
+    assert updated.quantity_overridden is False
+    assert updated.price == 3000.0
+    # 指示3章: override対象外(quantity_overridden=false)の行では
+    # quantity_updated_at/byはNULLのまま(PR #46レビュー指摘対応)。
+    assert updated.quantity_updated_at is None
+    assert updated.quantity_updated_by is None
+
+
+def test_reset_quantity_to_initial(db_path):
+    from app.db.connection import get_connection
+
+    with get_connection(db_path) as conn:
+        [created] = replace_results_for_product(conn, product_no="A1GV2421", candidates=[_candidate(quantity=1)])
+        set_current_quantity(
+            conn,
+            product_no="A1GV2421",
+            result_id=created.id,
+            current_quantity=9,
+            reason="一時的な変更",
+            updated_by=None,
+        )
+        reset = reset_quantity_to_initial(conn, product_no="A1GV2421", result_id=created.id)
+
+    assert reset.current_quantity == reset.initial_quantity == 1
+    assert reset.quantity == 1
+    assert reset.quantity_overridden is False
+    assert reset.quantity_override_reason is None
+    assert reset.price == 1000.0
+    # 指示2章「reset時」: quantity_updated_at/byもNULLへ戻す
+    # (PR #46レビュー指摘対応)。
+    assert reset.quantity_updated_at is None
+    assert reset.quantity_updated_by is None
+
+
+def test_set_current_quantity_recalculates_labor(db_path):
+    from app.db.connection import get_connection
+
+    with get_connection(db_path) as conn:
+        [created] = replace_results_for_product(
+            conn, product_no="A1GV2421", candidates=[_candidate(quantity=1, unit_price=1000.0, unit_labor=2.0)]
+        )
+        overridden = set_current_quantity(
+            conn,
+            product_no="A1GV2421",
+            result_id=created.id,
+            current_quantity=4,
+            reason="数量変更",
+            updated_by=None,
+        )
+
+    assert overridden.labor == 8.0  # 2.0 * 4 * 1.0
+    assert overridden.price == 4000.0  # 1000 * 4 * 1.0
+    # 要件1「updated_by未指定ならNULL可」: updated_at自体は保存するが、
+    # updated_byはNoneのまま保存される(PR #46レビュー指摘対応)。
+    assert overridden.quantity_updated_at is not None
+    assert overridden.quantity_updated_by is None
+
+
+def test_set_current_quantity_allows_explicit_zero(db_path):
+    """指示3章: 明示的な0は許可する(空欄blurでの0保存禁止はUI側の責務)。"""
+    from app.db.connection import get_connection
+
+    with get_connection(db_path) as conn:
+        [created] = replace_results_for_product(conn, product_no="A1GV2421", candidates=[_candidate(quantity=1)])
+        overridden = set_current_quantity(
+            conn, product_no="A1GV2421", result_id=created.id, current_quantity=0, reason="在庫から充当", updated_by=None
+        )
+
+    assert overridden.current_quantity == 0
+    assert overridden.quantity_overridden is True
+    assert overridden.price == 0.0
+
+
+def test_quantity_and_factor_overrides_are_independent(db_path):
+    """指示7章の前提: 係数と数量は別々に手修正でき、両方修正された状態も
+    成立する。"""
+    from app.db.connection import get_connection
+
+    with get_connection(db_path) as conn:
+        [created] = replace_results_for_product(conn, product_no="A1GV2421", candidates=[_candidate(quantity=1)])
+        set_current_quantity(
+            conn, product_no="A1GV2421", result_id=created.id, current_quantity=3, reason="数量変更", updated_by=None
+        )
+        both = set_current_factor(
+            conn, product_no="A1GV2421", result_id=created.id, current_factor=0.5, reason="係数変更", updated_by=None
+        )
+
+    assert both.quantity_overridden is True
+    assert both.factor_overridden is True
+    assert both.current_quantity == 3
+    assert both.current_factor == 0.5
+    assert both.price == 1500.0  # 1000 * 3 * 0.5
