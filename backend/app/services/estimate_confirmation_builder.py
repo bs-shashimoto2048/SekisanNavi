@@ -274,6 +274,8 @@ def build_confirmation_items(
                 current_quantity=result.current_quantity,
                 quantity_overridden=result.quantity_overridden,
                 quantity_override_reason=result.quantity_override_reason,
+                quantity_updated_at=result.quantity_updated_at,
+                quantity_updated_by=result.quantity_updated_by,
                 evidence=evidence_inputs,
             )
         )

@@ -407,6 +407,9 @@ def test_manual_quantity_override_survives_reevaluation(db_path):
         assert overridden.quantity_overridden is True
         assert overridden.quantity_override_reason == "現地確認により5個へ変更"
         assert overridden.price == 5000.0  # 1000 * 5 * 1.0
+        # PR #46レビュー指摘対応: override実行時のactor/日時を保存する(推奨案A)。
+        assert overridden.quantity_updated_by == "tester"
+        assert overridden.quantity_updated_at is not None
 
         # 再評価: initial_quantityが変わった新しい候補が来ても、
         # current_quantityは保持される(指示2章「自動再評価で手修正値を
@@ -421,6 +424,9 @@ def test_manual_quantity_override_survives_reevaluation(db_path):
         assert reevaluated.quantity_overridden is True
         assert reevaluated.quantity_override_reason == "現地確認により5個へ変更"
         assert reevaluated.price == 5000.0  # 1000 * 5 * 1.0 (保持された数量のまま)
+        # 再評価後もoverride中はquantity_updated_at/byを保持する(指示3章)。
+        assert reevaluated.quantity_updated_by == "tester"
+        assert reevaluated.quantity_updated_at == overridden.quantity_updated_at
 
 
 def test_unoverridden_result_tracks_initial_quantity_on_reevaluation(db_path):
@@ -438,6 +444,10 @@ def test_unoverridden_result_tracks_initial_quantity_on_reevaluation(db_path):
     assert updated.quantity == 3
     assert updated.quantity_overridden is False
     assert updated.price == 3000.0
+    # 指示3章: override対象外(quantity_overridden=false)の行では
+    # quantity_updated_at/byはNULLのまま(PR #46レビュー指摘対応)。
+    assert updated.quantity_updated_at is None
+    assert updated.quantity_updated_by is None
 
 
 def test_reset_quantity_to_initial(db_path):
@@ -460,6 +470,10 @@ def test_reset_quantity_to_initial(db_path):
     assert reset.quantity_overridden is False
     assert reset.quantity_override_reason is None
     assert reset.price == 1000.0
+    # 指示2章「reset時」: quantity_updated_at/byもNULLへ戻す
+    # (PR #46レビュー指摘対応)。
+    assert reset.quantity_updated_at is None
+    assert reset.quantity_updated_by is None
 
 
 def test_set_current_quantity_recalculates_labor(db_path):
@@ -480,6 +494,10 @@ def test_set_current_quantity_recalculates_labor(db_path):
 
     assert overridden.labor == 8.0  # 2.0 * 4 * 1.0
     assert overridden.price == 4000.0  # 1000 * 4 * 1.0
+    # 要件1「updated_by未指定ならNULL可」: updated_at自体は保存するが、
+    # updated_byはNoneのまま保存される(PR #46レビュー指摘対応)。
+    assert overridden.quantity_updated_at is not None
+    assert overridden.quantity_updated_by is None
 
 
 def test_set_current_quantity_allows_explicit_zero(db_path):

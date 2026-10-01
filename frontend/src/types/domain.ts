@@ -321,6 +321,10 @@ export interface EstimateConfirmationItem {
   current_quantity: number | null
   quantity_overridden: boolean | null
   quantity_override_reason: string | null
+  // [PR #46レビュー指摘対応] 確定時点のoverride実行時刻・actor。Phase 6後半
+  // 以前の過去snapshotでは全てnullのまま返る。
+  quantity_updated_at: string | null
+  quantity_updated_by: string | null
   evidence: EstimateConfirmationEvidence[]
 }
 
@@ -453,6 +457,10 @@ export interface EstimateResult {
   current_quantity: number
   quantity_overridden: boolean
   quantity_override_reason: string | null
+  // [PR #46レビュー指摘対応] factor_updated_at/factor_updated_byと同じ考え方
+  // で、数量override実行時の時刻・actorを保持する(推奨案A)。
+  quantity_updated_at: string | null
+  quantity_updated_by: string | null
   applicable_unit: ApplicableUnit | null
   initial_factor: number
   current_factor: number

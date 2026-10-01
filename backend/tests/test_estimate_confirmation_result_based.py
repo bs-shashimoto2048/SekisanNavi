@@ -334,6 +334,9 @@ def test_legacy_shaped_confirmation_row_reads_back_with_new_columns_null(client,
     assert item["current_quantity"] is None
     assert item["quantity_overridden"] is None
     assert item["quantity_override_reason"] is None
+    # PR #46レビュー指摘対応: 旧shapeの行はquantity_updated_at/byも全てNone。
+    assert item["quantity_updated_at"] is None
+    assert item["quantity_updated_by"] is None
 
 
 # --- Issue #40 Phase 6後半: 数量override(current_quantity)が確定snapshotへ反映される ---
@@ -360,8 +363,12 @@ def test_quantity_override_is_reflected_in_confirmation_and_frozen_afterward(cli
     assert item["quantity_override_reason"] == "現地確認"
     assert item["quantity"] == 4
     assert item["amount"] == overridden_price
+    # PR #46レビュー指摘対応: 確定時点のupdated_at/byもsnapshotへコピーされる。
+    assert item["quantity_updated_by"] == "tester"
+    assert item["quantity_updated_at"] == override_res.json()["quantity_updated_at"]
 
-    # 確定後に数量をさらに変更しても、過去snapshotは変化しない。
+    # 確定後に数量をさらに変更(今度はupdated_by未指定)しても、
+    # 過去snapshotのupdated_at/by(確定時点の"tester")は変化しない。
     client.patch(
         f"/api/products/A1GV2421/estimate-results/{result_id}/quantity",
         json={"current_quantity": 9, "reason": "再確認"},
@@ -370,3 +377,5 @@ def test_quantity_override_is_reflected_in_confirmation_and_frozen_afterward(cli
     assert detail["items"][0]["current_quantity"] == 4
     assert detail["items"][0]["quantity"] == 4
     assert detail["items"][0]["amount"] == overridden_price
+    assert detail["items"][0]["quantity_updated_by"] == "tester"
+    assert detail["items"][0]["quantity_updated_at"] == override_res.json()["quantity_updated_at"]

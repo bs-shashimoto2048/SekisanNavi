@@ -55,11 +55,25 @@ def test_fresh_db_applies_0011_via_real_runner_with_clean_foreign_keys(tmp_path)
 
     with get_connection(db_path) as conn:
         result_cols = [r[1] for r in conn.execute("PRAGMA table_info(estimate_results)").fetchall()]
-        for c in ("initial_quantity", "current_quantity", "quantity_overridden", "quantity_override_reason"):
+        for c in (
+            "initial_quantity",
+            "current_quantity",
+            "quantity_overridden",
+            "quantity_override_reason",
+            "quantity_updated_at",
+            "quantity_updated_by",
+        ):
             assert c in result_cols
 
         item_cols = [r[1] for r in conn.execute("PRAGMA table_info(estimate_confirmation_items)").fetchall()]
-        for c in ("initial_quantity", "current_quantity", "quantity_overridden", "quantity_override_reason"):
+        for c in (
+            "initial_quantity",
+            "current_quantity",
+            "quantity_overridden",
+            "quantity_override_reason",
+            "quantity_updated_at",
+            "quantity_updated_by",
+        ):
             assert c in item_cols
 
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
@@ -73,9 +87,11 @@ def test_rerunning_migrate_after_0011_is_a_noop(tmp_path):
 
 def test_existing_estimate_results_rows_survive_0011_with_backfilled_initial_and_current_quantity(tmp_path):
     """0011適用前から存在するestimate_results行は、id/値とも維持されたまま、
-    新設4列のうちinitial_quantity/current_quantityは既存quantity列の値で
+    新設列のうちinitial_quantity/current_quantityは既存quantity列の値で
     後方互換的に埋められ(指示10章「既存DB追いつき」)、
-    quantity_overridden=falseのまま追加される。"""
+    quantity_overridden=falseのまま追加される。quantity_updated_at/byは
+    override実行時のみ値を持つ列のため、backfillせずNULLのまま追加される
+    (PR #46レビュー指摘対応)。"""
     db_path = tmp_path / "legacy.db"
     with get_connection(db_path) as conn:
         _apply_migrations_up_to_0010(conn)
@@ -99,7 +115,8 @@ def test_existing_estimate_results_rows_survive_0011_with_backfilled_initial_and
         after = dict(
             conn.execute(
                 "SELECT id, product_no, result_key, code, quantity, initial_quantity, current_quantity, "
-                "quantity_overridden, quantity_override_reason FROM estimate_results WHERE id = ?",
+                "quantity_overridden, quantity_override_reason, quantity_updated_at, quantity_updated_by "
+                "FROM estimate_results WHERE id = ?",
                 (result_id,),
             ).fetchone()
         )
@@ -112,6 +129,8 @@ def test_existing_estimate_results_rows_survive_0011_with_backfilled_initial_and
         assert after["current_quantity"] == before["quantity"]
         assert after["quantity_overridden"] == 0
         assert after["quantity_override_reason"] is None
+        assert after["quantity_updated_at"] is None
+        assert after["quantity_updated_by"] is None
 
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
 
@@ -148,7 +167,8 @@ def test_legacy_confirmation_item_inserted_before_0011_reads_new_columns_as_null
     with get_connection(db_path) as conn:
         row = dict(
             conn.execute(
-                "SELECT quantity, initial_quantity, current_quantity, quantity_overridden, quantity_override_reason "
+                "SELECT quantity, initial_quantity, current_quantity, quantity_overridden, "
+                "quantity_override_reason, quantity_updated_at, quantity_updated_by "
                 "FROM estimate_confirmation_items WHERE id = ?",
                 (item_id,),
             ).fetchone()
@@ -158,6 +178,8 @@ def test_legacy_confirmation_item_inserted_before_0011_reads_new_columns_as_null
         assert row["current_quantity"] is None
         assert row["quantity_overridden"] is None
         assert row["quantity_override_reason"] is None
+        assert row["quantity_updated_at"] is None
+        assert row["quantity_updated_by"] is None
 
 
 def test_mid_migration_failure_rolls_back_0011_to_the_original_schema_with_no_partial_columns(tmp_path):
@@ -212,3 +234,5 @@ def test_mid_migration_failure_rolls_back_0011_to_the_original_schema_with_no_pa
         assert after_result_count == before_result_count
         assert "initial_quantity" not in after_result_cols
         assert "initial_quantity" not in after_item_cols
+        assert "quantity_updated_at" not in after_result_cols
+        assert "quantity_updated_at" not in after_item_cols

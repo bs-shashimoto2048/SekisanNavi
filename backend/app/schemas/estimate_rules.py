@@ -49,6 +49,10 @@ class EstimateResultOut(BaseModel):
     current_quantity: float
     quantity_overridden: bool
     quantity_override_reason: str | None
+    # [PR #46レビュー指摘対応] factor_updated_at/factor_updated_byと同じ考え方
+    # で、数量override実行時のactor/日時をAPI応答へ含める(推奨案A)。
+    quantity_updated_at: str | None
+    quantity_updated_by: str | None
     applicable_unit: ApplicableUnit | None
     initial_factor: float
     current_factor: float

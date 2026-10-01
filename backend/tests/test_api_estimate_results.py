@@ -381,11 +381,17 @@ def test_quantity_override_and_reset_roundtrip(client, monkeypatch, tmp_path, db
     assert overridden["quantity"] == 5
     assert overridden["quantity_overridden"] is True
     assert overridden["quantity_override_reason"] == "現地確認"
+    # PR #46レビュー指摘対応: updated_by指定時はそのまま保存され、
+    # updated_atも保存される。
+    assert overridden["quantity_updated_by"] == "tester"
+    assert overridden["quantity_updated_at"] is not None
 
-    # 再評価しても手修正は保持される。
+    # 再評価しても手修正は保持される(updated_at/byも含む、指示3章)。
     reevaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
     assert reevaluated["results"][0]["current_quantity"] == 5
     assert reevaluated["results"][0]["quantity_overridden"] is True
+    assert reevaluated["results"][0]["quantity_updated_by"] == "tester"
+    assert reevaluated["results"][0]["quantity_updated_at"] == overridden["quantity_updated_at"]
 
     reset_res = client.post(f"/api/products/A1GV2421/estimate-results/{result_id}/reset-quantity")
     assert reset_res.status_code == 200
@@ -393,6 +399,9 @@ def test_quantity_override_and_reset_roundtrip(client, monkeypatch, tmp_path, db
     assert reset_body["quantity_overridden"] is False
     assert reset_body["current_quantity"] == reset_body["initial_quantity"]
     assert reset_body["quantity_override_reason"] is None
+    # 指示2章「reset時」: updated_at/byもNULLへ戻す。
+    assert reset_body["quantity_updated_at"] is None
+    assert reset_body["quantity_updated_by"] is None
 
 
 def test_quantity_override_allows_explicit_zero(client, monkeypatch, tmp_path, db_path):
@@ -408,6 +417,9 @@ def test_quantity_override_allows_explicit_zero(client, monkeypatch, tmp_path, d
     assert res.status_code == 200
     assert res.json()["current_quantity"] == 0
     assert res.json()["quantity_overridden"] is True
+    # 要件1「updated_by未指定ならNULL可」(PR #46レビュー指摘対応)。
+    assert res.json()["quantity_updated_by"] is None
+    assert res.json()["quantity_updated_at"] is not None
 
 
 def test_quantity_override_rejects_negative_value(client, monkeypatch, tmp_path, db_path):

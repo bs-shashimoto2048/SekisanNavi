@@ -80,6 +80,10 @@ class EstimateConfirmationItemOut(BaseModel):
     current_quantity: float | None = None
     quantity_overridden: bool | None = None
     quantity_override_reason: str | None = None
+    # [PR #46レビュー指摘対応] 確定時点のoverride実行時刻・actor。
+    # Phase 6後半以前の過去snapshotでは全てNoneのまま返る。
+    quantity_updated_at: str | None = None
+    quantity_updated_by: str | None = None
     evidence: list[EstimateConfirmationEvidenceOut] = []
 
 

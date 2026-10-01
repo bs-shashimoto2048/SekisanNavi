@@ -212,6 +212,10 @@ class EstimateResult:
     current_quantity: float
     quantity_overridden: bool
     quantity_override_reason: str | None
+    # [PR #46レビュー指摘対応] 係数側のfactor_updated_at/factor_updated_byと
+    # 同じ考え方で、数量override実行時のactor/日時を追跡する(推奨案A)。
+    quantity_updated_at: str | None
+    quantity_updated_by: str | None
     applicable_unit: ApplicableUnit | None
     initial_factor: float
     current_factor: float

@@ -73,6 +73,8 @@ function makeDetail(overrides: Partial<EstimateConfirmationDetail> = {}): Estima
         current_quantity: 1,
         quantity_overridden: false,
         quantity_override_reason: null,
+        quantity_updated_at: null,
+        quantity_updated_by: null,
         evidence: [],
       },
     ],
@@ -189,6 +191,8 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
             current_quantity: 4,
             quantity_overridden: true,
             quantity_override_reason: '現地確認により4台へ変更',
+            quantity_updated_at: '2026-09-04 07:20:00',
+            quantity_updated_by: 'tester',
             evidence: [],
           },
         ],
@@ -202,6 +206,7 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
 
     const quantityCell = await screen.findByText('4 (手修正)')
     expect(quantityCell.title).toContain('初期数量: 1')
+    expect(quantityCell.title).toContain('修正者: tester')
     expect(quantityCell.title).toContain('確定数量: 4')
     expect(quantityCell.title).toContain('現地確認により4台へ変更')
   })
@@ -246,6 +251,8 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
             current_quantity: null,
             quantity_overridden: null,
             quantity_override_reason: null,
+            quantity_updated_at: null,
+            quantity_updated_by: null,
             evidence: [],
           },
         ],

@@ -133,8 +133,9 @@ def save_confirmation(
                 bbox_x, bbox_y, bbox_w, bbox_h, page_no,
                 current_factor, factor_overridden, judgment_method,
                 applicable_unit, judgment_reason, source_rule_id, result_status,
-                initial_quantity, current_quantity, quantity_overridden, quantity_override_reason
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                initial_quantity, current_quantity, quantity_overridden, quantity_override_reason,
+                quantity_updated_at, quantity_updated_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 confirmation_id,
@@ -171,6 +172,8 @@ def save_confirmation(
                 item.current_quantity,
                 (None if item.quantity_overridden is None else int(item.quantity_overridden)),
                 item.quantity_override_reason,
+                item.quantity_updated_at,
+                item.quantity_updated_by,
             ),
         )
         confirmation_item_id = item_cursor.lastrowid
@@ -212,6 +215,8 @@ def save_confirmation(
                 current_quantity=item.current_quantity,
                 quantity_overridden=item.quantity_overridden,
                 quantity_override_reason=item.quantity_override_reason,
+                quantity_updated_at=item.quantity_updated_at,
+                quantity_updated_by=item.quantity_updated_by,
                 evidence=saved_evidence,
             )
         )
@@ -387,6 +392,8 @@ def get_confirmation(
             current_quantity=row["current_quantity"],
             quantity_overridden=(None if row["quantity_overridden"] is None else bool(row["quantity_overridden"])),
             quantity_override_reason=row["quantity_override_reason"],
+            quantity_updated_at=row["quantity_updated_at"],
+            quantity_updated_by=row["quantity_updated_by"],
             evidence=evidence_by_item.get(row["id"], []),
         )
         for row in item_rows

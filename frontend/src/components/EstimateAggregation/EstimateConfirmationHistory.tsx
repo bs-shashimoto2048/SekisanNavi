@@ -70,13 +70,15 @@ function formatConfirmedQuantity(item: EstimateConfirmationItem): string {
   return item.quantity_overridden === true ? `${item.quantity} (手修正)` : `${item.quantity}`
 }
 
-/** 数量が手修正されていた行のみ、hover/titleで初期数量/確定数量/理由を
- * 確認できるようにする(指示9章)。 */
+/** 数量が手修正されていた行のみ、hover/titleで初期数量/確定数量/理由/
+ * 修正者(存在する場合)を確認できるようにする(指示9章、PR #46レビュー
+ * 指摘対応)。修正日時は内部で保持するのみとし、常時表示には含めない。 */
 function confirmedQuantityTitle(item: EstimateConfirmationItem): string | undefined {
   if (item.quantity_overridden !== true) return undefined
-  return `初期数量: ${item.initial_quantity ?? MISSING_VALUE_PLACEHOLDER}\n確定数量: ${
+  const base = `初期数量: ${item.initial_quantity ?? MISSING_VALUE_PLACEHOLDER}\n確定数量: ${
     item.current_quantity ?? item.quantity
   }\n理由: ${item.quantity_override_reason ?? ''}`
+  return item.quantity_updated_by != null ? `${base}\n修正者: ${item.quantity_updated_by}` : base
 }
 
 export function EstimateConfirmationHistory({ productNo }: Props) {

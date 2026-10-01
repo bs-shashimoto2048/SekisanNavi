@@ -15,6 +15,8 @@ function makeResult(overrides: Partial<EstimateResult> = {}): EstimateResult {
     current_quantity: 1,
     quantity_overridden: false,
     quantity_override_reason: null,
+    quantity_updated_at: null,
+    quantity_updated_by: null,
     applicable_unit: 'face',
     initial_factor: 1.0,
     current_factor: 1.0,
@@ -57,6 +59,22 @@ describe('EstimateResultQuantityCell (Issue #40 Phase 6後半: 積算明細の�
     expect(value.title).toContain('現在: 5')
     expect(value.title).toContain('初期: 2')
     expect(value.title).toContain('現地確認')
+    // quantity_updated_byが無い(null)場合、titleに「修正者」行自体を含めない
+    // (情報密度を増やしすぎない、指示5章)。
+    expect(value.title).not.toContain('修正者')
+  })
+
+  it('includes the modifier (quantity_updated_by) in the title when present (PR #46レビュー指摘対応)', () => {
+    const result = makeResult({
+      initial_quantity: 2,
+      current_quantity: 5,
+      quantity_overridden: true,
+      quantity_override_reason: '現地確認',
+      quantity_updated_by: 'tester',
+    })
+    render(<EstimateResultQuantityCell result={result} onOverride={() => {}} onReset={() => {}} />)
+    const value = screen.getByText('5')
+    expect(value.title).toContain('修正者: tester')
   })
 
   it('does not call onOverride and restores the display value when blurred while empty', () => {

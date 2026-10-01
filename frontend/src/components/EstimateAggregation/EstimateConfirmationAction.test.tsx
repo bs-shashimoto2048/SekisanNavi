@@ -60,6 +60,8 @@ function makeConfirmation(overrides: Partial<EstimateConfirmation> = {}): Estima
         current_quantity: 1,
         quantity_overridden: false,
         quantity_override_reason: null,
+        quantity_updated_at: null,
+        quantity_updated_by: null,
         evidence: [],
       },
     ],

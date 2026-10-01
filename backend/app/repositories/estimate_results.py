@@ -57,6 +57,7 @@ class FactorNotAllowedError(Exception):
 _COLUMNS = """
     id, product_no, result_key, master_item_id, code, quantity,
     initial_quantity, current_quantity, quantity_overridden, quantity_override_reason,
+    quantity_updated_at, quantity_updated_by,
     applicable_unit,
     initial_factor, current_factor, factor_overridden, factor_override_reason,
     factor_updated_at, factor_updated_by, judgment_method, judgment_scope,
@@ -77,6 +78,8 @@ def _row_to_result(row: sqlite3.Row) -> EstimateResult:
         current_quantity=row["current_quantity"],
         quantity_overridden=bool(row["quantity_overridden"]),
         quantity_override_reason=row["quantity_override_reason"],
+        quantity_updated_at=row["quantity_updated_at"],
+        quantity_updated_by=row["quantity_updated_by"],
         applicable_unit=ApplicableUnit(row["applicable_unit"]) if row["applicable_unit"] else None,
         initial_factor=row["initial_factor"],
         current_factor=row["current_factor"],
@@ -264,6 +267,10 @@ def replace_results_for_product(
             # (Issue #40 Phase 6後半、指示2章「自動再評価で手修正値を勝手に
             # 上書きしない」)。initial_quantityは手修正の有無に関わらず常に
             # 最新の自動算定値へ更新する(initial_factorと同じ扱い)。
+            # quantity_updated_at/quantity_updated_byはこのUPDATE文のSET対象に
+            # 含めていないため、overridden/非overriddenいずれの行でも常に
+            # 現在値のまま保持される(overridden行はoverride実行時の値を維持、
+            # 非overridden行は常にNULLのまま、PR #46レビュー指摘対応)。
             #
             # Issue #40 Phase 5: statusは`factor_overridden`のような手修正保護
             # 対象ではなく(現時点でstatusを手動変更するAPIは無い)、候補の値で
@@ -445,6 +452,10 @@ def set_current_quantity(
     (`set_current_factor`と同じ考え方)。`quantity`(既存列、常に
     `current_quantity`と同じ値を保つ)・`price`/`labor`もこの場で再計算する。
 
+    **PR #46レビュー指摘対応**: `factor_updated_at`/`factor_updated_by`と
+    同じ考え方で、override実行時刻(`quantity_updated_at`)・actor
+    (`quantity_updated_by`、未指定ならNULL)を保存する(推奨案A)。
+
     入力値の妥当性(0以上・NaN/Infinity禁止)はAPIスキーマ
     (`EstimateResultQuantityOverrideIn`)側で検証済みの前提とし、ここでは
     再度の検証は行わない(係数overrideが`allowed_factors`の検証をAPI層と
@@ -456,6 +467,7 @@ def set_current_quantity(
         UPDATE estimate_results
         SET current_quantity = ?, quantity = ?, quantity_overridden = 1,
             quantity_override_reason = ?,
+            quantity_updated_at = datetime('now'), quantity_updated_by = ?,
             price = unit_price * ? * current_factor, labor = unit_labor * ? * current_factor,
             updated_at = datetime('now')
         WHERE id = ? AND product_no = ?
@@ -464,6 +476,7 @@ def set_current_quantity(
             current_quantity,
             current_quantity,
             reason,
+            updated_by,
             current_quantity,
             current_quantity,
             result_id,
@@ -483,12 +496,16 @@ def reset_quantity_to_initial(
     `quantity_overridden`をFalseに、`quantity_override_reason`をNULLに戻す
     (以後の再評価で最新の自動算定値へ再び追従するようになる)。`price`/
     `labor`も`initial_quantity`を使って再計算する。
+
+    **PR #46レビュー指摘対応**: `factor_updated_at`/`factor_updated_by`と
+    同じく、`quantity_updated_at`/`quantity_updated_by`もNULLへ戻す。
     """
     cur = conn.execute(
         """
         UPDATE estimate_results
         SET current_quantity = initial_quantity, quantity = initial_quantity,
             quantity_overridden = 0, quantity_override_reason = NULL,
+            quantity_updated_at = NULL, quantity_updated_by = NULL,
             price = unit_price * initial_quantity * current_factor,
             labor = unit_labor * initial_quantity * current_factor,
             updated_at = datetime('now')

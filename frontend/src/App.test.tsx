@@ -360,6 +360,8 @@ function buildLiveEstimateResults(): EstimateResult[] {
       current_quantity: 1,
       quantity_overridden: false,
       quantity_override_reason: null,
+      quantity_updated_at: null,
+      quantity_updated_by: null,
       applicable_unit: null,
       initial_factor: 1.0,
       current_factor: 1.0,

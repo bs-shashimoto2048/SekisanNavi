@@ -16,7 +16,10 @@ interface Props {
  * - `quantity_overridden === false`: 自動算定値をそのまま適用中 → 緑字
  *   (係数セルと同じ配色思想、指示1章)。
  * - `quantity_overridden === true`: 手動修正値を適用中 → 赤字。hover/titleで
- *   「初期数量/現在数量/修正理由」を確認できるようにする(指示6章)。
+ *   「初期数量/現在数量/修正理由/修正者(存在する場合)」を確認できるようにする
+ *   (指示6章、PR #46レビュー指摘対応)。修正日時(`quantity_updated_at`)は
+ *   内部で保持するのみとし、情報密度を増やしすぎないよう常時表示はしない
+ *   (指示5章)。
  * - 数量変更時は理由入力を必須とする(指示4章、初回実装)。入力欄をblurした
  *   時点で値が変化していれば、同じセル内に理由入力(インライン、指示4章
  *   「選択肢B」)を展開し、理由確定まではAPIを呼ばない。
@@ -38,7 +41,7 @@ export function EstimateResultQuantityCell({ result, onOverride, onReset }: Prop
   const valueTitle = result.quantity_overridden
     ? `現在: ${result.current_quantity}\n初期: ${result.initial_quantity}\n理由: ${
         result.quantity_override_reason ?? ''
-      }\n手動修正`
+      }${result.quantity_updated_by != null ? `\n修正者: ${result.quantity_updated_by}` : ''}\n手動修正`
     : `初期値のまま (${result.initial_quantity})`
 
   // 空欄・NaN/Infinity・負数は保存せず、現在の`result.current_quantity`の表示へ

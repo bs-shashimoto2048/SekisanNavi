@@ -431,6 +431,11 @@ class EstimateConfirmationItemInput:
     current_quantity: float | None = None
     quantity_overridden: bool | None = None
     quantity_override_reason: str | None = None
+    # [PR #46レビュー指摘対応] 確定時点のoverride実行時刻・actorをsnapshotへ
+    # コピーする(推奨案A)。旧Detectionベース・Phase 6後半以前に確定された
+    # 行では全てNoneのまま保存する。
+    quantity_updated_at: str | None = None
+    quantity_updated_by: str | None = None
     evidence: list[EstimateConfirmationEvidenceInput] = field(default_factory=list)
 
 
