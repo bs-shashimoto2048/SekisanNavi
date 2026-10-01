@@ -1,0 +1,61 @@
+"""`app.domain.estimate_rules.StandardConditionField` の演算子拡張テスト
+(Issue #40 Phase 6-E指示3-A)。
+
+Phase 6-Dで18322(盤内通路IS/OS系)の検証条件が`model == "IS2"`という
+デモ専用の固定値一致になってしまった原因(前方一致・複数候補値のいずれか、
+という条件を表現する手段がStandardConditionに無かったこと)を解消する
+`starts_with`/`in`演算子の型安全性を確認する。
+"""
+import pytest
+
+from app.domain.estimate_rules import STANDARD_CONDITION_OPERATORS, StandardConditionField
+
+
+def test_standard_condition_operators_includes_new_and_existing_ones():
+    assert STANDARD_CONDITION_OPERATORS == {
+        "==", "!=", ">=", "<=", ">", "<", "starts_with", "in",
+    }
+
+
+def test_starts_with_accepts_string_value():
+    field = StandardConditionField(field="model", operator="starts_with", value="IS")
+    assert field.value == "IS"
+
+
+def test_starts_with_rejects_non_string_value():
+    with pytest.raises(ValueError):
+        StandardConditionField(field="model", operator="starts_with", value=123)
+
+
+def test_in_accepts_list_value():
+    field = StandardConditionField(field="model", operator="in", value=["IS1", "IS2", "OS1"])
+    assert field.value == ["IS1", "IS2", "OS1"]
+
+
+def test_in_accepts_tuple_value():
+    field = StandardConditionField(field="model", operator="in", value=("IS1", "OS1"))
+    assert field.value == ("IS1", "OS1")
+
+
+def test_in_rejects_bare_string_value():
+    """`in`に素の文字列を渡すと部分一致(`"IS" in "IS2"`)として暗黙に解釈
+    されてしまうため、明示的にlist/tupleのみを許可する(指示3-A「明示的な
+    候補値」)。"""
+    with pytest.raises(ValueError):
+        StandardConditionField(field="model", operator="in", value="IS2")
+
+
+def test_in_rejects_non_iterable_value():
+    with pytest.raises(ValueError):
+        StandardConditionField(field="model", operator="in", value=123)
+
+
+def test_unknown_operator_is_rejected():
+    with pytest.raises(ValueError):
+        StandardConditionField(field="model", operator="contains", value="IS")
+
+
+def test_existing_operators_still_accept_numeric_and_string_values():
+    # 既存の==/!=/>=/<=/>/<は従来通りfloat/strどちらも許可する(回帰確認)。
+    StandardConditionField(field="ban_w", operator=">=", value=900)
+    StandardConditionField(field="model", operator="==", value="IS2")

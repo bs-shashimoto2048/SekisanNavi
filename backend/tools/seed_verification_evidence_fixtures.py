@@ -160,12 +160,15 @@ EVIDENCE_TYPE_CANDIDATES = [
 #     した。位置関係を無視しているため、本番投入前に必ず幾何ロジックを
 #     追加する必要がある(Phase 1報告コメント5章で既出の既知の課題)。
 #   - 18322 (盤内通路、IS/OS系) は資料が「型式がIS/OS系かどうか」で分岐すると
-#     読めるが、`StandardCondition`の比較演算子は `==`/`!=`/`>=`/`<=`/`>`/`<`
-#     のみで前方一致("IS"で始まるか)を表現できないため、本候補では実データ
-#     (A1GV2421全盤がmodel='IS2')に合わせて `model == "IS2"` という**デモ専用の
-#     暫定条件**にしている。他の型式(IS1/IS3/OS系等)には対応しない
-#     (本番投入時は前方一致または列挙によるOR条件の表現方法を別途検討する
-#     必要がある、という構造上の制約として報告する)。
+#     読める。Phase 6-Dでは`StandardCondition`の比較演算子が`==`/`!=`/`>=`/
+#     `<=`/`>`/`<`のみで前方一致を表現できず、`model == "IS2"`という**デモ専用の
+#     暫定条件**にしていたが、Phase 6-Eで`starts_with`/`in`演算子を追加した
+#     ことにより、`model starts_with "IS"`という、資料によりそった表現へ
+#     置き換えた(IS系モデル全般にマッチする)。ただし`design_data_conditions`
+#     はAND結合のみでOR結合を持たないため、「IS系 **または** OS系」という
+#     資料の条件全体はまだ1つの`StandardCondition`では表現できない
+#     (OS系を含めるにはOR条件のサポートという別の評価器拡張が必要。
+#     Phase 6-Eでは対応しない、残課題として報告する)。
 #   - 19959/19961等の製番単位倍率コード(`calc_type=multiply_price`、
 #     `quantity_method=per_product`)は評価器が未実装のため、今回の代表検証
 #     ケースには含めない(資料根拠はあるが、評価器側の対応が先。Phase 2
@@ -248,17 +251,18 @@ RULE_MASTER_CANDIDATES = [
         applicable_unit=ApplicableUnit.LOCATION,
         quantity_method=QuantityMethod.PER_CONDITION_GROUP,
         condition=StandardCondition(
-            design_data_conditions=[StandardConditionField(field="model", operator="==", value="IS2")]
+            design_data_conditions=[StandardConditionField(field="model", operator="starts_with", value="IS")]
         ),
-        reason_template="盤 {panel}: 設計データ(型式IS2)により18322(盤内通路IS/OS系)が成立候補",
+        reason_template="盤 {panel}: 設計データ(型式がIS系)により18322(盤内通路IS/OS系)が成立候補",
         note=(
             f"{CANDIDATE_MARKER} 根拠: 積算コードPDF『18321-322盤内通路.pdf』"
             "(「18321=IA,OA」「18322=IS,OS」)。設計データのみ判定(カテゴリD)の"
-            "代表例。**デモ専用の暫定条件**: 本来は型式がIS/OS系かどうかの"
-            "前方一致判定が必要だが、`StandardCondition`は等価比較のみ対応のため、"
-            "実データ(A1GV2421全盤がmodel='IS2')に合わせて`model == \"IS2\"`へ"
-            "単純化している。他の型式には対応しない。盤内通路スペース自体の"
-            "有無を型式だけで断定してよいかも資料からは確認できず要確認。"
+            "代表例。Phase 6-Eで追加した`starts_with`演算子により"
+            "`model starts_with \"IS\"`という前方一致条件で表現している"
+            "(Phase 6-D時点の`model == \"IS2\"`固定値一致から置き換え済み)。"
+            "ただしOS系は別条件(OR)が必要なため未対応のまま(AND結合のみの"
+            "制約、Phase 6-E報告の残課題)。盤内通路スペース自体の有無を"
+            "型式だけで断定してよいかも資料からは確認できず要確認。"
         ),
     ),
 ]

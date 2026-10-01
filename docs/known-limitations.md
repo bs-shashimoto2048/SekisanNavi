@@ -134,6 +134,57 @@
   実際の長期運用での使用感(部品台帳を頻繁に使う作業者がいるか等)は
   未検証。
 
+## 実データ検証準備・評価器基盤補完 (Issue #40 Phase 6-D/6-E) に伴う既知の制約
+
+- **`drawing_evidence_types`/`estimate_rule_masters`の実マスタは依然未投入**:
+  Phase 6-Dで候補一覧・代表検証ケースを整理し、検証用DBコピー限定の投入
+  スクリプト(`backend/tools/seed_verification_evidence_fixtures.py`)で動作
+  確認を行ったが、本番DBへは一切投入していない(上記「図面情報マスタは
+  本番データで未投入」の状況は変わらない)。
+- **`StandardCondition`はAND結合のみで、OR結合を表現できない**: Phase 6-Eで
+  `starts_with`/`in`演算子を追加し、「型式がIS系」等の前方一致・複数候補値を
+  表現できるようになったが(`app.domain.estimate_rules.StandardConditionField`)、
+  「IS系**または**OS系」のようなOR条件は1つの`StandardCondition`では表現
+  できない(`design_data_conditions`は常にAND)。18322(盤内通路IS/OS系)の
+  検証fixtureも`model starts_with "IS"`のみで、OS系は対象外のまま。
+- **estcode_df.csvの追加19列は「読み込めるだけ」で業務ロジックには未接続**:
+  Phase 6-Eで`PANEL`/`TRANS`/`IN_PANEL`/`SHIELD`/`DOOR_FRONT`/`DOOR_BACK`/
+  `DOOR_STACK`/`DOOR_SIDE`/`DOOR_SMALL`/`FAN_ROOF`/`FAN_DOOR`/`MAIN_LINE`/
+  `WIRE_MESH`/`STACK_PLATE`/`DRAWER_DEVICE`/`VCT_STAND`/`BUS_DUCT`/`PASSAGE`/
+  `INPUT_CU_COEFF`を`EstimatePanelInfo`/`DesignDataContext`まで接続し、
+  `StandardCondition`の設計データ条件から参照できるようにしたが、各列が
+  「0/1のフラグ」なのか「枚数等のカウント」なのかの意味づけ、どの積算コードに
+  対応するか、という業務ルールの確定・実マスタへの接続は行っていない
+  (値をそのまま保持するだけに留める)。
+- **判定範囲`JudgmentScope.POSITION`/`RANGE`は引き続き未実装**:
+  `app.domain.geometry`にBBox同士の上下・左右・重なり判定(`is_above`/
+  `is_below`/`is_left_of`/`is_right_of`/`overlaps`)を純粋関数として追加したが、
+  どの実ルールへも接続していない。18323(VCT架台)の「CHがVCTの上にあれば
+  成立」という条件を含め、相対位置判定が必要な実ルールは引き続き
+  `needs_confirmation`扱いのまま。
+- **判定範囲`JudgmentScope.DRAWING`/`PRODUCT`は「図面情報の存在判定のみ」に
+  限定したサポート**: Phase 6-Eで追加したが、設計データ条件
+  (`design_data_conditions`)との組合せは評価せず`skipped_rule_master_ids`
+  へ回す(設計データは本来盤単位のデータであり、図面単位・製番単位への
+  集約方法が業務的に未確定なため)。
+- **`.boxspec`/`.baninf`ファイルは現行のデータ参照ルートには存在しない**:
+  18101〜18115(底板)の「設計データのみで判定可能」という分類の根拠資料
+  (「対応仕分け」Excelのプログラム対応リストシート)は、`.boxspec`
+  (`STEEL-BOTTOM`列)・`.baninf`(`ZUMEI`列)というファイル形式を前提にしている
+  が、Sekisan Naviが実際に参照している`data_source_root`
+  (`\\beans-f1\ShareData\estimatic\a_product\output\<製番>\`)配下には
+  これらの拡張子のファイルが1件も見つからなかった(Phase 6-E調査、
+  実製番A1GV2421で確認)。別のデータパイプライン(CAD/積算システム側の
+  内部ファイル)の可能性が高く、新しいデータソースへの接続自体が必要になる
+  ため、18101〜18115の設計データのみ判定は実装していない。
+- **`QuantityMethod`/`CalcType`の大半はenum定義のみ**: `PER_EVIDENCE`/
+  `PER_CONDITION_GROUP`(quantity)と`DIRECT`(calc)以外は、値は定義されて
+  いるが評価器は未実装で、該当ルールは常に`skipped_rule_master_ids`へ
+  回る(`PER_FACE`/`PER_UNIT`/`PER_PRODUCT`/`PER_COMBINATION_SET`/
+  `DIFF_FROM_STANDARD`/`CUSTOM`、`ADD`/`SUBTRACT`/`MULTIPLY_PRICE`/
+  `MULTIPLY_LABOR`/`MULTIPLY_BOTH`/`CUSTOM`)。詳細な対応状況はIssue #40
+  Phase 6-E報告コメントの一覧表を参照。
+
 ## その他、コードから確認できる制約
 
 - 積算コードの体系(11xxx/18xxx/44xxx等の桁の意味)は未確定

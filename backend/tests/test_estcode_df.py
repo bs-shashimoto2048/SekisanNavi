@@ -6,7 +6,7 @@
 """
 import pytest
 
-from app.services.estcode_df import load_estcode_df
+from app.services.estcode_df import ADDITIONAL_PANEL_FIELDS, load_estcode_df
 
 _HEADER = (
     "MODEL,BAN_MENNO,BAN_NO,BAN_MEISYOU,BAN_H,BAN_W,BAN_D,BAN_CONNECT,PANEL,TRANS,"
@@ -102,3 +102,67 @@ def test_load_estcode_df_keeps_sort_order_when_missing_as_none(product_dir):
     _write_csv(product_dir / "estcode_df.csv", [row])
     panel = load_estcode_df(product_dir, "A1TEST01").panels[0]
     assert panel.sort_order is None
+
+
+# ============================================================
+# Issue #40 Phase 6-E: estcode_df.csv追加19列の読み込み
+# ============================================================
+
+
+def test_load_estcode_df_parses_additional_19_columns(product_dir):
+    """実データ(A1GV2421/estcode_df.csv)で存在確認済みの追加19列が、
+    意味を解釈せずそのままfloatとして読み込まれることを確認する。"""
+    row = (
+        "IS2,5,5.0,No.2-1低圧動力盤,2300,1700,2200,箱･左右(L),"
+        "1,2,0,0,0,0,0,0,0,7,0,0,0,0,0,0,0,0,0.6,1"
+    )
+    _write_csv(product_dir / "estcode_df.csv", [row])
+    panel = load_estcode_df(product_dir, "A1TEST01").panels[0]
+
+    assert panel.panel == pytest.approx(1)
+    assert panel.trans == pytest.approx(2)
+    assert panel.in_panel == pytest.approx(0)
+    assert panel.shield == pytest.approx(0)
+    assert panel.door_front == pytest.approx(0)
+    assert panel.door_back == pytest.approx(0)
+    assert panel.door_stack == pytest.approx(0)
+    assert panel.door_side == pytest.approx(0)
+    assert panel.door_small == pytest.approx(0)
+    assert panel.fan_roof == pytest.approx(7)
+    assert panel.fan_door == pytest.approx(0)
+    assert panel.main_line == pytest.approx(0)
+    assert panel.wire_mesh == pytest.approx(0)
+    assert panel.stack_plate == pytest.approx(0)
+    assert panel.drawer_device == pytest.approx(0)
+    assert panel.vct_stand == pytest.approx(0)
+    assert panel.bus_duct == pytest.approx(0)
+    assert panel.passage == pytest.approx(0)
+    assert panel.input_cu_coeff == pytest.approx(0.6)
+
+
+def test_load_estcode_df_additional_columns_are_none_when_missing_from_old_9_column_csv(product_dir):
+    """旧来の9列構成(`SORT_ORDER`で終わる、追加19列が無い)CSVとの互換性。
+    追加19列は全て`None`になり、既存9列の読み込みには影響しない。"""
+    old_header = "MODEL,BAN_MENNO,BAN_NO,BAN_MEISYOU,BAN_H,BAN_W,BAN_D,BAN_CONNECT,SORT_ORDER"
+    old_row = "IS2,5,5.0,No.2-1低圧動力盤,2300,1700,2200,箱･左右(L),1"
+    content = "\n".join([old_header, old_row]) + "\n"
+    (product_dir / "estcode_df.csv").write_bytes(content.encode("cp932"))
+
+    panel = load_estcode_df(product_dir, "A1TEST01").panels[0]
+    assert panel.model == "IS2"
+    assert panel.ban_w == pytest.approx(1700)
+    for field_name in ADDITIONAL_PANEL_FIELDS:
+        assert getattr(panel, field_name) is None, f"{field_name} should be None for old 9-column CSV"
+
+
+def test_load_estcode_df_additional_columns_empty_value_is_none(product_dir):
+    """追加19列のうち値が空のものは(行全体をスキップせず)Noneとして扱う。"""
+    row = (
+        "IS2,5,5.0,No.2-1低圧動力盤,2300,1700,2200,箱･左右(L),"
+        "1,,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,,1"
+    )
+    _write_csv(product_dir / "estcode_df.csv", [row])
+    panel = load_estcode_df(product_dir, "A1TEST01").panels[0]
+    assert panel.panel == pytest.approx(1)
+    assert panel.trans is None
+    assert panel.input_cu_coeff is None

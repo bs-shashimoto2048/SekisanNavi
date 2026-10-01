@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.services.estcode_df import EstimatePanelInfo
+from app.services.estcode_df import ADDITIONAL_PANEL_FIELDS, EstimatePanelInfo
 from app.services.panel_assignment import physical_panel_key
 from app.services.product_df import PanelAreaFromDf
 
@@ -49,6 +49,31 @@ class DesignDataContext:
     ban_d: float | None
     # 単独/左右/中盤区分に相当しうる自由記述 (estcode_df.csv由来)。
     ban_connect: str | None
+    # estcode_df.csvの追加19列 (Issue #40 Phase 6-E)。`EstimatePanelInfo`
+    # (`app.services.estcode_df.ADDITIONAL_PANEL_FIELDS`)をそのまま転記する。
+    # 業務的な意味づけ(フラグか枚数か、どの積算コードに対応するか)は未確定の
+    # ため一切行わず、`StandardCondition.design_data_conditions`から参照できる
+    # 生の設計データ値として保持するだけに留める。estcode_df.csv自体が無い/
+    # 旧来の9列構成の場合は全てNoneになる。
+    panel: float | None = None
+    trans: float | None = None
+    in_panel: float | None = None
+    shield: float | None = None
+    door_front: float | None = None
+    door_back: float | None = None
+    door_stack: float | None = None
+    door_side: float | None = None
+    door_small: float | None = None
+    fan_roof: float | None = None
+    fan_door: float | None = None
+    main_line: float | None = None
+    wire_mesh: float | None = None
+    stack_plate: float | None = None
+    drawer_device: float | None = None
+    vct_stand: float | None = None
+    bus_duct: float | None = None
+    passage: float | None = None
+    input_cu_coeff: float | None = None
 
 
 def _resolve_name(panel: PanelAreaFromDf, estimate_panel: EstimatePanelInfo | None) -> str | None:
@@ -76,6 +101,13 @@ def build_design_data_context(
         if key in contexts:
             continue
         estimate_panel = estimate_by_key.get(key)
+        # estcode_df.csvの追加19列 (Issue #40 Phase 6-E): estimate_panel自体が
+        # 無い(estcode_df.csv未配置)、または旧来の9列構成で当該列が無い場合は
+        # `EstimatePanelInfo`側のdataclass defaultによりNoneになる。
+        additional_fields = {
+            name: getattr(estimate_panel, name) if estimate_panel else None
+            for name in ADDITIONAL_PANEL_FIELDS
+        }
         contexts[key] = DesignDataContext(
             ban_menno=panel.ban_menno,
             ban_no=panel.ban_no,
@@ -86,6 +118,7 @@ def build_design_data_context(
             ban_w=(estimate_panel.ban_w if estimate_panel and estimate_panel.ban_w is not None else panel.ban_w),
             ban_d=(estimate_panel.ban_d if estimate_panel and estimate_panel.ban_d is not None else panel.ban_d),
             ban_connect=estimate_panel.ban_connect if estimate_panel else None,
+            **additional_fields,
         )
     return contexts
 

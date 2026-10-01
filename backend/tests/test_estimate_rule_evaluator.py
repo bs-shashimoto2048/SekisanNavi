@@ -18,6 +18,7 @@ from app.domain.estimate_rules import (
     StandardConditionField,
 )
 from app.repositories.drawing_evidence_types import create_evidence_type
+from app.repositories.estimate_results import replace_results_for_product
 from app.repositories.estimate_rule_masters import create_rule_master
 from app.services.estimate_rule_evaluator import evaluate_product
 
@@ -59,6 +60,11 @@ def _configure_root(client, monkeypatch, root):
 def _page16_id(client) -> int:
     pages = client.get("/api/drawing-pages").json()
     return next(p["id"] for p in pages if p["page_no"] == 16)
+
+
+def _page18_id(client) -> int:
+    pages = client.get("/api/drawing-pages").json()
+    return next(p["id"] for p in pages if p["page_no"] == 18)
 
 
 def _first_master_item(client) -> dict:
@@ -294,3 +300,516 @@ def test_evaluate_product_skips_custom_processing_mode(client, monkeypatch, tmp_
 
     assert outcome.candidates == []
     assert outcome.skipped_rule_master_ids == [rule.id]
+
+
+# ============================================================
+# Issue #40 Phase 6-E指示3-A: StandardConditionの演算子拡張
+# (starts_with/in)をevaluate_product経由で確認する。
+#
+# Phase 6-Dで18322(盤内通路IS/OS系)の検証条件が`model == "IS2"`という
+# デモ専用の固定値一致になっていた原因(前方一致・複数候補値のいずれか、を
+# 表現する手段が無かったこと)を、ここで解消する。
+# ============================================================
+
+
+def test_evaluate_product_design_data_condition_starts_with_matches_prefix(
+    client, monkeypatch, tmp_path, db_path
+):
+    """合成データのMODEL='IS2'が、固定値一致ではなく前方一致
+    (`model starts_with "IS"`)で成立することを確認する(18322相当の表現)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_conditions=[StandardConditionField(field="model", operator="starts_with", value="IS")]
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert len(outcome.candidates) == 1
+
+
+def test_evaluate_product_design_data_condition_starts_with_does_not_match_other_prefix(
+    client, monkeypatch, tmp_path, db_path
+):
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_conditions=[StandardConditionField(field="model", operator="starts_with", value="OS")]
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+
+
+def test_evaluate_product_design_data_condition_in_matches_one_of_candidates(
+    client, monkeypatch, tmp_path, db_path
+):
+    """複数候補値のいずれかに一致する場合に成立する(`in`演算子)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_conditions=[
+                    StandardConditionField(field="model", operator="in", value=["IS1", "IS2", "OS1"])
+                ]
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert len(outcome.candidates) == 1
+
+
+def test_evaluate_product_design_data_condition_in_does_not_match_when_absent(
+    client, monkeypatch, tmp_path, db_path
+):
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_conditions=[StandardConditionField(field="model", operator="in", value=["OS1", "OS2"])]
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+
+
+def test_evaluate_product_starts_with_condition_evaluates_false_for_non_string_actual_value(
+    client, monkeypatch, tmp_path, db_path
+):
+    """型不一致は例外ではなく条件不成立として扱う(指示3-A)。`ban_w`はfloatの
+    ため、`starts_with`を適用すると常に不成立になる(クラッシュしない)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_conditions=[StandardConditionField(field="ban_w", operator="starts_with", value="9")]
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+
+
+# ============================================================
+# Issue #40 Phase 6-E指示3-C: 図面情報+設計データの複合条件(AND)
+# ============================================================
+
+
+def test_evaluate_product_requires_both_evidence_and_design_data_condition(
+    client, monkeypatch, tmp_path, db_path
+):
+    """同一盤にevidence Aがあり、かつdesign_data条件も成立する場合のみ
+    1件成立する(いずれか一方だけでは不成立)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        create_evidence_type(
+            conn, key="test_evidence_a", display_name="テスト用図面情報A", category=None,
+            usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.PANEL, description=None,
+        )
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_evidence_a"],
+                design_data_conditions=[StandardConditionField(field="ban_w", operator=">=", value=900)],
+            ),
+        )
+
+        # 1. まだevidenceが無い: 不成立。
+        outcome_none = evaluate_product(conn, str(tmp_path), "A1GV2421")
+    assert outcome_none.candidates == []
+
+    evidence_detection = _create_manual_detection(client, bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, evidence_detection["id"], "test_evidence_a")
+
+    with get_connection(db_path) as conn:
+        # 2. evidence + design_data両方成立: 1件成立。
+        outcome_both = evaluate_product(conn, str(tmp_path), "A1GV2421")
+    assert len(outcome_both.candidates) == 1
+    assert outcome_both.candidates[0].evidence[0].detection_id == evidence_detection["id"]
+
+
+def test_evaluate_product_evidence_without_design_data_condition_does_not_match(
+    client, monkeypatch, tmp_path, db_path
+):
+    """evidenceだけ成立していても、design_data条件が不成立なら成立しない。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        create_evidence_type(
+            conn, key="test_evidence_b", display_name="テスト用図面情報B", category=None,
+            usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.PANEL, description=None,
+        )
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_evidence_b"],
+                # 実データのban_w=900なので、>=99999は常に不成立。
+                design_data_conditions=[StandardConditionField(field="ban_w", operator=">=", value=99999)],
+            ),
+        )
+
+    evidence_detection = _create_manual_detection(client, bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, evidence_detection["id"], "test_evidence_b")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+    assert outcome.candidates == []
+
+
+def test_evaluate_product_result_disappears_when_evidence_is_removed(client, monkeypatch, tmp_path, db_path):
+    """成立後にevidenceを削除すると、再評価でresultが消滅する
+    (`replace_results_for_product`との組合せで確認)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        create_evidence_type(
+            conn, key="test_evidence_c", display_name="テスト用図面情報C", category=None,
+            usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.PANEL, description=None,
+        )
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_evidence_c"],
+                design_data_conditions=[StandardConditionField(field="ban_w", operator=">=", value=900)],
+            ),
+        )
+
+    evidence_detection = _create_manual_detection(client, bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, evidence_detection["id"], "test_evidence_c")
+
+    with get_connection(db_path) as conn:
+        outcome_before = evaluate_product(conn, str(tmp_path), "A1GV2421")
+        replace_results_for_product(conn, product_no="A1GV2421", candidates=outcome_before.candidates)
+        results_before = conn.execute(
+            "SELECT COUNT(*) FROM estimate_results WHERE product_no = 'A1GV2421'"
+        ).fetchone()[0]
+    assert results_before == 1
+
+    res = client.delete(f"/api/detections/{evidence_detection['id']}")
+    assert res.status_code == 204
+
+    with get_connection(db_path) as conn:
+        outcome_after = evaluate_product(conn, str(tmp_path), "A1GV2421")
+        replace_results_for_product(conn, product_no="A1GV2421", candidates=outcome_after.candidates)
+        results_after = conn.execute(
+            "SELECT COUNT(*) FROM estimate_results WHERE product_no = 'A1GV2421'"
+        ).fetchone()[0]
+    assert outcome_after.candidates == []
+    assert results_after == 0
+
+
+def test_evaluate_product_result_disappears_when_design_data_changes(client, monkeypatch, tmp_path, db_path):
+    """evidence+design_data両方成立後、design_dataが変化して条件不成立になると
+    再評価でresultが消滅する。"""
+    product_dir = _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        create_evidence_type(
+            conn, key="test_evidence_d", display_name="テスト用図面情報D", category=None,
+            usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.PANEL, description=None,
+        )
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_evidence_d"],
+                design_data_conditions=[StandardConditionField(field="ban_w", operator=">=", value=900)],
+            ),
+        )
+
+    evidence_detection = _create_manual_detection(client, bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, evidence_detection["id"], "test_evidence_d")
+
+    with get_connection(db_path) as conn:
+        outcome_before = evaluate_product(conn, str(tmp_path), "A1GV2421")
+    assert len(outcome_before.candidates) == 1
+
+    # 設計データを変更(ban_w=900 → 500、>=900を不成立にする)。
+    _write_cp932_csv(
+        product_dir / "estcode_df.csv",
+        _ESTCODE_DF_HEADER,
+        [_ESTCODE_ROW_1_1.replace(",900,", ",500,")],
+    )
+
+    with get_connection(db_path) as conn:
+        outcome_after = evaluate_product(conn, str(tmp_path), "A1GV2421")
+    assert outcome_after.candidates == []
+
+
+# ============================================================
+# Issue #40 Phase 6-E指示3-D: JudgmentScope.DRAWING/PRODUCT
+# (「業務意味に依存しない純粋な数量scope処理」として追加。evidenceの存在判定
+# のみを対象とし、design_data_conditionsとの組合せは評価せず
+# skipped_rule_master_idsへ記録する)。
+# ============================================================
+
+
+def test_evaluate_product_drawing_scope_groups_by_page_not_panel(client, monkeypatch, tmp_path, db_path):
+    """同じevidence種別が別々の図面ページ(page16/page18)にあれば、
+    DRAWING scopeではページごとに独立した結果になる(PANEL scopeとは異なり
+    盤割当を一切見ない)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        create_evidence_type(
+            conn, key="test_drawing_evidence", display_name="テスト用(図面単位)", category=None,
+            usage=EvidenceUsage.ESTIMATE_TARGET, default_judgment_scope=JudgmentScope.DRAWING, description=None,
+        )
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.DRAWING,
+            quantity_method=QuantityMethod.PER_EVIDENCE,
+            judgment_condition=StandardCondition(required_evidence_types=["test_drawing_evidence"]),
+        )
+
+    d16 = _create_manual_detection(client, drawing_page_id=_page16_id(client), bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, d16["id"], "test_drawing_evidence")
+    d18 = _create_manual_detection(client, drawing_page_id=_page18_id(client), bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, d18["id"], "test_drawing_evidence")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert len(outcome.candidates) == 2
+    detection_ids = {c.evidence[0].detection_id for c in outcome.candidates}
+    assert detection_ids == {d16["id"], d18["id"]}
+    for c in outcome.candidates:
+        assert c.target_panel_ban_menno is None
+        assert c.target_panel_ban_no is None
+        assert c.judgment_scope == JudgmentScope.DRAWING
+
+
+def test_evaluate_product_drawing_scope_condition_group_requires_both_types_on_same_page(
+    client, monkeypatch, tmp_path, db_path
+):
+    """複数種類のevidenceがそれぞれ別ページにある場合、DRAWING scopeでは
+    どちらのページも成立しない(同一ページ内に揃う必要がある)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        for key in ("test_drawing_a", "test_drawing_b"):
+            create_evidence_type(
+                conn, key=key, display_name=key, category=None,
+                usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.DRAWING, description=None,
+            )
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.DRAWING,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(required_evidence_types=["test_drawing_a", "test_drawing_b"]),
+        )
+
+    d16 = _create_manual_detection(client, drawing_page_id=_page16_id(client), bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, d16["id"], "test_drawing_a")
+    d18 = _create_manual_detection(client, drawing_page_id=_page18_id(client), bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, d18["id"], "test_drawing_b")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+    assert outcome.candidates == []
+
+
+def test_evaluate_product_drawing_scope_skips_rule_combined_with_design_data_condition(
+    client, monkeypatch, tmp_path, db_path
+):
+    """DRAWING scope + design_data_conditionsの組合せは、業務的な集約判断が
+    必要なため評価せずskipする(指示3-Dの制限)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        create_evidence_type(
+            conn, key="test_drawing_c", display_name="test_drawing_c", category=None,
+            usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.DRAWING, description=None,
+        )
+        master_item_id = _first_master_item(client)["id"]
+        rule = create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.DRAWING,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_drawing_c"],
+                design_data_conditions=[StandardConditionField(field="ban_w", operator=">=", value=900)],
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+    assert outcome.skipped_rule_master_ids == [rule.id]
+
+
+def test_evaluate_product_drawing_scope_skips_rule_without_required_evidence_types(
+    client, monkeypatch, tmp_path, db_path
+):
+    """DRAWING scopeでevidenceを1件も要求しないルール(設計データのみ相当)は
+    集約方法が未確定なためskipする。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        rule = create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.DRAWING,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+    assert outcome.skipped_rule_master_ids == [rule.id]
+
+
+def test_evaluate_product_product_scope_combines_evidence_across_pages(client, monkeypatch, tmp_path, db_path):
+    """PRODUCT scopeでは、異なる図面ページにまたがるevidenceの組合せでも
+    1件成立する(製番全体を1グループとする)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        for key in ("test_product_a", "test_product_b"):
+            create_evidence_type(
+                conn, key=key, display_name=key, category=None,
+                usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.PRODUCT, description=None,
+            )
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PRODUCT,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(required_evidence_types=["test_product_a", "test_product_b"]),
+        )
+
+    d16 = _create_manual_detection(client, drawing_page_id=_page16_id(client), bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, d16["id"], "test_product_a")
+    d18 = _create_manual_detection(client, drawing_page_id=_page18_id(client), bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, d18["id"], "test_product_b")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert len(outcome.candidates) == 1
+    candidate = outcome.candidates[0]
+    assert candidate.quantity == 1
+    assert candidate.target_panel_ban_menno is None
+    assert candidate.target_drawing_page_id is None
+    detection_ids = {e.detection_id for e in candidate.evidence}
+    assert detection_ids == {d16["id"], d18["id"]}
+
+
+def test_evaluate_product_product_scope_per_evidence_counts_across_pages(
+    client, monkeypatch, tmp_path, db_path
+):
+    """PRODUCT scope + PER_EVIDENCEは、ページをまたいでも根拠1件につき1行
+    (同種BBox複数→数量複数、の製番全体版)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        create_evidence_type(
+            conn, key="test_product_c", display_name="test_product_c", category=None,
+            usage=EvidenceUsage.ESTIMATE_TARGET, default_judgment_scope=JudgmentScope.PRODUCT, description=None,
+        )
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PRODUCT,
+            quantity_method=QuantityMethod.PER_EVIDENCE,
+            judgment_condition=StandardCondition(required_evidence_types=["test_product_c"]),
+        )
+
+    d16 = _create_manual_detection(client, drawing_page_id=_page16_id(client), bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, d16["id"], "test_product_c")
+    d18 = _create_manual_detection(client, drawing_page_id=_page18_id(client), bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, d18["id"], "test_product_c")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert len(outcome.candidates) == 2
+    detection_ids = {c.evidence[0].detection_id for c in outcome.candidates}
+    assert detection_ids == {d16["id"], d18["id"]}

@@ -161,20 +161,57 @@ class EstimateRuleMaster:
     note: str | None = None
 
 
+# 設計データ条件で使える演算子 (Issue #40 11章「標準ルール」の最小構造)。
+# Phase 6-Eで`starts_with`/`in`を追加した(Phase 6-Dで判明した「型式がIS*/OS*系」
+# 「複数候補値のいずれか」という資料上の条件を、`model == "IS2"`のような
+# デモ専用の固定値一致へ単純化せずに表現できるようにするため)。
+STANDARD_CONDITION_OPERATORS: frozenset[str] = frozenset(
+    {"==", "!=", ">=", "<=", ">", "<", "starts_with", "in"}
+)
+
+
 @dataclass
 class StandardConditionField:
     """設計データ条件1件 (Issue #40 11章「標準ルール」の最小構造)。
 
-    例: `{"field": "ban_w", "operator": ">=", "value": 900}`。
+    例: `{"field": "ban_w", "operator": ">=", "value": 900}`、
+    `{"field": "model", "operator": "starts_with", "value": "IS"}`、
+    `{"field": "model", "operator": "in", "value": ["IS1", "IS2", "OS1"]}`。
     `field`は`app.services.design_data_context.DesignDataContext`の属性名と
-    対応させる。演算子は`==`/`!=`/`>=`/`<=`/`>`/`<`のみサポートする
+    対応させる。
+
+    演算子は`==`/`!=`/`>=`/`<=`/`>`/`<`/`starts_with`/`in`のみサポートする
     (資料からより複雑な条件式の機械可読な仕様を確認できていないため、
-    Phase 2ではこれ以上の表現力を持たせない)。
+    これ以上の表現力は持たせない)。
+
+    **型安全性(Issue #40 Phase 6-E指示3-A)**: `starts_with`は`value`が文字列の
+    場合のみ、`in`は`value`がlist/tupleの場合のみ許可する(暗黙の型変換は
+    行わない)。不正な組合せは生成時に`ValueError`で即座に失敗させる
+    (DBに壊れた条件を保存してしまい、評価時に初めて気づく事態を避けるため)。
+    一方、**評価時**に実際の設計データ値(`DesignDataContext`側の値)が期待と
+    異なる型だった場合は、例外にはせず単に「条件不成立」として扱う
+    (既存の`>=`等が`None`を「不成立」として扱うのと同じ考え方。
+    `app.services.estimate_rule_evaluator._OPERATORS`参照)。
     """
 
     field: str
     operator: str
-    value: float | str
+    value: float | str | list | tuple
+
+    def __post_init__(self) -> None:
+        if self.operator not in STANDARD_CONDITION_OPERATORS:
+            raise ValueError(
+                f"未知の演算子です: {self.operator!r} "
+                f"(サポート対象: {sorted(STANDARD_CONDITION_OPERATORS)})"
+            )
+        if self.operator == "starts_with" and not isinstance(self.value, str):
+            raise ValueError(
+                f"演算子 'starts_with' のvalueは文字列である必要があります: {self.value!r}"
+            )
+        if self.operator == "in" and not isinstance(self.value, (list, tuple)):
+            raise ValueError(
+                f"演算子 'in' のvalueはlist/tupleである必要があります: {self.value!r}"
+            )
 
 
 @dataclass
@@ -320,6 +357,7 @@ __all__ = [
     "EstimateResultStatus",
     "DrawingEvidenceType",
     "EstimateRuleMaster",
+    "STANDARD_CONDITION_OPERATORS",
     "StandardConditionField",
     "StandardCondition",
     "EstimateResult",

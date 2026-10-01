@@ -177,6 +177,32 @@ SCALE_X≈7.6986, SCALE_Y≈7.6970, FRAME_MINI=2077×1485 → 正規化矩形
 Phase 1.5ではこれらのクラス名を参考にダミーDetectionのclass_nameとして使用しているが、
 これは実際のクラス体系そのものではない (要件23で「AIクラス体系確定」は対象外と明示)。
 
+### 6.1 Issue #40 Phase 6-D/6-Eでの追加確認
+
+- **`estcode_df.csv`の追加19列は実データに存在する(確定)**: 実製番A1GV2421の
+  `estcode_df.csv`を直接確認したところ、`PANEL`/`TRANS`/`IN_PANEL`/`SHIELD`/
+  `DOOR_FRONT`/`DOOR_BACK`/`DOOR_STACK`/`DOOR_SIDE`/`DOOR_SMALL`/`FAN_ROOF`/
+  `FAN_DOOR`/`MAIN_LINE`/`WIRE_MESH`/`STACK_PLATE`/`DRAWER_DEVICE`/
+  `VCT_STAND`/`BUS_DUCT`/`PASSAGE`/`INPUT_CU_COEFF`の19列が実在し、全5盤分に
+  値が入っていることを確認した(本節冒頭の「暫定」は、Sekisan Navi側が
+  これらを未パースだった状態を指していたもので、実データ自体への疑義では
+  なくなった)。Phase 6-Eで`app/services/estcode_df.py`/
+  `app/services/design_data_context.py`まで読み込みを接続した
+  (`docs/architecture.md`参照)。
+- **AI対応リストの正式なクラス一覧(20件)を確認**: `20250707_A製品自動化検討_
+  対応仕分け.xlsx`のAI対応リストシートに、`names`(内部key)・`検出対象`
+  (日本語)・`条件・備考`が揃った20クラスの一覧があり、本節冒頭の
+  「Class ID 0〜19」(20 ID)と件数が一致する: `door_w`/`panel`/`transformer`/
+  `partition`/`sidedoor_l`/`sidedoor_r`/`narrow_door`/`small_door`/`2doors`/
+  `3doors`/`stack_plate`/`drawer_device`/`roof_fan`/`roof_fan_l`/`roof_fan_r`/
+  `door_fan`/`bus_duct`/`rotate_panel`/`passage`/`vct_stand`。
+- **`.boxspec`/`.baninf`ファイルは現行のデータ参照ルートに存在しない**:
+  「対応仕分け」Excelのプログラム対応リストシートが18101〜18115(底板)の
+  判定根拠として挙げる`.boxspec`(`STEEL-BOTTOM`列)・`.baninf`(`ZUMEI`列)
+  というファイル形式を、実製番A1GV2421のディレクトリ配下で探したが
+  1件も見つからなかった(`*.dxf`/`*.pdf`/`*.png`/`*_detected.*`/各種`.csv`/
+  `dwg\`のみ)。別のデータパイプライン由来のファイルである可能性が高い。
+
 ## 7. データ量・読み込み速度
 
 - 製番1件あたりのデータ量: 概ね10〜50MB程度 (サンプルしたA1GV2421は約25MB、12ページ)。
@@ -212,5 +238,7 @@ Phase 1.5ではこれらのクラス名を参考にダミーDetectionのclass_na
 | CAD実座標 (`detected_df.csv`) → PDFページピクセル位置の厳密な変換式 | **未確認** |
 | product_df.csvの盤領域(KITEN_X/Y, DETECT_AREA_X/Y) → PNGサムネイル正規化座標の変換式 | 確定 (Phase 1.8, 5.1章参照) |
 | AI検出クラス・積算コード対応表 | 暫定 (参考資料に記載はあるが多くが「保留」注記あり) |
+| estcode_df.csvの追加19列が実データに存在するか | 確定 (Phase 6-D/6-E、6.1章参照。実在を確認、Sekisan Navi側の読み込みも接続済み) |
+| `.boxspec`/`.baninf`ファイルがデータ参照ルート配下に存在するか | 確定 (Phase 6-E、6.1章参照。**存在しない**ことを確認) |
 | 914製番全件の構造一貫性 | **未確認** (サンプル4件のみ確認) |
 | ネットワーク切断時の挙動 | **未確認** (設計上は例外を握りつぶし友好的メッセージを返す想定のみ) |
