@@ -534,12 +534,23 @@ function App() {
   // ため別々に取得する。上記`masterItemById`と同じ考え方)。製番に依存しない
   // マスタデータのため、初回1回だけ取得する。Viewer上のBBoxラベルを
   // 積算コード/内部keyではなく図面情報の日本語表示名にするために使う。
+  //
+  // [PR #47レビュー指摘対応] この取得はBBoxラベルの表示名解決という補助的な
+  // 用途に過ぎず、失敗しても`DetectionOverlay`側は既に`class_name`
+  // (内部key)へ安全にfallbackできる設計になっている。そのため、ここでの
+  // 失敗をApp共通の`error`(Viewer全体のエラーバナー)へは入れない
+  // (補助的なラベル解決の失敗で、BBox編集等の既存作業全体に影響を
+  // 波及させないため)。取得エラー自体の表示は、同じデータを独自に
+  // 取得・表示する`DrawingEvidencePanel`側の既存エラー表示に委ねる。
   useEffect(() => {
     fetchDrawingEvidenceTypes()
       .then((types) => {
         setEvidenceDisplayNameByKey(new Map(types.map((t) => [t.key, t.display_name])))
       })
-      .catch((e: unknown) => setError(describeFetchError(e, '図面情報マスタを取得できませんでした')))
+      .catch(() => {
+        // 失敗時はevidenceDisplayNameByKeyを初期値(空Map)のまま維持する
+        // (BBoxラベルは呼び出し側で`class_name`へfallbackする)。
+      })
   }, [])
 
   // 選択中Detectionに紐づく盤情報を取得

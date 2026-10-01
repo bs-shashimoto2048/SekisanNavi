@@ -1121,6 +1121,76 @@ describe('App: 図面情報→BBox作成 (Issue #40 Phase 6-C指示3章/4章)', 
     window.localStorage.clear()
   })
 
+  it('[PR #47レビュー指摘対応] does not surface a failed evidenceDisplayNameByKey fetch as the common App error banner, and the Viewer/既存panelはそのまま使える', async () => {
+    const { fetchDrawingEvidenceTypes } = await import('./api/client')
+    // App.tsx自身の取得(BBoxラベル解決用)だけを失敗させる。
+    // DrawingEvidencePanel自身の取得(1回目相当)は成功値を返す想定だが、
+    // どちらが先に呼ばれても同じ結果になるよう、両方の呼び出しを
+    // 「1回目reject・以降は空配列で継続」という設定にする
+    // (`mockResolvedValue`のデフォルトへの後方互換は`afterEach`が担保)。
+    vi.mocked(fetchDrawingEvidenceTypes).mockRejectedValueOnce(new Error('network error'))
+
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
+
+    // App共通のerror bannerは表示されない(`app-layout__error`)。
+    expect(document.querySelector('.app-layout__error')).not.toBeInTheDocument()
+
+    // 既存のViewer/floating panelは通常どおり使える(回帰無し、部品台帳は
+    // Phase 6-Cで既定非表示へ変更済みのため、既定表示中のpanelで確認する)。
+    expect(screen.getByRole('heading', { name: '積算明細' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
+    const thumbnail = await screen.findByRole('img', { name: 'P16' })
+    fireEvent.click(thumbnail)
+    await screen.findByTitle(/roof_fan/)
+  })
+
+  it('[PR #47レビュー指摘対応] falls back to class_name when evidenceDisplayNameByKey could not be fetched (App側取得失敗を模す)', async () => {
+    const { fetchDrawingEvidenceTypes } = await import('./api/client')
+    // App.tsx自身・DrawingEvidencePanel自身の両方のfetchDrawingEvidenceTypes()を
+    // 失敗させる(evidenceDisplayNameByKeyが確実に空Mapのまま継続する状況を
+    // 作る)。既存のevidence_type_key付きfixtureを使い、ラベル解決自体は
+    // `DetectionOverlay.test.tsx`側で既に単体検証済みのため、ここでは
+    // App.tsx統合レベルで「クラッシュせず、class_nameがそのままラベルに
+    // 出ること」のみを確認する。
+    vi.mocked(fetchDrawingEvidenceTypes).mockRejectedValue(new Error('network error'))
+    const evidenceDetection: Detection = {
+      id: 400,
+      drawing_page_id: 1, // pageOutline(P16)
+      panel_id: null,
+      class_name: 'side_door',
+      bbox_x: 0.6,
+      bbox_y: 0.6,
+      bbox_w: 0.05,
+      bbox_h: 0.05,
+      confidence: null,
+      status: 'reviewed',
+      source_type: 'manual',
+      master_item_id: null,
+      leader_label_x: null,
+      leader_label_y: null,
+      master_item_category: null,
+      master_item_model: null,
+      master_item_code: null,
+      evidence_type_key: 'side_door',
+    }
+    seedLiveDetections([detectionOnOutline, masterLinkedDetectionOnOutline, evidenceDetection])
+
+    render(<App />)
+    const thumbnail = await screen.findByRole('img', { name: 'P16' })
+    fireEvent.click(thumbnail)
+    await screen.findByTitle(/roof_fan/)
+
+    // クラッシュせず、evidence_type_key BBoxはclass_name(side_door)のまま
+    // 表示される(evidenceDisplayNameByKeyが空Mapのため、図面情報名への
+    // 解決ができず安全にfallbackする)。
+    await waitFor(() => {
+      const labels = Array.from(document.querySelectorAll('.detection-overlay__label')).map((el) => el.textContent)
+      expect(labels.some((l) => l?.includes('side_door'))).toBe(true)
+    })
+    expect(document.querySelector('.app-layout__error')).not.toBeInTheDocument()
+  })
+
   it('selecting a 図面情報 row enables bboxAddMode and shows the "次の操作" prompt', async () => {
     const { fetchDrawingEvidenceTypes } = await import('./api/client')
     vi.mocked(fetchDrawingEvidenceTypes).mockResolvedValue([sideDoorEvidenceType])
