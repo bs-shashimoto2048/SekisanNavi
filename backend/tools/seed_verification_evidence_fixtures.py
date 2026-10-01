@@ -15,7 +15,15 @@
   - `--cleanup` で、このスクリプトが投入した候補行だけを安全に削除できる
     (`note`/`description`列に埋め込んだ目印 `CANDIDATE_MARKER` で識別する。
     実マスタ投入候補であり、業務が確定した実マスタではないことが常に
-    行自体から分かるようにするため)。
+    行自体から分かるようにするため)。candidate evidence_typeを参照する
+    検証用Detection(常に`create_evidence_detection`経由で`master_item_id
+    IS NULL`として作られる)は、`evidence_type_key`をNULLへ落として残す
+    のではなく、関連する`estimate_results`(新方式・旧方式いずれの根拠に
+    していても)を先に削除した上でDetection自体を削除する(PR #48レビュー
+    指摘対応)。安全に削除できない状態を検出した場合は`CleanupError`で
+    明示的に失敗させ、黙ってNULL化はしない。marker無しの既存
+    `drawing_evidence_types`/`estimate_rule_masters`/`detections`/
+    `estimate_results`は一切変更しない。
 
 **この候補データの位置づけ**: Issue #40 Phase 6-D報告コメントで示す
 `drawing_evidence_types`/`estimate_rule_masters`候補一覧のうち、代表検証ケース
@@ -36,6 +44,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app.config import DATA_DIR  # noqa: E402
 from app.db.connection import get_connection  # noqa: E402
+from app.repositories.detections import delete_detection  # noqa: E402
 from app.domain.estimate_rules import (  # noqa: E402
     ApplicableUnit,
     CalcType,
@@ -336,6 +345,40 @@ def seed(db_path: Path) -> None:
         _print_counts(conn, "投入後")
 
 
+class CleanupError(RuntimeError):
+    """cleanupを安全に完了できない場合に送出する。
+
+    PR #48レビュー指摘対応: 依存関係の後始末に確信が持てない場合、黙って
+    `evidence_type_key = NULL`へ落としてBBoxを孤児化させるのではなく、
+    明示的に失敗させる(`get_connection`のcontext managerが例外時に
+    自動rollbackするため、中途半端な状態がDBへcommitされることはない)。
+    """
+
+
+def _delete_estimate_results_referencing_detection(conn, detection_id: int) -> int:
+    """指定detectionを根拠(`estimate_result_evidence.detection_id`)として持つ
+    `estimate_results`を削除する(`estimate_result_evidence`は
+    `ON DELETE CASCADE`で連動して消える)。
+
+    新方式(`source_rule_id`経由、ルールマスタcleanup時に既に削除済みのはず)・
+    旧方式(`source_rule_id IS NULL`、Manual BBox直接付与由来)のどちらの
+    EstimateResultも、このdetectionを根拠にしている限り対象にする
+    (`estimate_result_evidence.detection_id`にはFK制約が無いため、
+    Detection行を削除する前に明示的に消しておかないと孤児化する)。
+    """
+    result_ids = [
+        row["estimate_result_id"]
+        for row in conn.execute(
+            "SELECT DISTINCT estimate_result_id FROM estimate_result_evidence WHERE detection_id = ?",
+            (detection_id,),
+        ).fetchall()
+    ]
+    if result_ids:
+        placeholders = ",".join("?" for _ in result_ids)
+        conn.execute(f"DELETE FROM estimate_results WHERE id IN ({placeholders})", result_ids)
+    return len(result_ids)
+
+
 def cleanup(db_path: Path) -> None:
     _check_not_default_db(db_path)
     with get_connection(db_path) as conn:
@@ -354,15 +397,49 @@ def cleanup(db_path: Path) -> None:
             "SELECT id, key FROM drawing_evidence_types WHERE description LIKE ?",
             (f"{CANDIDATE_MARKER}%",),
         ).fetchall()
-        for row in evidence_rows:
-            conn.execute(
-                "UPDATE detections SET evidence_type_key = NULL WHERE evidence_type_key = ?",
-                (row["key"],),
-            )
-            conn.execute("DELETE FROM drawing_evidence_types WHERE id = ?", (row["id"],))
-            print(f"  deleted: drawing_evidence_types.id={row['id']} (key={row['key']!r})")
 
-        print(f"\n削除結果: estimate_rule_masters {len(rule_rows)}件 / drawing_evidence_types {len(evidence_rows)}件")
+        deleted_detection_count = 0
+        for row in evidence_rows:
+            key = row["key"]
+            detections_to_remove = conn.execute(
+                "SELECT id FROM detections WHERE evidence_type_key = ?", (key,)
+            ).fetchall()
+            for d in detections_to_remove:
+                detection_id = d["id"]
+                # candidate evidence_type由来のDetectionは`create_evidence_detection`
+                # (PR #48/Phase 6-D)経由でのみ作られ、常に`master_item_id IS NULL`
+                # (積算コードへの直結を持たない)。このDetectionを根拠にしている
+                # EstimateResultを先に消してから、Detection本体を削除する
+                # (`delete_detection`はestimate_references.detection_idのNULL化・
+                # decision_events監査記録まで含めて既存の安全な削除経路を再利用する。
+                # 新しい削除ロジックをここで独自実装しない)。
+                _delete_estimate_results_referencing_detection(conn, detection_id)
+                deleted = delete_detection(conn, detection_id)
+                if not deleted:
+                    raise CleanupError(
+                        f"detections.id={detection_id} (evidence_type_key={key!r}) の削除に失敗しました。"
+                        "孤児化を避けるため、evidence_type_keyのNULL化のみで済ませず処理を中断します。"
+                    )
+                deleted_detection_count += 1
+                print(f"  deleted: detections.id={detection_id} (evidence_type_key={key!r})")
+
+            # この時点でkeyを参照するdetectionは存在しないはず(FK制約
+            # `detections.evidence_type_key REFERENCES drawing_evidence_types(key)`
+            # を満たせる状態)。万一残っていればDELETEがFK違反で例外になり、
+            # 黙ってNULL化へフォールバックすることなくcleanup自体が失敗する。
+            conn.execute("DELETE FROM drawing_evidence_types WHERE id = ?", (row["id"],))
+            print(f"  deleted: drawing_evidence_types.id={row['id']} (key={key!r})")
+
+        violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise CleanupError(
+                f"cleanup後にforeign_key_check違反が{len(violations)}件検出されました: {violations}"
+            )
+
+        print(
+            f"\n削除結果: estimate_rule_masters {len(rule_rows)}件 / "
+            f"drawing_evidence_types {len(evidence_rows)}件 / detections {deleted_detection_count}件"
+        )
         _print_counts(conn, "削除後")
 
 
