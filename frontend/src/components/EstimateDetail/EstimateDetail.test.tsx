@@ -270,6 +270,49 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     expect(button.title).toContain('取得元: 手動')
   })
 
+  it('[Issue #40 Phase 6-B] shows design_data evidence as a Japanese condition line, not raw field names/JSON', () => {
+    renderDetail({
+      results: [
+        makeResult({
+          evidence: [
+            {
+              id: 1,
+              evidence_kind: 'design_data',
+              detection_id: null,
+              design_data_ref: JSON.stringify({
+                panel: '1:1',
+                conditions: [
+                  { field: 'ban_w', operator: '>=', expected_value: 900, actual_value: 1200 },
+                  { field: 'ban_d', operator: '==', expected_value: 2200, actual_value: 2200 },
+                ],
+              }),
+            },
+          ],
+        }),
+      ],
+    })
+    const button = screen.getByRole('button', { name: '根拠' })
+    expect(button.title).toContain('幅: 1200 ≥ 900')
+    expect(button.title).toContain('奥行: 2200 = 2200')
+    // 内部field名(ban_w/ban_d)をそのまま表示しない。
+    expect(button.title).not.toContain('ban_w')
+    expect(button.title).not.toContain('ban_d')
+  })
+
+  it('[Issue #40 Phase 6-B] falls back to a plain "設計データ" label for pre-Phase-6-B design_data_ref values ({"panel": "..."} only)', () => {
+    renderDetail({
+      results: [
+        makeResult({
+          evidence: [
+            { id: 1, evidence_kind: 'design_data', detection_id: null, design_data_ref: '{"panel": "1:1"}' },
+          ],
+        }),
+      ],
+    })
+    const button = screen.getByRole('button', { name: '根拠' })
+    expect(button.title).toContain('設計データ')
+  })
+
   it('shows a needs-review badge only when status === needs_review', () => {
     const { rerender } = renderDetail({ results: [makeResult({ status: 'needs_review' })] })
     expect(screen.getByText('⚠要確認')).toBeInTheDocument()

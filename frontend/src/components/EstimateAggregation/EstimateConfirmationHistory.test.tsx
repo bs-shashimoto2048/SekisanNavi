@@ -62,6 +62,14 @@ function makeDetail(overrides: Partial<EstimateConfirmationDetail> = {}): Estima
         bbox_w: 0.05,
         bbox_h: 0.05,
         page_no: 16,
+        current_factor: 1.0,
+        factor_overridden: false,
+        judgment_method: 'drawing_judgment',
+        applicable_unit: 'unit',
+        judgment_reason: null,
+        source_rule_id: null,
+        result_status: 'auto',
+        evidence: [],
       },
     ],
     ...overrides,
@@ -127,9 +135,12 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
 
     await waitFor(() => expect(getEstimateConfirmation).toHaveBeenCalledWith('A1GV2421', 1))
     expect(await screen.findByText('11002')).toBeInTheDocument()
-    // 「内容」列(型式/定格の結合)と「型式」列がどちらも同じ文字列になる
-    // ケースのため、件数のみ確認する(値そのものは既にテーブル描画で確認済み)。
-    expect(screen.getAllByText('OS2- 916').length).toBeGreaterThanOrEqual(1)
+    // 「内容」列は型式/定格の結合(定格がnullのためmodelのみ)。
+    expect(screen.getByText('OS2- 916')).toBeInTheDocument()
+    // [Issue #40 Phase 6-A] 数量/適用単位/係数/判定方法の列も表示される。
+    const row = screen.getByText('11002').closest('tr') as HTMLElement
+    const cellTexts = Array.from(row.querySelectorAll('td')).map((td) => td.textContent)
+    expect(cellTexts).toEqual(['11002', 'OS2- 916', '1', '1台', '1', '322,000円', '図面判定'])
     // Backend側で算出済みの合計をそのまま表示するだけで、再計算はしない
     expect(screen.getByText(/合計 322,000円/)).toBeInTheDocument()
   })
@@ -163,6 +174,14 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
             bbox_w: 0.05,
             bbox_h: 0.05,
             page_no: 16,
+            current_factor: null,
+            factor_overridden: null,
+            judgment_method: null,
+            applicable_unit: null,
+            judgment_reason: null,
+            source_rule_id: null,
+            result_status: null,
+            evidence: [],
           },
         ],
       }),
@@ -174,8 +193,13 @@ describe('EstimateConfirmationHistory (Issue #4 Phase B-4: 確定履歴の最小
     fireEvent.click(screen.getByText('2026-09-04 07:28:06'))
 
     await screen.findAllByText('18311') // コード列・内容列(共にfallback)の両方に出る
-    const unknownCells = screen.getAllByText('不明')
-    expect(unknownCells.length).toBe(2) // 単価・金額のいずれも不明
+    // [Issue #40 Phase 6-A] 単価列は廃止したため、金額のみ「不明」になる。
+    expect(screen.getByText('不明')).toBeInTheDocument()
+    // Phase 6-A以前に確定された行を模した新列全てnullのケースでも、適用単位/
+    // 係数/判定は推測で埋めず「-」のまま表示する(壊れない)。
+    const row = screen.getAllByText('18311')[0].closest('tr') as HTMLElement
+    const cellTexts = Array.from(row.querySelectorAll('td')).map((td) => td.textContent)
+    expect(cellTexts).toEqual(['18311', '18311', '1', '-', '-', '不明', '-'])
   })
 
   it('allows navigating back from detail to the list', async () => {

@@ -49,6 +49,14 @@ function makeConfirmation(overrides: Partial<EstimateConfirmation> = {}): Estima
         bbox_w: 0.05,
         bbox_h: 0.05,
         page_no: 16,
+        current_factor: 1.0,
+        factor_overridden: false,
+        judgment_method: 'drawing_judgment',
+        applicable_unit: null,
+        judgment_reason: null,
+        source_rule_id: null,
+        result_status: 'auto',
+        evidence: [],
       },
     ],
     ...overrides,
@@ -179,5 +187,37 @@ describe('EstimateConfirmationAction (Issue #4 Phase B-3: 積算確定の最小U
   it('[Issue #36] no longer wraps the label/button in the old bordered box (border/background廃止、compact rowへ直接溶け込む)', () => {
     const { container } = render(<EstimateConfirmationAction productNo="A1GV2421" />)
     expect(container.querySelector('.estimate-confirmation-action')).not.toBeInTheDocument()
+  })
+
+  describe('Issue #40 Phase 6-A指示A-1: needs_review行が残っている間は確定できない', () => {
+    it('disables the button and shows guidance when needsReviewCount > 0, without calling the API', () => {
+      render(<EstimateConfirmationAction productNo="A1GV2421" needsReviewCount={2} />)
+      const button = screen.getByRole('button', { name: '確定' })
+      expect(button).toBeDisabled()
+      expect(button).toHaveAttribute('title', '要確認の積算結果が残っているため確定できません')
+      expect(screen.getByRole('alert').textContent).toContain('要確認の積算結果が2件残っているため確定できません')
+
+      fireEvent.click(button)
+      expect(createEstimateConfirmation).not.toHaveBeenCalled()
+    })
+
+    it('shows a link to navigate to the 要確認 tab when onNavigateToNeedsReview is provided', () => {
+      const onNavigateToNeedsReview = vi.fn()
+      render(
+        <EstimateConfirmationAction
+          productNo="A1GV2421"
+          needsReviewCount={1}
+          onNavigateToNeedsReview={onNavigateToNeedsReview}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: '要確認タブで確認する' }))
+      expect(onNavigateToNeedsReview).toHaveBeenCalledTimes(1)
+    })
+
+    it('enables the button normally when needsReviewCount is 0 (default)', () => {
+      render(<EstimateConfirmationAction productNo="A1GV2421" />)
+      expect(screen.getByRole('button', { name: '確定' })).not.toBeDisabled()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
   })
 })

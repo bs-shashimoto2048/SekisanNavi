@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ApiError, getEstimateConfirmation, listEstimateConfirmations } from '../../api/client'
+import { applicableUnitLabel, judgmentMethodLabel } from '../../domain/drawingEvidencePresentation'
 import type { EstimateConfirmationDetail, EstimateConfirmationItem, EstimateConfirmationSummary } from '../../types/domain'
 import './EstimateConfirmationHistory.css'
 
@@ -48,6 +49,17 @@ function formatCurrency(amount: number): string {
 function formatContent(item: EstimateConfirmationItem): string {
   const parts = [item.model, item.rating].filter((v): v is string => !!v && v.trim() !== '')
   return parts.length > 0 ? parts.join(' / ') : item.code
+}
+
+const MISSING_VALUE_PLACEHOLDER = '-'
+
+/** [Issue #40 Phase 6-A指示A-5] 係数列の表示。Phase 6-A以前に確定された
+ * 過去snapshot(`current_factor`がnull)は「-」のまま表示し、推測で1等を
+ * 埋めない。`factor_overridden`が真の場合のみ「(手修正)」を添えて、
+ * 自動結果から変更されたことが分かるようにする。 */
+function formatConfirmedFactor(item: EstimateConfirmationItem): string {
+  if (item.current_factor == null) return MISSING_VALUE_PLACEHOLDER
+  return item.factor_overridden ? `${item.current_factor} (手修正)` : `${item.current_factor}`
 }
 
 export function EstimateConfirmationHistory({ productNo }: Props) {
@@ -199,16 +211,21 @@ export function EstimateConfirmationHistory({ productNo }: Props) {
                   </p>
                 ) : (
                   <div className="estimate-confirmation-history__table-wrap">
+                    {/* [Issue #40 Phase 6-A指示A-5] 列構成を積算明細(EstimateDetail)
+                        と揃えた(コード/内容/数量/適用単位/係数/金額/判定)。
+                        Phase 6-A以前に確定された過去snapshotは新列(数量以外)が
+                        全てnullのため、その場合は「-」のまま表示し壊れない
+                        (値を推測で埋めない)。 */}
                     <table className="estimate-confirmation-history__table">
                       <thead>
                         <tr>
                           <th>コード</th>
                           <th>内容</th>
-                          <th>型式</th>
-                          <th>定格</th>
-                          <th>単価(暫定)</th>
                           <th>数量</th>
+                          <th>適用単位</th>
+                          <th>係数</th>
                           <th>金額</th>
+                          <th>判定</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -216,11 +233,19 @@ export function EstimateConfirmationHistory({ productNo }: Props) {
                           <tr key={item.id}>
                             <td>{item.code}</td>
                             <td>{formatContent(item)}</td>
-                            <td>{item.model ?? '-'}</td>
-                            <td>{item.rating ?? '-'}</td>
-                            <td>{item.unit_price != null ? formatCurrency(item.unit_price) : '不明'}</td>
                             <td>{item.quantity}</td>
+                            <td>
+                              {item.applicable_unit != null
+                                ? applicableUnitLabel(item.applicable_unit)
+                                : MISSING_VALUE_PLACEHOLDER}
+                            </td>
+                            <td>{formatConfirmedFactor(item)}</td>
                             <td>{item.amount != null ? formatCurrency(item.amount) : '不明'}</td>
+                            <td>
+                              {item.judgment_method != null
+                                ? judgmentMethodLabel(item.judgment_method)
+                                : MISSING_VALUE_PLACEHOLDER}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

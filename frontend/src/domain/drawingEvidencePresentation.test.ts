@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   applicableUnitLabel,
+  designDataFieldLabel,
+  designDataOperatorLabel,
+  formatDesignDataCondition,
   judgmentMethodLabel,
   judgmentScopeLabel,
+  parseDesignDataRef,
   usageLabel,
   APPLICABLE_UNIT_LABELS,
   JUDGMENT_METHOD_LABELS,
@@ -56,5 +60,76 @@ describe('drawingEvidencePresentation (Issue #40 Phase 3: 作業者向けには�
     expect(judgmentMethodLabel('design_data')).toBe('設計データ')
     expect(judgmentMethodLabel('drawing_judgment')).toBe('図面判定')
     expect(judgmentMethodLabel('needs_confirmation')).toBe('要確認')
+  })
+})
+
+describe('design_data_ref presentation (Issue #40 Phase 6-B: 内部field名をそのまま表示しない)', () => {
+  it('translates every DesignDataContext field name used in judgment conditions to Japanese', () => {
+    const fields: [string, string][] = [
+      ['ban_menno', '面'],
+      ['ban_no', '盤'],
+      ['ban_meisyou', '盤名称'],
+      ['model', '型式'],
+      ['ban_h1', '正面高さ'],
+      ['ban_h2', '背面高さ'],
+      ['ban_w', '幅'],
+      ['ban_d', '奥行'],
+      ['ban_connect', '接続'],
+    ]
+    for (const [field, label] of fields) {
+      expect(designDataFieldLabel(field)).toBe(label)
+    }
+  })
+
+  it('falls back to the raw field name for an unknown field, rather than guessing a label', () => {
+    expect(designDataFieldLabel('unknown_field')).toBe('unknown_field')
+  })
+
+  it('translates every supported operator to a natural symbol', () => {
+    expect(designDataOperatorLabel('==')).toBe('=')
+    expect(designDataOperatorLabel('!=')).toBe('≠')
+    expect(designDataOperatorLabel('>=')).toBe('≥')
+    expect(designDataOperatorLabel('<=')).toBe('≤')
+    expect(designDataOperatorLabel('>')).toBe('>')
+    expect(designDataOperatorLabel('<')).toBe('<')
+  })
+
+  it('parses a Phase 6-B design_data_ref with conditions', () => {
+    const ref = parseDesignDataRef(
+      JSON.stringify({
+        panel: '1:1',
+        conditions: [{ field: 'ban_w', operator: '>=', expected_value: 900, actual_value: 1200 }],
+      }),
+    )
+    expect(ref).toEqual({
+      panel: '1:1',
+      conditions: [{ field: 'ban_w', operator: '>=', expected_value: 900, actual_value: 1200 }],
+    })
+  })
+
+  it('parses a pre-Phase-6-B design_data_ref ({"panel": "..."} only) as an empty conditions list, not an error', () => {
+    const ref = parseDesignDataRef('{"panel": "1:1"}')
+    expect(ref).toEqual({ panel: '1:1', conditions: [] })
+  })
+
+  it('returns null for invalid/unparseable JSON, rather than throwing or fabricating a value', () => {
+    expect(parseDesignDataRef('not json')).toBeNull()
+    expect(parseDesignDataRef(null)).toBeNull()
+    expect(parseDesignDataRef(undefined)).toBeNull()
+  })
+
+  it('formats a condition as "field: actual operator expected", matching the Issue #40 Phase 6-B UI example', () => {
+    expect(
+      formatDesignDataCondition({ field: 'ban_w', operator: '>=', expected_value: 900, actual_value: 1200 }),
+    ).toBe('幅: 1200 ≥ 900')
+    expect(
+      formatDesignDataCondition({ field: 'ban_d', operator: '==', expected_value: 2200, actual_value: 2200 }),
+    ).toBe('奥行: 2200 = 2200')
+  })
+
+  it('shows "不明" for actual_value rather than fabricating a number when it is null', () => {
+    expect(
+      formatDesignDataCondition({ field: 'ban_w', operator: '>=', expected_value: 900, actual_value: null }),
+    ).toBe('幅: 不明 ≥ 900')
   })
 })
