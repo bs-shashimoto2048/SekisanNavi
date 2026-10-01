@@ -17,6 +17,8 @@ import {
   fetchProjectInfo,
   overrideEstimateResultFactor,
   resetEstimateResultFactor,
+  overrideEstimateResultQuantity,
+  resetEstimateResultQuantity,
   updateDetectionBBox,
 } from './api/client'
 import { describeFetchError } from './api/errors'
@@ -752,6 +754,31 @@ function App() {
       setError(null)
     } catch (e) {
       setError(describeFetchError(e, '係数の初期値復元に失敗しました'))
+    }
+  }
+
+  // [Issue #40 Phase 6後半] 数量の手修正・初期値復元。係数の手修正と同じ
+  // パターン(更新された行だけをestimateResultsへ反映、全体の再取得はしない)。
+  async function handleOverrideEstimateResultQuantity(result: EstimateResult, newQuantity: number, reason: string) {
+    try {
+      const updated = await overrideEstimateResultQuantity(activeProductNo, result.id, {
+        current_quantity: newQuantity,
+        reason,
+      })
+      setEstimateResults((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      setError(null)
+    } catch (e) {
+      setError(describeFetchError(e, '数量の変更に失敗しました'))
+    }
+  }
+
+  async function handleResetEstimateResultQuantity(result: EstimateResult) {
+    try {
+      const updated = await resetEstimateResultQuantity(activeProductNo, result.id)
+      setEstimateResults((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      setError(null)
+    } catch (e) {
+      setError(describeFetchError(e, '数量の初期値復元に失敗しました'))
     }
   }
 
@@ -1689,6 +1716,8 @@ function App() {
                   onTabFilterChange={setEstimateDetailTabFilter}
                   onOverrideResultFactor={handleOverrideEstimateResultFactor}
                   onResetResultFactor={handleResetEstimateResultFactor}
+                  onOverrideResultQuantity={handleOverrideEstimateResultQuantity}
+                  onResetResultQuantity={handleResetEstimateResultQuantity}
                   onFocusResultEvidence={handleFocusResultEvidence}
                 />
               </FloatingPanel>

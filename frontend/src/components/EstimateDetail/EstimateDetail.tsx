@@ -6,6 +6,7 @@ import {
   parseDesignDataRef,
 } from '../../domain/drawingEvidencePresentation'
 import { EstimateResultFactorCell } from './EstimateResultFactorCell'
+import { EstimateResultQuantityCell } from './EstimateResultQuantityCell'
 import './EstimateDetail.css'
 
 /** 積算明細のタブ (Issue #40 Phase 5)。
@@ -23,9 +24,9 @@ import './EstimateDetail.css'
  *   新旧同一コード衝突で`status === 'needs_review'`となった行も対象とする
  *   (衝突行は`judgment_method`が`drawing_judgment`等のままのため)。
  *   衝突行は元の判定方法タブにも従来どおり残る(両タブに重複して表示される)。
- * - `overridden`: `factor_overridden === true`の行のみ(「修正あり」、指示6章。
- *   将来`quantity_overridden`等の手修正フラグが増えた場合もここに合流させる
- *   想定)。
+ * - `overridden`: `factor_overridden === true` OR `quantity_overridden === true`
+ *   の行(「修正あり」、Phase 6後半指示7章。両方修正されている行も1行として
+ *   表示する)。
  */
 export type DetailTabFilter = 'all' | 'design_data' | 'drawing_judgment' | 'needs_confirmation' | 'overridden'
 
@@ -41,7 +42,7 @@ const DETAIL_TABS: { value: DetailTabFilter; label: string }[] = [
 function matchesDetailTab(result: EstimateResult, tab: Exclude<DetailTabFilter, 'all'>): boolean {
   switch (tab) {
     case 'overridden':
-      return result.factor_overridden
+      return result.factor_overridden || result.quantity_overridden
     case 'needs_confirmation':
       return result.status === 'needs_review' || result.judgment_method === 'needs_confirmation'
     default:
@@ -111,6 +112,10 @@ interface Props {
   onOverrideResultFactor?: (result: EstimateResult, newFactor: number) => void
   /** 「初期値へ戻す」操作 (Issue #40 7-3章)。 */
   onResetResultFactor?: (result: EstimateResult) => void
+  /** 数量の手修正 (Issue #40 Phase 6後半)。理由入力必須。 */
+  onOverrideResultQuantity?: (result: EstimateResult, newQuantity: number, reason: string) => void
+  /** 数量の「初期値へ戻す」操作 (Issue #40 Phase 6後半)。 */
+  onResetResultQuantity?: (result: EstimateResult) => void
   /** 行のHover/クリックで根拠BBoxをViewer上に強調する (Issue #40 Phase 3の
    * `handleFocusResultEvidence`をそのまま再利用する想定)。設計データのみの
    * 行(`evidence`にdetection_idが無い)では何も起きない(指示7章/8章)。 */
@@ -142,6 +147,8 @@ export function EstimateDetail({
   onTabFilterChange,
   onOverrideResultFactor = () => {},
   onResetResultFactor = () => {},
+  onOverrideResultQuantity = () => {},
+  onResetResultQuantity = () => {},
   onFocusResultEvidence = () => {},
 }: Props) {
   // タブ件数と表示行は同じ判定関数(matchesDetailTab)で求め、両者がずれないようにする。
@@ -220,7 +227,15 @@ export function EstimateDetail({
                 >
                   <td className="estimate-detail__col-rr-code">{result.code}</td>
                   <td className="estimate-detail__col-rr-name">{content ?? MISSING_VALUE_PLACEHOLDER}</td>
-                  <td className="estimate-detail__col-rr-qty">{result.quantity}</td>
+                  <td className="estimate-detail__col-rr-qty">
+                    <EstimateResultQuantityCell
+                      result={result}
+                      onOverride={(newQuantity, reason) =>
+                        onOverrideResultQuantity(result, newQuantity, reason)
+                      }
+                      onReset={() => onResetResultQuantity(result)}
+                    />
+                  </td>
                   <td className="estimate-detail__col-rr-unit">
                     {result.applicable_unit != null
                       ? applicableUnitLabel(result.applicable_unit)

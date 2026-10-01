@@ -1,0 +1,104 @@
+/* [Issue #40 Phase 6後半] 積算明細「ルール結果」行の数量セル。係数セル
+   (EstimateResultFactorCell.css)と視覚・操作の一貫性を優先する。 */
+.estimate-result-quantity-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.estimate-result-quantity-cell__row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.estimate-result-quantity-cell__value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 2em;
+  text-align: right;
+}
+
+/* 指示1章: quantity_overridden=falseは自動算定値を緑字。 */
+.estimate-result-quantity-cell__value--initial {
+  color: #15803d;
+}
+
+/* 指示1章: quantity_overridden=trueは手修正値を赤字。 */
+.estimate-result-quantity-cell__value--overridden {
+  color: #b91c1c;
+}
+
+.estimate-result-quantity-cell__input {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.05rem 0.2rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  background: #fff;
+  color: #334155;
+  width: 4.2em;
+}
+
+.estimate-result-quantity-cell__reset {
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0.05rem 0.3rem;
+  cursor: pointer;
+}
+
+.estimate-result-quantity-cell__reset:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.estimate-result-quantity-cell__reset:disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+/* 指示4章: 数量変更後、理由確定までの間だけ同じセル内に展開するインライン
+   理由入力(選択肢B)。 */
+.estimate-result-quantity-cell__reason-prompt {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  white-space: nowrap;
+}
+
+.estimate-result-quantity-cell__reason-input {
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.05rem 0.2rem;
+  border: 1px solid #f59e0b;
+  border-radius: 3px;
+  background: #fffbeb;
+  color: #334155;
+  width: 8em;
+}
+
+.estimate-result-quantity-cell__reason-apply,
+.estimate-result-quantity-cell__reason-cancel {
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 0.05rem 0.3rem;
+  cursor: pointer;
+}
+
+.estimate-result-quantity-cell__reason-apply:disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.estimate-result-quantity-cell__reason-apply:hover:not(:disabled),
+.estimate-result-quantity-cell__reason-cancel:hover {
+  background: #e2e8f0;
+}
