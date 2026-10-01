@@ -69,6 +69,32 @@
   order: 6;
 }
 
+/* [Issue #40 Phase 6-C指示6章] 「要確認 N」「修正あり N」の小表示。確定/履歴
+   ボタンの直後、折り返し時専用の案内文(order:7)より前に置く。高さ抑制
+   優先のため、他のcompact-row要素と同じ1行内の小さなpill button。 */
+.estimate-aggregation__status-badge {
+  order: 6;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.estimate-aggregation__status-badge--needs-review {
+  border-color: var(--status-warning-accent, #d97706);
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.estimate-aggregation__status-badge--overridden {
+  border-color: #b91c1c;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 /* 積算コード0件時の案内文・確定成功/失敗メッセージは、compact rowの中へ
    無理に詰めず、`flex-basis: 100%`(親がflex-wrapのため)で必要時のみ
    独立した行として折り返す。 */

@@ -43,6 +43,19 @@
   margin-top: 0;
 }
 
+/* [Issue #40 Phase 6-C指示10章] 新ワークフローの手順を箇条書きより明確な
+   番号付きで示す(`__screen-list`と同じ余白・文字サイズ)。 */
+.viewer-guide__workflow-list {
+  margin: 0;
+  padding-left: 1.3rem;
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.viewer-guide__workflow-list li {
+  margin-bottom: 0.15rem;
+}
+
 .viewer-guide__table {
   width: 100%;
   border-collapse: collapse;

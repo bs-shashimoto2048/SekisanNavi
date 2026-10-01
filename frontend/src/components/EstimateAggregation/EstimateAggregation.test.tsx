@@ -1076,3 +1076,73 @@ describe('EstimateAggregation: 積算対象Selectの視認性 (Issue #6 指示1�
     })
   })
 })
+
+describe('EstimateAggregation: 「要確認 N」「修正あり N」小表示 (Issue #40 Phase 6-C指示6章)', () => {
+  it('does not render either badge when both counts are 0 (高さ抑制優先、常時の警告表示にしない)', () => {
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[makeTotalLineItem()]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+        needsReviewCount={0}
+        overriddenCount={0}
+      />,
+    )
+    expect(screen.queryByText(/要確認/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/修正あり/)).not.toBeInTheDocument()
+  })
+
+  it('shows 要確認 N and navigates to the needs-review tab when clicked', () => {
+    const onNavigateToNeedsReview = vi.fn()
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[makeTotalLineItem()]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+        needsReviewCount={3}
+        onNavigateToNeedsReview={onNavigateToNeedsReview}
+      />,
+    )
+    const badge = screen.getByText('要確認 3')
+    fireEvent.click(badge)
+    expect(onNavigateToNeedsReview).toHaveBeenCalled()
+  })
+
+  it('shows 修正あり N and navigates to the overridden tab when clicked', () => {
+    const onNavigateToOverridden = vi.fn()
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[makeTotalLineItem()]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+        overriddenCount={2}
+        onNavigateToOverridden={onNavigateToOverridden}
+      />,
+    )
+    const badge = screen.getByText('修正あり 2')
+    fireEvent.click(badge)
+    expect(onNavigateToOverridden).toHaveBeenCalled()
+  })
+
+  it('shows both badges together when both counts are non-zero', () => {
+    render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[makeTotalLineItem()]}
+        selectedTargetId={null}
+        onSelectTarget={() => {}}
+        needsReviewCount={1}
+        overriddenCount={1}
+      />,
+    )
+    expect(screen.getByText('要確認 1')).toBeInTheDocument()
+    expect(screen.getByText('修正あり 1')).toBeInTheDocument()
+  })
+})

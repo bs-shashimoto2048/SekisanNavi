@@ -223,8 +223,11 @@ export function DrawingEvidencePanel({
 
       {selectedType != null && (
         <div className="drawing-evidence-panel__selected">
+          {/* [Issue #40 Phase 6-C指示3章] 選択後に次の操作(図面上を囲んで追加)を
+              明示し、新ワークフローの「図面情報を選ぶ→図面を囲む」という流れを
+              迷わず続けられるようにする。 */}
           <div className="drawing-evidence-panel__selected-title">
-            選択中: {selectedType.display_name}
+            選択中: {selectedType.display_name} — 図面上を囲んで追加
           </div>
           <div className="drawing-evidence-panel__selected-meta">
             用途: {usageLabel(selectedType.usage)} ／ 判定範囲:{' '}

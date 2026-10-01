@@ -36,6 +36,17 @@ interface Props {
    * 通常非表示のBBoxを一時表示する点は共通だが、視覚的な強調スタイル
    * (半透明塗りつぶし+太めの枠)は`--detail-hover`修飾クラスで区別する。 */
   detailHoveredDetectionId?: number | null
+  /** [Issue #40 Phase 6-C指示7章] 積算明細(右ペイン③)でクリックして選択
+   * (persistent)した結果の根拠detection id集合。`detailHoveredDetectionId`
+   * (hoverの一時強調)とは独立し、別の行選択・解除操作まで保持し続ける
+   * (指示: 「選択中resultの根拠BBoxをViewerで持続強調」)。1つのEstimateResultが
+   * 複数のBBoxを根拠に持つ場合があるためSetで受け取る。 */
+  detailSelectedDetectionIds?: Set<number>
+  /** [Issue #40 Phase 6-C指示4章] 図面情報(evidence_type_key)経由で作成された
+   * BBoxのラベルを、積算コード/内部key(`class_name`)ではなく図面情報の
+   * 日本語表示名で出す(指示: 「ラベルは図面情報名を優先」)。
+   * `master_item_id`直結の旧Manual BBox(互換維持対象)には一切影響しない。 */
+  evidenceDisplayNameByKey?: Map<string, string>
   onSelectDetection: (detectionId: number) => void
   /** 選択中BBoxのリサイズ/移動がmouseupで確定した時に呼ばれる
    * (Phase 1.7, 要件17/23。Phase 1.11でBBox内部drag=移動にも流用する)。 */
@@ -90,6 +101,8 @@ export function DetectionOverlay({
   highlightedDetectionId,
   hoveredDetectionId = null,
   detailHoveredDetectionId = null,
+  detailSelectedDetectionIds,
+  evidenceDisplayNameByKey,
   onSelectDetection,
   onResizeDetection,
   previewBBox = null,
@@ -268,13 +281,26 @@ export function DetectionOverlay({
         const isMasterLinked = detection.master_item_id != null
         const isHoveredViaLeader = detection.id === hoveredDetectionId
         const isDetailHovered = detection.id === detailHoveredDetectionId
+        // [Issue #40 Phase 6-C指示7章] 積算明細の行クリックによる持続強調。
+        // `isHighlighted`(一定時間後に自動解除するflash)とは異なり、
+        // 別の行選択・明示的な解除操作まで保持し続ける。
+        const isDetailSelected = detailSelectedDetectionIds?.has(detection.id) ?? false
         // Phase 1.11 指示書7章/8章/9章: 積算Master Itemに紐づくBBoxは、選択中(編集中)・
         // 引出線hover中・積算明細hover中・一時強調中(`isHighlighted`。明細遷移後の
         // BBox残留・Hover色・品名列修正 指示1章: 選択せずに一時フォーカスするフローを
-        // 追加したため、選択されていなくても強調表示中は描画する必要がある)の
-        // いずれかでなければ矩形を描画しない。AI Detectionは従来通り常時表示のまま
-        // (要件29)。
-        if (isMasterLinked && !isSelected && !isHoveredViaLeader && !isDetailHovered && !isHighlighted) return null
+        // 追加したため、選択されていなくても強調表示中は描画する必要がある)・
+        // [Issue #40 Phase 6-C] 積算明細の行クリックによる持続強調中のいずれかで
+        // なければ矩形を描画しない。AI Detection・図面情報経由のBBox(後述)は
+        // 従来通り常時表示のまま (要件29)。
+        if (
+          isMasterLinked &&
+          !isSelected &&
+          !isHoveredViaLeader &&
+          !isDetailHovered &&
+          !isHighlighted &&
+          !isDetailSelected
+        )
+          return null
 
         const preview = effectivePreview?.detectionId === detection.id ? effectivePreview.rect : null
         const bboxX = preview ? preview.x : detection.bbox_x
@@ -285,6 +311,15 @@ export function DetectionOverlay({
         const categoryColors = isMasterLinked
           ? getCategoryPresentation(detection.master_item_category).colors
           : null
+        // [Issue #40 Phase 6-C指示4章] 図面情報(evidence_type_key)経由のBBoxは
+        // 積算コード/内部keyではなく図面情報の日本語表示名をラベルにする
+        // (未解決時は従来通りclass_name=evidence_type_keyへfallbackする。
+        // 値を推測で補完しない)。master_item_id直結の旧Manual BBoxは
+        // 対象外(互換維持、class_nameのまま)。
+        const displayLabel =
+          detection.evidence_type_key != null
+            ? (evidenceDisplayNameByKey?.get(detection.evidence_type_key) ?? detection.class_name)
+            : detection.class_name
 
         return (
           <div key={detection.id}>
@@ -302,7 +337,10 @@ export function DetectionOverlay({
                 // (明細遷移後のBBox残留・Hover色・品名列修正 指示2章)。既存の
                 // AI=青(#3b82f6)/マニュアル=紫(#7c3aed)の配色(下記--manual等と同じ)を
                 // そのまま再利用し、新たな色体系は増やさない。
-                (isDetailHovered ? ` detection-overlay__bbox--detail-hover-${detection.source_type}` : '')
+                (isDetailHovered ? ` detection-overlay__bbox--detail-hover-${detection.source_type}` : '') +
+                // [Issue #40 Phase 6-C指示7章] 積算明細の行クリックによる持続強調
+                // (hoverとは別のCSSクラスにして競合させない)。
+                (isDetailSelected ? ' detection-overlay__bbox--detail-selected' : '')
               }
               style={{
                 left: `${bboxX * 100}%`,
@@ -312,15 +350,16 @@ export function DetectionOverlay({
                 ...(categoryColors ? toCssVars(categoryColors) : {}),
               }}
               title={
-                `${detection.class_name} ` +
-                (isManual ? '(手動追加)' : `(confidence: ${detection.confidence ?? '-'})`)
+                `${displayLabel} ` +
+                (isManual ? '(手動追加)' : `(confidence: ${detection.confidence ?? '-'})`) +
+                (detection.evidence_type_key != null ? ` (取得元: ${isManual ? '手動' : 'AI'})` : '')
               }
               onClick={() => onSelectDetection(detection.id)}
               onMouseDown={(e) => handleBboxMouseDown(e, detection, isSelected)}
             >
               <span className="detection-overlay__label">
                 {isManual && '✎ '}
-                {detection.class_name}
+                {displayLabel}
               </span>
             </button>
             {isSelected &&

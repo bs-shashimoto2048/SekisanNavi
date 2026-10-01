@@ -499,6 +499,19 @@
   background: rgba(124, 58, 237, 0.3);
 }
 
+/* [Issue #40 Phase 6-C指示7章] 積算明細の行クリックによる持続強調。別の行を
+   選択する・明示的に解除操作するまで保持される点が、一時的なflash
+   (`--flash`、0.6秒アニメーション後に消える)・hover中のみの強調
+   (`--detail-hover-*`、マウスが離れると消える)のいずれとも異なる。
+   既存のどの色(赤=選択/flash、青/紫=hover)とも重ならないteal系にし、
+   `--category`より後に定義してカテゴリ色より優先して視認できるようにする。 */
+.detection-overlay__bbox--detail-selected {
+  border-color: #0d9488;
+  border-width: 3px;
+  border-style: dashed;
+  background: rgba(13, 148, 136, 0.18);
+}
+
 /* 編集中のBBox内部をドラッグすると移動できることを示す (Phase 1.11 指示書4章)。 */
 .detection-overlay__bbox--move-cursor {
   cursor: move;

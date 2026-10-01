@@ -66,6 +66,12 @@ interface Props {
    * 自身は現在ページの`detections`しか描画しないため、別ページの明細をhoverしても
    * 該当するDetectionが見つからず、自然に何も強調されない)。 */
   detailHoveredDetectionId?: number | null
+  /** [Issue #40 Phase 6-C指示7章] 積算明細の行クリックで持続強調するdetection
+   * id集合。`DetectionOverlay`へそのまま渡す。 */
+  detailSelectedDetectionIds?: Set<number>
+  /** [Issue #40 Phase 6-C指示4章] 図面情報key→日本語表示名のMap。
+   * `DetectionOverlay`のBBoxラベル解決にそのまま渡す。 */
+  evidenceDisplayNameByKey?: Map<string, string>
   /** 積算集約(②)で個別盤が選択されている間、その盤以外の盤BBoxを非表示にする
    * (盤フォーカス・積算明細再設計 指示1章)。`ProductPanelOverlay`へそのまま渡す。
    * 積算コード側(リード線・BBox)のフィルタは、App.tsx側で`detections`propに
@@ -98,6 +104,8 @@ export function DrawingViewer({
   onDeleteSelectedDetection,
   onDeselectDetection,
   detailHoveredDetectionId = null,
+  detailSelectedDetectionIds,
+  evidenceDisplayNameByKey,
   focusPanel = null,
 }: Props) {
   const selectedDetection = detections.find((d) => d.id === selectedDetectionId) ?? null
@@ -171,6 +179,8 @@ export function DrawingViewer({
               highlightedDetectionId={highlightedDetectionId}
               hoveredDetectionId={hoveredDetectionId}
               detailHoveredDetectionId={detailHoveredDetectionId}
+              detailSelectedDetectionIds={detailSelectedDetectionIds}
+              evidenceDisplayNameByKey={evidenceDisplayNameByKey}
               onSelectDetection={onSelectDetection}
               onResizeDetection={onResizeDetection}
               previewBBox={previewBBox}

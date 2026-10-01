@@ -124,6 +124,12 @@ interface Props {
   /** 「要確認」タブ/対象へ誘導するためのコールバック(指示A-1「要確認タブへ
    * 誘導できるなら望ましい」)。省略時は誘導リンクを表示しない。 */
   onNavigateToNeedsReview?: () => void
+  /** [Issue #40 Phase 6-C指示6章] 現在の製番で係数または数量が手修正されている
+   * EstimateResultの件数。積算明細「修正あり」タブと同じ判定(App.tsx側で算出)。 */
+  overriddenCount?: number
+  /** 「修正あり」タブへ誘導するためのコールバック(指示6章)。省略時は
+   * 誘導リンクを表示しない。 */
+  onNavigateToOverridden?: () => void
 }
 
 function formatCurrency(amount: number): string {
@@ -235,6 +241,8 @@ export function EstimateAggregation({
   productNo = null,
   needsReviewCount = 0,
   onNavigateToNeedsReview,
+  overriddenCount = 0,
+  onNavigateToOverridden,
 }: Props) {
   // ソート列/方向は「ユーザーが選んだ表示上の好み」であり、対象切替(総合計/製品全体/
   // 個別盤/要確認)やBBox編集によるデータ更新とは無関係のため、積算明細と同様に
@@ -319,6 +327,30 @@ export function EstimateAggregation({
             onNavigateToNeedsReview={onNavigateToNeedsReview}
           />
           <EstimateConfirmationHistory productNo={productNo} />
+
+          {/* [Issue #40 Phase 6-C指示6章] 「要確認 N」「修正あり N」の小表示。
+              0件の間は描画自体をしない(高さ抑制優先、常時の警告表示にしない)。
+              クリックで積算明細の対応タブへ誘導する。 */}
+          {needsReviewCount > 0 && (
+            <button
+              type="button"
+              className="estimate-aggregation__status-badge estimate-aggregation__status-badge--needs-review"
+              onClick={onNavigateToNeedsReview}
+              title="積算明細の「要確認」タブへ移動"
+            >
+              要確認 {needsReviewCount}
+            </button>
+          )}
+          {overriddenCount > 0 && (
+            <button
+              type="button"
+              className="estimate-aggregation__status-badge estimate-aggregation__status-badge--overridden"
+              onClick={onNavigateToOverridden}
+              title="積算明細の「修正あり」タブへ移動"
+            >
+              修正あり {overriddenCount}
+            </button>
+          )}
 
           {totalCodeCount === 0 ? (
             <p className="estimate-aggregation__empty">現在の製番に付加されている積算コードがありません</p>

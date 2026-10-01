@@ -392,3 +392,52 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     expect(screen.getByText('積算結果がありません')).toBeInTheDocument()
   })
 })
+
+describe('EstimateDetail: 行クリックによる持続選択 (Issue #40 Phase 6-C指示7章)', () => {
+  it('calls onSelectResultRow when a row is clicked (not on hover)', () => {
+    const onSelectResultRow = vi.fn()
+    const result = makeResult()
+    renderDetail({ results: [result], onSelectResultRow })
+    const row = screen.getByText('11001').closest('tr') as HTMLElement
+    fireEvent.mouseEnter(row)
+    expect(onSelectResultRow).not.toHaveBeenCalled()
+    fireEvent.click(row)
+    expect(onSelectResultRow).toHaveBeenCalledWith(result)
+  })
+
+  it('marks the selected row with --selected, and no other row', () => {
+    const results = [makeResult({ id: 1, code: 'A' }), makeResult({ id: 2, code: 'B' })]
+    renderDetail({ results, selectedResultId: 1 })
+    const rowA = screen.getByText('A').closest('tr') as HTMLElement
+    const rowB = screen.getByText('B').closest('tr') as HTMLElement
+    expect(rowA.className).toContain('estimate-detail__row--selected')
+    expect(rowB.className).not.toContain('estimate-detail__row--selected')
+  })
+
+  it('does not trigger row selection when clicking inside the quantity/factor cell or the reason/evidence buttons', () => {
+    const onSelectResultRow = vi.fn()
+    const result = makeResult()
+    renderDetail({ results: [result], onSelectResultRow })
+    fireEvent.click(screen.getByLabelText('数量'))
+    fireEvent.click(screen.getByLabelText('係数'))
+    fireEvent.click(screen.getByRole('button', { name: '根拠' }))
+    expect(onSelectResultRow).not.toHaveBeenCalled()
+  })
+
+  it('highlights rows related to the currently-selected Viewer BBox with --bbox-related, independently of --selected', () => {
+    const results = [makeResult({ id: 1, code: 'A' }), makeResult({ id: 2, code: 'B' })]
+    renderDetail({ results, relatedToSelectedBboxResultIds: new Set([2]) })
+    const rowA = screen.getByText('A').closest('tr') as HTMLElement
+    const rowB = screen.getByText('B').closest('tr') as HTMLElement
+    expect(rowA.className).not.toContain('estimate-detail__row--bbox-related')
+    expect(rowB.className).toContain('estimate-detail__row--bbox-related')
+  })
+
+  it('applies both --selected and --bbox-related when a row is both selected and BBox-related', () => {
+    const result = makeResult({ id: 1, code: 'A' })
+    renderDetail({ results: [result], selectedResultId: 1, relatedToSelectedBboxResultIds: new Set([1]) })
+    const row = screen.getByText('A').closest('tr') as HTMLElement
+    expect(row.className).toContain('estimate-detail__row--selected')
+    expect(row.className).toContain('estimate-detail__row--bbox-related')
+  })
+})

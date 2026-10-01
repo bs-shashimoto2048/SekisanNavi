@@ -801,3 +801,124 @@ describe('DetectionOverlay: 積算明細hover強調 (積算集約・積算明細
     expect(screen.queryByTitle(/11001/)).not.toBeInTheDocument()
   })
 })
+
+describe('DetectionOverlay: 図面情報(evidence_type_key)経由BBoxのラベル解決 (Issue #40 Phase 6-C指示4章)', () => {
+  it('shows the Japanese display name (not the raw key) when evidenceDisplayNameByKey resolves it', () => {
+    const detection = makeDetection({
+      id: 1,
+      source_type: 'manual',
+      master_item_id: null,
+      evidence_type_key: 'side_door',
+      class_name: 'side_door',
+    })
+    render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={null}
+        highlightedDetectionId={null}
+        onSelectDetection={() => {}}
+        evidenceDisplayNameByKey={new Map([['side_door', '側面扉']])}
+      />,
+    )
+    expect(screen.getByText(/側面扉/)).toBeInTheDocument()
+    expect(screen.queryByText('side_door', { exact: false })).not.toBeInTheDocument()
+    expect(screen.getByTitle(/側面扉/)).toBeInTheDocument()
+  })
+
+  it('falls back to class_name (the raw key) when the evidence type is not found in the map (値を推測で補完しない)', () => {
+    const detection = makeDetection({
+      id: 1,
+      source_type: 'manual',
+      master_item_id: null,
+      evidence_type_key: 'unknown_key',
+      class_name: 'unknown_key',
+    })
+    render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={null}
+        highlightedDetectionId={null}
+        onSelectDetection={() => {}}
+        evidenceDisplayNameByKey={new Map([['side_door', '側面扉']])}
+      />,
+    )
+    expect(screen.getByText(/unknown_key/)).toBeInTheDocument()
+  })
+
+  it('does not resolve a display name for master_item_id-linked (legacy) BBoxes, even if evidence_type_key happens to be set (compat)', () => {
+    const detection = makeDetection({
+      id: 1,
+      source_type: 'manual',
+      master_item_id: 10,
+      class_name: '11001',
+      evidence_type_key: null,
+    })
+    render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={1}
+        highlightedDetectionId={null}
+        onSelectDetection={() => {}}
+        evidenceDisplayNameByKey={new Map([['11001', '誤った解決']])}
+      />,
+    )
+    expect(screen.getByText(/11001/)).toBeInTheDocument()
+    expect(screen.queryByText(/誤った解決/)).not.toBeInTheDocument()
+  })
+})
+
+describe('DetectionOverlay: 積算明細の行クリックによる持続強調 (Issue #40 Phase 6-C指示7章)', () => {
+  it('draws a normally-hidden (master-linked) BBox when it is in detailSelectedDetectionIds, with the --detail-selected class', () => {
+    const detection = makeDetection({ id: 1, source_type: 'manual', master_item_id: 10, class_name: '11001' })
+    render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={null}
+        highlightedDetectionId={null}
+        onSelectDetection={() => {}}
+        detailSelectedDetectionIds={new Set([1])}
+      />,
+    )
+    const bbox = screen.getByTitle(/11001/)
+    expect(bbox.className).toContain('detection-overlay__bbox--detail-selected')
+  })
+
+  it('does not draw the BBox when detailSelectedDetectionIds does not include it (and no other reveal condition is active)', () => {
+    const detection = makeDetection({ id: 1, source_type: 'manual', master_item_id: 10, class_name: '11001' })
+    render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={null}
+        highlightedDetectionId={null}
+        onSelectDetection={() => {}}
+        detailSelectedDetectionIds={new Set([999])}
+      />,
+    )
+    expect(screen.queryByTitle(/11001/)).not.toBeInTheDocument()
+  })
+
+  it('clears the --detail-selected highlight once the id is removed from detailSelectedDetectionIds (別行選択/解除)', () => {
+    const detection = makeDetection({ id: 1, source_type: 'manual', master_item_id: 10, class_name: '11001' })
+    const { rerender } = render(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={null}
+        highlightedDetectionId={null}
+        onSelectDetection={() => {}}
+        detailSelectedDetectionIds={new Set([1])}
+      />,
+    )
+    expect(screen.getByTitle(/11001/)).toBeInTheDocument()
+
+    rerender(
+      <DetectionOverlay
+        detections={[detection]}
+        selectedDetectionId={null}
+        highlightedDetectionId={null}
+        onSelectDetection={() => {}}
+        detailSelectedDetectionIds={new Set()}
+      />,
+    )
+    expect(screen.queryByTitle(/11001/)).not.toBeInTheDocument()
+  })
+})
