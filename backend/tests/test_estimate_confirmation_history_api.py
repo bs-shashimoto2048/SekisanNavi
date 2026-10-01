@@ -53,6 +53,15 @@ def _create_manual_detection(client, **overrides) -> dict:
     return res.json()
 
 
+def _evaluate(client, product_no: str) -> dict:
+    """[Issue #40 Phase 6-A] 確定対象がEstimateResultへ移行したため、
+    Manual BBox作成直後に評価実行を呼ばないと確定対象に反映されない
+    (`test_estimate_confirmation_api.py::_evaluate`と同じ理由)。"""
+    res = client.post(f"/api/products/{product_no}/estimate-results/evaluate")
+    assert res.status_code == 200
+    return res.json()
+
+
 def _confirm(client, product_no: str) -> dict:
     res = client.post(f"/api/products/{product_no}/estimate-confirmations")
     assert res.status_code == 201
@@ -90,6 +99,7 @@ def test_list_confirmations_shows_confirmation_after_creating_one(client, monkey
     product.mkdir()
     _configure_root(client, monkeypatch, tmp_path)
     _create_manual_detection(client)
+    _evaluate(client, "A1GV2421")
     confirmed = _confirm(client, "A1GV2421")
 
     res = client.get("/api/products/A1GV2421/estimate-confirmations")
@@ -129,6 +139,7 @@ def test_list_confirmations_total_amount_sums_known_amounts_and_ignores_unknown(
     product.mkdir()
     _configure_root(client, monkeypatch, tmp_path)
     created = _create_manual_detection(client)
+    _evaluate(client, "A1GV2421")
     confirmed = _confirm(client, "A1GV2421")
     known_amount = confirmed["items"][0]["amount"]
     assert known_amount is not None  # seed済みMasterは単価を持つ前提
@@ -163,6 +174,7 @@ def test_get_confirmation_detail_returns_saved_items(client, monkeypatch, tmp_pa
     product.mkdir()
     _configure_root(client, monkeypatch, tmp_path)
     created = _create_manual_detection(client)
+    _evaluate(client, "A1GV2421")
     confirmed = _confirm(client, "A1GV2421")
 
     res = client.get(f"/api/products/A1GV2421/estimate-confirmations/{confirmed['id']}")
@@ -173,8 +185,13 @@ def test_get_confirmation_detail_returns_saved_items(client, monkeypatch, tmp_pa
     assert body["item_count"] == 1
     assert body["total_amount"] == confirmed["items"][0]["amount"]
     assert len(body["items"]) == 1
+    # [Issue #40 Phase 6-A] 確定対象はEstimateResultのため、根拠の詳細は
+    # evidence側に移った。detection_idのみ旧`decision-analysis`等との互換の
+    # ため、先頭のBBox根拠をミラーする。
     assert body["items"][0]["detection_id"] == created["id"]
     assert body["items"][0]["code"] == created["master_item_code"]
+    assert len(body["items"][0]["evidence"]) == 1
+    assert body["items"][0]["evidence"][0]["detection_id"] == created["id"]
 
 
 # --- 詳細: 0件確定も閲覧可能 ---
@@ -235,6 +252,7 @@ def test_get_confirmation_detail_values_are_frozen_after_master_price_change(cli
     product.mkdir()
     _configure_root(client, monkeypatch, tmp_path)
     created = _create_manual_detection(client)
+    _evaluate(client, "A1GV2421")
     confirmed = _confirm(client, "A1GV2421")
     original_unit_price = confirmed["items"][0]["unit_price"]
 
@@ -264,6 +282,7 @@ def test_history_endpoints_remain_readable_after_data_source_root_changes(client
     (product_dir_1 / "A1GV2421").mkdir()
     _configure_root(client, monkeypatch, product_dir_1)
     _create_manual_detection(client)
+    _evaluate(client, "A1GV2421")
     confirmed = _confirm(client, "A1GV2421")
 
     # 別のルートへ差し替える(元の製番ディレクトリはもう存在しない状態を模す)

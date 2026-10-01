@@ -1,4 +1,5 @@
-"""積算確定snapshot (Issue #4 Phase B-2/B-4) のAPI入出力スキーマ。
+"""積算確定snapshot (Issue #4 Phase B-2/B-4、Issue #40 Phase 6-Aで
+EstimateResultベースへ移行) のAPI入出力スキーマ。
 
 Phase B-2時点では確定操作(作成)のレスポンス形(`EstimateConfirmationOut`)
 のみを定義していたが、Issue #4 Phase B-4で過去snapshotの一覧・詳細取得API
@@ -6,12 +7,37 @@ Phase B-2時点では確定操作(作成)のレスポンス形(`EstimateConfirma
 `EstimateConfirmationDetailOut`)を追加した。既存の`EstimateConfirmationOut`
 (作成APIのレスポンス)はPhase B-4で変更していない
 (`docs/decision-snapshot-design.md` 10章/11章、Issue #4コメント参照)。
+
+[Issue #40 Phase 6-A] `EstimateConfirmationItemOut`へ、EstimateResultの
+snapshot列(`current_factor`等)と根拠一覧(`evidence`)を追加した。
+`source_type`/`status`は旧Detectionベースの行にのみ意味を持つため
+optionalへ変更した(値自体の意味は変えていない)。
 """
 from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.domain.estimate_rules import ApplicableUnit, EstimateResultStatus, EvidenceKind, JudgmentMethod
 from app.domain.models import DetectionSourceType, DetectionStatus, EstimateTargetType
+
+
+class EstimateConfirmationEvidenceOut(BaseModel):
+    """確定snapshot明細1行の根拠1件分 (Issue #40 Phase 6-A)。"""
+
+    id: int
+    evidence_kind: EvidenceKind
+    detection_id: int | None
+    drawing_page_id: int | None
+    source_type: DetectionSourceType | None
+    evidence_type_key: str | None
+    master_item_code: str | None
+    class_name: str | None
+    bbox_x: float | None
+    bbox_y: float | None
+    bbox_w: float | None
+    bbox_h: float | None
+    page_no: int | None
+    design_data_ref: str | None
 
 
 class EstimateConfirmationItemOut(BaseModel):
@@ -28,16 +54,27 @@ class EstimateConfirmationItemOut(BaseModel):
     category: str | None
     model: str | None
     rating: str | None
-    source_type: DetectionSourceType
+    # [Issue #40 Phase 6-A] 旧Detectionベースの行にのみ意味を持つためoptional化。
+    source_type: DetectionSourceType | None
     quantity: float
     unit_price: float | None
     amount: float | None
-    status: DetectionStatus
+    status: DetectionStatus | None
     bbox_x: float | None
     bbox_y: float | None
     bbox_w: float | None
     bbox_h: float | None
     page_no: int | None
+    # [Issue #40 Phase 6-A新規] EstimateResultのsnapshot。旧Detectionベースの
+    # 行(Phase 6-A以前に確定されたもの)では全てNoneのまま返る。
+    current_factor: float | None = None
+    factor_overridden: bool | None = None
+    judgment_method: JudgmentMethod | None = None
+    applicable_unit: ApplicableUnit | None = None
+    judgment_reason: str | None = None
+    source_rule_id: int | None = None
+    result_status: EstimateResultStatus | None = None
+    evidence: list[EstimateConfirmationEvidenceOut] = []
 
 
 class EstimateConfirmationOut(BaseModel):

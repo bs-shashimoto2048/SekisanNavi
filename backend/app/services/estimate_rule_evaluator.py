@@ -30,6 +30,7 @@
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -91,6 +92,32 @@ def _design_data_conditions_hold(condition: StandardCondition, ctx: DesignDataCo
         if op is None or not op(actual, c.value):
             return False
     return True
+
+
+def _build_design_data_ref(panel_key: str, condition: StandardCondition, ctx: DesignDataContext) -> str:
+    """設計データ根拠(`EvidenceRef.design_data_ref`)のJSON文字列を組み立てる
+    (Issue #40 Phase 6-B)。
+
+    「判定に実際に使った項目だけ」を保存する方針のため、
+    `condition.design_data_conditions`(このルールが実際に評価した
+    field/operator/valueの組)だけを対象にし、`DesignDataContext`が持つ
+    他の設計データ値(条件に使われていないフィールド)は含めない。
+    `actual_value`は判定時点の`ctx`から取得した実際の値であり、再評価の
+    たびに最新値で作り直される(`estimate_results`/`estimate_result_evidence`
+    自体が現在状態のテーブルであるため。過去の判定根拠を遡って確認したい
+    場合は、確定snapshot(`estimate_confirmation_result_evidence`、Issue #40
+    Phase 6-A)側へ確定時点の値をコピーする)。
+    """
+    conditions = [
+        {
+            "field": c.field,
+            "operator": c.operator,
+            "expected_value": c.value,
+            "actual_value": getattr(ctx, c.field, None),
+        }
+        for c in condition.design_data_conditions
+    ]
+    return json.dumps({"panel": panel_key, "conditions": conditions}, ensure_ascii=False)
 
 
 def _panel_evidence_by_type(
@@ -210,7 +237,7 @@ def evaluate_product(
                     evidence_refs.append(
                         EvidenceRef(
                             evidence_kind=EvidenceKind.DESIGN_DATA,
-                            design_data_ref=f'{{"panel": "{panel_key}"}}',
+                            design_data_ref=_build_design_data_ref(panel_key, condition, ctx),
                         )
                     )
                 outcome.candidates.append(

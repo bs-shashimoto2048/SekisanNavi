@@ -31,6 +31,7 @@ from app.schemas.decision_analysis import (
 from app.schemas.decision_events import DecisionEventOut
 from app.schemas.estimate_confirmations import (
     EstimateConfirmationDetailOut,
+    EstimateConfirmationEvidenceOut,
     EstimateConfirmationItemOut,
     EstimateConfirmationOut,
     EstimateConfirmationSummaryOut,
@@ -58,7 +59,10 @@ from app.services.data_source import (
 )
 from app.services.detected_df import load_detected_df
 from app.services.estcode_df import load_estcode_df
-from app.services.estimate_confirmation_builder import build_confirmation_items
+from app.services.estimate_confirmation_builder import (
+    NeedsReviewResultsExistError,
+    build_confirmation_items,
+)
 from app.services.product_df import load_page_scales, load_product_df
 
 router = APIRouter(prefix="/api/products", tags=["products"])
@@ -74,6 +78,22 @@ def _error_to_http(e: DataSourceError) -> HTTPException:
     if isinstance(e, RootUnavailable):
         return HTTPException(status_code=503, detail=e.message)
     return HTTPException(status_code=400, detail=e.message)
+
+
+def _confirmation_item_out(item) -> EstimateConfirmationItemOut:
+    """`EstimateConfirmationItem`(dataclass)をAPIスキーマへ変換する。
+
+    [Issue #40 Phase 6-A] `item.evidence`はdataclassのlistであり、Pydanticの
+    `EstimateConfirmationItemOut(**item.__dict__)`という単純な展開では
+    ネストしたBaseModelへ自動変換されない(dictまたは`EstimateConfirmation
+    EvidenceOut`インスタンスのみ受け付けるため、dataclassインスタンスは
+    バリデーションエラーになる)。そのため`evidence`だけ明示的に変換する。
+    """
+    data = {k: v for k, v in item.__dict__.items() if k != "evidence"}
+    return EstimateConfirmationItemOut(
+        **data,
+        evidence=[EstimateConfirmationEvidenceOut(**ev.__dict__) for ev in item.evidence],
+    )
 
 
 @router.get("/search", response_model=ProductSearchOut)
@@ -271,22 +291,28 @@ def read_estimate_panels(
 def create_estimate_confirmation(
     product_no: str, conn: sqlite3.Connection = Depends(get_db)
 ) -> EstimateConfirmationOut:
-    """製番`product_no`の現在の積算結果を丸ごと確定snapshotとして保存する
-    (Issue #4 Phase B-2)。
+    """製番`product_no`の現在の積算結果(EstimateResult)を丸ごと確定snapshot
+    として保存する (Issue #4 Phase B-2、Issue #40 Phase 6-Aで確定対象を
+    EstimateResultへ移行)。
 
     リクエストボディは受け取らない。Frontendから計算済みの値を信頼して
-    そのまま保存するのではなく、この時点の`detections`(DB)×
-    `estimate_master_items`(DB)×`product_df.csv`/`estcode_df.csv`
-    (都度読み込み)から、Backend自身が`build_confirmation_items()`で
-    Frontend `estimateAggregationReal.ts`と同じ対象所属判定ロジックを使って
-    組み立てる(Issue #4最新コメントの方針)。
+    そのまま保存するのではなく、この時点の`estimate_results`(+
+    `estimate_result_evidence`)×`estimate_master_items`×`estcode_df.csv`/
+    `product_df.csv`(都度読み込み)から、Backend自身が
+    `build_confirmation_items()`で組み立てる(Issue #4最新コメントの方針を
+    Phase 6-Aでも踏襲する)。
 
-    保存はDetection単位(積算明細相当)の粒度で行い、対象別・総合計の集約は
+    保存はEstimateResult単位(積算明細相当)の粒度で行い、対象別・総合計の集約は
     保存しない(`docs/decision-snapshot-design.md` 4章。読み出しAPIを
     追加した際に、保存済みの明細から同じ考え方で再現する想定)。
 
+    **[Issue #40 Phase 6-A] `status=needs_review`のEstimateResultが1件でも
+    存在する場合はHTTP 422を返し、確定操作自体を拒否する**(新旧コード衝突・
+    盤所属tie等の未解決状態を含んだまま確定しない。需要確認行を黙って除外する
+    「部分確定」は行わない)。
+
     対応するダミーDrawingPage行が無い実製番(Phase 1.8以降の既存の制約。
-    `docs/data-model.md`参照)や、積算コードに紐づくDetectionが1件も無い
+    `docs/data-model.md`参照)や、積算コードに紐づくEstimateResultが1件も無い
     製番でも、明細0件のconfirmationとして保存できる(**0件確定を許容する**。
     「対象データが無いこと」自体も、その時点の事実として記録する価値があり、
     かつPhase B-1のrepository層は既にこれを許容する設計であるため、API層で
@@ -305,6 +331,8 @@ def create_estimate_confirmation(
         items = build_confirmation_items(conn, root, product_no)
     except DataSourceError as e:
         raise _error_to_http(e) from e
+    except NeedsReviewResultsExistError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
     confirmation = save_confirmation(conn, product_no=product_no, items=items)
 
@@ -313,7 +341,7 @@ def create_estimate_confirmation(
         product_no=confirmation.product_no,
         confirmed_at=confirmation.confirmed_at,
         item_count=len(confirmation.items),
-        items=[EstimateConfirmationItemOut(**item.__dict__) for item in confirmation.items],
+        items=[_confirmation_item_out(item) for item in confirmation.items],
     )
 
 
@@ -379,7 +407,7 @@ def read_estimate_confirmation(
         confirmed_at=confirmation.confirmed_at,
         item_count=len(confirmation.items),
         total_amount=total_amount,
-        items=[EstimateConfirmationItemOut(**item.__dict__) for item in confirmation.items],
+        items=[_confirmation_item_out(item) for item in confirmation.items],
     )
 
 
