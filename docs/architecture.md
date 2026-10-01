@@ -1740,10 +1740,26 @@ Backend側の互換レイヤで統合し、Frontend側のUIも`EstimateResult`�
                                           (legacy_detection_adapter.py)  新旧コード衝突→needs_review付与)
 ```
 
-- **評価器(`app/services/estimate_rule_evaluator.py`、Phase 2〜3)**: 図面情報
-  panel(Phase 3)経由で作られた`evidence_type_key`付きDetection、および
-  `product_df`/`estcode_df`由来の設計データを根拠に、`estimate_rule_masters`
-  の成立条件を評価し`EstimateResultCandidate`を組み立てる。
+- **評価器(`app/services/estimate_rule_evaluator.py`、Phase 2〜3、Phase 6-Eで
+  拡張)**: 図面情報panel(Phase 3)経由で作られた`evidence_type_key`付き
+  Detection、および`product_df`/`estcode_df`由来の設計データを根拠に、
+  `estimate_rule_masters`の成立条件を評価し`EstimateResultCandidate`を
+  組み立てる。
+  - 判定条件(`StandardCondition`)の設計データ比較演算子は、Phase 6-Eで
+    `starts_with`/`in`を追加した(`==`/`!=`/`>=`/`<=`/`>`/`<`に加え、前方
+    一致・複数候補値のいずれかを表現できる。`design_data_conditions`は
+    引き続きAND結合のみでOR結合は持たない)。
+  - 判定範囲(`JudgmentScope`)は、Phase 2の`PANEL`/`DESIGN_DATA`に加え
+    Phase 6-Eで`DRAWING`(1図面ページ単位)/`PRODUCT`(製番全体単位)を
+    追加したが、いずれも「図面情報の存在判定のみ」(`design_data_conditions`
+    を持たないルール)に限定したサポートであり、`POSITION`/`RANGE`
+    (BBox同士の相対位置判定)は引き続き未実装(`app/domain/geometry.py`に
+    純粋なgeometry predicateのみ用意し、実ルールへは未接続)。
+  - `app/services/estcode_df.py`が読み込む追加19列(`ADDITIONAL_PANEL_FIELDS`)
+    は`DesignDataContext`まで到達し、`StandardCondition`から参照可能だが、
+    業務的な意味づけ(どの積算コードに対応するか等)は未確定のまま。
+  - 対応状況の一覧(`QuantityMethod`/`JudgmentScope`/`CalcType`それぞれ
+    完全実装/部分実装/enumのみ)はIssue #40 Phase 6-E報告コメント参照。
 - **旧Detection互換レイヤ(`app/services/legacy_detection_adapter.py`、
   Phase 5新設)**: `master_item_id`直結の旧Manual/AI BBoxを、削除・変更せず
   そのまま保持した状態で`EstimateResultCandidate`へ変換する読み取り専用の

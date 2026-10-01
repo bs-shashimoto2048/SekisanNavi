@@ -9,10 +9,21 @@ product_df.csv/detected_df.csvと同じ):
     STACK_PLATE, DRAWER_DEVICE, VCT_STAND, BUS_DUCT, PASSAGE,
     INPUT_CU_COEFF, SORT_ORDER
 
-今回このモジュールが使用するのは冒頭の
+当初(Phase 1.14)このモジュールが使用していたのは冒頭の
 `MODEL/BAN_MENNO/BAN_NO/BAN_MEISYOU/BAN_H/BAN_W/BAN_D/BAN_CONNECT/SORT_ORDER`
-の9列のみ (指示書2章)。それ以外(PANEL/TRANS/...INPUT_CU_COEFF)は将来の積算集約
-ロジック向けの内訳フラグ・係数と見られるが、今回はロジックを作り込まないため未使用。
+の9列のみだった(指示書2章)。それ以外(PANEL/TRANS/...INPUT_CU_COEFF)は将来の
+積算集約ロジック向けの内訳フラグ・係数と見られていたが、今回ロジックを
+作り込まないため当時は未使用のままだった。
+
+**Issue #40 Phase 6-E追加**: 上記の追加19列について、実製番A1GV2421の
+`estcode_df.csv`に実在し、全5盤分で値が入っていることをPhase 6-Dで確認した
+(各列が「0/1のフラグ」なのか「枚数等のカウント」なのかは資料・実データからは
+断定できないため、意味を勝手に解釈せず、元の列名のままfloatとして保持する
+だけに留める。業務的な意味づけ・積算コードへの対応付けはこのPhaseでは行わない
+`EstimatePanelInfo`/`DesignDataContext`まで安全に読み込み、`StandardCondition`の
+設計データ条件から参照できる状態にするところまでが今回のスコープ)。
+旧来の9列構成のCSV(`PANEL`列以降が存在しない)との互換性も維持し、欠損列・
+空値は常に`None`として扱う。
 
 **重要 (指示書10章〜12章での実データ検証結果)**: 指示書は紐付けキーの候補として
 `X_No`列を例示していたが、実ファイルにその列名は存在しない。実際は
@@ -49,10 +60,41 @@ _ENCODING = "cp932"
 _FILENAME = "estcode_df.csv"
 
 
+# estcode_df.csvの追加19列 (Issue #40 Phase 6-D/6-E)。列名はCSVのものをそのまま
+# 小文字化しただけで、意味の解釈・rename・boolean化は一切行わない(フラグなのか
+# 枚数なのか等の業務的な意味づけは未確定なため)。
+ADDITIONAL_PANEL_FIELDS: tuple[str, ...] = (
+    "panel",
+    "trans",
+    "in_panel",
+    "shield",
+    "door_front",
+    "door_back",
+    "door_stack",
+    "door_side",
+    "door_small",
+    "fan_roof",
+    "fan_door",
+    "main_line",
+    "wire_mesh",
+    "stack_plate",
+    "drawer_device",
+    "vct_stand",
+    "bus_duct",
+    "passage",
+    "input_cu_coeff",
+)
+
+
 @dataclass
 class EstimatePanelInfo:
     """estcode_df.csv 1行から得られる、表示用に正規化済みの盤情報
-    (指示書26章の`EstimatePanelInfo`相当)。"""
+    (指示書26章の`EstimatePanelInfo`相当)。
+
+    `panel`〜`input_cu_coeff`(`ADDITIONAL_PANEL_FIELDS`参照)はIssue #40
+    Phase 6-Eで追加した列。旧来の9列構成のCSVには存在しないため、その場合は
+    常に`None`になる(ファイル自体は`file_present=True`のまま、この行だけ
+    追加情報が無い状態として扱う)。"""
 
     model: str | None
     ban_menno: int
@@ -63,6 +105,26 @@ class EstimatePanelInfo:
     ban_d: float | None
     ban_connect: str | None
     sort_order: int | None
+    # Issue #40 Phase 6-E追加分 (実データ確認済みの列名そのまま、float|Noneで保持)。
+    panel: float | None = None
+    trans: float | None = None
+    in_panel: float | None = None
+    shield: float | None = None
+    door_front: float | None = None
+    door_back: float | None = None
+    door_stack: float | None = None
+    door_side: float | None = None
+    door_small: float | None = None
+    fan_roof: float | None = None
+    fan_door: float | None = None
+    main_line: float | None = None
+    wire_mesh: float | None = None
+    stack_plate: float | None = None
+    drawer_device: float | None = None
+    vct_stand: float | None = None
+    bus_duct: float | None = None
+    passage: float | None = None
+    input_cu_coeff: float | None = None
 
 
 @dataclass
@@ -141,6 +203,25 @@ def _parse_row(row: dict[str, str]) -> EstimatePanelInfo:
         ban_d=_parse_optional_float(row, "BAN_D"),
         ban_connect=_parse_optional_str(row, "BAN_CONNECT"),
         sort_order=_parse_optional_int(row, "SORT_ORDER"),
+        panel=_parse_optional_float(row, "PANEL"),
+        trans=_parse_optional_float(row, "TRANS"),
+        in_panel=_parse_optional_float(row, "IN_PANEL"),
+        shield=_parse_optional_float(row, "SHIELD"),
+        door_front=_parse_optional_float(row, "DOOR_FRONT"),
+        door_back=_parse_optional_float(row, "DOOR_BACK"),
+        door_stack=_parse_optional_float(row, "DOOR_STACK"),
+        door_side=_parse_optional_float(row, "DOOR_SIDE"),
+        door_small=_parse_optional_float(row, "DOOR_SMALL"),
+        fan_roof=_parse_optional_float(row, "FAN_ROOF"),
+        fan_door=_parse_optional_float(row, "FAN_DOOR"),
+        main_line=_parse_optional_float(row, "MAIN_LINE"),
+        wire_mesh=_parse_optional_float(row, "WIRE_MESH"),
+        stack_plate=_parse_optional_float(row, "STACK_PLATE"),
+        drawer_device=_parse_optional_float(row, "DRAWER_DEVICE"),
+        vct_stand=_parse_optional_float(row, "VCT_STAND"),
+        bus_duct=_parse_optional_float(row, "BUS_DUCT"),
+        passage=_parse_optional_float(row, "PASSAGE"),
+        input_cu_coeff=_parse_optional_float(row, "INPUT_CU_COEFF"),
     )
 
 

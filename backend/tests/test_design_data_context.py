@@ -1,6 +1,8 @@
 """`app.services.design_data_context` のテスト (Issue #40 Phase 2)。"""
+import pytest
+
 from app.services.design_data_context import build_design_data_context
-from app.services.estcode_df import EstimatePanelInfo
+from app.services.estcode_df import ADDITIONAL_PANEL_FIELDS, EstimatePanelInfo
 from app.services.product_df import NormalizedRect, PanelAreaFromDf
 
 
@@ -75,3 +77,28 @@ def test_build_context_uses_first_seen_panel_across_multiple_views():
     contexts = build_design_data_context(panels, [])
     assert len(contexts) == 1
     assert contexts["1:1"].ban_w == 900.0  # 最初に見つかった代表行を採用
+
+
+# ============================================================
+# Issue #40 Phase 6-E: estcode_df.csv追加19列をDesignDataContextへ転記
+# ============================================================
+
+
+def test_build_context_copies_additional_19_fields_from_estcode():
+    estimate_panel = _estimate_panel(passage=1.0, vct_stand=2.0, fan_roof=7.0, door_small=0.0)
+    contexts = build_design_data_context([_panel()], [estimate_panel])
+    ctx = contexts["1:1"]
+    assert ctx.passage == pytest.approx(1.0)
+    assert ctx.vct_stand == pytest.approx(2.0)
+    assert ctx.fan_roof == pytest.approx(7.0)
+    assert ctx.door_small == pytest.approx(0.0)
+    # 明示的に上書きしていないフィールドはEstimatePanelInfo側のdefault(None)のまま。
+    assert ctx.panel is None
+    assert ctx.trans is None
+
+
+def test_build_context_additional_fields_are_none_when_estcode_missing():
+    contexts = build_design_data_context([_panel()], [])
+    ctx = contexts["1:1"]
+    for field_name in ADDITIONAL_PANEL_FIELDS:
+        assert getattr(ctx, field_name) is None
