@@ -44,6 +44,16 @@ import './EstimateConfirmationAction.css'
 interface Props {
   /** 現在Viewerで開いている実製番。未選択(null)の間はボタン自体を出さない。 */
   productNo: string | null
+  /** [Issue #40 Phase 6-A指示A-1] 現在の製番に`status=needs_review`の
+   * EstimateResultがいくつ存在するか。1件以上あれば確定ボタンを無効化し、
+   * 案内文を表示する(新旧コード衝突・盤所属tie等の未解決状態を含んだまま
+   * 確定しない。Backend側(`POST .../estimate-confirmations`)も同じ条件で
+   * HTTP 422を返すため、このFrontend側の制御はあくまで誤操作を未然に防ぐ
+   * ためのものであり、最終的な検証はBackend側が担う)。 */
+  needsReviewCount?: number
+  /** 「要確認」タブ/対象へ誘導するためのコールバック。省略時は誘導リンクを
+   * 表示しない。 */
+  onNavigateToNeedsReview?: () => void
 }
 
 type ConfirmationState =
@@ -72,12 +82,17 @@ function summarizeAmount(confirmation: EstimateConfirmation): { total: number; u
   return { total, unknownCount }
 }
 
-export function EstimateConfirmationAction({ productNo }: Props) {
+export function EstimateConfirmationAction({
+  productNo,
+  needsReviewCount = 0,
+  onNavigateToNeedsReview,
+}: Props) {
   const [state, setState] = useState<ConfirmationState>({ kind: 'idle' })
 
   if (productNo == null) return null
 
   const confirming = state.kind === 'confirming'
+  const blockedByNeedsReview = needsReviewCount > 0
 
   async function handleClick() {
     // productNoはこの時点でnullでないことをコンポーネント冒頭のガードで
@@ -110,11 +125,30 @@ export function EstimateConfirmationAction({ productNo }: Props) {
         type="button"
         className="estimate-confirmation-action__button"
         onClick={() => void handleClick()}
-        disabled={confirming}
-        title="積算確定する"
+        disabled={confirming || blockedByNeedsReview}
+        title={blockedByNeedsReview ? '要確認の積算結果が残っているため確定できません' : '積算確定する'}
       >
         {confirming ? '確定中...' : '確定'}
       </button>
+
+      {/* [Issue #40 Phase 6-A指示A-1] 要確認行が残っている間は確定操作自体を
+          禁止し、作業者向けに理由と対処(要確認タブでの確認)を案内する。 */}
+      {blockedByNeedsReview && (
+        <p className="estimate-confirmation-action__result estimate-confirmation-action__result--error" role="alert">
+          要確認の積算結果が{needsReviewCount}件残っているため確定できません。
+          {onNavigateToNeedsReview ? (
+            <button
+              type="button"
+              className="estimate-confirmation-action__needs-review-link"
+              onClick={onNavigateToNeedsReview}
+            >
+              要確認タブで確認する
+            </button>
+          ) : (
+            '積算明細の「要確認」タブで内容を確認・解消してください。'
+          )}
+        </p>
+      )}
 
       {state.kind === 'success' && (
         <p className="estimate-confirmation-action__result estimate-confirmation-action__result--success">

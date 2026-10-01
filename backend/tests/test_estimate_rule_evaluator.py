@@ -239,6 +239,17 @@ def test_evaluate_product_design_data_only_rule_matches_without_any_bbox(
     assert candidate.evidence[0].detection_id is None
     assert candidate.evidence[0].design_data_ref is not None
 
+    # [Issue #40 Phase 6-B] design_data_refは「判定に実際に使った項目だけ」を
+    # 保存する(DesignDataContext全体ではなく、この条件が参照したfield/
+    # operator/expected_value/実際値のみ)。
+    import json
+
+    ref = json.loads(candidate.evidence[0].design_data_ref)
+    assert ref == {
+        "panel": "1:1",
+        "conditions": [{"field": "ban_w", "operator": ">=", "expected_value": 900, "actual_value": 900.0}],
+    }
+
 
 def test_evaluate_product_skips_rules_with_unsupported_scope(client, monkeypatch, tmp_path, db_path):
     _setup_product_dir(tmp_path)

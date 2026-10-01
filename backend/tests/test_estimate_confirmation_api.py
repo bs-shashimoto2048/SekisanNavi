@@ -77,6 +77,17 @@ def _create_manual_detection(client, **overrides) -> dict:
     return res.json()
 
 
+def _evaluate(client, product_no: str) -> dict:
+    """[Issue #40 Phase 6-A] 確定対象がEstimateResultへ移行したため、
+    Manual BBox作成直後に`reevaluateEstimateResults()`相当の評価実行を
+    呼ばないと、確定対象の`estimate_results`に反映されない
+    (Frontend側は`App.tsx::reevaluateEstimateResults`がBBox操作のたびに
+    自動で呼ぶため、実運用ではこのヘルパー相当の呼び出しが必ず挟まる)。"""
+    res = client.post(f"/api/products/{product_no}/estimate-results/evaluate")
+    assert res.status_code == 200
+    return res.json()
+
+
 def _confirmations(db_path) -> list[sqlite3.Row]:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -96,6 +107,7 @@ def test_create_confirmation_saves_manual_detection_with_panel_assignment(client
     _configure_root(client, monkeypatch, tmp_path)
 
     created = _create_manual_detection(client)
+    _evaluate(client, "A1GV2421")
 
     res = client.post("/api/products/A1GV2421/estimate-confirmations")
     assert res.status_code == 201
@@ -106,8 +118,14 @@ def test_create_confirmation_saves_manual_detection_with_panel_assignment(client
     assert len(body["items"]) == 1
 
     item = body["items"][0]
+    # [Issue #40 Phase 6-A] 確定対象はEstimateResultのため、旧Detectionベース
+    # 専用列のうちsource_type/status/bbox_x,y,w,hはNoneのまま。detection_idのみ
+    # 旧`decision-analysis`等との互換のため、先頭のBBox根拠をミラーする。
+    # 根拠の詳細(複数BBoxを含む)はevidence側に保存される。
     assert item["detection_id"] == created["id"]
-    assert item["drawing_page_id"] == created["drawing_page_id"]
+    assert item["source_type"] is None
+    assert item["status"] is None
+    assert item["bbox_x"] is None
     # product_df.csvの盤1/1と交差するBBoxのため、対象は個別盤に解決される
     assert item["target_id"] == "panel:1:1"
     assert item["target_type"] == "panel"
@@ -117,12 +135,24 @@ def test_create_confirmation_saves_manual_detection_with_panel_assignment(client
     assert item["panel_name"] == "高圧受電盤"
     assert item["master_item_id"] == created["master_item_id"]
     assert item["code"] == created["master_item_code"]
-    assert item["source_type"] == "manual"
-    assert item["status"] == "reviewed"
     assert item["quantity"] == 1
-    assert item["bbox_x"] == created["bbox_x"]
-    assert item["bbox_y"] == created["bbox_y"]
     assert item["page_no"] == 16
+    # [Issue #40 Phase 6-A新規] EstimateResultのsnapshot列。
+    assert item["current_factor"] == 1.0
+    assert item["factor_overridden"] is False
+    assert item["judgment_method"] == "drawing_judgment"
+    assert item["result_status"] == "auto"
+
+    # 根拠(evidence)に、確定時点のDetection情報がsnapshotされている。
+    assert len(item["evidence"]) == 1
+    evidence = item["evidence"][0]
+    assert evidence["evidence_kind"] == "detection"
+    assert evidence["detection_id"] == created["id"]
+    assert evidence["drawing_page_id"] == created["drawing_page_id"]
+    assert evidence["source_type"] == "manual"
+    assert evidence["bbox_x"] == created["bbox_x"]
+    assert evidence["bbox_y"] == created["bbox_y"]
+    assert evidence["page_no"] == 16
 
     # DB側にも同じ内容がappend-onlyで保存されている
     headers = _confirmations(db_path)
@@ -137,6 +167,7 @@ def test_create_confirmation_without_product_df_assigns_product_target(client, m
     _configure_root(client, monkeypatch, tmp_path)
 
     _create_manual_detection(client)
+    _evaluate(client, "A1GV2421")
 
     res = client.post("/api/products/A1GV2421/estimate-confirmations")
     assert res.status_code == 201
@@ -214,6 +245,7 @@ def test_confirmation_values_are_frozen_even_after_master_item_price_changes_aft
     product.mkdir()
     _configure_root(client, monkeypatch, tmp_path)
     created = _create_manual_detection(client)
+    _evaluate(client, "A1GV2421")
 
     confirmed = client.post("/api/products/A1GV2421/estimate-confirmations").json()
     original_unit_price = confirmed["items"][0]["unit_price"]

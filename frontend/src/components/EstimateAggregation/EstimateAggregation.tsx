@@ -117,6 +117,13 @@ interface Props {
    * 実製番。積算確定は対象セレクトの選択状態とは無関係に常に製番全体が対象の
    * ため、既存の`selectedTargetId`とは別に受け取る(意味を混同しない)。 */
   productNo?: string | null
+  /** [Issue #40 Phase 6-A指示A-1] 現在の製番に`status=needs_review`の
+   * EstimateResultがいくつ存在するか。1件以上あれば確定操作自体を禁止する
+   * (新旧コード衝突・盤所属tie等の未解決状態を含んだまま確定しないため)。 */
+  needsReviewCount?: number
+  /** 「要確認」タブ/対象へ誘導するためのコールバック(指示A-1「要確認タブへ
+   * 誘導できるなら望ましい」)。省略時は誘導リンクを表示しない。 */
+  onNavigateToNeedsReview?: () => void
 }
 
 function formatCurrency(amount: number): string {
@@ -226,6 +233,8 @@ export function EstimateAggregation({
   selectedTargetId,
   onSelectTarget,
   productNo = null,
+  needsReviewCount = 0,
+  onNavigateToNeedsReview,
 }: Props) {
   // ソート列/方向は「ユーザーが選んだ表示上の好み」であり、対象切替(総合計/製品全体/
   // 個別盤/要確認)やBBox編集によるデータ更新とは無関係のため、積算明細と同様に
@@ -304,7 +313,11 @@ export function EstimateAggregation({
             CSS側の`order`(`EstimateAggregation.css`)で実現している
             (コンポーネント境界を変えずに済む最小差分のため)。 */}
         <div className="estimate-aggregation__compact-row">
-          <EstimateConfirmationAction productNo={productNo} />
+          <EstimateConfirmationAction
+            productNo={productNo}
+            needsReviewCount={needsReviewCount}
+            onNavigateToNeedsReview={onNavigateToNeedsReview}
+          />
           <EstimateConfirmationHistory productNo={productNo} />
 
           {totalCodeCount === 0 ? (

@@ -1,5 +1,10 @@
 import type { Detection, EstimateMasterItem, EstimateResult } from '../../types/domain'
-import { applicableUnitLabel, judgmentMethodLabel } from '../../domain/drawingEvidencePresentation'
+import {
+  applicableUnitLabel,
+  formatDesignDataCondition,
+  judgmentMethodLabel,
+  parseDesignDataRef,
+} from '../../domain/drawingEvidencePresentation'
 import { EstimateResultFactorCell } from './EstimateResultFactorCell'
 import './EstimateDetail.css'
 
@@ -59,17 +64,23 @@ function formatResultPrice(price: number | null): string {
 /** `masterItemById`と同様、省略時の既定値を固定参照にする。 */
 const EMPTY_DETECTION_MAP = new Map<number, Detection>()
 
-/** 根拠情報の表示 (Issue #40 Phase 5指示7章)。AI/手動は積算結果の種類では
- * なく根拠情報の取得元であるため、ここ(根拠詳細)でのみ表示する
- * (判定方法タブには出さない、指示1章)。設計データのみの根拠は、現時点で
- * APIが`design_data_ref`(盤キーのみ)しか返さないため、実際に判定へ使った
- * フィールド値までは表示できない(Phase 6以降での拡張余地として残す)。 */
+/** 根拠情報の表示 (Issue #40 Phase 5指示7章、Phase 6-B指示B-1)。AI/手動は
+ * 積算結果の種類ではなく根拠情報の取得元であるため、ここ(根拠詳細)でのみ
+ * 表示する(判定方法タブには出さない、指示1章)。設計データ根拠は、
+ * `design_data_ref`(Phase 6-Bで拡張したJSON、判定に実際に使ったfield/
+ * operator/expected_value/actual_valueのみを持つ)から、内部field名を
+ * そのまま出さず日本語の条件式として整形する(例:「幅: 1200 ≥ 900」)。
+ * Phase 6-B以前に生成された`{"panel": "..."}`のみの古い値は`conditions`を
+ * 持たないため、その場合は条件式を省略し「設計データ」とだけ表示する
+ * (値を推測で埋めない)。 */
 function evidenceSummaryText(result: EstimateResult, detectionById: Map<number, Detection>): string {
   if (result.evidence.length === 0) return '根拠情報なし'
   return result.evidence
     .map((e) => {
       if (e.evidence_kind === 'design_data') {
-        return '設計データ' + (e.design_data_ref ? ` (${e.design_data_ref})` : '')
+        const parsed = parseDesignDataRef(e.design_data_ref)
+        if (parsed == null || parsed.conditions.length === 0) return '設計データ'
+        return ['設計データ', ...parsed.conditions.map((c) => `  ${formatDesignDataCondition(c)}`)].join('\n')
       }
       if (e.detection_id != null) {
         const d = detectionById.get(e.detection_id)

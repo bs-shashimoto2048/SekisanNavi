@@ -610,6 +610,16 @@ function App() {
   )
 
 
+  // [Issue #40 Phase 6-A指示A-1] EstimateResult.status==='needs_review'の件数。
+  // 旧Detectionベースの`tieDetailCount`(下記)とは別概念(新旧コード衝突も
+  // 含むため)。積算確定ボタンの確定可否判定に使う(Backend側
+  // `POST .../estimate-confirmations`も同じ条件でHTTP 422を返すため、
+  // ここでの無効化はBackendの検証を前提にした補助的なものに留まる)。
+  const estimateResultNeedsReviewCount = useMemo(
+    () => estimateResults.filter((r) => r.status === 'needs_review').length,
+    [estimateResults],
+  )
+
   // 要確認(BBox所属判定でtieになった項目)の対象と件数 (指示7章)。0件になれば
   // 警告バナーは自動的に非表示になる(JSX側で`tieDetailCount > 0`のみ描画するため)。
   const tieTarget = useMemo(
@@ -671,6 +681,16 @@ function App() {
     for (const ev of result.evidence) {
       if (ev.detection_id != null) flashDetection(ev.detection_id)
     }
+  }
+
+  // [Issue #40 Phase 6-A指示A-1] 確定ボタンの「要確認タブで確認する」リンクから
+  // 呼ぶ。要確認行は対象(盤/製品全体)を問わず存在しうるため、積算集約の対象は
+  // 「総合計」(フィルタなし)へ戻した上で、積算明細のタブを「要確認」へ切り替える
+  // (`needs_confirmation`タブはjudgment_method===needs_confirmationに加え
+  // status===needs_reviewの行も対象に含む、EstimateDetail.tsx参照)。
+  function handleNavigateToNeedsReview() {
+    setSelectedEstimateTargetId(null)
+    setEstimateDetailTabFilter('needs_confirmation')
   }
 
   // [Issue #40 Phase 4/5] 積算明細向けに、選択中の対象(盤/製品全体/総合計/
@@ -1649,6 +1669,8 @@ function App() {
                   selectedTargetId={selectedEstimateTargetId}
                   onSelectTarget={setSelectedEstimateTargetId}
                   productNo={activeProductNo}
+                  needsReviewCount={estimateResultNeedsReviewCount}
+                  onNavigateToNeedsReview={handleNavigateToNeedsReview}
                 />
               </FloatingPanel>
               <FloatingPanel

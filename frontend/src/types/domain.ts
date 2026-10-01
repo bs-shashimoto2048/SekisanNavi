@@ -253,11 +253,39 @@ export interface DetectedPreviewItem {
 // `types/estimateAggregation.ts::EstimateTargetType`と同じ3値。
 export type EstimateTargetType = 'product' | 'panel' | 'tie'
 
-/** 積算確定snapshotの明細1行 (Detection単位。Phase B-2の
- * `POST /api/products/{product_no}/estimate-confirmations`レスポンスの一部)。
+/** 積算確定snapshot明細1行が持つ根拠1件分 (Issue #40 Phase 6-A)。
+ * `EstimateResultEvidence`のsnapshot版。BBox根拠は確定時点のDetection情報
+ * (表示名解決用の`master_item_code`/`class_name`、AI/手動の取得元、BBox座標等)を
+ * 非正規化コピーしたもの、設計データ根拠は`design_data_ref`のJSON文字列を
+ * そのままコピーしたもの。 */
+export interface EstimateConfirmationEvidence {
+  id: number
+  evidence_kind: EvidenceKind
+  detection_id: number | null
+  drawing_page_id: number | null
+  source_type: DetectionSourceType | null
+  evidence_type_key: string | null
+  master_item_code: string | null
+  class_name: string | null
+  bbox_x: number | null
+  bbox_y: number | null
+  bbox_w: number | null
+  bbox_h: number | null
+  page_no: number | null
+  design_data_ref: string | null
+}
+
+/** 積算確定snapshotの明細1行 (Phase B-2ではDetection単位だったが、Issue #40
+ * Phase 6-AでEstimateResult単位へ移行)。Phase B-2の
+ * `POST /api/products/{product_no}/estimate-confirmations`レスポンスの一部。
  * 確定時点の値をBackend側が非正規化コピーとして保存したものであり、以後
  * `estimate_master_items`が更新されてもこの値自体は変化しない
- * (`docs/decision-snapshot-design.md`参照)。 */
+ * (`docs/decision-snapshot-design.md`参照)。
+ *
+ * [Issue #40 Phase 6-A] `source_type`/`status`は旧Detectionベースの行にのみ
+ * 意味を持つ(EstimateResultベースの新しい行ではnull)。`current_factor`以降は
+ * Phase 6-Aで追加された列で、Phase 6-A以前に確定された過去snapshotでは
+ * 全てnullのまま返る(過去snapshot自体は書き換えていない)。 */
 export interface EstimateConfirmationItem {
   id: number
   detection_id: number | null
@@ -272,16 +300,24 @@ export interface EstimateConfirmationItem {
   category: string | null
   model: string | null
   rating: string | null
-  source_type: DetectionSourceType
+  source_type: DetectionSourceType | null
   quantity: number
   unit_price: number | null
   amount: number | null
-  status: DetectionStatus
+  status: DetectionStatus | null
   bbox_x: number | null
   bbox_y: number | null
   bbox_w: number | null
   bbox_h: number | null
   page_no: number | null
+  current_factor: number | null
+  factor_overridden: boolean | null
+  judgment_method: JudgmentMethod | null
+  applicable_unit: ApplicableUnit | null
+  judgment_reason: string | null
+  source_rule_id: number | null
+  result_status: EstimateResultStatus | null
+  evidence: EstimateConfirmationEvidence[]
 }
 
 /** 積算確定snapshotのheader (Issue #4 Phase B-2)。製番単位でその時点の

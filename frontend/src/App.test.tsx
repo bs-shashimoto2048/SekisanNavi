@@ -985,6 +985,38 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
     })
   })
 
+  it('[Issue #40 Phase 6-A指示A-1] disables the 確定 button while a needs_review EstimateResult exists, and re-enables it once resolved', async () => {
+    seedLiveDetections([detectionOnOutline, masterLinkedDetectionOnOutline, tieDetectionOnOutline])
+
+    render(<App />)
+    await navigateToOutlinePage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '確定' })).toBeDisabled()
+    })
+    expect(screen.getByRole('alert').textContent).toContain('要確認の積算結果が1件残っているため確定できません')
+
+    // 「要確認タブで確認する」リンクから、総合計+要確認タブへ誘導される。
+    fireEvent.click(screen.getByRole('button', { name: '要確認タブで確認する' }))
+    await waitFor(() => {
+      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      expect(select.value).toBe('')
+    })
+    expect(screen.getByRole('tab', { name: /^要確認/ })).toHaveAttribute('aria-selected', 'true')
+
+    // 面1/盤1の内側だけへ移動して解消すると、確定ボタンが再び有効になる。
+    fireEvent.click(screen.getByRole('button', { name: '18500 テスト品目2' }))
+    const bbox = await findOverlayBBoxByTitle(/18500/)
+    setOverlayRect(1000, 1000)
+    fireEvent.mouseDown(bbox, { clientX: 500, clientY: 500 })
+    fireEvent.mouseMove(window, { clientX: 465, clientY: 500 })
+    fireEvent.mouseUp(window, { clientX: 465, clientY: 500 })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '確定' })).not.toBeDisabled()
+    })
+  })
+
   it('Ctrl+Z on a focused text input does not trigger the app Undo (does not steal the browser/input\'s own undo, 指示6章)', async () => {
     render(<App />)
     await navigateToOutlinePage()

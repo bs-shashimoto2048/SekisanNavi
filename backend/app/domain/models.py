@@ -13,6 +13,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+# [Issue #40 Phase 6-A] EstimateConfirmationItemInput/Itemを、EstimateResultの
+# snapshotも保持できるよう拡張するための型のみ、新しいドメインモジュール
+# (app.domain.estimate_rules)から参照する。estimate_rules.py側はこのモジュールへ
+# 依存していない(一方向の依存のみで、既存の「独立したモジュール」という設計
+# 方針そのものは崩さない)。
+from app.domain.estimate_rules import (
+    ApplicableUnit,
+    EstimateResultStatus,
+    EvidenceKind,
+    JudgmentMethod,
+)
+
 
 class AnalysisStatus(str, Enum):
     """案件の解析状態。暫定候補 (要件9)。"""
@@ -327,21 +339,65 @@ class EstimateTargetType(str, Enum):
 
 
 @dataclass
-class EstimateConfirmationItemInput:
-    """`save_confirmation()`への入力1行分 (Issue #4 Phase B-1)。
+class EstimateConfirmationEvidenceInput:
+    """確定snapshot明細1行が持つ根拠1件分の入力 (Issue #40 Phase 6-A)。
 
-    Detection 1件 = 1行の粒度(積算明細`detailItems`相当)で渡す。
-    id/confirmation_idはINSERT時にDBが払い出すため、入力側は持たない
-    (`docs/decision-snapshot-design.md` 4章)。呼び出し側(将来のPhase B-2の
-    確定API)が、その時点の`detections`×`estimate_master_items`×
-    `product_df.csv`/`estcode_df.csv`から解決済みの値をここへ集めて渡す。
+    `EstimateResultEvidence`(`app.domain.estimate_rules`)のsnapshot版。
+    1つの確定明細行(EstimateConfirmationItem)が複数の根拠を持ちうるため、
+    `estimate_confirmation_result_evidence`テーブルへ1件ずつ保存する。
+    確定時点でDetectionの表示に必要な値(表示名解決用の
+    `master_item_code`/`class_name`、BBox座標等)を非正規化コピーしておく
+    ことで、確定後にDetectionが削除・変更されても履歴側の表示が壊れない
+    ようにする(既存の`estimate_confirmation_items.bbox_x`等と同じ考え方)。
+    """
+
+    evidence_kind: EvidenceKind
+    detection_id: int | None = None
+    drawing_page_id: int | None = None
+    source_type: DetectionSourceType | None = None
+    evidence_type_key: str | None = None
+    master_item_code: str | None = None
+    class_name: str | None = None
+    bbox_x: float | None = None
+    bbox_y: float | None = None
+    bbox_w: float | None = None
+    bbox_h: float | None = None
+    page_no: int | None = None
+    design_data_ref: str | None = None
+
+
+@dataclass
+class EstimateConfirmationEvidenceItem(EstimateConfirmationEvidenceInput):
+    """保存後の確定snapshot根拠1件 (`save_confirmation()`の戻り値要素)。"""
+
+    id: int = 0
+    confirmation_item_id: int = 0
+
+
+@dataclass
+class EstimateConfirmationItemInput:
+    """`save_confirmation()`への入力1行分 (Issue #4 Phase B-1、Issue #40
+    Phase 6-Aで確定対象をEstimateResultへ移行)。
+
+    Phase 6-A以降は1 EstimateResult = 1行の粒度(積算明細`EstimateDetail`相当)
+    で渡す(Phase 5以前はDetection 1件 = 1行だった)。id/confirmation_idは
+    INSERT時にDBが払い出すため、入力側は持たない
+    (`docs/decision-snapshot-design.md` 4章)。呼び出し側
+    (`app.services.estimate_confirmation_builder`)が、その時点の
+    `estimate_results`×`estimate_result_evidence`×`estimate_master_items`×
+    `estcode_df.csv`から解決済みの値をここへ集めて渡す。
+
+    `source_type`/`status`は旧Detectionベースの行にのみ意味を持つ列
+    (Issue #40 Phase 6-A migration参照)。EstimateResultベースの新しい行
+    (design_data判定のみ等、対応するDetectionを持たない場合がある)では
+    `None`のまま保存する(値を推測で埋めない)。
     """
 
     target_id: str
     target_type: EstimateTargetType
     code: str
-    source_type: DetectionSourceType
-    status: DetectionStatus
+    source_type: DetectionSourceType | None
+    status: DetectionStatus | None
     detection_id: int | None = None
     drawing_page_id: int | None = None
     ban_menno: int | None = None
@@ -359,6 +415,16 @@ class EstimateConfirmationItemInput:
     bbox_w: float | None = None
     bbox_h: float | None = None
     page_no: int | None = None
+    # [Issue #40 Phase 6-A新規] EstimateResultのsnapshot。旧Detectionベースの
+    # 行では全てNoneのまま保存する(既存列の意味は変えない、新規追加のみ)。
+    current_factor: float | None = None
+    factor_overridden: bool | None = None
+    judgment_method: JudgmentMethod | None = None
+    applicable_unit: ApplicableUnit | None = None
+    judgment_reason: str | None = None
+    source_rule_id: int | None = None
+    result_status: EstimateResultStatus | None = None
+    evidence: list[EstimateConfirmationEvidenceInput] = field(default_factory=list)
 
 
 @dataclass
@@ -374,6 +440,7 @@ class EstimateConfirmationItem(EstimateConfirmationItemInput):
 
     id: int = 0
     confirmation_id: int = 0
+    evidence: list[EstimateConfirmationEvidenceItem] = field(default_factory=list)
 
 
 @dataclass

@@ -57,6 +57,15 @@ def _configure_root(client, monkeypatch, root):
     assert res.status_code == 200
 
 
+def _evaluate(client, product_no: str) -> dict:
+    """[Issue #40 Phase 6-A] 確定対象がEstimateResultへ移行したため、
+    Manual BBox作成/移動直後に評価実行を呼ばないと確定対象に反映されない
+    (`test_estimate_confirmation_api.py::_evaluate`と同じ理由)。"""
+    res = client.post(f"/api/products/{product_no}/estimate-results/evaluate")
+    assert res.status_code == 200
+    return res.json()
+
+
 def _confirm(client, product_no: str) -> dict:
     res = client.post(f"/api/products/{product_no}/estimate-confirmations")
     assert res.status_code == 201
@@ -213,6 +222,7 @@ def test_confirmations_counts_only_events_before_confirmation(client, monkeypatc
     created = _create_manual_detection(client)
     detection_id = created["id"]
     _move_detection(client, detection_id, bbox_x=0.15, bbox_y=0.15)  # 確定前のbbox_edit 1件目
+    _evaluate(client, "A1GV2421")
 
     confirmed = _confirm(client, "A1GV2421")
 
@@ -256,8 +266,10 @@ def test_confirmations_distinguishes_confirmation_ids_on_reconfirmation(client, 
     created = _create_manual_detection(client)
     detection_id = created["id"]
 
+    _evaluate(client, "A1GV2421")
     first = _confirm(client, "A1GV2421")  # create 1件のみ確定前に存在させたい
     _move_detection(client, detection_id, bbox_x=0.2, bbox_y=0.2)
+    _evaluate(client, "A1GV2421")
     second = _confirm(client, "A1GV2421")  # create + bbox_edit 1件が確定前に存在させたい
 
     # occurred_at/confirmed_atは秒精度のため、テスト実行速度によっては
