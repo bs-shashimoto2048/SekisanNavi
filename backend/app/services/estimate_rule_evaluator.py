@@ -43,6 +43,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.domain.estimate_rules import (
+    CalcType,
     EstimateResultCandidate,
     EvidenceKind,
     EvidenceRef,
@@ -102,6 +103,97 @@ _SUPPORTED_QUANTITY_METHODS = {QuantityMethod.PER_EVIDENCE, QuantityMethod.PER_C
 # DRAWING/PRODUCT scopeで実際に評価するのは「evidenceの存在判定のみ」の
 # ルールに限る(docstring参照)。
 _EVIDENCE_ONLY_SCOPES = {JudgmentScope.DRAWING, JudgmentScope.PRODUCT}
+
+
+@dataclass(frozen=True)
+class RuleSupportResult:
+    """`is_standard_rule_supported`/`_rule_shape_supported`の戻り値
+    (Issue #40 Phase 6-F PR #50レビュー指摘対応)。`supported=False`の場合、
+    `reason`に具体的な未対応理由を日本語で入れる(候補マニフェストvalidatorが
+    `ValidationIssue`のメッセージへそのまま使う)。"""
+
+    supported: bool
+    reason: str | None = None
+
+
+def _rule_shape_supported(
+    judgment_scope: JudgmentScope, quantity_method: QuantityMethod, condition: StandardCondition
+) -> RuleSupportResult:
+    """judgment_scope/quantity_method/conditionの組合せ(`calc_type`は含まない)
+    を`evaluate_product`が実際に処理できるかを判定する(Issue #40 Phase 6-F
+    PR #50レビュー指摘対応: evaluatorとvalidatorのrule support判定を共通化する
+    単一の真実源)。
+
+    `calc_type`をこの関数に含めない理由: `evaluate_product`は`calc_type`が
+    `direct`以外でも、該当ルールの評価(図面情報の存在判定・数量算定)自体は
+    スキップしない(`unit_price`が`None`のまま「要確認」として扱われるだけ。
+    Issue #40 Phase 2指示の「推測で価格を埋めない」という既存仕様であり、
+    Phase 6-Fで変更しない)。したがって`calc_type`は「このルールが完全に
+    本番投入可能か」(`is_standard_rule_supported`、候補マニフェストvalidatorの
+    `ready`判定が使う)を判定する際にだけ追加で考慮すべき、別軸の制約である。
+    """
+    if quantity_method not in _SUPPORTED_QUANTITY_METHODS:
+        return RuleSupportResult(False, f"quantity_method={quantity_method.value!r}は標準評価器が未対応です")
+
+    if judgment_scope in (JudgmentScope.PANEL, JudgmentScope.DESIGN_DATA):
+        return RuleSupportResult(True)
+
+    if judgment_scope in _EVIDENCE_ONLY_SCOPES:
+        # Issue #40 Phase 6-E docstring/Phase 6-F PR #50レビュー指摘: DRAWING/
+        # PRODUCTで実際に評価するのは「図面情報の存在判定のみ」のルールに限る。
+        # design_data_any_of(Phase 6-F追加のOR表現)も、design_data_conditions
+        # と同じ理由(盤単位の設計データを図面/製番単位へどう集約するかが業務的に
+        # 未確定)でこのscopeでは未対応とする(PR #50レビュー指摘: 従来の判定は
+        # design_data_any_ofの有無を見ておらず、黙って無視してしまう抜けが
+        # あった。これを明示的なskip理由として修正する)。
+        if condition.design_data_conditions:
+            return RuleSupportResult(
+                False,
+                f"judgment_scope={judgment_scope.value!r} + design_data_conditionsは標準評価器が未対応です"
+                "(evidenceの存在判定のみ対応)",
+            )
+        if condition.design_data_any_of:
+            return RuleSupportResult(
+                False,
+                f"judgment_scope={judgment_scope.value!r} + design_data_any_ofは標準評価器が未対応です"
+                "(evidenceの存在判定のみ対応)",
+            )
+        if not condition.required_evidence_types:
+            return RuleSupportResult(
+                False,
+                f"judgment_scope={judgment_scope.value!r}はrequired_evidence_typesが1件以上必要です"
+                "(evidenceの存在判定のみ対応のため)",
+            )
+        return RuleSupportResult(True)
+
+    return RuleSupportResult(False, f"judgment_scope={judgment_scope.value!r}は標準評価器が未対応です")
+
+
+def is_standard_rule_supported(
+    *,
+    judgment_scope: JudgmentScope,
+    quantity_method: QuantityMethod,
+    calc_type: CalcType,
+    condition: StandardCondition,
+) -> RuleSupportResult:
+    """このルール形状(judgment_scope/quantity_method/calc_type/condition)を
+    標準rule evaluator(`evaluate_product`)が実際に完全評価できるかを判定する
+    純粋関数(Issue #40 Phase 6-F PR #50レビュー指摘対応)。
+
+    `evaluate_product`自身(`_rule_shape_supported`経由、`calc_type`抜きで
+    skip判定にのみ使う)と、本番投入候補マニフェストvalidator
+    (`backend/tools/validate_candidate_manifests.py`、`calc_type`含めて
+    `status=ready`の妥当性チェックに使う)の両方が、この関数(または内部で
+    共有する`_rule_shape_supported`)を単一の真実源として参照する。
+    `processing_mode`(custom handlerかどうか)はこの関数の対象外
+    (standard rule前提の判定であるため、呼び出し側で別途チェックする)。
+    """
+    shape = _rule_shape_supported(judgment_scope, quantity_method, condition)
+    if not shape.supported:
+        return shape
+    if calc_type != CalcType.DIRECT:
+        return RuleSupportResult(False, f"calc_type={calc_type.value!r}は標準評価器が未対応です(directのみ対応)")
+    return RuleSupportResult(True)
 
 
 @dataclass
@@ -301,13 +393,19 @@ def evaluate_product(
             # 常にスキップする(Issue #40 11章「専用ルール」はPhase 5以降)。
             outcome.skipped_rule_master_ids.append(rule.id)
             continue
-        if rule.judgment_scope not in _SUPPORTED_SCOPES:
-            outcome.skipped_rule_master_ids.append(rule.id)
-            continue
-        if rule.quantity_method not in _SUPPORTED_QUANTITY_METHODS:
-            outcome.skipped_rule_master_ids.append(rule.id)
-            continue
         condition = rule.judgment_condition or StandardCondition()
+
+        # Issue #40 Phase 6-F PR #50レビュー指摘対応: scope/quantity_method/
+        # condition形状によるskip判定を`_rule_shape_supported`へ集約した
+        # (旧`_SUPPORTED_SCOPES`/`_SUPPORTED_QUANTITY_METHODS`直接参照 +
+        # EVIDENCE_ONLY_SCOPES個別チェックを1箇所にまとめただけで、Phase 6-E
+        # までの判定結果自体は変えていない。ただし`design_data_any_of`の
+        # 有無チェックが元々漏れていた不具合はここで修正している
+        # (`_rule_shape_supported`のdocstring参照)。
+        shape = _rule_shape_supported(rule.judgment_scope, rule.quantity_method, condition)
+        if not shape.supported:
+            outcome.skipped_rule_master_ids.append(rule.id)
+            continue
 
         master = _get_master(rule.master_item_id)
         if master is None:
@@ -317,13 +415,6 @@ def evaluate_product(
         unit_price = master.total_price_a if rule.calc_type.value == "direct" else None
 
         if rule.judgment_scope in _EVIDENCE_ONLY_SCOPES:
-            if condition.design_data_conditions or not condition.required_evidence_types:
-                # 設計データ条件を含む、またはevidenceを一切要求しない
-                # DRAWING/PRODUCTルールは評価しない(docstring参照。業務的な
-                # 集約判断が必要になるため推測実装しない)。
-                outcome.skipped_rule_master_ids.append(rule.id)
-                continue
-
             if rule.judgment_scope == JudgmentScope.DRAWING:
                 groups: list[tuple[dict[str, list[Detection]], int | None, str]] = [
                     (evidence_by_type, drawing_page_id, f"drawing:{drawing_page_id}")
@@ -480,4 +571,10 @@ def evaluate_product(
     return outcome
 
 
-__all__ = ["EvaluationOutcome", "evaluate_product", "DataSourceError"]
+__all__ = [
+    "EvaluationOutcome",
+    "evaluate_product",
+    "DataSourceError",
+    "RuleSupportResult",
+    "is_standard_rule_supported",
+]

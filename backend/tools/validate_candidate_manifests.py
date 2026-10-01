@@ -16,9 +16,17 @@ validator。
     再利用する)
   - source_refsが空でないか
   - status/blockerの整合(ready以外はblocker必須、readyはblocker無し)
-  - readyなのに評価器が未対応のjudgment_scope/quantity_method/calc_typeを
-    使っていないか(`app.services.estimate_rule_evaluator`の対応状況を
-    単一の真実源として再利用する。重複定義による乖離を避ける)
+  - readyなのに評価器が未対応のjudgment_scope/quantity_method/calc_type/
+    conditionの組合せを使っていないか(`app.services.estimate_rule_evaluator.
+    is_standard_rule_supported`を単一の真実源として再利用する。evaluator本体
+    [`evaluate_product`]のskip判定もこの関数[内部の`_rule_shape_supported`]を
+    使っており、重複定義による乖離が起きない。Issue #40 Phase 6-F PR #50
+    レビュー指摘対応: DRAWING/PRODUCT scopeは「evidenceの存在判定のみ」の
+    部分実装であり、design_data_conditions/design_data_any_ofを伴う場合や
+    required_evidence_typesが空の場合はreadyであってはならない)
+
+`condition`がdict以外(list/str/int等)の不正なマニフェストでもCLIが
+tracebackを出して落ちないこと(`_parse_condition`参照)。
 """
 from __future__ import annotations
 
@@ -43,8 +51,8 @@ from app.domain.estimate_rules import (  # noqa: E402
     StandardConditionField,
 )
 from app.services.estimate_rule_evaluator import (  # noqa: E402
-    _SUPPORTED_QUANTITY_METHODS,
     _SUPPORTED_SCOPES,
+    is_standard_rule_supported,
 )
 
 DEFAULT_EVIDENCE_TYPES_PATH = BACKEND_DIR / "data_candidates" / "phase6f_drawing_evidence_types.json"
@@ -58,11 +66,6 @@ VALID_QUANTITY_METHODS = frozenset(q.value for q in QuantityMethod)
 VALID_JUDGMENT_METHODS = frozenset(m.value for m in JudgmentMethod)
 VALID_CALC_TYPES = frozenset(c.value for c in CalcType)
 
-# status="ready"の候補に対しては、評価器が実際に計算できる組合せ
-# (calc_type=directのみ)まで厳格にチェックする(「技術的に動く」と
-# 「本番投入可能」を混同しないため)。
-_READY_ALLOWED_CALC_TYPES = frozenset({CalcType.DIRECT.value})
-
 
 @dataclass
 class ValidationIssue:
@@ -73,14 +76,22 @@ class ValidationIssue:
         return f"[{self.location}] {self.message}"
 
 
-def _parse_condition(raw: dict | None) -> StandardCondition | None:
-    """マニフェストJSON内の`condition`辞書から`StandardCondition`を構築する。
+def _parse_condition(raw: object) -> StandardCondition | None:
+    """マニフェストJSON内の`condition`からStandardConditionを構築する。
     不正な場合は例外を送出する(呼び出し側でcatchしてValidationIssue化する)。
     `app.repositories.estimate_rule_masters._parse_condition`と同じ構造
     (本番DBへのJSON保存形式)をそのまま検証対象にする。
+
+    **堅牢性(Issue #40 Phase 6-F PR #50レビュー指摘対応)**: `raw`が
+    dict/None以外(list・str・int等、不正なマニフェストによる入力)の場合に
+    `.get()`でAttributeErrorを送出してCLI自体をクラッシュさせないよう、
+    明示的に型チェックしてTypeErrorを送出する(呼び出し側で
+    `ValidationIssue`化できる既知の例外にする)。
     """
     if raw is None:
         return None
+    if not isinstance(raw, dict):
+        raise TypeError(f"conditionはdict、またはnullである必要があります: {raw!r}")
     return StandardCondition(
         required_evidence_types=list(raw.get("required_evidence_types", [])),
         design_data_conditions=[
@@ -224,11 +235,17 @@ def validate_rules(data: dict, known_evidence_keys: set[str]) -> list[Validation
 
         condition_raw = c.get("condition")
         condition: StandardCondition | None = None
+        condition_parse_failed = False
         if condition_raw is not None:
             try:
                 condition = _parse_condition(condition_raw)
-            except (ValueError, KeyError, TypeError) as e:
+            except (ValueError, KeyError, TypeError, AttributeError) as e:
+                # AttributeErrorはconditionがdict以外(list/str/int等)の
+                # 不正なマニフェストで発生しうる(PR #50レビュー指摘対応)。
+                # `_parse_condition`自体がTypeErrorへ変換するが、念のため
+                # ここでも捕捉し、CLIがtracebackで落ちないようにする。
                 issues.append(ValidationIssue(loc, f"conditionのschemaが不正です: {e}"))
+                condition_parse_failed = True
             else:
                 for t in condition.required_evidence_types:
                     if t not in known_evidence_keys:
@@ -243,14 +260,26 @@ def validate_rules(data: dict, known_evidence_keys: set[str]) -> list[Validation
         _check_status_and_blocker(loc, c.get("status"), c.get("blocker"), issues)
 
         if c.get("status") == "ready":
-            if scope in VALID_SCOPES and JudgmentScope(scope) not in _SUPPORTED_SCOPES:
-                issues.append(ValidationIssue(loc, f"status=readyですが、judgment_scope={scope!r}は評価器が未対応です"))
-            if quantity_method in VALID_QUANTITY_METHODS and QuantityMethod(quantity_method) not in _SUPPORTED_QUANTITY_METHODS:
-                issues.append(ValidationIssue(loc, f"status=readyですが、quantity_method={quantity_method!r}は評価器が未対応です"))
-            if calc_type in VALID_CALC_TYPES and calc_type not in _READY_ALLOWED_CALC_TYPES:
-                issues.append(ValidationIssue(loc, f"status=readyですが、calc_type={calc_type!r}は評価器が未対応です(directのみ対応)"))
-            if condition_raw is not None and condition is None:
-                pass  # 既にschemaエラーとして記録済み
+            # scope/quantity_method/calc_type/conditionのいずれかが既に不正な
+            # 場合は、それぞれ既にValidationIssueを記録済みのため、ここでは
+            # 二重に報告せずスキップする。
+            if scope in VALID_SCOPES and quantity_method in VALID_QUANTITY_METHODS and calc_type in VALID_CALC_TYPES and not condition_parse_failed:
+                # Issue #40 Phase 6-F PR #50レビュー指摘対応: evaluatorと同じ
+                # `is_standard_rule_supported`(単一の真実源)で、このルール形状を
+                # 標準評価器が本当に完全評価できるかを判定する(旧実装は
+                # judgment_scope/quantity_method/calc_typeを個別にしか見ておらず、
+                # DRAWING/PRODUCT scope + design_data_conditions/any_of の
+                # ような「scopeは許可リストに入っているが実際には未対応」の
+                # 組合せをreadyとして見逃す抜けがあった)。
+                effective_condition = condition if condition is not None else StandardCondition()
+                support = is_standard_rule_supported(
+                    judgment_scope=JudgmentScope(scope),
+                    quantity_method=QuantityMethod(quantity_method),
+                    calc_type=CalcType(calc_type),
+                    condition=effective_condition,
+                )
+                if not support.supported:
+                    issues.append(ValidationIssue(loc, f"status=readyですが、{support.reason}"))
 
     return issues
 

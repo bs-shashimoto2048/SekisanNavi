@@ -224,3 +224,208 @@ def test_ready_rule_fully_supported_passes():
         },
     )
     assert issues == []
+
+
+# ============================================================
+# PR #50レビュー指摘対応: evaluatorとvalidatorのrule support判定共通化
+# (is_standard_rule_supported)。DRAWING/PRODUCT scopeの条件付きサポートを
+# validator側でも正確に反映できているかを確認する。
+# ============================================================
+
+
+def test_ready_drawing_scope_with_design_data_conditions_is_rejected():
+    """DRAWING scope + design_data_conditionsは、evidence存在判定のみの
+    部分実装のため、readyでは拒否されるべき(項目1)。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence(status="ready", blocker=None, judgment_scope="drawing")]},
+        {
+            "candidates": [
+                _rule(
+                    status="ready",
+                    blocker=None,
+                    judgment_scope="drawing",
+                    quantity_method="per_evidence",
+                    calc_type="direct",
+                    condition={
+                        "required_evidence_types": ["side_door"],
+                        "design_data_conditions": [{"field": "ban_w", "operator": ">=", "value": 900}],
+                        "design_data_any_of": [],
+                    },
+                )
+            ]
+        },
+    )
+    assert any("design_data_conditions" in str(i) and "drawing" in str(i) for i in issues)
+
+
+def test_ready_product_scope_with_design_data_any_of_is_rejected():
+    """PRODUCT scope + design_data_any_ofも同様にreadyでは拒否される(項目2)。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence(status="ready", blocker=None, judgment_scope="product")]},
+        {
+            "candidates": [
+                _rule(
+                    status="ready",
+                    blocker=None,
+                    judgment_scope="product",
+                    quantity_method="per_condition_group",
+                    calc_type="direct",
+                    condition={
+                        "required_evidence_types": ["side_door"],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [
+                            [{"field": "model", "operator": "starts_with", "value": "IS"}]
+                        ],
+                    },
+                )
+            ]
+        },
+    )
+    assert any("design_data_any_of" in str(i) and "product" in str(i) for i in issues)
+
+
+def test_ready_drawing_scope_without_required_evidence_types_is_rejected():
+    """DRAWING scopeでevidenceを1件も要求しない(evidence存在判定が成立
+    しようがない)候補はreadyでは拒否される(項目3)。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence(status="ready", blocker=None, judgment_scope="drawing")]},
+        {
+            "candidates": [
+                _rule(
+                    status="ready",
+                    blocker=None,
+                    judgment_scope="drawing",
+                    quantity_method="per_evidence",
+                    calc_type="direct",
+                    condition={
+                        "required_evidence_types": [],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [],
+                    },
+                )
+            ]
+        },
+    )
+    assert any("required_evidence_types" in str(i) and "drawing" in str(i) for i in issues)
+
+
+def test_ready_product_scope_without_required_evidence_types_is_rejected():
+    """項目4: PRODUCT版。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence(status="ready", blocker=None, judgment_scope="product")]},
+        {
+            "candidates": [
+                _rule(
+                    status="ready",
+                    blocker=None,
+                    judgment_scope="product",
+                    quantity_method="per_condition_group",
+                    calc_type="direct",
+                    condition={
+                        "required_evidence_types": [],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [],
+                    },
+                )
+            ]
+        },
+    )
+    assert any("required_evidence_types" in str(i) and "product" in str(i) for i in issues)
+
+
+def test_ready_drawing_scope_evidence_only_per_evidence_is_accepted():
+    """項目5: DRAWING scope + evidenceのみ(design_data無し) +
+    per_evidence + directは、評価器が実際に対応している形状なのでreadyとして
+    通る。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence(status="ready", blocker=None, judgment_scope="drawing")]},
+        {
+            "candidates": [
+                _rule(
+                    status="ready",
+                    blocker=None,
+                    judgment_scope="drawing",
+                    quantity_method="per_evidence",
+                    calc_type="direct",
+                    condition={
+                        "required_evidence_types": ["side_door"],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [],
+                    },
+                )
+            ]
+        },
+    )
+    assert issues == []
+
+
+def test_ready_product_scope_evidence_only_per_condition_group_is_accepted():
+    """項目6: PRODUCT scope + per_condition_group版。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence(status="ready", blocker=None, judgment_scope="product")]},
+        {
+            "candidates": [
+                _rule(
+                    status="ready",
+                    blocker=None,
+                    judgment_scope="product",
+                    quantity_method="per_condition_group",
+                    calc_type="direct",
+                    condition={
+                        "required_evidence_types": ["side_door"],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [],
+                    },
+                )
+            ]
+        },
+    )
+    assert issues == []
+
+
+def test_ready_unsupported_quantity_method_is_rejected():
+    """項目8: 未対応のquantity_method(enum自体は有効だが評価器未実装の
+    per_face等)を使ったready候補は拒否される。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence(status="ready", blocker=None, judgment_scope="panel")]},
+        {
+            "candidates": [
+                _rule(
+                    status="ready",
+                    blocker=None,
+                    judgment_scope="panel",
+                    quantity_method="per_face",
+                    calc_type="direct",
+                )
+            ]
+        },
+    )
+    assert any("quantity_method" in str(i) and "per_face" in str(i) for i in issues)
+
+
+def test_condition_as_list_does_not_crash_and_is_rejected():
+    """項目10: condition=[] (dict以外) でもCLIがクラッシュせず、
+    ValidationIssueとして報告される。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence()]},
+        {"candidates": [_rule(condition=[])]},
+    )
+    assert any("conditionのschema" in str(i) for i in issues)
+
+
+def test_condition_as_string_does_not_crash_and_is_rejected():
+    """項目11。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence()]},
+        {"candidates": [_rule(condition="foo")]},
+    )
+    assert any("conditionのschema" in str(i) for i in issues)
+
+
+def test_condition_as_int_does_not_crash_and_is_rejected():
+    """項目12。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence()]},
+        {"candidates": [_rule(condition=123)]},
+    )
+    assert any("conditionのschema" in str(i) for i in issues)

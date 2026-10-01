@@ -1,0 +1,185 @@
+"""`app.services.estimate_rule_evaluator.is_standard_rule_supported`
+(および内部の`_rule_shape_supported`)の単体テスト
+(Issue #40 Phase 6-F PR #50レビュー指摘対応: evaluatorとvalidatorのrule
+support判定を共通化する単一の真実源)。
+
+`evaluate_product`自身のテスト(`test_estimate_rule_evaluator.py`)・候補
+マニフェストvalidatorのテスト(`test_validate_candidate_manifests.py`)は
+それぞれの統合経路からこの関数を間接的に検証しているが、ここでは
+関数そのものの入出力を直接・網羅的に確認する。
+"""
+from app.domain.estimate_rules import (
+    CalcType,
+    JudgmentScope,
+    QuantityMethod,
+    StandardCondition,
+    StandardConditionField,
+)
+from app.services.estimate_rule_evaluator import is_standard_rule_supported
+
+
+def _condition(**overrides) -> StandardCondition:
+    base = dict(required_evidence_types=[], design_data_conditions=[], design_data_any_of=[])
+    base.update(overrides)
+    return StandardCondition(**base)
+
+
+def test_panel_scope_with_design_data_conditions_and_any_of_is_supported():
+    """PANEL/DESIGN_DATAはdesign_data_conditions/design_data_any_ofの
+    有無に関わらずサポート対象(evaluate_productが元々この2 scopeを完全
+    サポートしているため)。"""
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.PANEL,
+        quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(
+            design_data_conditions=[StandardConditionField(field="ban_w", operator=">=", value=900)],
+            design_data_any_of=[[StandardConditionField(field="model", operator="starts_with", value="IS")]],
+        ),
+    )
+    assert result.supported is True
+
+
+def test_design_data_scope_is_supported():
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.DESIGN_DATA,
+        quantity_method=QuantityMethod.PER_EVIDENCE,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(required_evidence_types=["side_door"]),
+    )
+    assert result.supported is True
+
+
+def test_drawing_scope_with_design_data_conditions_is_not_supported():
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.DRAWING,
+        quantity_method=QuantityMethod.PER_EVIDENCE,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(
+            required_evidence_types=["side_door"],
+            design_data_conditions=[StandardConditionField(field="ban_w", operator=">=", value=900)],
+        ),
+    )
+    assert result.supported is False
+    assert "design_data_conditions" in result.reason
+    assert "drawing" in result.reason
+
+
+def test_product_scope_with_design_data_any_of_is_not_supported():
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.PRODUCT,
+        quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(
+            required_evidence_types=["side_door"],
+            design_data_any_of=[[StandardConditionField(field="model", operator="starts_with", value="IS")]],
+        ),
+    )
+    assert result.supported is False
+    assert "design_data_any_of" in result.reason
+    assert "product" in result.reason
+
+
+def test_drawing_scope_without_required_evidence_types_is_not_supported():
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.DRAWING,
+        quantity_method=QuantityMethod.PER_EVIDENCE,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(),
+    )
+    assert result.supported is False
+    assert "required_evidence_types" in result.reason
+
+
+def test_product_scope_without_required_evidence_types_is_not_supported():
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.PRODUCT,
+        quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(),
+    )
+    assert result.supported is False
+    assert "required_evidence_types" in result.reason
+
+
+def test_drawing_scope_evidence_only_per_evidence_direct_is_supported():
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.DRAWING,
+        quantity_method=QuantityMethod.PER_EVIDENCE,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(required_evidence_types=["side_door"]),
+    )
+    assert result.supported is True
+
+
+def test_product_scope_evidence_only_per_condition_group_direct_is_supported():
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.PRODUCT,
+        quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(required_evidence_types=["side_door"]),
+    )
+    assert result.supported is True
+
+
+def test_position_and_range_scopes_are_never_supported():
+    for scope in (JudgmentScope.POSITION, JudgmentScope.RANGE):
+        result = is_standard_rule_supported(
+            judgment_scope=scope,
+            quantity_method=QuantityMethod.PER_EVIDENCE,
+            calc_type=CalcType.DIRECT,
+            condition=_condition(required_evidence_types=["side_door"]),
+        )
+        assert result.supported is False, scope
+
+
+def test_unsupported_quantity_methods_are_rejected_for_every_scope():
+    unsupported = [
+        QuantityMethod.PER_FACE,
+        QuantityMethod.PER_UNIT,
+        QuantityMethod.PER_PRODUCT,
+        QuantityMethod.PER_COMBINATION_SET,
+        QuantityMethod.DIFF_FROM_STANDARD,
+        QuantityMethod.CUSTOM,
+    ]
+    for qm in unsupported:
+        result = is_standard_rule_supported(
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=qm,
+            calc_type=CalcType.DIRECT,
+            condition=_condition(),
+        )
+        assert result.supported is False, qm
+        assert "quantity_method" in result.reason
+
+
+def test_non_direct_calc_types_are_rejected():
+    for calc_type in (
+        CalcType.ADD,
+        CalcType.SUBTRACT,
+        CalcType.MULTIPLY_PRICE,
+        CalcType.MULTIPLY_LABOR,
+        CalcType.MULTIPLY_BOTH,
+        CalcType.CUSTOM,
+    ):
+        result = is_standard_rule_supported(
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_EVIDENCE,
+            calc_type=calc_type,
+            condition=_condition(required_evidence_types=["side_door"]),
+        )
+        assert result.supported is False, calc_type
+        assert "calc_type" in result.reason
+
+
+def test_shape_failure_takes_priority_over_calc_type_in_reason():
+    """shapeが既に未対応の場合、理由はshape側のものが返る(calc_typeの
+    チェックまで進まない)。"""
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.DRAWING,
+        quantity_method=QuantityMethod.PER_EVIDENCE,
+        calc_type=CalcType.MULTIPLY_PRICE,
+        condition=_condition(),  # required_evidence_types空 → shape不成立
+    )
+    assert result.supported is False
+    assert "required_evidence_types" in result.reason

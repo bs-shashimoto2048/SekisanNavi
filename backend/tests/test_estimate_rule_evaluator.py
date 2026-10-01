@@ -717,6 +717,83 @@ def test_evaluate_product_drawing_scope_skips_rule_combined_with_design_data_con
     assert outcome.skipped_rule_master_ids == [rule.id]
 
 
+def test_evaluate_product_drawing_scope_skips_rule_combined_with_design_data_any_of(
+    client, monkeypatch, tmp_path, db_path
+):
+    """PR #50レビュー指摘の再発防止テスト: DRAWING scope + design_data_any_of
+    (OR条件)の組合せも、design_data_conditions(AND)と同じ理由で評価せず
+    skipする。修正前はこのOR条件の有無チェックが漏れており、evidenceさえ
+    揃えばOR条件を無視して黙って成立してしまう不具合があった。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        create_evidence_type(
+            conn, key="test_drawing_any_of", display_name="test_drawing_any_of", category=None,
+            usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.DRAWING, description=None,
+        )
+        master_item_id = _first_master_item(client)["id"]
+        rule = create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.DRAWING,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_drawing_any_of"],
+                design_data_any_of=[
+                    [StandardConditionField(field="model", operator="starts_with", value="IS")]
+                ],
+            ),
+        )
+
+    d = _create_manual_detection(client, bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, d["id"], "test_drawing_any_of")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+    assert outcome.skipped_rule_master_ids == [rule.id]
+
+
+def test_evaluate_product_product_scope_skips_rule_combined_with_design_data_any_of(
+    client, monkeypatch, tmp_path, db_path
+):
+    """同上、PRODUCT scope版。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        create_evidence_type(
+            conn, key="test_product_any_of", display_name="test_product_any_of", category=None,
+            usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.PRODUCT, description=None,
+        )
+        master_item_id = _first_master_item(client)["id"]
+        rule = create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PRODUCT,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_product_any_of"],
+                design_data_any_of=[
+                    [StandardConditionField(field="model", operator="starts_with", value="IS")]
+                ],
+            ),
+        )
+
+    d = _create_manual_detection(client, bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, d["id"], "test_product_any_of")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+    assert outcome.skipped_rule_master_ids == [rule.id]
+
+
 def test_evaluate_product_drawing_scope_skips_rule_without_required_evidence_types(
     client, monkeypatch, tmp_path, db_path
 ):
