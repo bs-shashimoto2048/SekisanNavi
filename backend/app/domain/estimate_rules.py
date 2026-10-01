@@ -201,7 +201,17 @@ class EstimateResult:
     result_key: str
     master_item_id: int | None
     code: str
+    # [Issue #40 Phase 6後半] `quantity`は従来通り「計算に使う現在の数量」を
+    # 表す列として維持する(既存の集約・表示コードは今後もこの列を読むだけで
+    # 手修正を自動的に反映する)。`current_quantity`はその別名として常に
+    # 同じ値を持つ(repository層が書き込み時に同期させる)。`initial_quantity`
+    # は評価器が算出した自動値そのもの(手修正の有無に関わらず再評価のたびに
+    # 最新化される)。
     quantity: float
+    initial_quantity: float
+    current_quantity: float
+    quantity_overridden: bool
+    quantity_override_reason: str | None
     applicable_unit: ApplicableUnit | None
     initial_factor: float
     current_factor: float

@@ -25,6 +25,10 @@ from app.db.connection import get_connection
 from app.db.migrate import run_migrations
 
 _0010_FILENAME = "0010_estimate_confirmation_result_snapshot.py"
+# [Issue #40 Phase 6後半] 0011追加後、0009以前の状態から`run_migrations`を
+# 実行すると0010に続けて0011も適用される(0011は本テストの対象外だが、
+# 「0010だけが適用される」という前提のassertionはここで更新する必要がある)。
+_0011_FILENAME = "0011_estimate_quantity_override.py"
 
 
 def _apply_migrations_up_to_0009(conn: sqlite3.Connection) -> None:
@@ -112,7 +116,7 @@ def test_existing_fk_bearing_confirmation_rows_survive_0010_byte_identical(tmp_p
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
 
     applied = run_migrations(db_path)
-    assert applied == [_0010_FILENAME]
+    assert applied == [_0010_FILENAME, _0011_FILENAME]
 
     with get_connection(db_path) as conn:
         conn.execute("PRAGMA foreign_keys = ON")

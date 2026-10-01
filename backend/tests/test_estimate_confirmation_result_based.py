@@ -329,3 +329,44 @@ def test_legacy_shaped_confirmation_row_reads_back_with_new_columns_null(client,
     assert item["applicable_unit"] is None
     assert item["result_status"] is None
     assert item["evidence"] == []
+    # Issue #40 Phase 6後半: 旧shapeの行は数量override snapshot列も全てNone。
+    assert item["initial_quantity"] is None
+    assert item["current_quantity"] is None
+    assert item["quantity_overridden"] is None
+    assert item["quantity_override_reason"] is None
+
+
+# --- Issue #40 Phase 6後半: 数量override(current_quantity)が確定snapshotへ反映される ---
+
+
+def test_quantity_override_is_reflected_in_confirmation_and_frozen_afterward(client, monkeypatch, tmp_path, db_path):
+    _setup_single_panel_product(client, monkeypatch, tmp_path)
+    _create_manual_detection(client)
+    evaluated = _evaluate(client)
+    result_id = evaluated["results"][0]["id"]
+
+    override_res = client.patch(
+        f"/api/products/A1GV2421/estimate-results/{result_id}/quantity",
+        json={"current_quantity": 4, "reason": "現地確認", "updated_by": "tester"},
+    )
+    assert override_res.status_code == 200
+    overridden_price = override_res.json()["price"]
+
+    confirmed = _confirm(client).json()
+    item = confirmed["items"][0]
+    assert item["current_quantity"] == 4
+    assert item["initial_quantity"] == 1
+    assert item["quantity_overridden"] is True
+    assert item["quantity_override_reason"] == "現地確認"
+    assert item["quantity"] == 4
+    assert item["amount"] == overridden_price
+
+    # 確定後に数量をさらに変更しても、過去snapshotは変化しない。
+    client.patch(
+        f"/api/products/A1GV2421/estimate-results/{result_id}/quantity",
+        json={"current_quantity": 9, "reason": "再確認"},
+    )
+    detail = client.get(f"/api/products/A1GV2421/estimate-confirmations/{confirmed['id']}").json()
+    assert detail["items"][0]["current_quantity"] == 4
+    assert detail["items"][0]["quantity"] == 4
+    assert detail["items"][0]["amount"] == overridden_price

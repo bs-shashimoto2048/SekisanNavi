@@ -132,8 +132,9 @@ def save_confirmation(
                 source_type, status, quantity, unit_price, amount,
                 bbox_x, bbox_y, bbox_w, bbox_h, page_no,
                 current_factor, factor_overridden, judgment_method,
-                applicable_unit, judgment_reason, source_rule_id, result_status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                applicable_unit, judgment_reason, source_rule_id, result_status,
+                initial_quantity, current_quantity, quantity_overridden, quantity_override_reason
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 confirmation_id,
@@ -166,6 +167,10 @@ def save_confirmation(
                 item.judgment_reason,
                 item.source_rule_id,
                 item.result_status.value if item.result_status is not None else None,
+                item.initial_quantity,
+                item.current_quantity,
+                (None if item.quantity_overridden is None else int(item.quantity_overridden)),
+                item.quantity_override_reason,
             ),
         )
         confirmation_item_id = item_cursor.lastrowid
@@ -203,6 +208,10 @@ def save_confirmation(
                 judgment_reason=item.judgment_reason,
                 source_rule_id=item.source_rule_id,
                 result_status=item.result_status,
+                initial_quantity=item.initial_quantity,
+                current_quantity=item.current_quantity,
+                quantity_overridden=item.quantity_overridden,
+                quantity_override_reason=item.quantity_override_reason,
                 evidence=saved_evidence,
             )
         )
@@ -374,6 +383,10 @@ def get_confirmation(
             judgment_reason=row["judgment_reason"],
             source_rule_id=row["source_rule_id"],
             result_status=EstimateResultStatus(row["result_status"]) if row["result_status"] else None,
+            initial_quantity=row["initial_quantity"],
+            current_quantity=row["current_quantity"],
+            quantity_overridden=(None if row["quantity_overridden"] is None else bool(row["quantity_overridden"])),
+            quantity_override_reason=row["quantity_override_reason"],
             evidence=evidence_by_item.get(row["id"], []),
         )
         for row in item_rows

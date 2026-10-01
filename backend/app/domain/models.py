@@ -424,6 +424,13 @@ class EstimateConfirmationItemInput:
     judgment_reason: str | None = None
     source_rule_id: int | None = None
     result_status: EstimateResultStatus | None = None
+    # [Issue #40 Phase 6後半新規] 数量override snapshot。旧Detectionベース・
+    # Phase 6後半以前に確定された行では全てNoneのまま保存する(既存列
+    # `quantity`の意味は変えない、新規追加のみ)。
+    initial_quantity: float | None = None
+    current_quantity: float | None = None
+    quantity_overridden: bool | None = None
+    quantity_override_reason: str | None = None
     evidence: list[EstimateConfirmationEvidenceInput] = field(default_factory=list)
 
 

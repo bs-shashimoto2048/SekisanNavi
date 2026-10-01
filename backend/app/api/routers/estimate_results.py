@@ -16,7 +16,9 @@ from app.repositories.estimate_results import (
     list_results_for_product,
     replace_results_for_product,
     reset_factor_to_initial,
+    reset_quantity_to_initial,
     set_current_factor,
+    set_current_quantity,
 )
 from app.repositories.estimate_rule_masters import get_allowed_factors
 from app.repositories.system_settings import get_data_source_root
@@ -26,6 +28,7 @@ from app.schemas.estimate_rules import (
     EstimateResultEvidenceOut,
     EstimateResultFactorOverrideIn,
     EstimateResultOut,
+    EstimateResultQuantityOverrideIn,
 )
 from app.services.data_source import DataSourceError
 from app.services.estimate_result_pipeline import build_all_candidates
@@ -155,6 +158,50 @@ def reset_estimate_result_factor(
     """「初期値へ戻す」操作 (Issue #40 7-3章)。以後の再評価では最新の
     初期係数へ再び追従するようになる。"""
     result = reset_factor_to_initial(conn, product_no=product_no, result_id=result_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="指定された積算結果が見つかりません。")
+    return _result_out(conn, result)
+
+
+@router.patch(
+    "/{product_no}/estimate-results/{result_id}/quantity",
+    response_model=EstimateResultOut,
+)
+def override_estimate_result_quantity(
+    product_no: str,
+    result_id: int,
+    body: EstimateResultQuantityOverrideIn,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> EstimateResultOut:
+    """数量の手修正 (Issue #40 Phase 6後半)。以後の再評価でもこの値を保持する
+    (`override_estimate_result_factor`と同じ考え方)。数値妥当性(0以上・
+    NaN/Infinity禁止)は`EstimateResultQuantityOverrideIn`側で検証済み。
+    """
+    result = set_current_quantity(
+        conn,
+        product_no=product_no,
+        result_id=result_id,
+        current_quantity=body.current_quantity,
+        reason=body.reason,
+        updated_by=body.updated_by,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="指定された積算結果が見つかりません。")
+    return _result_out(conn, result)
+
+
+@router.post(
+    "/{product_no}/estimate-results/{result_id}/reset-quantity",
+    response_model=EstimateResultOut,
+)
+def reset_estimate_result_quantity(
+    product_no: str,
+    result_id: int,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> EstimateResultOut:
+    """「初期値へ戻す」操作(数量、Issue #40 Phase 6後半)。以後の再評価では
+    最新の自動算定値へ再び追従するようになる。"""
+    result = reset_quantity_to_initial(conn, product_no=product_no, result_id=result_id)
     if result is None:
         raise HTTPException(status_code=404, detail="指定された積算結果が見つかりません。")
     return _result_out(conn, result)

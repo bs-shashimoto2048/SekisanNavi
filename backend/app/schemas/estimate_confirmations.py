@@ -74,6 +74,12 @@ class EstimateConfirmationItemOut(BaseModel):
     judgment_reason: str | None = None
     source_rule_id: int | None = None
     result_status: EstimateResultStatus | None = None
+    # [Issue #40 Phase 6後半新規] 数量override snapshot。Phase 6後半以前に
+    # 確定された行では全てNoneのまま返る。
+    initial_quantity: float | None = None
+    current_quantity: float | None = None
+    quantity_overridden: bool | None = None
+    quantity_override_reason: str | None = None
     evidence: list[EstimateConfirmationEvidenceOut] = []
 
 

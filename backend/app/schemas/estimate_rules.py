@@ -5,7 +5,9 @@ Phase 3/4向けの基盤として用意するのみ(`docs`にも未反映。PR/I
 """
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+import math
+
+from pydantic import BaseModel, Field, field_validator
 
 from app.domain.estimate_rules import (
     ApplicableUnit,
@@ -41,6 +43,12 @@ class EstimateResultOut(BaseModel):
     master_item_id: int | None
     code: str
     quantity: float
+    # [Issue #40 Phase 6後半] 数量override。既存の`quantity`は従来通り
+    # 「計算に使う現在の数量」のまま(常に`current_quantity`と同じ値)。
+    initial_quantity: float
+    current_quantity: float
+    quantity_overridden: bool
+    quantity_override_reason: str | None
     applicable_unit: ApplicableUnit | None
     initial_factor: float
     current_factor: float
@@ -87,3 +95,29 @@ class EstimateResultFactorOverrideIn(BaseModel):
     current_factor: float
     reason: str | None = Field(default=None)
     updated_by: str | None = Field(default=None)
+
+
+class EstimateResultQuantityOverrideIn(BaseModel):
+    """数量の手修正 (Issue #40 Phase 6後半、指示3章/4章)。
+
+    `reason`は必須とする(指示4章「理由を必須にすることで、自動値との差分が
+    後から追跡可能になる」)。係数のoverrideとは異なり、初回実装時点では
+    任意入力を許容する業務上の根拠が無いため、ここでは必須のまま実装する。
+    """
+
+    current_quantity: float
+    reason: str = Field(min_length=1)
+    updated_by: str | None = Field(default=None)
+
+    @field_validator("current_quantity")
+    @classmethod
+    def _validate_current_quantity(cls, value: float) -> float:
+        # 指示3章: 数値/0以上/NaN・Infinity禁止。`ge=0`制約だけでは
+        # NaN(NaN <比較はすべてFalseのため、下限チェックをすり抜ける)や
+        # +Infinity(0以上という条件自体は満たしてしまう)を防げないため、
+        # 明示的に検証する。
+        if math.isnan(value) or math.isinf(value):
+            raise ValueError("current_quantityにNaN/Infinityは指定できません。")
+        if value < 0:
+            raise ValueError("current_quantityは0以上である必要があります。")
+        return value
