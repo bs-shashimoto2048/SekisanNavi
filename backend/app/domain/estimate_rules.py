@@ -216,17 +216,48 @@ class StandardConditionField:
 
 @dataclass
 class StandardCondition:
-    """標準ルールの判定条件 (AND結合のみ。OR/NOTは持たない)。
+    """標準ルールの判定条件 (Issue #40 Phase 6-FでOR表現を追加)。
 
     - `required_evidence_types`: このリストの図面情報種別(key)が、
-      判定範囲(judgment_scope)内にすべて存在すること。
-    - `design_data_conditions`: 設計データ条件(すべて満たすこと)。
-    両方空の場合は「常に成立」する条件として扱う(design_dataのみで判定可能な
+      判定範囲(judgment_scope)内にすべて存在すること(AND)。
+    - `design_data_conditions`: 設計データ条件(すべて満たすこと、AND)。
+    - `design_data_any_of`: Issue #40 Phase 6-F追加。
+      「ANDグループのリスト」で、**いずれか1つのグループが丸ごと成立すれば
+      よい**(OR)。各グループ内の条件同士はAND。例えば
+      `model starts_with "IS"` **または** `model starts_with "OS"`は
+      `[[StandardConditionField("model", "starts_with", "IS")],
+        [StandardConditionField("model", "starts_with", "OS")]]`と表現する
+      (各グループが単一条件の場合は、単純なOR-of-single-conditionsになる)。
+      空リスト(既定値)は「OR制約なし」を意味し、既存の
+      `design_data_conditions`(AND)のみの挙動と完全に同じになる
+      (Phase 6-E以前のDB保存済みJSONとの後方互換性はこれで保たれる:
+      `design_data_any_of`キーが無いJSONは空リストとしてパースされる)。
+
+    全体の成立条件は
+    `required_evidence_types`(AND) かつ `design_data_conditions`(AND) かつ
+    (`design_data_any_of`が空、または、いずれか1グループがAND成立)
+    という構造(ANDの中に1段のORを許す、浅いDNF)。これ以上複雑な
+    OR/NOTの組合せは資料から必要性を確認できていないため持たせない。
+
+    **禁止事項(Issue #40 Phase 6-F指示A)**: 文字列式のeval、SQL文字列の
+    動的生成は一切行わない。条件は常にこの明示的な構造化データ
+    (dataclass/JSON)としてのみ表現する。
+
+    全てが空の場合は「常に成立」する条件として扱う(design_dataのみで判定可能な
     コードで、根拠となる図面情報が不要なケースを表現するため)。
     """
 
     required_evidence_types: list[str] = field(default_factory=list)
     design_data_conditions: list[StandardConditionField] = field(default_factory=list)
+    design_data_any_of: list[list[StandardConditionField]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        for group in self.design_data_any_of:
+            if not group:
+                raise ValueError(
+                    "design_data_any_of の各グループは1件以上の条件を持つ必要があります"
+                    "(空グループは常に成立してしまうため禁止)"
+                )
 
 
 @dataclass

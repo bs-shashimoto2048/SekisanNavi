@@ -81,8 +81,10 @@ export function designDataFieldLabel(field: string): string {
 }
 
 // 設計データ条件の比較演算子(`app.domain.estimate_rules.py::
-// StandardConditionField.operator`、`==`/`!=`/`>=`/`<=`/`>`/`<`のみ)を
-// 作業者向けの記号へ変換する。
+// StandardConditionField.operator`)を作業者向けの記号・日本語へ変換する。
+// `starts_with`/`in`(Issue #40 Phase 6-E追加)は記号で表せないため、
+// `formatDesignDataCondition`側で個別に文章化する(このmapは`==`/`!=`/
+// `>=`/`<=`/`>`/`<`の記号表示にのみ使う)。
 export const DESIGN_DATA_OPERATOR_LABELS: Record<string, string> = {
   '==': '=',
   '!=': '≠',
@@ -97,23 +99,54 @@ export function designDataOperatorLabel(operator: string): string {
 }
 
 /** 設計データ根拠1条件分(Issue #40 Phase 6-B、`design_data_ref`のJSON内
- * `conditions`配列1件分)。 */
+ * `conditions`配列1件分)。`expected_value`は`in`演算子の場合は候補値の配列
+ * になる(Issue #40 Phase 6-E)。 */
 export interface DesignDataRefCondition {
   field: string
   operator: string
-  expected_value: number | string
+  expected_value: number | string | (number | string)[]
   actual_value: number | string | null
 }
 
-/** `design_data_ref`のJSON構造(Issue #40 Phase 6-B)。`panel`は
- * `"面番号:盤番号"`形式の物理盤キー、`conditions`はこの結果の判定に
- * 実際に使われた設計データ条件のみ(`DesignDataContext`の全フィールドでは
- * ない)。Phase 6-B以前に生成された古い値は`{"panel": "..."}`のみで
- * `conditions`を持たないため、その場合は`conditions`を空配列として扱う
- * (値を推測で埋めない)。 */
+/** OR条件のグループ1件分(Issue #40 Phase 6-F `design_data_any_of`に対応)。
+ * `matched`はこのグループ(AND)が判定時点で成立していたかどうか。 */
+export interface DesignDataRefAnyOfGroup {
+  matched: boolean
+  conditions: DesignDataRefCondition[]
+}
+
+/** `design_data_ref`のJSON構造(Issue #40 Phase 6-B、Phase 6-FでOR対応)。
+ * `panel`は`"面番号:盤番号"`形式の物理盤キー、`conditions`はAND条件(この
+ * 結果の判定に実際に使われた設計データ条件のみ、`DesignDataContext`の全
+ * フィールドではない)。`any_of`はOR条件のグループ一覧で、Phase 6-F以前の
+ * 値には存在しない(その場合`undefined`。「いずれか1つ成立」というOR制約
+ * 自体が無かった、という意味であり、値を推測で埋めない)。 */
 export interface DesignDataRef {
   panel: string | null
   conditions: DesignDataRefCondition[]
+  any_of?: DesignDataRefAnyOfGroup[]
+}
+
+function parseDesignDataRefCondition(c: unknown): DesignDataRefCondition | null {
+  if (typeof c !== 'object' || c === null) return null
+  const obj = c as Record<string, unknown>
+  if (typeof obj.field !== 'string' || typeof obj.operator !== 'string') return null
+  const expected = obj.expected_value
+  const expectedValue: number | string | (number | string)[] =
+    Array.isArray(expected) || typeof expected === 'number' || typeof expected === 'string'
+      ? (expected as number | string | (number | string)[])
+      : String(expected)
+  const actual = obj.actual_value
+  const actualValue: number | string | null =
+    typeof actual === 'number' || typeof actual === 'string' ? actual : null
+  return { field: obj.field, operator: obj.operator, expected_value: expectedValue, actual_value: actualValue }
+}
+
+function parseDesignDataRefConditions(raw: unknown): DesignDataRefCondition[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map(parseDesignDataRefCondition)
+    .filter((c): c is DesignDataRefCondition => c !== null)
 }
 
 /** `design_data_ref`(JSON文字列)をパースする。不正なJSON・期待した形で
@@ -125,31 +158,50 @@ export function parseDesignDataRef(ref: string | null | undefined): DesignDataRe
     if (typeof parsed !== 'object' || parsed === null) return null
     const obj = parsed as Record<string, unknown>
     const panel = typeof obj.panel === 'string' ? obj.panel : null
-    const conditions = Array.isArray(obj.conditions)
-      ? obj.conditions
+    const conditions = parseDesignDataRefConditions(obj.conditions)
+    const anyOf = Array.isArray(obj.any_of)
+      ? obj.any_of
           .filter(
-            (c): c is DesignDataRefCondition =>
-              typeof c === 'object' &&
-              c !== null &&
-              typeof (c as Record<string, unknown>).field === 'string' &&
-              typeof (c as Record<string, unknown>).operator === 'string',
+            (g): g is Record<string, unknown> =>
+              typeof g === 'object' && g !== null && typeof (g as Record<string, unknown>).matched === 'boolean',
           )
-          .map((c) => ({
-            field: c.field,
-            operator: c.operator,
-            expected_value: c.expected_value,
-            actual_value: c.actual_value ?? null,
+          .map((g) => ({
+            matched: g.matched as boolean,
+            conditions: parseDesignDataRefConditions(g.conditions),
           }))
-      : []
-    return { panel, conditions }
+      : undefined
+    return anyOf !== undefined ? { panel, conditions, any_of: anyOf } : { panel, conditions }
   } catch {
     return null
   }
 }
 
-/** 設計データ条件1件を「幅: 1200 ≥ 900」のような作業者向けの1行へ整形する
- * (指示B-1の表示例と同じ順序: フィールド名: 実際値 演算子 期待値)。 */
+/** 設計データ条件1件を作業者向けの1行へ整形する(指示B-1の表示例と同じ
+ * 順序: フィールド名: 実際値 演算子 期待値)。`starts_with`/`in`
+ * (Issue #40 Phase 6-E追加)は記号で表せないため個別に文章化する
+ * (例: 「型式: IS2 が "IS" で始まる」「型式: IS2 が [IS1, IS2] のいずれか」)。 */
 export function formatDesignDataCondition(condition: DesignDataRefCondition): string {
   const actual = condition.actual_value ?? '不明'
-  return `${designDataFieldLabel(condition.field)}: ${actual} ${designDataOperatorLabel(condition.operator)} ${condition.expected_value}`
+  const fieldLabel = designDataFieldLabel(condition.field)
+  if (condition.operator === 'starts_with') {
+    return `${fieldLabel}: ${actual} が "${condition.expected_value}" で始まる`
+  }
+  if (condition.operator === 'in') {
+    const list = Array.isArray(condition.expected_value)
+      ? condition.expected_value.join(', ')
+      : String(condition.expected_value)
+    return `${fieldLabel}: ${actual} が [${list}] のいずれか`
+  }
+  return `${fieldLabel}: ${actual} ${designDataOperatorLabel(condition.operator)} ${condition.expected_value}`
+}
+
+/** OR条件(`design_data_any_of`)の各グループを、成立/不成立が分かる形で
+ * 作業者向けの複数行へ整形する(Issue #40 Phase 6-F指示B: 「どのOR枝が
+ * 成立したか」を後から説明可能にする)。グループ内が複数条件(AND)の場合は
+ * " かつ "で連結する。 */
+export function formatDesignDataAnyOfGroups(groups: DesignDataRefAnyOfGroup[]): string[] {
+  return groups.map((g) => {
+    const text = g.conditions.map(formatDesignDataCondition).join(' かつ ')
+    return `${g.matched ? '○' : '×'} ${text}`
+  })
 }

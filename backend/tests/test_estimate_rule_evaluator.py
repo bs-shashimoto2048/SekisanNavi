@@ -3,6 +3,7 @@
 `test_estimate_confirmation_api.py`と同じ手法(tmp_path配下に製番ディレクトリを
 模したダミー構造を用意し、データ参照ルートを差し替える)を使う。
 """
+import json
 import sqlite3
 
 from app import config
@@ -716,6 +717,83 @@ def test_evaluate_product_drawing_scope_skips_rule_combined_with_design_data_con
     assert outcome.skipped_rule_master_ids == [rule.id]
 
 
+def test_evaluate_product_drawing_scope_skips_rule_combined_with_design_data_any_of(
+    client, monkeypatch, tmp_path, db_path
+):
+    """PR #50レビュー指摘の再発防止テスト: DRAWING scope + design_data_any_of
+    (OR条件)の組合せも、design_data_conditions(AND)と同じ理由で評価せず
+    skipする。修正前はこのOR条件の有無チェックが漏れており、evidenceさえ
+    揃えばOR条件を無視して黙って成立してしまう不具合があった。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        create_evidence_type(
+            conn, key="test_drawing_any_of", display_name="test_drawing_any_of", category=None,
+            usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.DRAWING, description=None,
+        )
+        master_item_id = _first_master_item(client)["id"]
+        rule = create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.DRAWING,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_drawing_any_of"],
+                design_data_any_of=[
+                    [StandardConditionField(field="model", operator="starts_with", value="IS")]
+                ],
+            ),
+        )
+
+    d = _create_manual_detection(client, bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, d["id"], "test_drawing_any_of")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+    assert outcome.skipped_rule_master_ids == [rule.id]
+
+
+def test_evaluate_product_product_scope_skips_rule_combined_with_design_data_any_of(
+    client, monkeypatch, tmp_path, db_path
+):
+    """同上、PRODUCT scope版。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        create_evidence_type(
+            conn, key="test_product_any_of", display_name="test_product_any_of", category=None,
+            usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.PRODUCT, description=None,
+        )
+        master_item_id = _first_master_item(client)["id"]
+        rule = create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PRODUCT,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_product_any_of"],
+                design_data_any_of=[
+                    [StandardConditionField(field="model", operator="starts_with", value="IS")]
+                ],
+            ),
+        )
+
+    d = _create_manual_detection(client, bbox_x=0.1, bbox_y=0.1)
+    _set_evidence_type(db_path, d["id"], "test_product_any_of")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+    assert outcome.skipped_rule_master_ids == [rule.id]
+
+
 def test_evaluate_product_drawing_scope_skips_rule_without_required_evidence_types(
     client, monkeypatch, tmp_path, db_path
 ):
@@ -813,3 +891,216 @@ def test_evaluate_product_product_scope_per_evidence_counts_across_pages(
     assert len(outcome.candidates) == 2
     detection_ids = {c.evidence[0].detection_id for c in outcome.candidates}
     assert detection_ids == {d16["id"], d18["id"]}
+
+
+# ============================================================
+# Issue #40 Phase 6-F指示A: StandardConditionのOR表現(design_data_any_of)
+# ============================================================
+
+
+def test_evaluate_product_or_condition_matches_when_either_branch_holds(
+    client, monkeypatch, tmp_path, db_path
+):
+    """合成データのMODEL='IS2'が、OR条件(IS系 または OS系)のIS側の枝で
+    成立することを確認する(18322相当、資料どおりのOR表現)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_any_of=[
+                    [StandardConditionField(field="model", operator="starts_with", value="IS")],
+                    [StandardConditionField(field="model", operator="starts_with", value="OS")],
+                ]
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert len(outcome.candidates) == 1
+
+
+def test_evaluate_product_or_condition_matches_via_os_branch_with_synthetic_data(
+    client, monkeypatch, tmp_path, db_path
+):
+    """OS系のデータ(合成)でもOR条件のOS側の枝で成立することを確認する
+    (実データにOS系が無いため、指示通り合成データで検証する)。"""
+    product_dir = _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+    _write_cp932_csv(
+        product_dir / "estcode_df.csv",
+        _ESTCODE_DF_HEADER,
+        [_ESTCODE_ROW_1_1.replace("IS2,", "OS1,")],
+    )
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_any_of=[
+                    [StandardConditionField(field="model", operator="starts_with", value="IS")],
+                    [StandardConditionField(field="model", operator="starts_with", value="OS")],
+                ]
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert len(outcome.candidates) == 1
+
+
+def test_evaluate_product_or_condition_all_branches_fail(client, monkeypatch, tmp_path, db_path):
+    """OR条件のどちらの枝も成立しない(合成データのmodelがIS/OSどちらでもない)
+    場合、不成立になる。"""
+    product_dir = _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+    _write_cp932_csv(
+        product_dir / "estcode_df.csv",
+        _ESTCODE_DF_HEADER,
+        [_ESTCODE_ROW_1_1.replace("IS2,", "IA2,")],
+    )
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_any_of=[
+                    [StandardConditionField(field="model", operator="starts_with", value="IS")],
+                    [StandardConditionField(field="model", operator="starts_with", value="OS")],
+                ]
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+
+
+def test_evaluate_product_and_plus_or_requires_both(client, monkeypatch, tmp_path, db_path):
+    """AND条件(`ban_w>=900`)とOR条件(IS系またはOS系)を同時に満たす必要が
+    ある場合、どちらか片方だけでは不成立。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_conditions=[StandardConditionField(field="ban_w", operator=">=", value=99999)],
+                design_data_any_of=[
+                    [StandardConditionField(field="model", operator="starts_with", value="IS")],
+                    [StandardConditionField(field="model", operator="starts_with", value="OS")],
+                ],
+            ),
+        )
+        # AND条件(ban_w>=99999)が成立しないため、OR側(IS2で成立するはず)が
+        # 真でも全体としては不成立。
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+
+
+def test_evaluate_product_or_condition_with_in_operator_inside_group(
+    client, monkeypatch, tmp_path, db_path
+):
+    """OR groupの中で`in`演算子を使う組合せ。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_any_of=[
+                    [StandardConditionField(field="model", operator="in", value=["IS1", "IS2"])],
+                    [StandardConditionField(field="model", operator="in", value=["OS1", "OS2"])],
+                ]
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert len(outcome.candidates) == 1
+
+
+def test_evaluate_product_design_data_ref_includes_any_of_when_present(
+    client, monkeypatch, tmp_path, db_path
+):
+    """design_data_refのJSONに、OR各枝の成立有無・実際値が記録される
+    (Issue #40 Phase 6-F指示B: 後から「どのOR枝が成立したか」を説明可能に)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_any_of=[
+                    [StandardConditionField(field="model", operator="starts_with", value="IS")],
+                    [StandardConditionField(field="model", operator="starts_with", value="OS")],
+                ]
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert len(outcome.candidates) == 1
+    ref = json.loads(outcome.candidates[0].evidence[0].design_data_ref)
+    assert ref["conditions"] == []  # AND条件は無し
+    assert len(ref["any_of"]) == 2
+    assert ref["any_of"][0]["matched"] is True  # IS系の枝(model='IS2')
+    assert ref["any_of"][0]["conditions"][0]["actual_value"] == "IS2"
+    assert ref["any_of"][1]["matched"] is False  # OS系の枝
+
+
+def test_evaluate_product_design_data_ref_omits_any_of_key_when_no_or_condition(
+    client, monkeypatch, tmp_path, db_path
+):
+    """OR条件を使わない既存ルールのdesign_data_refは、Phase 6-B時点と全く
+    同じ形(`any_of`キー無し)のまま(後方互換の確認)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_conditions=[StandardConditionField(field="ban_w", operator=">=", value=900)]
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    ref = json.loads(outcome.candidates[0].evidence[0].design_data_ref)
+    assert "any_of" not in ref

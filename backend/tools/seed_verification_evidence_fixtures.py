@@ -162,13 +162,11 @@ EVIDENCE_TYPE_CANDIDATES = [
 #   - 18322 (盤内通路、IS/OS系) は資料が「型式がIS/OS系かどうか」で分岐すると
 #     読める。Phase 6-Dでは`StandardCondition`の比較演算子が`==`/`!=`/`>=`/
 #     `<=`/`>`/`<`のみで前方一致を表現できず、`model == "IS2"`という**デモ専用の
-#     暫定条件**にしていたが、Phase 6-Eで`starts_with`/`in`演算子を追加した
-#     ことにより、`model starts_with "IS"`という、資料によりそった表現へ
-#     置き換えた(IS系モデル全般にマッチする)。ただし`design_data_conditions`
-#     はAND結合のみでOR結合を持たないため、「IS系 **または** OS系」という
-#     資料の条件全体はまだ1つの`StandardCondition`では表現できない
-#     (OS系を含めるにはOR条件のサポートという別の評価器拡張が必要。
-#     Phase 6-Eでは対応しない、残課題として報告する)。
+#     暫定条件**にしていた。Phase 6-Eで`starts_with`/`in`演算子を追加して
+#     `model starts_with "IS"`(IS系のみ)へ改善し、Phase 6-Fで`design_data_any_of`
+#     (OR表現)を追加したことで、ようやく資料どおりの
+#     「`model starts_with "IS"` **または** `model starts_with "OS"`」を
+#     1つの`StandardCondition`で正確に表現できるようになった。
 #   - 19959/19961等の製番単位倍率コード(`calc_type=multiply_price`、
 #     `quantity_method=per_product`)は評価器が未実装のため、今回の代表検証
 #     ケースには含めない(資料根拠はあるが、評価器側の対応が先。Phase 2
@@ -251,18 +249,23 @@ RULE_MASTER_CANDIDATES = [
         applicable_unit=ApplicableUnit.LOCATION,
         quantity_method=QuantityMethod.PER_CONDITION_GROUP,
         condition=StandardCondition(
-            design_data_conditions=[StandardConditionField(field="model", operator="starts_with", value="IS")]
+            design_data_any_of=[
+                [StandardConditionField(field="model", operator="starts_with", value="IS")],
+                [StandardConditionField(field="model", operator="starts_with", value="OS")],
+            ]
         ),
-        reason_template="盤 {panel}: 設計データ(型式がIS系)により18322(盤内通路IS/OS系)が成立候補",
+        reason_template="盤 {panel}: 設計データ(型式がIS系またはOS系)により18322(盤内通路IS/OS系)が成立候補",
         note=(
             f"{CANDIDATE_MARKER} 根拠: 積算コードPDF『18321-322盤内通路.pdf』"
             "(「18321=IA,OA」「18322=IS,OS」)。設計データのみ判定(カテゴリD)の"
-            "代表例。Phase 6-Eで追加した`starts_with`演算子により"
-            "`model starts_with \"IS\"`という前方一致条件で表現している"
-            "(Phase 6-D時点の`model == \"IS2\"`固定値一致から置き換え済み)。"
-            "ただしOS系は別条件(OR)が必要なため未対応のまま(AND結合のみの"
-            "制約、Phase 6-E報告の残課題)。盤内通路スペース自体の有無を"
-            "型式だけで断定してよいかも資料からは確認できず要確認。"
+            "代表例。Phase 6-Fで追加した`design_data_any_of`(OR表現)により、"
+            "`model starts_with \"IS\"` **または** `model starts_with \"OS\"`"
+            "という、資料どおりの条件を1つの`StandardCondition`で表現している"
+            "(実データA1GV2421はIS系のみのためIS側の枝で成立。OS系の枝は"
+            "合成データでのみ検証済み、Issue #40 Phase 6-F報告参照)。"
+            "`judgment_method=needs_confirmation`のまま: 盤内通路スペース自体の"
+            "有無を型式だけで断定してよいかは資料からは確認できず、本番投入前に"
+            "業務確認が必要(本候補は検証用のまま、本番マスタへは投入しない)。"
         ),
     ),
 ]

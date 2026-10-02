@@ -8,7 +8,11 @@ Phase 6-Dで18322(盤内通路IS/OS系)の検証条件が`model == "IS2"`とい�
 """
 import pytest
 
-from app.domain.estimate_rules import STANDARD_CONDITION_OPERATORS, StandardConditionField
+from app.domain.estimate_rules import (
+    STANDARD_CONDITION_OPERATORS,
+    StandardCondition,
+    StandardConditionField,
+)
 
 
 def test_standard_condition_operators_includes_new_and_existing_ones():
@@ -59,3 +63,42 @@ def test_existing_operators_still_accept_numeric_and_string_values():
     # 既存の==/!=/>=/<=/>/<は従来通りfloat/strどちらも許可する(回帰確認)。
     StandardConditionField(field="ban_w", operator=">=", value=900)
     StandardConditionField(field="model", operator="==", value="IS2")
+
+
+# ============================================================
+# Issue #40 Phase 6-F指示A: StandardCondition.design_data_any_of (OR表現)
+# ============================================================
+
+
+def test_standard_condition_default_any_of_is_empty_list():
+    condition = StandardCondition()
+    assert condition.design_data_any_of == []
+
+
+def test_standard_condition_accepts_or_groups():
+    condition = StandardCondition(
+        design_data_any_of=[
+            [StandardConditionField(field="model", operator="starts_with", value="IS")],
+            [StandardConditionField(field="model", operator="starts_with", value="OS")],
+        ]
+    )
+    assert len(condition.design_data_any_of) == 2
+
+
+def test_standard_condition_rejects_empty_or_group():
+    """空のANDグループは常に成立してしまう(`all([])`がTrueになるため)ので
+    明示的に禁止する。"""
+    with pytest.raises(ValueError):
+        StandardCondition(design_data_any_of=[[]])
+
+
+def test_standard_condition_allows_multi_condition_and_group_inside_or():
+    condition = StandardCondition(
+        design_data_any_of=[
+            [
+                StandardConditionField(field="model", operator="starts_with", value="IS"),
+                StandardConditionField(field="ban_w", operator=">=", value=900),
+            ],
+        ]
+    )
+    assert len(condition.design_data_any_of[0]) == 2
