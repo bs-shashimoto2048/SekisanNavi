@@ -10,7 +10,9 @@ support判定を共通化する単一の真実源)。
 """
 from app.domain.estimate_rules import (
     CalcType,
+    EvidenceRelation,
     JudgmentScope,
+    MatchMode,
     QuantityMethod,
     StandardCondition,
     StandardConditionField,
@@ -183,3 +185,154 @@ def test_shape_failure_takes_priority_over_calc_type_in_reason():
     )
     assert result.supported is False
     assert "required_evidence_types" in result.reason
+
+
+# ============================================================
+# Issue #40 Phase 6-G指示2/3: evidence_relations(位置関係条件)のsupport判定
+# ============================================================
+
+
+def test_panel_scope_with_evidence_relations_is_supported():
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.PANEL,
+        quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(
+            required_evidence_types=["ch", "vct"],
+            evidence_relations=[EvidenceRelation(left_type="ch", relation="above", right_type="vct")],
+        ),
+    )
+    assert result.supported is True
+
+
+def test_design_data_scope_with_evidence_relations_is_not_supported():
+    """evidence_relationsはPANEL scopeのみ対応(指示2「PANEL scopeから
+    開始してよい」)。"""
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.DESIGN_DATA,
+        quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(
+            evidence_relations=[EvidenceRelation(left_type="ch", relation="above", right_type="vct")],
+        ),
+    )
+    assert result.supported is False
+    assert "evidence_relations" in result.reason
+
+
+def test_drawing_scope_with_evidence_relations_is_not_supported():
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.DRAWING,
+        quantity_method=QuantityMethod.PER_EVIDENCE,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(
+            required_evidence_types=["ch"],
+            evidence_relations=[EvidenceRelation(left_type="ch", relation="above", right_type="vct")],
+        ),
+    )
+    assert result.supported is False
+    assert "evidence_relations" in result.reason
+
+
+def test_unsupported_match_mode_is_rejected_even_on_panel_scope():
+    for mode in (MatchMode.EVERY_PAIR, MatchMode.ONE_TO_ONE, MatchMode.NEAREST_PAIR):
+        result = is_standard_rule_supported(
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            calc_type=CalcType.DIRECT,
+            condition=_condition(
+                required_evidence_types=["ch", "vct"],
+                evidence_relations=[EvidenceRelation(left_type="ch", relation="above", right_type="vct")],
+                match_mode=mode,
+            ),
+        )
+        assert result.supported is False, mode
+        assert "match_mode" in result.reason
+
+
+def test_any_pair_match_mode_is_supported_on_panel_scope():
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.PANEL,
+        quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(
+            required_evidence_types=["ch", "vct"],
+            evidence_relations=[EvidenceRelation(left_type="ch", relation="above", right_type="vct")],
+            match_mode=MatchMode.ANY_PAIR,
+        ),
+    )
+    assert result.supported is True
+
+
+# ============================================================
+# Issue #40 PR #51レビュー指摘: overlaps + tolerance!=0 のsilent ignore防止
+# ============================================================
+
+
+def test_overlaps_with_zero_tolerance_is_supported():
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.PANEL,
+        quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(
+            required_evidence_types=["ch", "vct"],
+            evidence_relations=[
+                EvidenceRelation(left_type="ch", relation="overlaps", right_type="vct", tolerance=0.0)
+            ],
+        ),
+    )
+    assert result.supported is True
+
+
+def test_overlaps_with_nonzero_tolerance_is_not_supported():
+    """`app.domain.geometry.overlaps`はtolerance引数を受け取らないため、
+    指定したtoleranceが評価時にsilent ignoreされる状態を避ける
+    (Issue #40 PR #51レビュー指摘)。"""
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.PANEL,
+        quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(
+            required_evidence_types=["ch", "vct"],
+            evidence_relations=[
+                EvidenceRelation(left_type="ch", relation="overlaps", right_type="vct", tolerance=0.1)
+            ],
+        ),
+    )
+    assert result.supported is False
+    assert "overlaps" in result.reason
+    assert "tolerance" in result.reason
+
+
+def test_overlaps_with_negative_nonzero_tolerance_is_not_supported():
+    result = is_standard_rule_supported(
+        judgment_scope=JudgmentScope.PANEL,
+        quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+        calc_type=CalcType.DIRECT,
+        condition=_condition(
+            required_evidence_types=["ch", "vct"],
+            evidence_relations=[
+                EvidenceRelation(left_type="ch", relation="overlaps", right_type="vct", tolerance=-0.1)
+            ],
+        ),
+    )
+    assert result.supported is False
+    assert "overlaps" in result.reason
+
+
+def test_above_below_left_right_with_nonzero_tolerance_remain_supported():
+    """overlaps以外のrelationは従来通りtolerance!=0でもサポート対象のまま
+    (Issue #40 PR #51レビュー指摘による制約はoverlapsのみ)。"""
+    for relation in ("above", "below", "left_of", "right_of"):
+        result = is_standard_rule_supported(
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            calc_type=CalcType.DIRECT,
+            condition=_condition(
+                required_evidence_types=["ch", "vct"],
+                evidence_relations=[
+                    EvidenceRelation(left_type="ch", relation=relation, right_type="vct", tolerance=0.1)
+                ],
+            ),
+        )
+        assert result.supported is True, relation

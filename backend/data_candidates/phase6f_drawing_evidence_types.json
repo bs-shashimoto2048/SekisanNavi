@@ -1,11 +1,16 @@
 {
-  "schema_version": 1,
-  "generated_by": "Issue #40 Phase 6-D/6-F",
-  "note": "これは本番seedではない。backend/db/seed.py・master_importer.py等から自動ロードされない、レビュー用の候補マニフェストである。本番投入可否の最終判断はPhase 6-F報告(Issue #40)の本番投入判定表、および業務側確認を経て別途行う。実データの価格・工数等の実数値はここに一切含めない。",
+  "schema_version": 2,
+  "generated_by": "Issue #40 Phase 6-D/6-F/6-G",
+  "note": "これは本番seedではない。backend/db/seed.py・master_importer.py等から自動ロードされない、レビュー用の候補マニフェストである。本番投入可否の最終判断はPhase 6-F/6-G報告(Issue #40)の本番投入判定表、および業務側確認を経て別途行う。実データの価格・工数等の実数値はここに一切含めない。schema_version 2(Phase 6-G)でtechnical_blockers/business_blockers/data_source_blockersを追加した(既存のstatus/blockerは後方互換のため維持)。",
   "status_definitions": {
     "ready": "資料の成立条件を技術的に完全表現でき、評価器(app/services/estimate_rule_evaluator.py)が対応する範囲(judgment_scope/quantity_method/calc_type)のみで、業務的な簡略化・未確認事項が無い",
     "needs_business_confirmation": "技術的には動作するが、資料の条件の一部を簡略化している、複数解釈がある、またはAI class統合方法等の業務判断が必要",
     "blocked": "対応コードの確定・必要な判定ロジック・データソースのいずれかが欠けており、現時点では実装・投入ができない"
+  },
+  "blocker_category_definitions": {
+    "technical_blockers": "評価器(estimate_rule_evaluator.py)側の実装・表現力が不足しているもの(Phase 6-Gでは技術実装のみで解消可能なものを対象に取り組んだ)",
+    "business_blockers": "資料だけでは断定できない、業務側の確認・判断が必要なもの(推測で実装・投入しない)",
+    "data_source_blockers": "現行のdata_source_root配下に無い外部データ・ファイル・対応表が必要なもの"
   },
   "candidates": [
     {
@@ -23,7 +28,12 @@
       ],
       "status": "needs_business_confirmation",
       "blocker": "18302は箱コード標準含有枚数との差分(超過分のみ加算)が本来の条件だが、現行の検証用fixtureは単純な存在判定のみで過大計上の可能性がある。18330の「箱体OS左右盤の場合は標準含有のため計上しない」除外条件も未実装。",
-      "notes": "Phase 6-D/6-E/6-Fで動作確認済み(検証用DBコピー上)。衝突検出(既存Manual BBoxとの新旧重複)も確認済み。"
+      "technical_blockers": [],
+      "business_blockers": [
+        "標準含有枚数(差分算出のベースライン)の実体が『Ａ製品標準工数計算手順NNメモ追加.xlsx』の『箱体コードに含む』シートにあるが、記載は正面/側面/正面両開等の構成ラベルのみで、積算可能な数値カウントではない。『正面両開=2枚』等への変換規則が未確定のため、QuantityMethod.DIFF_FROM_STANDARDを推測実装しない(Phase 6-G指示7調査)"
+      ],
+      "data_source_blockers": [],
+      "notes": "Phase 6-D/6-E/6-F/6-Gで動作確認済み(検証用DBコピー上)。衝突検出(既存Manual BBoxとの新旧重複)も確認済み。"
     },
     {
       "key": "narrow_door",
@@ -38,7 +48,12 @@
         "積算コードPDF『18303両開扉.pdf』(「W=1100以下の箱コードには正面扉1枚しか含まれていない」と記載があるが、narrow_doorクラスへの明示的な対応付けは無い)"
       ],
       "status": "blocked",
-      "blocker": "narrow_door(AI class)と18303(両開扉)の対応は推定であり、資料上に明示的な対応付けが無い。コードマッピング自体が未確定。"
+      "blocker": "narrow_door(AI class)と18303(両開扉)の対応は推定であり、資料上に明示的な対応付けが無い。コードマッピング自体が未確定。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "narrow_doorクラスと18303の対応関係自体が資料から確定できない(コードマッピングの確認が必要)"
+      ],
+      "data_source_blockers": []
     },
     {
       "key": "small_door",
@@ -54,7 +69,12 @@
         "積算コードPDF『18306小扉(屋外操作用).pdf』"
       ],
       "status": "blocked",
-      "blocker": "18305(屋内)/18306(屋外)のどちらに対応するかを、資料(両PDFとも成立条件テキスト無し)からは判別できない。"
+      "blocker": "18305(屋内)/18306(屋外)のどちらに対応するかを、資料(両PDFとも成立条件テキスト無し)からは判別できない。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "屋内(18305)/屋外(18306)のどちらに対応するか資料から判別不可"
+      ],
+      "data_source_blockers": []
     },
     {
       "key": "stack_doors",
@@ -69,7 +89,12 @@
         "積算コードPDF『18307扉上下２段.pdf』『18329扉上下３段.pdf』(2doors/3doorsクラスへの明示的な対応付けは無い)"
       ],
       "status": "blocked",
-      "blocker": "2doors/3doors(AI class)と18307/18329の対応は推定であり、資料上に明示的な対応付けが無い。"
+      "blocker": "2doors/3doors(AI class)と18307/18329の対応は推定であり、資料上に明示的な対応付けが無い。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "2doors/3doorsと18307/18329の対応関係自体が資料から確定できない"
+      ],
+      "data_source_blockers": []
     },
     {
       "key": "roof_fan_top",
@@ -85,7 +110,12 @@
       ],
       "status": "needs_business_confirmation",
       "blocker": "roof_fan/roof_fan_l/roof_fan_rの3クラス(正面/左側面/右側面から見た同一の換気扇)をどう1つの図面情報へ統合するか未確定。統合せず3クラスを独立に数えると、1台の換気扇を複数回カウントする可能性がある。",
-      "notes": "Phase 6-D/6-E/6-Fでは`roof_fan`クラスのみを対象にした簡略版で動作確認済み(検証用DBコピー上、同種BBox複数→数量複数、衝突検出も確認)。"
+      "technical_blockers": [],
+      "business_blockers": [
+        "roof_fan/roof_fan_l/roof_fan_rを1図面情報へ統合してよいかの業務判断が必要(alias mapping基盤はPhase 6-Gで技術的に用意したが、適用可否は未確認)"
+      ],
+      "data_source_blockers": [],
+      "notes": "Phase 6-D/6-E/6-Fでは`roof_fan`クラスのみを対象にした簡略版で動作確認済み(検証用DBコピー上、同種BBox複数→数量複数、衝突検出も確認)。Phase 6-Gで`backend/tools/ai_class_alias.py`(pure mapping utility)を追加し、3class→1evidence_typeのalias解決自体は技術的に可能なことを確認した(本番運用への適用はまだしない)。"
     },
     {
       "key": "door_fan",
@@ -100,7 +130,12 @@
         "積算コードPDF『18312換気扇側面取付.pdf』(door_fanクラスへの明示的な対応付けは無い)"
       ],
       "status": "blocked",
-      "blocker": "door_fan(AI class、扉取付の換気扇)と18312(側面取付)の対応は名称が一致せず、資料上の明示的な対応付けが無い。"
+      "blocker": "door_fan(AI class、扉取付の換気扇)と18312(側面取付)の対応は名称が一致せず、資料上の明示的な対応付けが無い。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "door_fanと18312の対応関係自体が資料から確定できない"
+      ],
+      "data_source_blockers": []
     },
     {
       "key": "vct",
@@ -115,7 +150,17 @@
         "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: vct_stand「種類多めに。但し取得条件きついのでザックリでいい」)"
       ],
       "status": "blocked",
-      "blocker": "18323の成立条件(CHがVCTの上にあれば成立)に必要な位置関係判定(JudgmentScope.POSITION)が評価器に未実装(Phase 6-E/6-Fで幾何predicate `app/domain/geometry.py` は用意したが実ルールへは未接続)。"
+      "blocker": "18323の成立条件(CHがVCTの上にあれば成立)に必要な位置関係の表現自体はPhase 6-Gで技術的に実装したが、発注者区分データが無く、盤内外判定も未実装のため、18323全体としてはまだ投入できない。",
+      "technical_blockers": [
+        "『盤内/盤外』判定がabove/below関係とは別の幾何概念であり、汎用position engine(Phase 6-G)ではまだ表現方法を定義していない"
+      ],
+      "business_blockers": [
+        "上下関係(above/below)自体は資料に明記されているが、発注者区分・盤内外条件を含めた全体の優先順位・組合せルールの最終確認が必要"
+      ],
+      "data_source_blockers": [
+        "発注者区分(東電のみ等)を設計データとして参照する手段が無く、データの所在も未確認"
+      ],
+      "notes": "Phase 6-Gで`app.domain.estimate_rules.EvidenceRelation`/`app.services.estimate_rule_evaluator`のposition condition基盤(above/below/left_of/right_of/overlaps、PANEL scope限定)を実装・テスト済み。CH/VCTの上下関係自体は技術的に表現・評価可能になったが、18323の全条件(発注者区分・盤内外判定含む)の完全表現には至っていない。"
     },
     {
       "key": "ch",
@@ -129,7 +174,16 @@
         "積算コードPDF『18323VCT架台.pdf』"
       ],
       "status": "blocked",
-      "blocker": "対応する既存AI検出classが資料(AI対応リストExcel)から特定できない。加えて18323同様、position scope未実装のため成立条件を正しく表現できない。"
+      "blocker": "対応する既存AI検出classが資料(AI対応リストExcel)から特定できない。18323全体が未完成(vct候補のnotes参照)。",
+      "technical_blockers": [
+        "vct候補と同じ(盤内外判定の表現方法が未定義)"
+      ],
+      "business_blockers": [
+        "対応する既存AI検出classが資料から特定できない"
+      ],
+      "data_source_blockers": [
+        "発注者区分データの所在未確認(vct候補と同じ)"
+      ]
     },
     {
       "key": "transformer",
@@ -144,7 +198,12 @@
         "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「トランス」)"
       ],
       "status": "blocked",
-      "blocker": "18313/18314の使い分け基準が資料から読み取れない(赤枠は「18313,14」併記のみ)。特定メーカー向け個別仕様図が混在しており一般化にも注意が必要。"
+      "blocker": "18313/18314の使い分け基準が資料から読み取れない(赤枠は「18313,14」併記のみ)。特定メーカー向け個別仕様図が混在しており一般化にも注意が必要。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "18313/18314の使い分け基準が資料から読み取れない"
+      ],
+      "data_source_blockers": []
     },
     {
       "key": "panel_internal",
@@ -159,7 +218,12 @@
         "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「内部パネル」備考「ここでいうパネルは操作+MCCB」)"
       ],
       "status": "blocked",
-      "blocker": "18001〜18016の16コードを1枚のPDFにまとめているが、個々のコードの判定基準が資料から読み取れない。"
+      "blocker": "18001〜18016の16コードを1枚のPDFにまとめているが、個々のコードの判定基準が資料から読み取れない。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "18001〜18016個々の判定基準が資料から読み取れない"
+      ],
+      "data_source_blockers": []
     },
     {
       "key": "rotate_panel",
@@ -174,7 +238,12 @@
         "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「回転パネル」)"
       ],
       "status": "blocked",
-      "blocker": "「回転」という動作機構は静止図面だけでは判別が困難と資料調査で判明している。"
+      "blocker": "「回転」という動作機構は静止図面だけでは判別が困難と資料調査で判明している。",
+      "technical_blockers": [
+        "静止図面から「回転」機構を判別するロジック自体が無い(AIモデルの再学習が前提になりうる)"
+      ],
+      "business_blockers": [],
+      "data_source_blockers": []
     },
     {
       "key": "partition",
@@ -189,7 +258,15 @@
         "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「仕切り板記号」)"
       ],
       "status": "blocked",
-      "blocker": "18201-214PDFのファイル名範囲(〜214)と実際の記載内容(1条件のみ)が一致しておらず、抜粋資料の可能性がある。2段/3段の判別規則も解釈の域を出ない。"
+      "blocker": "18201-214PDFのファイル名範囲(〜214)と実際の記載内容(1条件のみ)が一致しておらず、抜粋資料の可能性がある。2段/3段の判別規則も解釈の域を出ない。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "18201-214の実際の条件範囲が資料から確定できない",
+        "2段/3段の判別規則が解釈の域を出ない"
+      ],
+      "data_source_blockers": [
+        "18201-214の完全な条件一覧資料が見当たらない(抜粋の可能性)"
+      ]
     },
     {
       "key": "stack_plate",
@@ -203,7 +280,12 @@
         "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「段積み板」備考「前後レール含む」)"
       ],
       "status": "blocked",
-      "blocker": "18308/18309との対応は推定であり、資料上に明示的な対応付けが無い。"
+      "blocker": "18308/18309との対応は推定であり、資料上に明示的な対応付けが無い。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "stack_plateと18308/18309の対応関係自体が資料から確定できない"
+      ],
+      "data_source_blockers": []
     },
     {
       "key": "drawer_device",
@@ -218,7 +300,14 @@
         "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「引出装置」備考「対象機器全て用意するIA/OA型(VCB･VT・LA・ZPC)」)"
       ],
       "status": "needs_business_confirmation",
-      "blocker": "箱体型式がIA/OAかどうかという設計データ条件との組合せ(evidence+design_data AND)はPhase 6-Eで技術的には表現可能になったが、IA/OA製品のMODEL列の実際の文字列パターンが実データで未確認(A1GV2421はIS系のみ確認済み)。"
+      "blocker": "箱体型式がIA/OAかどうかという設計データ条件との組合せ(evidence+design_data AND)はPhase 6-Eで技術的には表現可能になったが、IA/OA製品のMODEL列の実際の文字列パターンが実データで未確認(A1GV2421はIS系のみ確認済み)。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "「1台につき1コード選択」という数量算定ルールの詳細確認が必要"
+      ],
+      "data_source_blockers": [
+        "IA/OA製品のMODEL列の実際の文字列パターンが実データで未確認(確認済みはIS2のみ。Phase 6-Gで18321の技術検証は合成データで実施、実データでの確認はまだ)"
+      ]
     },
     {
       "key": "bus_duct",
@@ -233,7 +322,12 @@
         "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「バスダクト」備考「未知のため種類多く用意する」)"
       ],
       "status": "blocked",
-      "blocker": "成立条件の積極的な記載が資料に無く、非該当(×)例しか確認できていない。"
+      "blocker": "成立条件の積極的な記載が資料に無く、非該当(×)例しか確認できていない。",
+      "technical_blockers": [],
+      "business_blockers": [],
+      "data_source_blockers": [
+        "肯定例(成立条件)を示す資料が見当たらない"
+      ]
     },
     {
       "key": "passage",
@@ -248,7 +342,15 @@
         "AI対応リストExcel(20250707_A製品自動化検討_対応仕分け.xlsx, AI対応リストシート: 検出対象「盤内通路」)"
       ],
       "status": "needs_business_confirmation",
-      "blocker": "型式(IS/OS系かIA/OA系か)のみで盤内通路スペースの有無・コード要否を断定してよいかが資料からは確認できない(資料内に「×」の非該当例も複数ある)。18322側はPhase 6-FでOR条件(IS*またはOS*)により技術的には表現可能になったが、この業務判断が未確認のため投入しない。"
+      "blocker": "型式(IS/OS系かIA/OA系か)のみで盤内通路スペースの有無・コード要否を断定してよいかが資料からは確認できない(資料内に「×」の非該当例も複数ある)。18322(IS/OS系)・18321(IA/OA系)いずれもPhase 6-F/6-GでOR条件により技術的には表現可能・検証済みになったが、この業務判断が未確認のため投入しない。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "型式だけで盤内通路スペースの有無・コード要否を断定してよいか(資料内の「×」非該当例との整合)"
+      ],
+      "data_source_blockers": [
+        "IA/OA系の実データサンプルが無く、18321側のMODEL文字列パターンは合成データでのみ確認"
+      ],
+      "notes": "Phase 6-Fで18322(IS/OS系)、Phase 6-Gで18321(IA/OA系、合成データ)のOR表現を技術検証済み(docs/master-candidate-status.md参照)。"
     }
   ]
 }

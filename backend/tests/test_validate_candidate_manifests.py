@@ -24,6 +24,9 @@ def _evidence(**overrides) -> dict:
         source_refs=["積算コードPDF『18302側面扉（追加）.pdf』"],
         status="needs_business_confirmation",
         blocker="標準含有枚数との差分算出が未実装",
+        technical_blockers=[],
+        business_blockers=["標準含有枚数との差分算出が未実装"],
+        data_source_blockers=[],
     )
     base.update(overrides)
     return base
@@ -49,6 +52,9 @@ def _rule(**overrides) -> dict:
         source_refs=["積算コードPDF『18302側面扉（追加）.pdf』"],
         status="needs_business_confirmation",
         blocker="標準含有枚数との差分算出が未実装",
+        technical_blockers=[],
+        business_blockers=["標準含有枚数との差分算出が未実装"],
+        data_source_blockers=[],
     )
     base.update(overrides)
     return base
@@ -210,12 +216,13 @@ def test_ready_rule_fully_supported_passes():
     """評価器が対応する組合せ(panel scope/per_evidence/direct)で、資料根拠
     source_refsもあるready候補は問題なく通る(readyを不当に拒否しない)。"""
     issues = validate_manifests(
-        {"candidates": [_evidence(status="ready", blocker=None, judgment_scope="panel")]},
+        {"candidates": [_evidence(status="ready", blocker=None, business_blockers=[], judgment_scope="panel")]},
         {
             "candidates": [
                 _rule(
                     status="ready",
                     blocker=None,
+                    business_blockers=[],
                     judgment_scope="panel",
                     quantity_method="per_evidence",
                     calc_type="direct",
@@ -338,12 +345,13 @@ def test_ready_drawing_scope_evidence_only_per_evidence_is_accepted():
     per_evidence + directは、評価器が実際に対応している形状なのでreadyとして
     通る。"""
     issues = validate_manifests(
-        {"candidates": [_evidence(status="ready", blocker=None, judgment_scope="drawing")]},
+        {"candidates": [_evidence(status="ready", blocker=None, business_blockers=[], judgment_scope="drawing")]},
         {
             "candidates": [
                 _rule(
                     status="ready",
                     blocker=None,
+                    business_blockers=[],
                     judgment_scope="drawing",
                     quantity_method="per_evidence",
                     calc_type="direct",
@@ -362,12 +370,13 @@ def test_ready_drawing_scope_evidence_only_per_evidence_is_accepted():
 def test_ready_product_scope_evidence_only_per_condition_group_is_accepted():
     """項目6: PRODUCT scope + per_condition_group版。"""
     issues = validate_manifests(
-        {"candidates": [_evidence(status="ready", blocker=None, judgment_scope="product")]},
+        {"candidates": [_evidence(status="ready", blocker=None, business_blockers=[], judgment_scope="product")]},
         {
             "candidates": [
                 _rule(
                     status="ready",
                     blocker=None,
+                    business_blockers=[],
                     judgment_scope="product",
                     quantity_method="per_condition_group",
                     calc_type="direct",
@@ -429,3 +438,311 @@ def test_condition_as_int_does_not_crash_and_is_rejected():
         {"candidates": [_rule(condition=123)]},
     )
     assert any("conditionのschema" in str(i) for i in issues)
+
+
+# ============================================================
+# Issue #40 Phase 6-G指示4: 候補マニフェストvalidatorのposition condition対応
+# ============================================================
+
+
+def test_evidence_relations_with_unknown_relation_is_rejected_without_crash():
+    issues = validate_manifests(
+        {"candidates": [_evidence(key="ch"), _evidence(key="vct")]},
+        {
+            "candidates": [
+                _rule(
+                    evidence_type_keys=["ch", "vct"],
+                    condition={
+                        "required_evidence_types": ["ch", "vct"],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [],
+                        "evidence_relations": [
+                            {"left_type": "ch", "relation": "diagonally_adjacent_to", "right_type": "vct"}
+                        ],
+                    },
+                )
+            ]
+        },
+    )
+    assert any("conditionのschema" in str(i) for i in issues)
+
+
+def test_evidence_relations_referencing_unknown_evidence_key_is_rejected():
+    issues = validate_manifests(
+        {"candidates": [_evidence(key="ch")]},
+        {
+            "candidates": [
+                _rule(
+                    evidence_type_keys=["ch"],
+                    condition={
+                        "required_evidence_types": ["ch"],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [],
+                        "evidence_relations": [
+                            {"left_type": "ch", "relation": "above", "right_type": "nonexistent_vct"}
+                        ],
+                    },
+                )
+            ]
+        },
+    )
+    assert any("nonexistent_vct" in str(i) for i in issues)
+
+
+def test_evidence_relations_with_non_numeric_tolerance_is_rejected_without_crash():
+    issues = validate_manifests(
+        {"candidates": [_evidence(key="ch"), _evidence(key="vct")]},
+        {
+            "candidates": [
+                _rule(
+                    evidence_type_keys=["ch", "vct"],
+                    condition={
+                        "required_evidence_types": ["ch", "vct"],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [],
+                        "evidence_relations": [
+                            {"left_type": "ch", "relation": "above", "right_type": "vct", "tolerance": "big"}
+                        ],
+                    },
+                )
+            ]
+        },
+    )
+    assert any("conditionのschema" in str(i) for i in issues)
+
+
+def test_ready_panel_scope_with_evidence_relations_any_pair_is_accepted():
+    issues = validate_manifests(
+        {
+            "candidates": [
+                _evidence(key="ch", status="ready", blocker=None, business_blockers=[]),
+                _evidence(key="vct", status="ready", blocker=None, business_blockers=[]),
+            ]
+        },
+        {
+            "candidates": [
+                _rule(
+                    status="ready",
+                    blocker=None,
+                    business_blockers=[],
+                    judgment_scope="panel",
+                    quantity_method="per_condition_group",
+                    calc_type="direct",
+                    evidence_type_keys=["ch", "vct"],
+                    condition={
+                        "required_evidence_types": ["ch", "vct"],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [],
+                        "evidence_relations": [{"left_type": "ch", "relation": "above", "right_type": "vct"}],
+                    },
+                )
+            ]
+        },
+    )
+    assert issues == []
+
+
+def test_ready_with_unsupported_match_mode_is_rejected():
+    """readyなのに未実装match_mode(any_pair以外)を使用 → NG(指示4)。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence(key="ch", status="ready", blocker=None), _evidence(key="vct", status="ready", blocker=None)]},
+        {
+            "candidates": [
+                _rule(
+                    status="ready",
+                    blocker=None,
+                    judgment_scope="panel",
+                    quantity_method="per_condition_group",
+                    calc_type="direct",
+                    evidence_type_keys=["ch", "vct"],
+                    condition={
+                        "required_evidence_types": ["ch", "vct"],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [],
+                        "evidence_relations": [{"left_type": "ch", "relation": "above", "right_type": "vct"}],
+                        "match_mode": "every_pair",
+                    },
+                )
+            ]
+        },
+    )
+    assert any("match_mode" in str(i) and "every_pair" in str(i) for i in issues)
+
+
+def test_ready_design_data_scope_with_evidence_relations_is_rejected():
+    """readyなのにDESIGN_DATA scope + evidence_relations(PANEL scope限定)
+    を使用 → NG(指示4)。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence(key="ch", status="ready", blocker=None), _evidence(key="vct", status="ready", blocker=None)]},
+        {
+            "candidates": [
+                _rule(
+                    status="ready",
+                    blocker=None,
+                    judgment_scope="design_data",
+                    quantity_method="per_condition_group",
+                    calc_type="direct",
+                    evidence_type_keys=["ch", "vct"],
+                    condition={
+                        "required_evidence_types": [],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [],
+                        "evidence_relations": [{"left_type": "ch", "relation": "above", "right_type": "vct"}],
+                    },
+                )
+            ]
+        },
+    )
+    assert any("evidence_relations" in str(i) for i in issues)
+
+
+# ============================================================
+# Issue #40 PR #51レビュー指摘: overlaps + tolerance!=0 のsilent ignore防止
+# ============================================================
+
+
+def test_ready_overlaps_with_zero_tolerance_is_accepted():
+    issues = validate_manifests(
+        {
+            "candidates": [
+                _evidence(key="ch", status="ready", blocker=None, business_blockers=[]),
+                _evidence(key="vct", status="ready", blocker=None, business_blockers=[]),
+            ]
+        },
+        {
+            "candidates": [
+                _rule(
+                    status="ready",
+                    blocker=None,
+                    business_blockers=[],
+                    judgment_scope="panel",
+                    quantity_method="per_condition_group",
+                    calc_type="direct",
+                    evidence_type_keys=["ch", "vct"],
+                    condition={
+                        "required_evidence_types": ["ch", "vct"],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [],
+                        "evidence_relations": [
+                            {"left_type": "ch", "relation": "overlaps", "right_type": "vct", "tolerance": 0.0}
+                        ],
+                    },
+                )
+            ]
+        },
+    )
+    assert issues == []
+
+
+def test_ready_overlaps_with_nonzero_tolerance_is_rejected():
+    """readyなのに`relation=overlaps`かつ`tolerance!=0`(評価時にsilent
+    ignoreされてしまう組合せ) → NG(Issue #40 PR #51レビュー指摘)。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence(key="ch", status="ready", blocker=None), _evidence(key="vct", status="ready", blocker=None)]},
+        {
+            "candidates": [
+                _rule(
+                    status="ready",
+                    blocker=None,
+                    judgment_scope="panel",
+                    quantity_method="per_condition_group",
+                    calc_type="direct",
+                    evidence_type_keys=["ch", "vct"],
+                    condition={
+                        "required_evidence_types": ["ch", "vct"],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [],
+                        "evidence_relations": [
+                            {"left_type": "ch", "relation": "overlaps", "right_type": "vct", "tolerance": 0.1}
+                        ],
+                    },
+                )
+            ]
+        },
+    )
+    assert any("overlaps" in str(i) and "tolerance" in str(i) for i in issues)
+
+
+# ============================================================
+# Issue #40 Phase 6-G指示11: technical_blockers/business_blockers/
+# data_source_blockersの整合性チェック
+# ============================================================
+
+
+def test_ready_with_nonempty_blocker_array_is_rejected():
+    """status=readyなのにいずれかのblocker配列に項目が残っている → NG。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence(status="ready", blocker=None, business_blockers=["何か残っている"])]},
+        {"candidates": []},
+    )
+    assert any("readyですが" in str(i) and "blocker" in str(i).lower() for i in issues)
+
+
+def test_ready_with_nonempty_technical_blocker_array_is_rejected():
+    issues = validate_manifests(
+        {"candidates": [_evidence(status="ready", blocker=None, business_blockers=[], technical_blockers=["何か残っている"])]},
+        {"candidates": []},
+    )
+    assert any("readyですが" in str(i) for i in issues)
+
+
+def test_needs_business_confirmation_with_empty_business_blockers_is_rejected():
+    """status=needs_business_confirmationなのにbusiness_blockersが空 → NG。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence(business_blockers=[])]},
+        {"candidates": []},
+    )
+    assert any("business_blockersが空" in str(i) for i in issues)
+
+
+def test_blocked_with_all_blocker_arrays_empty_is_rejected():
+    """status=blockedなのに3種の配列が全て空 → NG。"""
+    issues = validate_manifests(
+        {
+            "candidates": [
+                _evidence(
+                    status="blocked",
+                    blocker="何かの理由",
+                    technical_blockers=[],
+                    business_blockers=[],
+                    data_source_blockers=[],
+                )
+            ]
+        },
+        {"candidates": []},
+    )
+    assert any("全て空です" in str(i) for i in issues)
+
+
+def test_blocked_with_at_least_one_blocker_array_passes():
+    issues = validate_manifests(
+        {
+            "candidates": [
+                _evidence(
+                    status="blocked",
+                    blocker="何かの理由",
+                    technical_blockers=[],
+                    business_blockers=[],
+                    data_source_blockers=["資料が見当たらない"],
+                )
+            ]
+        },
+        {"candidates": []},
+    )
+    assert issues == []
+
+
+def test_blocker_array_with_non_string_items_is_rejected():
+    issues = validate_manifests(
+        {"candidates": [_evidence(business_blockers=[123, "ok"])]},
+        {"candidates": []},
+    )
+    assert any("business_blockersはstrのlist" in str(i) for i in issues)
+
+
+def test_blocker_array_as_non_list_is_rejected():
+    issues = validate_manifests(
+        {"candidates": [_evidence(business_blockers="not a list")]},
+        {"candidates": []},
+    )
+    assert any("business_blockersはstrのlist" in str(i) for i in issues)

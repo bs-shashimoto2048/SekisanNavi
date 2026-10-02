@@ -184,8 +184,55 @@
   いるが評価器は未実装で、該当ルールは常に`skipped_rule_master_ids`へ
   回る(`PER_FACE`/`PER_UNIT`/`PER_PRODUCT`/`PER_COMBINATION_SET`/
   `DIFF_FROM_STANDARD`/`CUSTOM`、`ADD`/`SUBTRACT`/`MULTIPLY_PRICE`/
-  `MULTIPLY_LABOR`/`MULTIPLY_BOTH`/`CUSTOM`)。詳細な対応状況はIssue #40
-  Phase 6-E報告コメントの一覧表を参照。
+  `MULTIPLY_LABOR`/`MULTIPLY_BOTH`/`CUSTOM`)。詳細な対応状況は
+  `docs/rule-engine-support.md`を参照。
+
+## 評価器基盤補完 (Issue #40 Phase 6-G) に伴う既知の制約
+
+- **位置関係条件(`evidence_relations`)はPANEL scope限定、match_modeは
+  `any_pair`のみ**: `app.domain.estimate_rules.EvidenceRelation`/
+  `MatchMode`、`app.services.estimate_rule_evaluator`の`is_standard_rule_
+  supported`/`_rule_shape_supported`参照。`DESIGN_DATA`/`DRAWING`/
+  `PRODUCT` scopeとの組合せ、`EVERY_PAIR`/`ONE_TO_ONE`/`NEAREST_PAIR`
+  match_modeは未実装のまま(複数BBoxがある場合のペアリング規則を業務的に
+  決めていないため)。
+- **`relation=overlaps`は`tolerance=0.0`のみサポート**(PR #51レビュー指摘
+  対応): `app.domain.geometry.overlaps`はtolerance引数を持たないため、
+  `tolerance!=0`を指定しても評価時にsilent ignoreされてしまう。この組合せ
+  自体を`is_standard_rule_supported`で明示的にunsupportedとし、評価器
+  (`evaluate_product`)・候補マニフェストvalidatorの両方がskip/NGとする。
+  「overlapに対するtolerance」の業務的な意味(矩形を膨張させる、等)は
+  資料から確認できないため、今回は意味を定義せず未対応のままにしている。
+  `above`/`below`/`left_of`/`right_of`は引き続き任意のtoleranceを
+  サポートする。`EvidenceRelation.tolerance`自体もNaN/+Infinity/-Infinityを
+  `math.isfinite`で拒否する(DSL/JSON境界として有限値のみ許可)。
+- **18323(VCT架台)はまだ投入できない**: 位置関係(CHがVCTの上にあれば成立)
+  自体を表現する技術基盤はPhase 6-Gで実装・テスト済みだが、実ルールへは
+  まだ接続していない。加えて資料にある「発注者区分(東電のみ等)」を設計
+  データとして参照する手段が無く、「盤内/盤外」判定もabove/below関係とは
+  別の概念のため表現方法が未定義。`docs/master-candidate-status.md`参照。
+- **18321(盤内通路IA/OA系)はPhase 6-Gで技術検証済みへ更新したが、本番投入
+  可能という意味ではない**: 18322(IS/OS系)と同じOR engineで
+  `model starts_with "IA"`/`"OA"`を合成データ(IA2/OA1)で評価できることを
+  確認したが、実データでのIA/OA型式パターンは未確認。型式だけで盤内通路
+  スペースの有無を断定してよいかという業務確認(18322と共通)も残っている。
+- **18302の標準含有枚数差分(`QuantityMethod.DIFF_FROM_STANDARD`)は実装
+  しない**: 標準枚数の参照先として`Ａ製品標準工数計算手順NNメモ追加.xlsx`
+  の「箱体コードに含む」シートが実在することをPhase 6-Gで確認したが、
+  記載は「正面」「正面両開」等の構成ラベルのみで、積算可能な数値カウント
+  ではない。「正面両開=2枚」等への変換規則(カウント規約)が資料から
+  確定できないため、標準枚数を推測せず、評価器実装を見送った。
+- **AI class alias mapping基盤(`backend/tools/ai_class_alias.py`)は
+  本番runtimeへ未接続**: `roof_fan`/`roof_fan_l`/`roof_fan_r`→
+  `roof_fan_top`のような複数AI class統合が技術的に可能なことを、
+  候補マニフェストの`ai_class_keys`を使った純粋なmapping関数として
+  確認したが、`class_name`→`evidence_type_key`の実際の書き込み経路
+  (いつ・どこで解決するか)は未実装・未確定のまま(同モジュールの
+  docstring「調査結論」参照)。
+- **19959-19962(箱体価格倍率)の`multiply_price`等は実装しない**:
+  倍率の基準となる金額・複数倍率の適用順序・`factor`(既存の係数)との
+  関係のいずれも資料から確定できないため、Phase 6-Gでも評価器実装を
+  見送った(`docs/master-candidate-status.md`の本番投入判定表参照)。
 
 ## 本番投入候補マニフェスト (Issue #40 Phase 6-F) に伴う既知の制約
 

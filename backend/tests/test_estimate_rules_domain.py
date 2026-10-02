@@ -10,6 +10,9 @@ import pytest
 
 from app.domain.estimate_rules import (
     STANDARD_CONDITION_OPERATORS,
+    EvidenceRelation,
+    MatchMode,
+    PositionRelation,
     StandardCondition,
     StandardConditionField,
 )
@@ -102,3 +105,81 @@ def test_standard_condition_allows_multi_condition_and_group_inside_or():
         ]
     )
     assert len(condition.design_data_any_of[0]) == 2
+
+
+# ============================================================
+# Issue #40 Phase 6-G指示2/3: EvidenceRelation/MatchMode(位置関係条件)
+# ============================================================
+
+
+def test_evidence_relation_accepts_valid_relation_string():
+    rel = EvidenceRelation(left_type="ch", relation="above", right_type="vct")
+    assert rel.relation == PositionRelation.ABOVE
+    assert rel.tolerance == 0.0
+
+
+def test_evidence_relation_accepts_all_position_relations():
+    for value in ("above", "below", "left_of", "right_of", "overlaps"):
+        rel = EvidenceRelation(left_type="a", relation=value, right_type="b")
+        assert rel.relation.value == value
+
+
+def test_evidence_relation_rejects_unknown_relation_string():
+    with pytest.raises(ValueError):
+        EvidenceRelation(left_type="ch", relation="diagonally_adjacent_to", right_type="vct")
+
+
+def test_evidence_relation_rejects_non_numeric_tolerance():
+    with pytest.raises(ValueError):
+        EvidenceRelation(left_type="ch", relation="above", right_type="vct", tolerance="large")
+
+
+def test_evidence_relation_rejects_bool_tolerance():
+    """`bool`は`int`のサブクラスのため、明示的に拒否しないと`True`/`False`が
+    数値として紛れ込んでしまう。"""
+    with pytest.raises(ValueError):
+        EvidenceRelation(left_type="ch", relation="above", right_type="vct", tolerance=True)
+
+
+def test_evidence_relation_rejects_empty_left_or_right_type():
+    with pytest.raises(ValueError):
+        EvidenceRelation(left_type="", relation="above", right_type="vct")
+    with pytest.raises(ValueError):
+        EvidenceRelation(left_type="ch", relation="above", right_type="")
+
+
+def test_evidence_relation_rejects_nan_tolerance():
+    """Issue #40 PR #51レビュー指摘: DSL/JSON境界として有限値のみ許可する。"""
+    with pytest.raises(ValueError):
+        EvidenceRelation(left_type="ch", relation="above", right_type="vct", tolerance=float("nan"))
+
+
+def test_evidence_relation_rejects_positive_infinity_tolerance():
+    with pytest.raises(ValueError):
+        EvidenceRelation(left_type="ch", relation="above", right_type="vct", tolerance=float("inf"))
+
+
+def test_evidence_relation_rejects_negative_infinity_tolerance():
+    with pytest.raises(ValueError):
+        EvidenceRelation(left_type="ch", relation="above", right_type="vct", tolerance=float("-inf"))
+
+
+def test_evidence_relation_accepts_finite_tolerance():
+    rel = EvidenceRelation(left_type="ch", relation="above", right_type="vct", tolerance=0.05)
+    assert rel.tolerance == 0.05
+
+
+def test_standard_condition_default_evidence_relations_is_empty_and_match_mode_is_any_pair():
+    condition = StandardCondition()
+    assert condition.evidence_relations == []
+    assert condition.match_mode == MatchMode.ANY_PAIR
+
+
+def test_standard_condition_accepts_match_mode_as_string():
+    condition = StandardCondition(match_mode="every_pair")
+    assert condition.match_mode == MatchMode.EVERY_PAIR
+
+
+def test_standard_condition_rejects_unknown_match_mode():
+    with pytest.raises(ValueError):
+        StandardCondition(match_mode="first_pair_only")

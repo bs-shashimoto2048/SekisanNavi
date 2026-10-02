@@ -16,6 +16,7 @@ UI表示用の日本語ラベルは、この段階ではUIを一切実装しな�
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -121,6 +122,41 @@ class EstimateResultStatus(str, Enum):
     EXCLUDED = "excluded"
 
 
+class PositionRelation(str, Enum):
+    """2つの図面情報(BBox)間の相対位置関係 (Issue #40 Phase 6-G指示2:
+    POSITIONの汎用ルール表現)。`app.domain.geometry`の同名predicate
+    (`is_above`/`is_below`/`is_left_of`/`is_right_of`/`overlaps`)へ
+    そのまま対応する。業務的な意味づけ(「18323はCHがVCTの上にあれば成立」
+    等)は一切持たず、純粋に幾何学的な関係のみを表す。"""
+
+    ABOVE = "above"
+    BELOW = "below"
+    LEFT_OF = "left_of"
+    RIGHT_OF = "right_of"
+    OVERLAPS = "overlaps"
+
+
+class MatchMode(str, Enum):
+    """`EvidenceRelation`を複数BBoxの組合せに対してどう適用するかの戦略
+    (Issue #40 Phase 6-G指示3)。
+
+    値は列挙するが、Phase 6-Gで実際に評価器が実装するのは`ANY_PAIR`のみ
+    (`QuantityMethod`/`CalcType`等、既存のenum値と評価器実装状況が1対1で
+    対応しない既存パターンと同じ)。`EVERY_PAIR`/`ONE_TO_ONE`/
+    `NEAREST_PAIR`は、どのペアリング規則が業務的に正しいかを資料から
+    確認できておらず、**推測で実装しない**(指示3「これを勝手に業務決定
+    しない」)。"""
+
+    ANY_PAIR = "any_pair"
+    EVERY_PAIR = "every_pair"
+    ONE_TO_ONE = "one_to_one"
+    NEAREST_PAIR = "nearest_pair"
+
+
+# Phase 6-Gで評価器が実際にサポートするmatch_mode(docstring参照)。
+SUPPORTED_MATCH_MODES: frozenset[MatchMode] = frozenset({MatchMode.ANY_PAIR})
+
+
 @dataclass
 class DrawingEvidenceType:
     """図面情報マスタ1件 (Issue #40 10-1章)。"""
@@ -215,8 +251,66 @@ class StandardConditionField:
 
 
 @dataclass
+class EvidenceRelation:
+    """2種類の図面情報(evidence_type_key)間に要求する相対位置関係
+    (Issue #40 Phase 6-G指示2: 「Evidence AとEvidence Bの位置関係」を
+    `StandardCondition`で表現できる汎用position condition基盤)。
+
+    例: `{"left_type": "ch", "relation": "above", "right_type": "vct",
+    "tolerance": 0.0}` は「`ch`種別の根拠が`vct`種別の根拠より上にある」
+    という関係を表す(`app.domain.geometry.is_above`へそのまま対応)。
+
+    **業務ルールを含まない**: このdataclass自体は「18323はCHがVCTの上に
+    あれば成立する」といった特定コードの業務解釈を一切持たない。資料で
+    確定できる業務ルールが無い限り、候補マニフェストへ実際の関係を
+    投入しない(Issue #40 Phase 6-G指示2末尾)。
+
+    **arbitrary evalは禁止**: `relation`は`PositionRelation`の明示的な
+    列挙値のみを許可し、文字列式の評価・SQL動的生成は一切行わない。
+
+    **tolerance**: 有限の数値(NaN/+Infinity/-Infinity禁止、DSL/JSON境界で
+    扱えない値のため)のみ許可する。負値は意味を変える可能性があるが、
+    資料根拠なしに解釈・禁止を決めないため、今回は現状の型チェックのみとし、
+    符号自体は制限しない(Issue #40 PR #51レビュー指摘)。
+
+    **`overlaps`はtolerance=0.0のみサポート**: `PositionRelation.OVERLAPS`は
+    `app.domain.geometry.overlaps`が2矩形の交差判定のみを行い、tolerance
+    引数を受け取らない。`overlaps`に対してtoleranceを与えた場合に何を
+    意味するか(矩形を膨張させる、等)は資料から確認できないため、今回は
+    推測で意味を定義せず、`OVERLAPS`かつ`tolerance != 0.0`の組合せを
+    `is_standard_rule_supported`(単一の真実源)で明示的にunsupportedとする
+    (Issue #40 PR #51レビュー指摘: silent ignore禁止)。このdataclass自体は
+    construct時点ではこの組合せを許可する(構造としては妥当なため)。
+    """
+
+    left_type: str
+    relation: PositionRelation
+    right_type: str
+    tolerance: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.relation, PositionRelation):
+            try:
+                self.relation = PositionRelation(self.relation)
+            except ValueError:
+                raise ValueError(
+                    f"未知のrelationです: {self.relation!r} "
+                    f"(サポート対象: {[r.value for r in PositionRelation]})"
+                ) from None
+        if not isinstance(self.left_type, str) or self.left_type == "":
+            raise ValueError(f"left_typeは空でない文字列である必要があります: {self.left_type!r}")
+        if not isinstance(self.right_type, str) or self.right_type == "":
+            raise ValueError(f"right_typeは空でない文字列である必要があります: {self.right_type!r}")
+        if isinstance(self.tolerance, bool) or not isinstance(self.tolerance, (int, float)):
+            raise ValueError(f"toleranceは数値である必要があります: {self.tolerance!r}")
+        if not math.isfinite(self.tolerance):
+            raise ValueError(f"toleranceは有限の数値である必要があります(NaN/Infinity不可): {self.tolerance!r}")
+
+
+@dataclass
 class StandardCondition:
-    """標準ルールの判定条件 (Issue #40 Phase 6-FでOR表現を追加)。
+    """標準ルールの判定条件 (Issue #40 Phase 6-FでOR表現、Phase 6-Gで
+    位置関係(position)表現を追加)。
 
     - `required_evidence_types`: このリストの図面情報種別(key)が、
       判定範囲(judgment_scope)内にすべて存在すること(AND)。
@@ -232,14 +326,21 @@ class StandardCondition:
       `design_data_conditions`(AND)のみの挙動と完全に同じになる
       (Phase 6-E以前のDB保存済みJSONとの後方互換性はこれで保たれる:
       `design_data_any_of`キーが無いJSONは空リストとしてパースされる)。
+    - `evidence_relations`: Issue #40 Phase 6-G追加。`EvidenceRelation`の
+      リストで、すべての関係が成立すること(AND)。`match_mode`
+      (既定`ANY_PAIR`)が、複数BBoxが存在する場合に「どのペアで関係が
+      成立すればよいか」を決める(`match_mode`のdocstring参照)。
+      空リスト(既定値)は「位置関係の制約なし」を意味し、Phase 6-F以前の
+      挙動と完全に同じになる(後方互換)。
+    - `match_mode`: `evidence_relations`の適用戦略。既定`MatchMode.ANY_PAIR`。
 
     全体の成立条件は
     `required_evidence_types`(AND) かつ `design_data_conditions`(AND) かつ
-    (`design_data_any_of`が空、または、いずれか1グループがAND成立)
-    という構造(ANDの中に1段のORを許す、浅いDNF)。これ以上複雑な
+    (`design_data_any_of`が空、または、いずれか1グループがAND成立) かつ
+    `evidence_relations`(すべてAND成立)という構造。これ以上複雑な
     OR/NOTの組合せは資料から必要性を確認できていないため持たせない。
 
-    **禁止事項(Issue #40 Phase 6-F指示A)**: 文字列式のeval、SQL文字列の
+    **禁止事項(Issue #40 Phase 6-F/6-G指示)**: 文字列式のeval、SQL文字列の
     動的生成は一切行わない。条件は常にこの明示的な構造化データ
     (dataclass/JSON)としてのみ表現する。
 
@@ -250,6 +351,8 @@ class StandardCondition:
     required_evidence_types: list[str] = field(default_factory=list)
     design_data_conditions: list[StandardConditionField] = field(default_factory=list)
     design_data_any_of: list[list[StandardConditionField]] = field(default_factory=list)
+    evidence_relations: list[EvidenceRelation] = field(default_factory=list)
+    match_mode: MatchMode = MatchMode.ANY_PAIR
 
     def __post_init__(self) -> None:
         for group in self.design_data_any_of:
@@ -258,6 +361,14 @@ class StandardCondition:
                     "design_data_any_of の各グループは1件以上の条件を持つ必要があります"
                     "(空グループは常に成立してしまうため禁止)"
                 )
+        if not isinstance(self.match_mode, MatchMode):
+            try:
+                self.match_mode = MatchMode(self.match_mode)
+            except ValueError:
+                raise ValueError(
+                    f"未知のmatch_modeです: {self.match_mode!r} "
+                    f"(サポート対象: {[m.value for m in MatchMode]})"
+                ) from None
 
 
 @dataclass
@@ -386,10 +497,14 @@ __all__ = [
     "ProcessingMode",
     "EvidenceKind",
     "EstimateResultStatus",
+    "PositionRelation",
+    "MatchMode",
+    "SUPPORTED_MATCH_MODES",
     "DrawingEvidenceType",
     "EstimateRuleMaster",
     "STANDARD_CONDITION_OPERATORS",
     "StandardConditionField",
+    "EvidenceRelation",
     "StandardCondition",
     "EstimateResult",
     "EstimateResultEvidence",
