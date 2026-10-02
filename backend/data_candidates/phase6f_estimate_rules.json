@@ -1,11 +1,16 @@
 {
-  "schema_version": 1,
-  "generated_by": "Issue #40 Phase 6-D/6-F",
-  "note": "これは本番seedではない。backend/db/seed.py・master_importer.py等から自動ロードされない、レビュー用の候補マニフェストである。condition構造はapp.domain.estimate_rules.StandardCondition(Phase 6-FでOR表現design_data_any_ofを追加)のJSON表現と同じ形。本番投入可否の最終判断はPhase 6-F報告(Issue #40)の本番投入判定表、および業務側確認を経て別途行う。実データの価格・工数等の実数値はここに一切含めない(unit_price/unit_labor/allowed_factorsの具体値も含めない)。",
+  "schema_version": 2,
+  "generated_by": "Issue #40 Phase 6-D/6-F/6-G",
+  "note": "これは本番seedではない。backend/db/seed.py・master_importer.py等から自動ロードされない、レビュー用の候補マニフェストである。condition構造はapp.domain.estimate_rules.StandardCondition(Phase 6-FでOR表現design_data_any_ofを追加、Phase 6-Gで位置関係表現evidence_relations/match_modeを追加)のJSON表現と同じ形。本番投入可否の最終判断はPhase 6-F/6-G報告(Issue #40)の本番投入判定表、および業務側確認を経て別途行う。実データの価格・工数等の実数値はここに一切含めない(unit_price/unit_labor/allowed_factorsの具体値も含めない)。schema_version 2(Phase 6-G)でtechnical_blockers/business_blockers/data_source_blockersを追加した(既存のstatus/blockerは後方互換のため維持)。18323のcondition自体は、資料から確定できない特定の業務ルール(「CHがVCTの上なら成立」等)をまだ投入していない(existing evidence存在判定のみのまま。Phase 6-G指示2末尾の方針を厳守)。",
   "status_definitions": {
     "ready": "資料の成立条件を技術的に完全表現でき、評価器(app/services/estimate_rule_evaluator.py)が対応する範囲(judgment_scope/quantity_method/calc_type)のみで、業務的な簡略化・未確認事項が無い",
     "needs_business_confirmation": "技術的には動作するが、資料の条件の一部を簡略化している、複数解釈がある、または対応するevidence type側の業務判断が必要",
     "blocked": "必要な判定ロジック・データソース・評価器機能のいずれかが欠けており、現時点では実装・投入ができない"
+  },
+  "blocker_category_definitions": {
+    "technical_blockers": "評価器(estimate_rule_evaluator.py)側の実装・表現力が不足しているもの",
+    "business_blockers": "資料だけでは断定できない、業務側の確認・判断が必要なもの(推測で実装・投入しない)",
+    "data_source_blockers": "現行のdata_source_root配下に無い外部データ・ファイル・対応表が必要なもの"
   },
   "candidates": [
     {
@@ -26,7 +31,14 @@
       "allowed_factors": null,
       "source_refs": ["積算コードPDF『18302側面扉（追加）.pdf』"],
       "status": "needs_business_confirmation",
-      "blocker": "標準含有枚数との差分(超過分のみ加算)算出ロジックが未実装。単純な存在判定のみでは、既に箱コードへ含まれる標準扉まで二重に計上する可能性がある。"
+      "blocker": "標準含有枚数との差分(超過分のみ加算)算出ロジックが未実装。単純な存在判定のみでは、既に箱コードへ含まれる標準扉まで二重に計上する可能性がある。",
+      "technical_blockers": [
+        "QuantityMethod.DIFF_FROM_STANDARD自体が評価器に未実装(標準枚数の信頼できる数値データが無いため、Phase 6-Gでは実装を見送った)"
+      ],
+      "business_blockers": [
+        "標準含有枚数の実体(『Ａ製品標準工数計算手順NNメモ追加.xlsx』の『箱体コードに含む』シート)は構成ラベル(正面/側面/正面両開等)のみで数値カウントではなく、『正面両開=2枚』等への変換規則(カウント規約)が未確定"
+      ],
+      "data_source_blockers": []
     },
     {
       "code": "18311",
@@ -46,7 +58,12 @@
       "allowed_factors": null,
       "source_refs": ["積算コードPDF『18311換気扇上部取付.pdf』"],
       "status": "needs_business_confirmation",
-      "blocker": "roof_fan/roof_fan_l/roof_fan_rの3 AI classをどう1つの図面情報へ統合するか未確定。統合方法次第で数量(台数)の数え方が変わる。"
+      "blocker": "roof_fan/roof_fan_l/roof_fan_rの3 AI classをどう1つの図面情報へ統合するか未確定。統合方法次第で数量(台数)の数え方が変わる。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "roof_fan/roof_fan_l/roof_fan_rを1evidence_typeへ統合してよいか(alias mapping基盤はPhase 6-Gで用意済み、backend/tools/ai_class_alias.py参照)"
+      ],
+      "data_source_blockers": []
     },
     {
       "code": "18305",
@@ -66,7 +83,12 @@
       "allowed_factors": null,
       "source_refs": ["積算コードPDF『18305小扉(屋内操作用).pdf』", "積算コードPDF『18306小扉(屋外操作用).pdf』"],
       "status": "blocked",
-      "blocker": "屋内(18305)/屋外(18306)のどちらに対応するか、資料から判別できない。誤ったコードを自動選択するリスクがあるため投入不可。"
+      "blocker": "屋内(18305)/屋外(18306)のどちらに対応するか、資料から判別できない。誤ったコードを自動選択するリスクがあるため投入不可。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "屋内(18305)/屋外(18306)のどちらに対応するか資料から判別不可"
+      ],
+      "data_source_blockers": []
     },
     {
       "code": "18323",
@@ -86,7 +108,17 @@
       "allowed_factors": null,
       "source_refs": ["積算コードPDF『18323VCT架台.pdf』"],
       "status": "blocked",
-      "blocker": "本来の成立条件(CHがVCTの上にあれば成立)に必要な位置関係判定(JudgmentScope.POSITION)が評価器に未実装。現状の「同一盤内に両方存在するか」のみの判定では過大計上になる。"
+      "blocker": "本来の成立条件(CHがVCTの上にあれば成立)を表現する技術基盤(evidence_relations、Phase 6-G新設)は実装・テスト済みだが、発注者区分データが無く、盤内外判定も未実装のため、18323全体としてはまだ投入できない。現状のconditionは「同一盤内に両方存在するか」のみの簡略版のまま(過大計上の可能性があるため投入しない)。",
+      "technical_blockers": [
+        "『盤内/盤外』判定がabove/below関係とは別の幾何概念であり、汎用position engineではまだ表現方法を定義していない"
+      ],
+      "business_blockers": [
+        "上下関係(above/below)自体は資料に明記されているが、発注者区分・盤内外条件を含めた全体の優先順位・組合せルールの最終確認が必要"
+      ],
+      "data_source_blockers": [
+        "発注者区分(東電のみ等)を設計データとして参照する手段が無く、データの所在も未確認"
+      ],
+      "notes": "Phase 6-Gで位置関係条件(evidence_relations、PANEL scope限定、match_mode=any_pair)を実装し、CH/VCTの上下関係自体は汎用エンジンとテストで技術検証済み(本candidateのconditionへは未接続。資料で確定できない業務ルールをmanifestへ入れない方針のため)。"
     },
     {
       "code": "18322",
@@ -109,7 +141,12 @@
       "allowed_factors": null,
       "source_refs": ["積算コードPDF『18321-322盤内通路.pdf』(「18321=IA,OA」「18322=IS,OS」)"],
       "status": "needs_business_confirmation",
-      "blocker": "Phase 6-Fで資料どおりのOR条件(IS*またはOS*)を技術的に表現できるようになったが、型式だけで盤内通路スペースの有無・コード要否を断定してよいかは業務未確認(資料内に「×」の非該当例も複数ある)。"
+      "blocker": "Phase 6-Fで資料どおりのOR条件(IS*またはOS*)を技術的に表現できるようになったが、型式だけで盤内通路スペースの有無・コード要否を断定してよいかは業務未確認(資料内に「×」の非該当例も複数ある)。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "型式だけで盤内通路スペースの有無・コード要否を断定してよいか"
+      ],
+      "data_source_blockers": []
     },
     {
       "code": "18321",
@@ -131,8 +168,16 @@
       "initial_factor": 1.0,
       "allowed_factors": null,
       "source_refs": ["積算コードPDF『18321-322盤内通路.pdf』(「18321=IA,OA」「18322=IS,OS」)"],
-      "status": "blocked",
-      "blocker": "18322と同じ業務未確認に加え、IA/OA系のMODEL文字列パターンが実データで一度も確認できていない(確認済みはIS2のみ)。検証用DBコピーでの動作確認も未実施。"
+      "status": "needs_business_confirmation",
+      "blocker": "18322と同じく、型式だけで盤内通路スペースの有無・コード要否を断定してよいかが業務未確認。Phase 6-Gで技術検証(合成データIA2/OA1によるOR評価)を実施し、18322と同じ仕組みで正しく評価できることを確認した(Issue #40 Phase 6-G報告参照)。実データでのIA/OA型式パターン確認はまだ無い。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "型式だけで盤内通路スペースの有無・コード要否を断定してよいか(18322と同様)"
+      ],
+      "data_source_blockers": [
+        "IA/OA系の実データサンプルが無く、合成データでの技術検証にとどまる"
+      ],
+      "notes": "Phase 6-D時点はblockedだったが、Phase 6-G指示8に基づき技術検証(OR engineでの評価)を実施したためneeds_business_confirmationへ更新した(「技術的に動く」ことの確認であり、本番投入可能という意味ではない)。"
     },
     {
       "code": "18101-18115",
@@ -151,7 +196,12 @@
         "対応仕分けExcel(20250707_A製品自動化検討_対応仕分け.xlsx, プログラム対応リストシート: 対象コード18101〜18115、「STEEL-BOTTOMが底板の情報」「.boxspec」「.baninf」「ZUMEI」参照)"
       ],
       "status": "blocked",
-      "blocker": "判定に必要な.boxspec(STEEL-BOTTOM列)/.baninf(ZUMEI列)ファイルが、Sekisan Naviの現行データ参照ルート(data_source_root)配下には存在しない(Phase 6-E調査、実製番A1GV2421で確認)。新規データソースへの接続自体が前提となり、現状のapp/services/estcode_df.py/product_df.pyでは対応不可。W/D寸法帯ごとのコード選定テーブルの実体も資料からは未確認。"
+      "blocker": "判定に必要な.boxspec(STEEL-BOTTOM列)/.baninf(ZUMEI列)ファイルが、Sekisan Naviの現行データ参照ルート(data_source_root)配下には存在しない(Phase 6-E調査、実製番A1GV2421で確認)。新規データソースへの接続自体が前提となり、現状のapp/services/estcode_df.py/product_df.pyでは対応不可。W/D寸法帯ごとのコード選定テーブルの実体も資料からは未確認。",
+      "technical_blockers": [],
+      "business_blockers": [],
+      "data_source_blockers": [
+        ".boxspec(STEEL-BOTTOM列)/.baninf(ZUMEI列)ファイルが現行data_source_root配下に存在しない。必要な提供物: ファイルサンプル1件以上、カラムschema、ファイル配置規則(命名/ディレクトリ構造)、既存data_source_rootとの関係、W/D寸法帯ごとのコード選定閾値テーブル"
+      ]
     },
     {
       "code": "18501-18521",
@@ -170,7 +220,12 @@
         "対応仕分けExcel(プログラム対応リストシート: 対象コード18501〜18521)"
       ],
       "status": "blocked",
-      "blocker": "18501〜18519の個別コードとサイズ/枚数の対応表が資料に無く、どのコードを選ぶべきか機械的に判定できない。"
+      "blocker": "18501〜18519の個別コードとサイズ/枚数の対応表が資料に無く、どのコードを選ぶべきか機械的に判定できない。",
+      "technical_blockers": [],
+      "business_blockers": [],
+      "data_source_blockers": [
+        "18501〜18519のコード⇔サイズ(面サイズ・枚数)対応表が必要"
+      ]
     },
     {
       "code": "19959-19962",
@@ -186,7 +241,16 @@
       "allowed_factors": null,
       "source_refs": ["積算コードPDF『19959箱体ﾄﾞﾌﾞ漬(HDZ).pdf』『19961鋼板厚全てt3.2.pdf』『19962鋼板厚ﾄﾞｱのみt3.2.pdf』"],
       "status": "blocked",
-      "blocker": "評価器が`quantity_method=per_product`/`calc_type=multiply_price`のいずれも未実装(app/services/estimate_rule_evaluator.pyがDIRECT以外のcalc_typeを計算しない設計のため)。倍率の数値根拠も未確認。"
+      "blocker": "評価器が`quantity_method=per_product`/`calc_type=multiply_price`のいずれも未実装(app/services/estimate_rule_evaluator.pyがDIRECT以外のcalc_typeを計算しない設計のため)。倍率の数値根拠も未確認。Phase 6-G指示9により、評価器実装は今回も見送り、未確定事項をbusiness_blockersとして明文化した。",
+      "technical_blockers": [
+        "評価器がquantity_method=per_product/calc_type=multiply_price・multiply_labor・multiply_bothのいずれも未実装"
+      ],
+      "business_blockers": [
+        "倍率の基準となる金額(箱・部品価格/塗装価格/直接材料費のどれか)が未確定",
+        "複数倍率が重なる場合の適用順序(order of operations)が未確定",
+        "倍率とfactor(現行の係数)との関係(同じものか別物か)が未確定"
+      ],
+      "data_source_blockers": []
     },
     {
       "code": "44241-44833",
@@ -205,7 +269,14 @@
         "対応仕分けExcel(保留シート: コード44241/44833、理由「単結はAIで各盤との紐付けが難しいためプログラム対応を検討中」)"
       ],
       "status": "blocked",
-      "blocker": "資料自身が「保留」区分。作業者が図を参照しながら係数を手入力する運用のため、Phase 5以降のcustom handler機構が前提。2資料間で運用像が完全には一致しない(Phase 1報告8章)という未解消の矛盾もある。"
+      "blocker": "資料自身が「保留」区分。作業者が図を参照しながら係数を手入力する運用のため、Phase 5以降のcustom handler機構が前提。2資料間で運用像が完全には一致しない(Phase 1報告8章)という未解消の矛盾もある。",
+      "technical_blockers": [
+        "custom processing_mode用のhandler実装が無い(Phase 5以降で対応予定のまま)"
+      ],
+      "business_blockers": [
+        "2種の資料間で運用像(係数入力→コード変換 vs 個別スペックコード選択+銅建値コード併記)が完全には一致しない(Phase 1報告8章)"
+      ],
+      "data_source_blockers": []
     },
     {
       "code": "18304",
@@ -224,7 +295,14 @@
         "対応仕分けExcel(保留シート: コード18304、理由「ISなど？特定の箱体かつ、現状この辺の箱体の情報がそもそもほとんどない」「外形図(2)or背面図からしか確認できない」)"
       ],
       "status": "blocked",
-      "blocker": "資料自身が「保留」区分。成立条件の情報がほとんど無い。"
+      "blocker": "資料自身が「保留」区分。成立条件の情報がほとんど無い。",
+      "technical_blockers": [],
+      "business_blockers": [
+        "資料自身が「保留」区分。箱体型式・カウント方法とも情報がほとんど無い"
+      ],
+      "data_source_blockers": [
+        "外形図(2)/背面図以外に確認できる資料が無い"
+      ]
     }
   ]
 }

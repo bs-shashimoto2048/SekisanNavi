@@ -12,10 +12,16 @@ validator。
   - ruleが存在しないevidence keyを参照していないか
   - allowed_factorsの型(null、またはnumberのlist)
   - condition schema(`app.domain.estimate_rules.StandardCondition`として
-    構築できるか。`StandardConditionField.__post_init__`の型検証をそのまま
-    再利用する)
+    構築できるか。`StandardConditionField.__post_init__`/
+    `EvidenceRelation.__post_init__`の型検証をそのまま再利用する)
+  - evidence_relations(Issue #40 Phase 6-G追加の位置関係条件)のleft_type/
+    right_typeがdrawing_evidence_types候補に存在するか
   - source_refsが空でないか
   - status/blockerの整合(ready以外はblocker必須、readyはblocker無し)
+  - technical_blockers/business_blockers/data_source_blockers(Issue #40
+    Phase 6-G追加)の型検証、および`status`との整合(readyなのに1件でも
+    残っている/needs_business_confirmationなのにbusiness_blockersが空/
+    blockedなのに3種とも空、のいずれもNG)
   - readyなのに評価器が未対応のjudgment_scope/quantity_method/calc_type/
     conditionの組合せを使っていないか(`app.services.estimate_rule_evaluator.
     is_standard_rule_supported`を単一の真実源として再利用する。evaluator本体
@@ -43,9 +49,11 @@ if str(BACKEND_DIR) not in sys.path:
 from app.domain.estimate_rules import (  # noqa: E402
     ApplicableUnit,
     CalcType,
+    EvidenceRelation,
     EvidenceUsage,
     JudgmentMethod,
     JudgmentScope,
+    MatchMode,
     QuantityMethod,
     StandardCondition,
     StandardConditionField,
@@ -102,6 +110,16 @@ def _parse_condition(raw: object) -> StandardCondition | None:
             [StandardConditionField(field=c["field"], operator=c["operator"], value=c["value"]) for c in group]
             for group in raw.get("design_data_any_of", [])
         ],
+        evidence_relations=[
+            EvidenceRelation(
+                left_type=r["left_type"],
+                relation=r["relation"],
+                right_type=r["right_type"],
+                tolerance=r.get("tolerance", 0.0),
+            )
+            for r in raw.get("evidence_relations", [])
+        ],
+        match_mode=raw.get("match_mode", MatchMode.ANY_PAIR.value),
     )
 
 
@@ -131,6 +149,61 @@ def _check_allowed_factors(location: str, allowed_factors: object, issues: list[
         return
     if not isinstance(allowed_factors, list) or not all(isinstance(v, (int, float)) for v in allowed_factors):
         issues.append(ValidationIssue(location, f"allowed_factorsはnull、またはnumberのlistである必要があります: {allowed_factors!r}"))
+
+
+_BLOCKER_ARRAY_FIELDS = ("technical_blockers", "business_blockers", "data_source_blockers")
+
+
+def _check_blocker_arrays_and_consistency(
+    location: str, candidate: dict, status: object, issues: list[ValidationIssue]
+) -> None:
+    """Issue #40 Phase 6-G指示11: `technical_blockers`/`business_blockers`/
+    `data_source_blockers`(各str listか、未設定[後方互換で省略可])の型検証と、
+    `status`との整合性チェック。
+
+    - 各配列: 存在する場合はstrのlistである必要がある(空listは許可)。
+    - `status=ready`なのにいずれかの配列が1件以上ある → NG
+      (readyはblockerが無いことを意味するはずなので矛盾)。
+    - `status=needs_business_confirmation`なのに`business_blockers`が空
+      → NG(「業務確認が必要」と言いながら具体的な理由が無い)。
+    - `status=blocked`なのに3種の配列が全て空 → NG(「投入不可」と言い
+      ながら理由が1つも無い)。
+    """
+    arrays: dict[str, list] = {}
+    for field_name in _BLOCKER_ARRAY_FIELDS:
+        value = candidate.get(field_name, [])
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            issues.append(ValidationIssue(location, f"{field_name}はstrのlistである必要があります: {value!r}"))
+            arrays[field_name] = []
+        else:
+            arrays[field_name] = value
+
+    total = sum(len(v) for v in arrays.values())
+
+    if status == "ready" and total > 0:
+        issues.append(
+            ValidationIssue(
+                location,
+                "status=readyですが、technical_blockers/business_blockers/data_source_blockersの"
+                f"いずれかに{total}件の項目が残っています(readyはblockerが無いことを意味します)",
+            )
+        )
+    elif status == "needs_business_confirmation" and not arrays["business_blockers"]:
+        issues.append(
+            ValidationIssue(
+                location,
+                "status=needs_business_confirmationですが、business_blockersが空です"
+                "(業務確認が必要な具体的理由を記載してください)",
+            )
+        )
+    elif status == "blocked" and total == 0:
+        issues.append(
+            ValidationIssue(
+                location,
+                "status=blockedですが、technical_blockers/business_blockers/data_source_blockersが"
+                "全て空です(投入できない理由を少なくとも1件記載してください)",
+            )
+        )
 
 
 def validate_evidence_types(data: dict) -> tuple[list[ValidationIssue], set[str]]:
@@ -170,6 +243,7 @@ def validate_evidence_types(data: dict) -> tuple[list[ValidationIssue], set[str]
 
         _check_source_refs(loc, c.get("source_refs"), issues)
         _check_status_and_blocker(loc, c.get("status"), c.get("blocker"), issues)
+        _check_blocker_arrays_and_consistency(loc, c, c.get("status"), issues)
 
         if c.get("status") == "ready" and scope in VALID_SCOPES and JudgmentScope(scope) not in _SUPPORTED_SCOPES:
             issues.append(
@@ -254,10 +328,25 @@ def validate_rules(data: dict, known_evidence_keys: set[str]) -> list[Validation
                                 loc, f"condition.required_evidence_types内のkey {t!r} はdrawing_evidence_types候補に存在しません"
                             )
                         )
+                # Issue #40 Phase 6-G指示4: evidence_relationsのleft_type/
+                # right_typeも、required_evidence_typesと同じくevidence key
+                # 存在チェックの対象にする(relation enum/tolerance数値の検証は
+                # `EvidenceRelation.__post_init__`経由で既に完了している。
+                # 単一の真実源を再利用し、ここで二重定義しない)。
+                for rel in condition.evidence_relations:
+                    for ref_key in (rel.left_type, rel.right_type):
+                        if ref_key not in known_evidence_keys:
+                            issues.append(
+                                ValidationIssue(
+                                    loc,
+                                    f"evidence_relations内のkey {ref_key!r} はdrawing_evidence_types候補に存在しません",
+                                )
+                            )
 
         _check_allowed_factors(loc, c.get("allowed_factors"), issues)
         _check_source_refs(loc, c.get("source_refs"), issues)
         _check_status_and_blocker(loc, c.get("status"), c.get("blocker"), issues)
+        _check_blocker_arrays_and_consistency(loc, c, c.get("status"), issues)
 
         if c.get("status") == "ready":
             # scope/quantity_method/calc_type/conditionのいずれかが既に不正な

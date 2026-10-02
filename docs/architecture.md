@@ -1772,17 +1772,46 @@ Backend側の互換レイヤで統合し、Frontend側のUIも`EstimateResult`�
     追加したが、いずれも「図面情報の存在判定のみ」(`design_data_conditions`
     を持たないルール)に限定したサポートであり、`POSITION`/`RANGE`
     (BBox同士の相対位置判定)は引き続き未実装(`app/domain/geometry.py`に
-    純粋なgeometry predicateのみ用意し、実ルールへは未接続)。
+    純粋なgeometry predicateのみ用意し、Phase 6-E/6-F時点では実ルールへ未接続
+    だった)。
+  - **位置関係条件(`evidence_relations`、Phase 6-G新設)**: 2種類の図面情報
+    (evidence_type_key)間に要求する相対位置関係を`StandardCondition`で表現
+    できる汎用基盤。`EvidenceRelation(left_type, relation, right_type,
+    tolerance)`のリストとして持ち、`relation`は`PositionRelation`
+    (`above`/`below`/`left_of`/`right_of`/`overlaps`、`app/domain/geometry.py`
+    のpredicateへそのまま対応)の明示列挙値のみ(文字列evalやSQL動的生成は
+    一切行わない)。複数BBoxが存在する場合の組合せ戦略は`match_mode`
+    (`MatchMode`)で指定し、Phase 6-Gで実際に評価器が対応するのは
+    `ANY_PAIR`(全組合せのうち1組でも関係が成立すれば良い)のみ
+    (`EVERY_PAIR`/`ONE_TO_ONE`/`NEAREST_PAIR`は列挙のみで未実装、業務的な
+    ペアリング規則が資料から確認できないため推測実装しない)。
+    `judgment_scope=PANEL`のルールのみサポートし(1盤内の評価グループに
+    限定)、`DESIGN_DATA`/`DRAWING`/`PRODUCT`との組合せは未対応。
+    `is_standard_rule_supported`/`_rule_shape_supported`がこの制約も含めて
+    判定する(単一の真実源)。**特定コードの業務ルール
+    (「18323はCHがVCTの上にあれば成立」等)はこの汎用基盤へもまだ接続して
+    いない**(資料から確定できる業務ルールが無い限り、候補マニフェストへ
+    実際の関係を投入しない方針)。
   - `app/services/estcode_df.py`が読み込む追加19列(`ADDITIONAL_PANEL_FIELDS`)
     は`DesignDataContext`まで到達し、`StandardCondition`から参照可能だが、
     業務的な意味づけ(どの積算コードに対応するか等)は未確定のまま。
   - 対応状況の一覧(`QuantityMethod`/`JudgmentScope`/`CalcType`それぞれ
-    完全実装/部分実装/enumのみ)はIssue #40 Phase 6-E/6-F報告コメント参照。
-  - **本番投入候補マニフェスト(Phase 6-F新設)**: `backend/data_candidates/
-    phase6f_drawing_evidence_types.json`/`phase6f_estimate_rules.json`に、
-    実マスタ投入候補を`status`(ready/needs_business_confirmation/blocked)
-    付きで整理している(本番seedではなく自動ロードもしない、レビュー専用。
-    `docs/master-candidate-status.md`参照)。構造検証は
+    完全実装/部分実装/enumのみ)は`docs/rule-engine-support.md`参照。
+  - **AI class alias mapping基盤(`backend/tools/ai_class_alias.py`、
+    Phase 6-G新設)**: 候補マニフェストの`ai_class_keys`から
+    `ai_class -> evidence_type_key`のmappingを構築し、複数AI class
+    (`roof_fan`/`roof_fan_l`/`roof_fan_r`等)を1つの図面情報へ正規化
+    できるかを検証する、純粋なmapping/fixture変換ユーティリティ。
+    本番DBへの書き込み・`class_name`列の変更は一切行わない
+    (raw AI classは失わない方針)。本番運用で使う正式なmapping保存方式・
+    適用タイミングは未確定のまま(同モジュールのdocstring参照)。
+  - **本番投入候補マニフェスト(Phase 6-F新設、Phase 6-Gでschema拡張)**:
+    `backend/data_candidates/phase6f_drawing_evidence_types.json`/
+    `phase6f_estimate_rules.json`に、実マスタ投入候補を`status`
+    (ready/needs_business_confirmation/blocked)、および`technical_blockers`/
+    `business_blockers`/`data_source_blockers`(Phase 6-G追加、3分類の
+    未解消事項一覧)付きで整理している(本番seedではなく自動ロードもしない、
+    レビュー専用。`docs/master-candidate-status.md`参照)。構造検証は
     `backend/tools/validate_candidate_manifests.py`で行う。
 - **旧Detection互換レイヤ(`app/services/legacy_detection_adapter.py`、
   Phase 5新設)**: `master_item_id`直結の旧Manual/AI BBoxを、削除・変更せず

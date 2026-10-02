@@ -10,9 +10,11 @@ from app import config
 from app.db.connection import get_connection
 from app.domain.estimate_rules import (
     ApplicableUnit,
+    EvidenceRelation,
     EvidenceUsage,
     JudgmentMethod,
     JudgmentScope,
+    MatchMode,
     ProcessingMode,
     QuantityMethod,
     StandardCondition,
@@ -959,6 +961,104 @@ def test_evaluate_product_or_condition_matches_via_os_branch_with_synthetic_data
     assert len(outcome.candidates) == 1
 
 
+def test_evaluate_product_18321_style_or_condition_matches_ia_branch_with_synthetic_data(
+    client, monkeypatch, tmp_path, db_path
+):
+    """Issue #40 Phase 6-G指示8: 18321(盤内通路IA/OA系)の技術検証。18322
+    (IS/OS系)と同じOR engineで`model starts_with "IA"` **または**
+    `model starts_with "OA"`が資料どおりに表現・評価できることを、合成
+    データ(IA2)で確認する。業務ルール(「IA/OAなら必ず18321」の断定)は
+    資料で確定していないため、ここでは技術的な表現可能性の検証にとどめ、
+    本番マスタ投入は行わない(手動で候補マニフェストへ反映する際も、
+    statusはneeds_business_confirmationのまま)。"""
+    product_dir = _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+    _write_cp932_csv(
+        product_dir / "estcode_df.csv",
+        _ESTCODE_DF_HEADER,
+        [_ESTCODE_ROW_1_1.replace("IS2,", "IA2,")],
+    )
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_any_of=[
+                    [StandardConditionField(field="model", operator="starts_with", value="IA")],
+                    [StandardConditionField(field="model", operator="starts_with", value="OA")],
+                ]
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert len(outcome.candidates) == 1
+
+
+def test_evaluate_product_18321_style_or_condition_matches_oa_branch_with_synthetic_data(
+    client, monkeypatch, tmp_path, db_path
+):
+    """同上、OA側の枝。"""
+    product_dir = _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+    _write_cp932_csv(
+        product_dir / "estcode_df.csv",
+        _ESTCODE_DF_HEADER,
+        [_ESTCODE_ROW_1_1.replace("IS2,", "OA1,")],
+    )
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_any_of=[
+                    [StandardConditionField(field="model", operator="starts_with", value="IA")],
+                    [StandardConditionField(field="model", operator="starts_with", value="OA")],
+                ]
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert len(outcome.candidates) == 1
+
+
+def test_evaluate_product_18321_style_or_condition_does_not_match_is_os(
+    client, monkeypatch, tmp_path, db_path
+):
+    """18321(IA/OA系)の条件は、18322(IS/OS系、実データIS2)には成立しない
+    (コード同士が混同されないことの確認)。"""
+    _setup_product_dir(tmp_path)  # 実データのままIS2。
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DESIGN_DATA,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                design_data_any_of=[
+                    [StandardConditionField(field="model", operator="starts_with", value="IA")],
+                    [StandardConditionField(field="model", operator="starts_with", value="OA")],
+                ]
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+
+
 def test_evaluate_product_or_condition_all_branches_fail(client, monkeypatch, tmp_path, db_path):
     """OR条件のどちらの枝も成立しない(合成データのmodelがIS/OSどちらでもない)
     場合、不成立になる。"""
@@ -1104,3 +1204,286 @@ def test_evaluate_product_design_data_ref_omits_any_of_key_when_no_or_condition(
 
     ref = json.loads(outcome.candidates[0].evidence[0].design_data_ref)
     assert "any_of" not in ref
+
+
+# ============================================================
+# Issue #40 Phase 6-G指示2/3: 位置関係条件(evidence_relations)の評価。
+# 座標系はY軸下向き(product_df.pyのdocstring参照): yが小さい方が画面上で
+# 上(above)。
+# ============================================================
+
+
+def test_evaluate_product_position_relation_matches_when_above_holds(client, monkeypatch, tmp_path, db_path):
+    """CHがVCTより上(yが小さい)にある場合、位置関係条件が成立する。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        for key in ("test_ch", "test_vct"):
+            create_evidence_type(
+                conn, key=key, display_name=key, category=None,
+                usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.PANEL, description=None,
+            )
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_ch", "test_vct"],
+                evidence_relations=[EvidenceRelation(left_type="test_ch", relation="above", right_type="test_vct")],
+            ),
+        )
+
+    ch = _create_manual_detection(client, bbox_x=0.10, bbox_y=0.10, bbox_w=0.02, bbox_h=0.02)
+    _set_evidence_type(db_path, ch["id"], "test_ch")
+    vct = _create_manual_detection(client, bbox_x=0.10, bbox_y=0.30, bbox_w=0.02, bbox_h=0.02)
+    _set_evidence_type(db_path, vct["id"], "test_vct")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert len(outcome.candidates) == 1
+    detection_ids = {e.detection_id for e in outcome.candidates[0].evidence}
+    assert detection_ids == {ch["id"], vct["id"]}
+
+
+def test_evaluate_product_position_relation_does_not_match_when_reversed(
+    client, monkeypatch, tmp_path, db_path
+):
+    """CHがVCTより下にある(=above不成立)場合は、evidenceが両方揃っていても
+    成立しない。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        for key in ("test_ch2", "test_vct2"):
+            create_evidence_type(
+                conn, key=key, display_name=key, category=None,
+                usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.PANEL, description=None,
+            )
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_ch2", "test_vct2"],
+                evidence_relations=[
+                    EvidenceRelation(left_type="test_ch2", relation="above", right_type="test_vct2")
+                ],
+            ),
+        )
+
+    # CHをVCTより下(yが大きい)に配置する → above不成立。
+    ch = _create_manual_detection(client, bbox_x=0.10, bbox_y=0.30, bbox_w=0.02, bbox_h=0.02)
+    _set_evidence_type(db_path, ch["id"], "test_ch2")
+    vct = _create_manual_detection(client, bbox_x=0.10, bbox_y=0.10, bbox_w=0.02, bbox_h=0.02)
+    _set_evidence_type(db_path, vct["id"], "test_vct2")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+
+
+def test_evaluate_product_position_relation_any_pair_matches_if_one_pair_holds(
+    client, monkeypatch, tmp_path, db_path
+):
+    """複数のCH・複数のVCTがある場合、ANY_PAIR(既定)は全組合せのうち
+    1組でも関係を満たせば成立する(指示3: 暗黙に最初の1件同士を比較しない、
+    の確認。1組目は不成立・2組目のみ成立するよう配置する)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        for key in ("test_ch3", "test_vct3"):
+            create_evidence_type(
+                conn, key=key, display_name=key, category=None,
+                usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.PANEL, description=None,
+            )
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_ch3", "test_vct3"],
+                evidence_relations=[
+                    EvidenceRelation(left_type="test_ch3", relation="above", right_type="test_vct3")
+                ],
+                match_mode=MatchMode.ANY_PAIR,
+            ),
+        )
+
+    # 1組目: ch_low(下)/vct_high(上) → above不成立。
+    ch_low = _create_manual_detection(client, bbox_x=0.10, bbox_y=0.40, bbox_w=0.02, bbox_h=0.02)
+    _set_evidence_type(db_path, ch_low["id"], "test_ch3")
+    vct_high = _create_manual_detection(client, bbox_x=0.30, bbox_y=0.10, bbox_w=0.02, bbox_h=0.02)
+    _set_evidence_type(db_path, vct_high["id"], "test_vct3")
+    # 2組目: ch_high(上)/vct_low(下) → above成立。
+    ch_high = _create_manual_detection(client, bbox_x=0.50, bbox_y=0.10, bbox_w=0.02, bbox_h=0.02)
+    _set_evidence_type(db_path, ch_high["id"], "test_ch3")
+    vct_low = _create_manual_detection(client, bbox_x=0.70, bbox_y=0.40, bbox_w=0.02, bbox_h=0.02)
+    _set_evidence_type(db_path, vct_low["id"], "test_vct3")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert len(outcome.candidates) == 1
+
+
+def test_evaluate_product_position_relation_tolerance_absorbs_small_difference(
+    client, monkeypatch, tmp_path, db_path
+):
+    """toleranceを指定すると、わずかな差は「above」とみなされなくなる
+    (`app.domain.geometry.is_above`のtolerance仕様をそのまま反映)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        for key in ("test_ch4", "test_vct4"):
+            create_evidence_type(
+                conn, key=key, display_name=key, category=None,
+                usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.PANEL, description=None,
+            )
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_ch4", "test_vct4"],
+                evidence_relations=[
+                    EvidenceRelation(
+                        left_type="test_ch4", relation="above", right_type="test_vct4", tolerance=0.1
+                    )
+                ],
+            ),
+        )
+
+    # center_yの差はごくわずか(0.01)。tolerance=0.1より小さいため不成立。
+    ch = _create_manual_detection(client, bbox_x=0.10, bbox_y=0.100, bbox_w=0.02, bbox_h=0.02)
+    _set_evidence_type(db_path, ch["id"], "test_ch4")
+    vct = _create_manual_detection(client, bbox_x=0.10, bbox_y=0.110, bbox_w=0.02, bbox_h=0.02)
+    _set_evidence_type(db_path, vct["id"], "test_vct4")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+
+
+def test_evaluate_product_design_data_scope_skips_rule_with_evidence_relations(
+    client, monkeypatch, tmp_path, db_path
+):
+    """evidence_relationsはPANEL scopeのみ対応。DESIGN_DATA scopeでは
+    (指示2「PANEL scopeから開始してよい」の範囲外のため)skipする。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        rule = create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.NEEDS_CONFIRMATION,
+            judgment_scope=JudgmentScope.DESIGN_DATA,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_ch5", "test_vct5"],
+                evidence_relations=[
+                    EvidenceRelation(left_type="test_ch5", relation="above", right_type="test_vct5")
+                ],
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+    assert outcome.skipped_rule_master_ids == [rule.id]
+
+
+def test_evaluate_product_skips_rule_with_evidence_relations_and_unsupported_match_mode(
+    client, monkeypatch, tmp_path, db_path
+):
+    """未対応のmatch_mode(any_pair以外)を使うルールはskipする(指示3:
+    実装するのはany_pairのみ、他はunsupported)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item(client)["id"]
+        rule = create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.NEEDS_CONFIRMATION,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_ch6", "test_vct6"],
+                evidence_relations=[
+                    EvidenceRelation(left_type="test_ch6", relation="above", right_type="test_vct6")
+                ],
+                match_mode=MatchMode.EVERY_PAIR,
+            ),
+        )
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+    assert outcome.skipped_rule_master_ids == [rule.id]
+
+
+def test_evidence_relations_hold_is_false_across_panels():
+    """`_evidence_relations_hold`は`evidence_by_type`に渡された根拠だけを
+    見る。盤ごとの絞り込みは呼び出し元(`_panel_evidence_by_type`、既存の
+    panel_assignmentベースのグルーピング、Phase 2から変更していない)が
+    行うため、異なる盤のevidenceが同じ`evidence_by_type`へ混ざることは
+    無い(=この関数自身のテストとしては「right_type側のevidenceが
+    (他の盤にあって)この盤には無い」状態を模せば十分。cross-panel不成立の
+    実質的な保証はpanel_assignment側のテストが担う)。"""
+    from app.domain.models import Detection, DetectionSourceType, DetectionStatus
+    from app.services.estimate_rule_evaluator import _evidence_relations_hold
+
+    def _detection(id_: int, y: float) -> Detection:
+        return Detection(
+            id=id_,
+            drawing_page_id=1,
+            panel_id=None,
+            class_name="test",
+            bbox_x=0.1,
+            bbox_y=y,
+            bbox_w=0.02,
+            bbox_h=0.02,
+            confidence=None,
+            status=DetectionStatus.REVIEWED,
+            source_type=DetectionSourceType.MANUAL,
+            master_item_id=None,
+            leader_label_x=None,
+            leader_label_y=None,
+            master_item_category=None,
+            master_item_model=None,
+            master_item_code=None,
+            evidence_type_key="test_ch",
+        )
+
+    condition = StandardCondition(
+        required_evidence_types=["test_ch", "test_vct"],
+        evidence_relations=[EvidenceRelation(left_type="test_ch", relation="above", right_type="test_vct")],
+    )
+
+    # 同じ盤にtest_ch/test_vct両方がある場合は成立する(above成立の配置)。
+    same_panel_evidence = {"test_ch": [_detection(1, 0.1)], "test_vct": [_detection(2, 0.3)]}
+    assert _evidence_relations_hold(condition, same_panel_evidence) is True
+
+    # test_vctがこの盤のevidence_by_typeに存在しない(=別の盤にしか無い、と
+    # いう状況を模す)場合は不成立。
+    cross_panel_evidence = {"test_ch": [_detection(1, 0.1)]}
+    assert _evidence_relations_hold(condition, cross_panel_evidence) is False

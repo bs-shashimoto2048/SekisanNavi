@@ -11,8 +11,10 @@ from app.db.connection import get_connection
 from app.domain.estimate_rules import (
     ApplicableUnit,
     CalcType,
+    EvidenceRelation,
     JudgmentMethod,
     JudgmentScope,
+    MatchMode,
     ProcessingMode,
     QuantityMethod,
     StandardCondition,
@@ -154,3 +156,123 @@ def test_old_json_without_any_of_key_parses_as_empty_or_constraint(db_path):
     assert reloaded.judgment_condition.required_evidence_types == ["side_door"]
     assert reloaded.judgment_condition.design_data_any_of == []
     assert reloaded.judgment_condition.design_data_conditions[0].field == "ban_w"
+
+
+# ============================================================
+# Issue #40 Phase 6-G指示2: evidence_relations(位置関係条件)のserialize/
+# deserialize往復・後方互換性確認。
+# ============================================================
+
+
+def test_evidence_relations_roundtrip(db_path):
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item_id(conn)
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["ch", "vct"],
+                evidence_relations=[
+                    EvidenceRelation(left_type="ch", relation="above", right_type="vct", tolerance=0.01)
+                ],
+            ),
+        )
+        raw = conn.execute(
+            "SELECT judgment_condition FROM estimate_rule_masters WHERE master_item_id = ?",
+            (master_item_id,),
+        ).fetchone()["judgment_condition"]
+        parsed_json = json.loads(raw)
+        assert parsed_json["evidence_relations"] == [
+            {"left_type": "ch", "relation": "above", "right_type": "vct", "tolerance": 0.01}
+        ]
+        assert "match_mode" not in parsed_json  # 既定値(any_pair)は出力しない
+
+        reloaded = get_rule_master_by_master_item_id(conn, master_item_id)
+
+    assert len(reloaded.judgment_condition.evidence_relations) == 1
+    rel = reloaded.judgment_condition.evidence_relations[0]
+    assert rel.left_type == "ch"
+    assert rel.relation == "above"
+    assert rel.right_type == "vct"
+    assert rel.tolerance == 0.01
+    assert reloaded.judgment_condition.match_mode == MatchMode.ANY_PAIR
+
+
+def test_condition_without_evidence_relations_has_no_relations_key(db_path):
+    """evidence_relationsを使わないルール(Phase 6-F以前相当)のJSONには
+    `evidence_relations`/`match_mode`キーが現れない(後方互換)。"""
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item_id(conn)
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_EVIDENCE,
+            judgment_condition=StandardCondition(required_evidence_types=["side_door"]),
+        )
+        raw = conn.execute(
+            "SELECT judgment_condition FROM estimate_rule_masters WHERE master_item_id = ?",
+            (master_item_id,),
+        ).fetchone()["judgment_condition"]
+    parsed_json = json.loads(raw)
+    assert "evidence_relations" not in parsed_json
+    assert "match_mode" not in parsed_json
+
+
+def test_old_json_without_evidence_relations_key_parses_with_empty_relations(db_path):
+    """Phase 6-F以前の生JSON(`evidence_relations`キー無し)を直接書き込んでも
+    問題なくパースできる。"""
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item_id(conn)
+        old_style_json = json.dumps(
+            {
+                "required_evidence_types": ["vct", "ch"],
+                "design_data_conditions": [],
+            }
+        )
+        conn.execute(
+            """
+            INSERT INTO estimate_rule_masters
+                (master_item_id, judgment_method, judgment_scope, quantity_method,
+                 initial_factor, judgment_condition, calc_type, processing_mode,
+                 auto_display, enabled)
+            VALUES (?, 'drawing_judgment', 'panel', 'per_condition_group', 1.0, ?, 'direct', 'standard', 1, 1)
+            """,
+            (master_item_id, old_style_json),
+        )
+        reloaded = get_rule_master_by_master_item_id(conn, master_item_id)
+
+    assert reloaded.judgment_condition.evidence_relations == []
+    assert reloaded.judgment_condition.match_mode == MatchMode.ANY_PAIR
+
+
+def test_evidence_relations_with_non_default_match_mode_roundtrip(db_path):
+    """既定値以外のmatch_mode(例: every_pair、評価器は未対応)もschema
+    としては保存・復元できる(validatorがreadyでは拒否する、という別の
+    責務と切り分ける)。"""
+    with get_connection(db_path) as conn:
+        master_item_id = _first_master_item_id(conn)
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["ch", "vct"],
+                evidence_relations=[EvidenceRelation(left_type="ch", relation="above", right_type="vct")],
+                match_mode=MatchMode.EVERY_PAIR,
+            ),
+        )
+        raw = conn.execute(
+            "SELECT judgment_condition FROM estimate_rule_masters WHERE master_item_id = ?",
+            (master_item_id,),
+        ).fetchone()["judgment_condition"]
+        assert json.loads(raw)["match_mode"] == "every_pair"
+
+        reloaded = get_rule_master_by_master_item_id(conn, master_item_id)
+    assert reloaded.judgment_condition.match_mode == MatchMode.EVERY_PAIR

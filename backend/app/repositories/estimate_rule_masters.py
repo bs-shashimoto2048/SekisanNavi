@@ -12,8 +12,10 @@ from app.domain.estimate_rules import (
     ApplicableUnit,
     CalcType,
     EstimateRuleMaster,
+    EvidenceRelation,
     JudgmentMethod,
     JudgmentScope,
+    MatchMode,
     ProcessingMode,
     QuantityMethod,
     StandardCondition,
@@ -31,11 +33,12 @@ _COLUMNS = """
 def _parse_condition(raw: str | None) -> StandardCondition | None:
     """`judgment_condition`(JSON文字列)をパースする。
 
-    Issue #40 Phase 6-Fで`design_data_any_of`(OR表現)を追加したが、
-    このキーを持たない旧JSON(Phase 6-E以前にDBへ保存済みの行)は
-    `data.get("design_data_any_of", [])`により空リストとして扱われ、
-    `StandardCondition.design_data_any_of=[]`(OR制約なし、従来通りAND
-    のみ)として問題なくパースできる(完全な後方互換性)。
+    Issue #40 Phase 6-Fで`design_data_any_of`(OR表現)、Phase 6-Gで
+    `evidence_relations`/`match_mode`(位置関係表現)を追加したが、これらの
+    キーを持たない旧JSON(Phase 6-E以前にDBへ保存済みの行)は
+    `data.get(..., [])`により空リスト・既定値として扱われ、
+    「OR制約なし」「位置関係制約なし」として問題なくパースできる
+    (完全な後方互換性)。
     """
     if raw is None:
         return None
@@ -53,17 +56,28 @@ def _parse_condition(raw: str | None) -> StandardCondition | None:
             ]
             for group in data.get("design_data_any_of", [])
         ],
+        evidence_relations=[
+            EvidenceRelation(
+                left_type=r["left_type"],
+                relation=r["relation"],
+                right_type=r["right_type"],
+                tolerance=r.get("tolerance", 0.0),
+            )
+            for r in data.get("evidence_relations", [])
+        ],
+        match_mode=data.get("match_mode", MatchMode.ANY_PAIR.value),
     )
 
 
 def _serialize_condition(condition: StandardCondition | None) -> str | None:
     """`judgment_condition`をJSON文字列へ直列化する。
 
-    Issue #40 Phase 6-F: `design_data_any_of`が空の場合(OR条件を持たない
-    ルール、Phase 6-E以前からある全ルールが該当)は、このキー自体を出力
-    しない。これにより、OR条件を使わないルールのJSON表現はPhase 6-E以前と
-    完全に同じバイト列になり、既存DBとの差分を生まない(明示的な後方互換
-    設計)。
+    Issue #40 Phase 6-F/6-G: `design_data_any_of`/`evidence_relations`が
+    空の場合(OR条件・位置関係条件を持たないルール、Phase 6-F以前からある
+    全ルールが該当)は、それぞれのキー自体を出力しない。`match_mode`も
+    既定値(`any_pair`)の場合は出力しない。これにより、これらの新機能を
+    使わないルールのJSON表現は旧Phase時点と完全に同じバイト列になり、
+    既存DBとの差分を生まない(明示的な後方互換設計)。
     """
     if condition is None:
         return None
@@ -79,6 +93,18 @@ def _serialize_condition(condition: StandardCondition | None) -> str | None:
             [{"field": c.field, "operator": c.operator, "value": c.value} for c in group]
             for group in condition.design_data_any_of
         ]
+    if condition.evidence_relations:
+        payload["evidence_relations"] = [
+            {
+                "left_type": r.left_type,
+                "relation": r.relation.value,
+                "right_type": r.right_type,
+                "tolerance": r.tolerance,
+            }
+            for r in condition.evidence_relations
+        ]
+        if condition.match_mode != MatchMode.ANY_PAIR:
+            payload["match_mode"] = condition.match_mode.value
     return json.dumps(payload)
 
 

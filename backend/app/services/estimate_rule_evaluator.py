@@ -47,12 +47,17 @@ from app.domain.estimate_rules import (
     EstimateResultCandidate,
     EvidenceKind,
     EvidenceRef,
+    EvidenceRelation,
     JudgmentScope,
+    MatchMode,
+    PositionRelation,
     ProcessingMode,
     QuantityMethod,
     StandardCondition,
     StandardConditionField,
+    SUPPORTED_MATCH_MODES,
 )
+from app.domain.geometry import Rect, is_above, is_below, is_left_of, is_right_of, overlaps
 from app.domain.models import Detection
 from app.repositories.detections import list_detections
 from app.repositories.estimate_rule_masters import list_rule_masters
@@ -135,6 +140,25 @@ def _rule_shape_supported(
     if quantity_method not in _SUPPORTED_QUANTITY_METHODS:
         return RuleSupportResult(False, f"quantity_method={quantity_method.value!r}は標準評価器が未対応です")
 
+    if condition.evidence_relations:
+        # Issue #40 Phase 6-G指示2: 位置関係条件(evidence_relations)は
+        # 「PANEL scopeから開始してよい」という指示の範囲に限定してサポート
+        # する。DESIGN_DATA/DRAWING/PRODUCTは、盤を跨いだ位置関係の定義が
+        # 資料から確認できないため対象外とする(推測実装しない)。
+        if judgment_scope != JudgmentScope.PANEL:
+            return RuleSupportResult(
+                False,
+                f"judgment_scope={judgment_scope.value!r} + evidence_relationsは標準評価器が未対応です"
+                "(evidence_relationsはPANEL scopeのみ対応)",
+            )
+        if condition.match_mode not in SUPPORTED_MATCH_MODES:
+            return RuleSupportResult(
+                False,
+                f"match_mode={condition.match_mode.value!r}は標準評価器が未対応です"
+                f"(対応: {[m.value for m in SUPPORTED_MATCH_MODES]})",
+            )
+        return RuleSupportResult(True)
+
     if judgment_scope in (JudgmentScope.PANEL, JudgmentScope.DESIGN_DATA):
         return RuleSupportResult(True)
 
@@ -145,7 +169,8 @@ def _rule_shape_supported(
         # と同じ理由(盤単位の設計データを図面/製番単位へどう集約するかが業務的に
         # 未確定)でこのscopeでは未対応とする(PR #50レビュー指摘: 従来の判定は
         # design_data_any_ofの有無を見ておらず、黙って無視してしまう抜けが
-        # あった。これを明示的なskip理由として修正する)。
+        # あった。これを明示的なskip理由として修正する)。evidence_relationsは
+        # 上のブロックで既に判定済み(ここに到達する時点で空)。
         if condition.design_data_conditions:
             return RuleSupportResult(
                 False,
@@ -228,6 +253,64 @@ def _design_data_conditions_hold(condition: StandardCondition, ctx: DesignDataCo
         if not any(all(_field_condition_holds(c, ctx) for c in group) for group in condition.design_data_any_of):
             return False
     return True
+
+
+# `PositionRelation` -> `app.domain.geometry`の対応するpredicate関数
+# (Issue #40 Phase 6-G指示2)。
+_POSITION_PREDICATES = {
+    PositionRelation.ABOVE: is_above,
+    PositionRelation.BELOW: is_below,
+    PositionRelation.LEFT_OF: is_left_of,
+    PositionRelation.RIGHT_OF: is_right_of,
+    PositionRelation.OVERLAPS: lambda a, b, tolerance=0.0: overlaps(a, b),
+}
+
+
+def _detection_rect(detection: Detection) -> Rect:
+    return Rect(x=detection.bbox_x, y=detection.bbox_y, w=detection.bbox_w, h=detection.bbox_h)
+
+
+def _evidence_relation_holds(
+    relation: EvidenceRelation, evidence_by_type: dict[str, list[Detection]], match_mode: MatchMode
+) -> bool:
+    """1件の`EvidenceRelation`が、現在の判定グループ(盤)内のevidenceで
+    成立するかを判定する(Issue #40 Phase 6-G指示2/3)。
+
+    `match_mode`は呼び出し時点で`_rule_shape_supported`により
+    `SUPPORTED_MATCH_MODES`(現状`ANY_PAIR`のみ)であることが保証されている
+    前提(未対応のmatch_modeはそもそも評価対象から除外される)。
+    `ANY_PAIR`: `left_type`側・`right_type`側の根拠から作れる全てのペアの
+    うち、**少なくとも1組**が関係を満たせば成立(指示3「暗黙に『最初の1件
+    同士』を比較しない」の通り、全組合せを試す)。
+    """
+    left_candidates = evidence_by_type.get(relation.left_type, [])
+    right_candidates = evidence_by_type.get(relation.right_type, [])
+    if not left_candidates or not right_candidates:
+        return False
+
+    predicate = _POSITION_PREDICATES[relation.relation]
+    if match_mode == MatchMode.ANY_PAIR:
+        return any(
+            predicate(_detection_rect(left), _detection_rect(right), relation.tolerance)
+            for left in left_candidates
+            for right in right_candidates
+        )
+    # ここに到達するのは、呼び出し側が`_rule_shape_supported`での事前判定を
+    # 経由せずこの関数を直接呼んだ場合のみ(現状の呼び出し経路では発生しない)。
+    # 未対応のmatch_modeを「成立」として誤魔化さないよう、明示的に不成立とする。
+    return False
+
+
+def _evidence_relations_hold(
+    condition: StandardCondition, evidence_by_type: dict[str, list[Detection]]
+) -> bool:
+    """`condition.evidence_relations`の全件(AND)が成立するかを判定する。
+    空リストの場合は「位置関係の制約なし」として常に成立する(後方互換)。
+    """
+    return all(
+        _evidence_relation_holds(relation, evidence_by_type, condition.match_mode)
+        for relation in condition.evidence_relations
+    )
 
 
 def _build_design_data_ref(panel_key: str, condition: StandardCondition, ctx: DesignDataContext) -> str:
@@ -493,6 +576,13 @@ def evaluate_product(
             if missing_types:
                 continue
 
+            # Issue #40 Phase 6-G指示2: 位置関係条件(evidence_relations)。
+            # `_rule_shape_supported`により、ここに到達するルールの
+            # `evidence_relations`は空、またはjudgment_scope=PANELかつ
+            # match_modeがSUPPORTED_MATCH_MODESであることが保証されている。
+            if not _evidence_relations_hold(condition, evidence_by_type):
+                continue
+
             reason = rule.judgment_reason_template or (
                 f"盤 {ctx.ban_menno}/{ctx.ban_no}: "
                 + (
@@ -500,6 +590,7 @@ def evaluate_product(
                     if condition.required_evidence_types
                     else "設計データ条件が成立"
                 )
+                + ("・位置関係条件が成立" if condition.evidence_relations else "")
             )
 
             if rule.quantity_method == QuantityMethod.PER_CONDITION_GROUP or not condition.required_evidence_types:
