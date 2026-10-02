@@ -66,7 +66,7 @@ validate_candidate_manifests.py`)も同じ関数を使って`status=ready`の妥
 | `design_data_conditions`(`starts_with`/`in`) | fully supported | Phase 6-E追加 |
 | `design_data_any_of`(OR、ANDグループのリスト) | fully supported | Phase 6-F追加。既存JSON完全互換 |
 | `required_evidence_types`(図面情報の存在判定) | fully supported | 全4 scopeで対応 |
-| `evidence_relations`(位置関係条件、`above`/`below`/`left_of`/`right_of`/`overlaps`) | conditionally supported | PANEL scope限定。`match_mode=any_pair`のみ(`every_pair`/`one_to_one`/`nearest_pair`はinfrastructure only、enumとしては列挙済みだが評価器は拒否する) |
+| `evidence_relations`(位置関係条件、`above`/`below`/`left_of`/`right_of`/`overlaps`) | conditionally supported | PANEL scope限定。`match_mode=any_pair`のみ(`every_pair`/`one_to_one`/`nearest_pair`はinfrastructure only、enumとしては列挙済みだが評価器は拒否する)。さらに`relation=overlaps`は`tolerance=0.0`のみサポート(`tolerance!=0`はPR #51レビュー指摘により明示的にunsupportedとする。`app.domain.geometry.overlaps`がtolerance引数を持たず、指定値が評価時にsilent ignoreされてしまうため。`above`/`below`/`left_of`/`right_of`は引き続き任意のtoleranceをサポート) |
 | OR結合(design_data_any_of)とNOT | not implemented | OR(1段のみ)とANDの組合せのみ。2段以上のネスト・NOTは資料から必要性を確認できていない |
 
 ## 幾何predicate (`app/domain/geometry.py`)

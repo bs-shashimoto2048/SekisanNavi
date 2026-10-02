@@ -157,6 +157,18 @@ def _rule_shape_supported(
                 f"match_mode={condition.match_mode.value!r}は標準評価器が未対応です"
                 f"(対応: {[m.value for m in SUPPORTED_MATCH_MODES]})",
             )
+        # Issue #40 PR #51レビュー指摘: `app.domain.geometry.overlaps`はtolerance
+        # 引数を持たないため、`relation=overlaps`かつ`tolerance != 0.0`の組合せは
+        # 実評価で指定toleranceが silent ignore されてしまう。業務的な
+        # 「overlap tolerance」の意味を推測で定義しないため、この組合せ自体を
+        # 単一の真実源(本関数)でunsupportedとする。
+        for r in condition.evidence_relations:
+            if r.relation == PositionRelation.OVERLAPS and r.tolerance != 0.0:
+                return RuleSupportResult(
+                    False,
+                    f"relation=overlaps + tolerance={r.tolerance!r}(!=0)は標準評価器が未対応です"
+                    "(overlapsはtolerance=0.0のみ対応。toleranceの業務的な意味が資料から未確認のため)",
+                )
         return RuleSupportResult(True)
 
     if judgment_scope in (JudgmentScope.PANEL, JudgmentScope.DESIGN_DATA):

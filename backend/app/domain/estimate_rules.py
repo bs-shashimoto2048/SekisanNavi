@@ -16,6 +16,7 @@ UI表示用の日本語ラベルは、この段階ではUIを一切実装しな�
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -266,6 +267,20 @@ class EvidenceRelation:
 
     **arbitrary evalは禁止**: `relation`は`PositionRelation`の明示的な
     列挙値のみを許可し、文字列式の評価・SQL動的生成は一切行わない。
+
+    **tolerance**: 有限の数値(NaN/+Infinity/-Infinity禁止、DSL/JSON境界で
+    扱えない値のため)のみ許可する。負値は意味を変える可能性があるが、
+    資料根拠なしに解釈・禁止を決めないため、今回は現状の型チェックのみとし、
+    符号自体は制限しない(Issue #40 PR #51レビュー指摘)。
+
+    **`overlaps`はtolerance=0.0のみサポート**: `PositionRelation.OVERLAPS`は
+    `app.domain.geometry.overlaps`が2矩形の交差判定のみを行い、tolerance
+    引数を受け取らない。`overlaps`に対してtoleranceを与えた場合に何を
+    意味するか(矩形を膨張させる、等)は資料から確認できないため、今回は
+    推測で意味を定義せず、`OVERLAPS`かつ`tolerance != 0.0`の組合せを
+    `is_standard_rule_supported`(単一の真実源)で明示的にunsupportedとする
+    (Issue #40 PR #51レビュー指摘: silent ignore禁止)。このdataclass自体は
+    construct時点ではこの組合せを許可する(構造としては妥当なため)。
     """
 
     left_type: str
@@ -288,6 +303,8 @@ class EvidenceRelation:
             raise ValueError(f"right_typeは空でない文字列である必要があります: {self.right_type!r}")
         if isinstance(self.tolerance, bool) or not isinstance(self.tolerance, (int, float)):
             raise ValueError(f"toleranceは数値である必要があります: {self.tolerance!r}")
+        if not math.isfinite(self.tolerance):
+            raise ValueError(f"toleranceは有限の数値である必要があります(NaN/Infinity不可): {self.tolerance!r}")
 
 
 @dataclass

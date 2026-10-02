@@ -1487,3 +1487,97 @@ def test_evidence_relations_hold_is_false_across_panels():
     # いう状況を模す)場合は不成立。
     cross_panel_evidence = {"test_ch": [_detection(1, 0.1)]}
     assert _evidence_relations_hold(condition, cross_panel_evidence) is False
+
+
+# ============================================================
+# Issue #40 PR #51レビュー指摘: overlaps + tolerance!=0 のsilent ignore防止
+# ============================================================
+
+
+def test_evaluate_product_position_relation_overlaps_with_zero_tolerance_matches(
+    client, monkeypatch, tmp_path, db_path
+):
+    """`overlaps`はtolerance=0.0であれば通常通り評価される。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        for key in ("test_ch7", "test_vct7"):
+            create_evidence_type(
+                conn, key=key, display_name=key, category=None,
+                usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.PANEL, description=None,
+            )
+        master_item_id = _first_master_item(client)["id"]
+        create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_ch7", "test_vct7"],
+                evidence_relations=[
+                    EvidenceRelation(
+                        left_type="test_ch7", relation="overlaps", right_type="test_vct7", tolerance=0.0
+                    )
+                ],
+            ),
+        )
+
+    # 2つの矩形が重なるように配置する(overlaps成立)。
+    ch = _create_manual_detection(client, bbox_x=0.10, bbox_y=0.10, bbox_w=0.05, bbox_h=0.05)
+    _set_evidence_type(db_path, ch["id"], "test_ch7")
+    vct = _create_manual_detection(client, bbox_x=0.12, bbox_y=0.12, bbox_w=0.05, bbox_h=0.05)
+    _set_evidence_type(db_path, vct["id"], "test_vct7")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert len(outcome.candidates) == 1
+    assert outcome.skipped_rule_master_ids == []
+
+
+def test_evaluate_product_position_relation_overlaps_with_nonzero_tolerance_is_skipped(
+    client, monkeypatch, tmp_path, db_path
+):
+    """`overlaps`はtolerance!=0をサポートしない(`is_standard_rule_supported`
+    が理由付きでunsupportedとするため、評価器はこのルール自体をskipする。
+    指定したtoleranceがsilent ignoreされて成立扱いになってはならない)。"""
+    _setup_product_dir(tmp_path)
+    _configure_root(client, monkeypatch, tmp_path)
+
+    with get_connection(db_path) as conn:
+        for key in ("test_ch8", "test_vct8"):
+            create_evidence_type(
+                conn, key=key, display_name=key, category=None,
+                usage=EvidenceUsage.CONDITION, default_judgment_scope=JudgmentScope.PANEL, description=None,
+            )
+        master_item_id = _first_master_item(client)["id"]
+        rule = create_rule_master(
+            conn,
+            master_item_id=master_item_id,
+            judgment_method=JudgmentMethod.DRAWING_JUDGMENT,
+            judgment_scope=JudgmentScope.PANEL,
+            quantity_method=QuantityMethod.PER_CONDITION_GROUP,
+            judgment_condition=StandardCondition(
+                required_evidence_types=["test_ch8", "test_vct8"],
+                evidence_relations=[
+                    EvidenceRelation(
+                        left_type="test_ch8", relation="overlaps", right_type="test_vct8", tolerance=0.1
+                    )
+                ],
+            ),
+        )
+
+    # 重なるように配置しても(overlaps自体は成立しうる状況でも)、rule自体が
+    # unsupportedとしてskipされるため候補は生成されない。
+    ch = _create_manual_detection(client, bbox_x=0.10, bbox_y=0.10, bbox_w=0.05, bbox_h=0.05)
+    _set_evidence_type(db_path, ch["id"], "test_ch8")
+    vct = _create_manual_detection(client, bbox_x=0.12, bbox_y=0.12, bbox_w=0.05, bbox_h=0.05)
+    _set_evidence_type(db_path, vct["id"], "test_vct8")
+
+    with get_connection(db_path) as conn:
+        outcome = evaluate_product(conn, str(tmp_path), "A1GV2421")
+
+    assert outcome.candidates == []
+    assert outcome.skipped_rule_master_ids == [rule.id]

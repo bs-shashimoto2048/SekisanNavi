@@ -597,6 +597,73 @@ def test_ready_design_data_scope_with_evidence_relations_is_rejected():
 
 
 # ============================================================
+# Issue #40 PR #51レビュー指摘: overlaps + tolerance!=0 のsilent ignore防止
+# ============================================================
+
+
+def test_ready_overlaps_with_zero_tolerance_is_accepted():
+    issues = validate_manifests(
+        {
+            "candidates": [
+                _evidence(key="ch", status="ready", blocker=None, business_blockers=[]),
+                _evidence(key="vct", status="ready", blocker=None, business_blockers=[]),
+            ]
+        },
+        {
+            "candidates": [
+                _rule(
+                    status="ready",
+                    blocker=None,
+                    business_blockers=[],
+                    judgment_scope="panel",
+                    quantity_method="per_condition_group",
+                    calc_type="direct",
+                    evidence_type_keys=["ch", "vct"],
+                    condition={
+                        "required_evidence_types": ["ch", "vct"],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [],
+                        "evidence_relations": [
+                            {"left_type": "ch", "relation": "overlaps", "right_type": "vct", "tolerance": 0.0}
+                        ],
+                    },
+                )
+            ]
+        },
+    )
+    assert issues == []
+
+
+def test_ready_overlaps_with_nonzero_tolerance_is_rejected():
+    """readyなのに`relation=overlaps`かつ`tolerance!=0`(評価時にsilent
+    ignoreされてしまう組合せ) → NG(Issue #40 PR #51レビュー指摘)。"""
+    issues = validate_manifests(
+        {"candidates": [_evidence(key="ch", status="ready", blocker=None), _evidence(key="vct", status="ready", blocker=None)]},
+        {
+            "candidates": [
+                _rule(
+                    status="ready",
+                    blocker=None,
+                    judgment_scope="panel",
+                    quantity_method="per_condition_group",
+                    calc_type="direct",
+                    evidence_type_keys=["ch", "vct"],
+                    condition={
+                        "required_evidence_types": ["ch", "vct"],
+                        "design_data_conditions": [],
+                        "design_data_any_of": [],
+                        "evidence_relations": [
+                            {"left_type": "ch", "relation": "overlaps", "right_type": "vct", "tolerance": 0.1}
+                        ],
+                    },
+                )
+            ]
+        },
+    )
+    assert any("overlaps" in str(i) and "tolerance" in str(i) for i in issues)
+
+
+# ============================================================
 # Issue #40 Phase 6-G指示11: technical_blockers/business_blockers/
 # data_source_blockersの整合性チェック
 # ============================================================

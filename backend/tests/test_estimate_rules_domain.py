@@ -148,6 +148,27 @@ def test_evidence_relation_rejects_empty_left_or_right_type():
         EvidenceRelation(left_type="ch", relation="above", right_type="")
 
 
+def test_evidence_relation_rejects_nan_tolerance():
+    """Issue #40 PR #51レビュー指摘: DSL/JSON境界として有限値のみ許可する。"""
+    with pytest.raises(ValueError):
+        EvidenceRelation(left_type="ch", relation="above", right_type="vct", tolerance=float("nan"))
+
+
+def test_evidence_relation_rejects_positive_infinity_tolerance():
+    with pytest.raises(ValueError):
+        EvidenceRelation(left_type="ch", relation="above", right_type="vct", tolerance=float("inf"))
+
+
+def test_evidence_relation_rejects_negative_infinity_tolerance():
+    with pytest.raises(ValueError):
+        EvidenceRelation(left_type="ch", relation="above", right_type="vct", tolerance=float("-inf"))
+
+
+def test_evidence_relation_accepts_finite_tolerance():
+    rel = EvidenceRelation(left_type="ch", relation="above", right_type="vct", tolerance=0.05)
+    assert rel.tolerance == 0.05
+
+
 def test_standard_condition_default_evidence_relations_is_empty_and_match_mode_is_any_pair():
     condition = StandardCondition()
     assert condition.evidence_relations == []

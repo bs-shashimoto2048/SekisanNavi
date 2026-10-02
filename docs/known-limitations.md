@@ -196,6 +196,16 @@
   `PRODUCT` scopeとの組合せ、`EVERY_PAIR`/`ONE_TO_ONE`/`NEAREST_PAIR`
   match_modeは未実装のまま(複数BBoxがある場合のペアリング規則を業務的に
   決めていないため)。
+- **`relation=overlaps`は`tolerance=0.0`のみサポート**(PR #51レビュー指摘
+  対応): `app.domain.geometry.overlaps`はtolerance引数を持たないため、
+  `tolerance!=0`を指定しても評価時にsilent ignoreされてしまう。この組合せ
+  自体を`is_standard_rule_supported`で明示的にunsupportedとし、評価器
+  (`evaluate_product`)・候補マニフェストvalidatorの両方がskip/NGとする。
+  「overlapに対するtolerance」の業務的な意味(矩形を膨張させる、等)は
+  資料から確認できないため、今回は意味を定義せず未対応のままにしている。
+  `above`/`below`/`left_of`/`right_of`は引き続き任意のtoleranceを
+  サポートする。`EvidenceRelation.tolerance`自体もNaN/+Infinity/-Infinityを
+  `math.isfinite`で拒否する(DSL/JSON境界として有限値のみ許可)。
 - **18323(VCT架台)はまだ投入できない**: 位置関係(CHがVCTの上にあれば成立)
   自体を表現する技術基盤はPhase 6-Gで実装・テスト済みだが、実ルールへは
   まだ接続していない。加えて資料にある「発注者区分(東電のみ等)」を設計

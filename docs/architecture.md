@@ -1787,6 +1787,12 @@ Backend側の互換レイヤで統合し、Frontend側のUIも`EstimateResult`�
     ペアリング規則が資料から確認できないため推測実装しない)。
     `judgment_scope=PANEL`のルールのみサポートし(1盤内の評価グループに
     限定)、`DESIGN_DATA`/`DRAWING`/`PRODUCT`との組合せは未対応。
+    `relation=overlaps`は`tolerance=0.0`のみサポート(`app/domain/geometry.
+    overlaps`がtolerance引数を持たないため、`tolerance!=0`を許すと評価時に
+    silent ignoreされてしまう。PR #51レビュー指摘対応で`is_standard_rule_
+    supported`が明示的にunsupportedとする。`above`/`below`/`left_of`/
+    `right_of`は引き続き任意のtoleranceに対応)。`EvidenceRelation.tolerance`
+    はNaN/±Infinityを`math.isfinite`で拒否する(DSL/JSON境界)。
     `is_standard_rule_supported`/`_rule_shape_supported`がこの制約も含めて
     判定する(単一の真実源)。**特定コードの業務ルール
     (「18323はCHがVCTの上にあれば成立」等)はこの汎用基盤へもまだ接続して
