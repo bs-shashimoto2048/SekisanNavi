@@ -39,6 +39,7 @@ from app.schemas.estimate_confirmations import (
 from app.schemas.settings import (
     DetectedPreviewItemOut,
     EstimatePanelInfoOut,
+    MaterialRowOut,
     NormalizedRectOut,
     PanelPreviewOut,
     ProductDrawingOut,
@@ -59,6 +60,7 @@ from app.services.data_source import (
 )
 from app.services.detected_df import load_detected_df
 from app.services.estcode_df import load_estcode_df
+from app.services.material_csv import load_material_csv
 from app.services.estimate_confirmation_builder import (
     NeedsReviewResultsExistError,
     build_confirmation_items,
@@ -245,6 +247,39 @@ def read_detected_preview(
             ),
         )
         for item in detected_result.items_by_page.get(page_no, [])
+    ]
+
+
+@router.get("/{product_no}/materials", response_model=list[MaterialRowOut])
+def read_materials(
+    product_no: str, conn: sqlite3.Connection = Depends(get_db)
+) -> list[MaterialRowOut]:
+    """`material.csv` (設計データの`*.boxspec`由来の材料一覧) を製番単位で全件返す。
+
+    ページ・材料シンボル・箱体型式(CABTYPE)・構成部ごとの行をCSV順のまま返す。
+    `material.csv`自体が製番フォルダに存在しない(旧データ・boxspecなし)場合や、
+    データ行が無い場合もエラーにはせず空配列を返す(Frontendは「材料情報なし」を表示する)。
+    読み込みのみで、製番フォルダへは書き込まない。
+    """
+    root = get_data_source_root(conn)
+    try:
+        resolution = resolve_product_dir(root, product_no)
+    except DataSourceError as e:
+        raise _error_to_http(e) from e
+
+    result = load_material_csv(resolution.ccv_dir, resolution.product_no)
+
+    return [
+        MaterialRowOut(
+            page=row.page,
+            source_file=row.source_file,
+            symbol_name=row.symbol_name,
+            cabtype=row.cabtype,
+            component_code=row.component_code,
+            component_name=row.component_name,
+            material_spec=row.material_spec,
+        )
+        for row in result.rows
     ]
 
 

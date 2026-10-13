@@ -1,4 +1,5 @@
-import type { AttributeSource, EstimatePanelInfo, Panel, PanelPreview } from '../../types/domain'
+import type { AttributeSource, EstimatePanelInfo, MaterialRow, Panel, PanelPreview } from '../../types/domain'
+import { MaterialInfo } from './MaterialInfo'
 import { banGroupKey, panelKey } from '../../utils/panel'
 import './PanelInfo.css'
 
@@ -21,6 +22,9 @@ interface Props {
   /** 製番全体のestcode_df.csv行 (ページに依存しない。Phase 1.14)。panelsの
    * 各行とban_menno/ban_noで突き合わせる。 */
   estimatePanels: EstimatePanelInfo[]
+  /** 製番全体の材料一覧 (material.csv。ページに依存しない)。省略時は材料情報の欄自体を出さない
+   * (既存の呼び出し・テストへの影響を避けるため)。空配列なら「材料情報なし」を表示する。 */
+  materials?: MaterialRow[]
   /** 中央Viewerで現在選択中の盤 (Phase 1.9)。 */
   selectedPanel: { key: string; panel: PanelPreview } | null
   /** カードクリックで中央Viewerと同じ盤選択状態にする (次work指示3章: 「盤情報を
@@ -186,6 +190,7 @@ export function PanelInfo({
   panel,
   panels,
   estimatePanels,
+  materials,
   selectedPanel,
   onSelectPanel,
 }: Props) {
@@ -293,6 +298,8 @@ export function PanelInfo({
           </table>
         </>
       )}
+
+      {materials !== undefined && <MaterialInfo materials={materials} />}
     </section>
   )
 }

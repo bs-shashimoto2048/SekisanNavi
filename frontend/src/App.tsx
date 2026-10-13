@@ -11,6 +11,7 @@ import {
   fetchDrawingEvidenceTypes,
   fetchDrawingPages,
   fetchEstimatePanels,
+  fetchMaterials,
   fetchEstimateResults,
   fetchMasterItems,
   fetchPanel,
@@ -47,6 +48,7 @@ import type {
   DrawingPage,
   EstimateMasterItem,
   EstimatePanelInfo,
+  MaterialRow,
   EstimateResult,
   Panel,
   PanelPreview,
@@ -191,6 +193,12 @@ function App() {
   // estcode_df.csv (盤ごとの積算コード基本情報) 由来の盤情報 (Phase 1.14)。PAGE列を
   // 持たない製番単位のデータのため、ページ切替では再取得せず、製番切替時のみ取得する。
   const [estimatePanels, setEstimatePanels] = useState<EstimatePanelInfo[]>([])
+  // material.csv (設計データの*.boxspec由来の材料一覧)。製番単位のデータで、製番切替時のみ取得する。
+  // 取得に失敗しても他の画面は止めない(材料情報なし扱い)。取得結果は製番と一緒に持ち、
+  // 製番を切り替えた直後に前の製番の材料が表示されないよう、表示時に現在の製番と照合する。
+  const [materialsState, setMaterialsState] = useState<{ productNo: string; rows: MaterialRow[] } | null>(null)
+  const materials: MaterialRow[] =
+    materialsState != null && materialsState.productNo === activeProductNo ? materialsState.rows : []
   // 積算コードMaster全件 (id引き)。中央プレビューの積算コードHover表示 (次work指示1章)
   // でmaster_item_idから定格(rating)を引くために使う。EstimateMasterPickerも
   // 独自に全件取得しているが、責務が異なるためここでは別途取得する
@@ -503,6 +511,24 @@ function App() {
         setError(null)
       })
       .catch((e: unknown) => setError(describeFetchError(e, '盤情報を取得できませんでした')))
+  }, [activeProductNo])
+
+  // material.csv由来の材料一覧を取得する。製番単位のデータのため製番切替時のみ取得する。
+  // 材料情報は参考表示であり、取得に失敗しても既存画面(盤情報・積算)の表示を妨げない
+  // (エラーバナーは出さず、材料情報なしとして扱う)。
+  useEffect(() => {
+    if (activeProductNo == null) return
+    let cancelled = false
+    fetchMaterials(activeProductNo)
+      .then((fetched) => {
+        if (!cancelled) setMaterialsState({ productNo: activeProductNo, rows: fetched })
+      })
+      .catch(() => {
+        if (!cancelled) setMaterialsState({ productNo: activeProductNo, rows: [] })
+      })
+    return () => {
+      cancelled = true
+    }
   }, [activeProductNo])
 
   // [Issue #40 Phase 3] 製番切替時に既存の積算結果(estimate_results)を取得する。
@@ -1760,6 +1786,7 @@ function App() {
                   panel={panel}
                   panels={activeProductPage?.panels ?? []}
                   estimatePanels={estimatePanels}
+                  materials={materials}
                   selectedPanel={selectedPanel}
                   onSelectPanel={handleSelectPanel}
                 />
