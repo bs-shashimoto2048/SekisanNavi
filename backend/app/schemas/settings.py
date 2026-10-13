@@ -66,6 +66,19 @@ class ProductDrawingOut(BaseModel):
     panels: list[PanelPreviewOut] = []
 
 
+class MaterialRowOut(BaseModel):
+    """material.csv 1行相当 (製番の材料一覧。ページ × 材料シンボル × 構成部)。
+    `material_spec`の`未記載`(記載なし)と`無し`(明示値)は意味が違うため、元の文字列のまま返す。"""
+
+    page: str
+    source_file: str = ""
+    symbol_name: str = ""
+    cabtype: str = ""
+    component_code: str
+    component_name: str = ""
+    material_spec: str = ""
+
+
 class EstimatePanelInfoOut(BaseModel):
     """estcode_df.csv 1行相当。右ペイン上部「盤情報」表示用 (Phase 1.14指示書26章)。
     CSVの生データをそのまま渡さず、正規化済みの表示用モデルへ変換してから返す。

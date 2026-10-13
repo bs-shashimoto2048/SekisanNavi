@@ -16,6 +16,7 @@ import type {
   EstimateItem,
   EstimateMasterItem,
   EstimatePanelInfo,
+  MaterialRow,
   EstimateResult,
   EstimateResultEvaluateResponse,
   EvidenceDetectionCreateInput,
@@ -218,6 +219,13 @@ export function fetchDetectedPreview(productNo: string, pageNo: number): Promise
  * まとめて返す (Frontend側で選択中盤のban_menno/ban_noと突き合わせる)。 */
 export function fetchEstimatePanels(productNo: string): Promise<EstimatePanelInfo[]> {
   return getJson(`/api/products/${encodeURIComponent(productNo)}/estimate-panels`)
+}
+
+/** material.csv (設計データの*.boxspec由来の材料一覧) を製番単位で取得する。
+ * ファイルが無い(旧データ・boxspecなし)/データ行が無い場合はエラーではなく空配列が返る
+ * (Backend側で保証済み)。 */
+export function fetchMaterials(productNo: string): Promise<MaterialRow[]> {
+  return getJson(`/api/products/${encodeURIComponent(productNo)}/materials`)
 }
 
 // --- Phase 1.8: 製番検索・左ペインPNGサムネイル ---

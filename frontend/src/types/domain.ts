@@ -236,6 +236,19 @@ export interface EstimatePanelInfo {
   sort_order: number | null
 }
 
+/** material.csv (製番の材料一覧。設計データの*.boxspec由来) 1行。ページ × 材料シンボル × 構成部。
+ * `material_spec`の`未記載`(.boxspecに記載なし)と`無し`(明示値)は意味が違うため、
+ * Backendが返した文字列のまま保持し、表示層で区別する。`cabtype`(箱体型式)は空のことがある。 */
+export interface MaterialRow {
+  page: string
+  source_file: string
+  symbol_name: string
+  cabtype: string
+  component_code: string
+  component_name: string
+  material_spec: string
+}
+
 /** detected_df.csv (YOLO検出結果) 由来の検出BBoxプレビュー (Phase 1.12)。
  * DBの`Detection`とは別データ源であり、`id`はDBのDetection.idとは異なる体系
  * (ページ内のYOLO_INDEXそのもの) であることに注意 (混同して同一視しない)。

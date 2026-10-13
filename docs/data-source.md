@@ -37,6 +37,7 @@ output\A1GV2421\
   A1GV2421_df_outline.csv    (外形図由来の盤情報)
   detected_df.csv            (YOLO検出結果。CAD実座標系)
   estcode_df.csv             (積算コード集計用DataFrame)
+  material.csv               (材料一覧。設計データの*.boxspec由来。無い製番もある。下記「material.csv」参照)
   product_df.csv             (ページ・盤ごとの図面座標・縮尺情報)
   WIRING.SCR                 (未調査。AutoCADスクリプトと推測されるが未確認)
   共通製作仕様書.pdf
@@ -44,6 +45,26 @@ output\A1GV2421\
     16.dwg / 18.dwg / 21.dwg ... (元CAD図面。参考資料PDFによれば「DWGは扱わず
     DXFへ変換して図枠寸法取得にのみ利用する」とのこと)
 ```
+
+### material.csv (材料一覧)
+
+SekisanNaviData が設計データの`*.boxspec`(CP932)から作る、製番直下の材料一覧CSV。
+**cp932・BOMなし**。列は固定(順序も契約):
+
+    PAGE, SOURCE_FILE, SYMBOL_NAME, CABTYPE, COMPONENT_CODE, COMPONENT_NAME, MATERIAL_SPEC
+
+- 1行 = ページ × 材料シンボル(`BSP-STEELA-*`) × 構成部。構成部は9種
+  (`STEEL-BASE` 基礎ベース / `STEEL-SIDE` 側板 / `STEEL-ROOF` 屋根・天井板 /
+  `STEEL-PANEL` パネル(背面板) / `STEEL-DIVIDE` 仕切り板 / `STEEL-FRAME` 組枠 /
+  `STEEL-BOTTOM` 底板 / `STEEL-INSIDEPANEL` 補助・内部パネル / `STEEL-DOOR` 扉板)。
+  未知の`STEEL-*`キーは行として残り、`COMPONENT_NAME`が空になる。
+- `MATERIAL_SPEC`の`未記載`(.boxspecに記載なし。キーが無い、または値が空)と
+  `無し`(明示値)は意味が違う。Sekisan Naviは値を加工せず、画面でも区別して表示する。
+- `CABTYPE`(箱体型式)は空のことがある(.boxspecに無い、または複数あって対応が決められない場合)。
+- `.boxspec`が無い製番、または解析に失敗した製番では`material.csv`自体が存在しない。
+  Sekisan Naviは「材料情報なし」と表示し、他の画面・CSVの読み込みには影響しない。
+- 読み込みは`GET /api/products/{製番}/materials`(`app/services/material_csv.py`)。読み取りのみで、
+  積算ロジック・AI検出結果の積算反映・他のCSV契約には関与しない。
 
 サンプル数点 (A1AA0722, A1AB2225, A1AB2395) でも同一パターン (フラットなページファイル群 +
 `dwg\` サブディレクトリ + `WIRING.SCR` + 各種CSV) であることを確認した。
