@@ -414,6 +414,7 @@ vi.mock('./api/client', () => ({
   fetchEstimatePanels: vi.fn(async () => estimatePanelsFixture),
   // material.csv由来の材料一覧。既存テストへの影響を避けるため既定では空配列(材料情報なし)。
   fetchMaterials: vi.fn(async () => []),
+  fetchSteelOutline: vi.fn(async () => ({ status: 'missing', source_page: null, source_drawing_name: null, items: [] })),
   fetchMasterItems: vi.fn(async () => masterItems),
   // [Issue #40 Phase 5] 積算集約・積算明細の正本。`liveDetectionsById`の現在状態
   // (BBox作成/移動/削除・Undo/Redo反映後)から都度導出する。
@@ -3201,5 +3202,52 @@ describe('App: 材料情報 (material.csv。設計データの*.boxspec由来)',
     expect(await screen.findByRole('img', { name: 'P16' })).toBeInTheDocument()
     expect(await screen.findByText('材料情報なし')).toBeInTheDocument()
     expect(document.querySelector('.app-layout__error')).not.toBeInTheDocument()
+  })
+})
+
+describe('App: 鋼材欄 (外形図1ページぶん。折りたたみ・ページ切替に連動しない)', () => {
+  const steelOk = {
+    status: 'ok',
+    source_page: '5',
+    source_drawing_name: '外形図(2)',
+    items: [{ symbol_name: 'BSP-STEELA-H', cabtype: 'TYPE-X', component_name: '基礎ベース', material_spec: 'TEST-MAT' }],
+  }
+
+  afterEach(async () => {
+    vi.clearAllMocks()
+    const { fetchSteelOutline } = await import('./api/client')
+    vi.mocked(fetchSteelOutline).mockImplementation(
+      async () => ({ status: 'missing', source_page: null, source_drawing_name: null, items: [] }) as never,
+    )
+  })
+
+  it('fetches once per product (not per page) and shows the outline steel in a collapsed section', async () => {
+    const { fetchSteelOutline } = await import('./api/client')
+    vi.mocked(fetchSteelOutline).mockImplementation(async () => steelOk as never)
+    render(<App />)
+    const thumbnail = await screen.findByRole('img', { name: 'P16' })
+    await waitFor(() => expect(fetchSteelOutline).toHaveBeenCalledWith('A1GV2421'))
+    const toggle = await screen.findByRole('button', { name: /鋼材/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+    expect(await screen.findByText('表示元: 外形図(2) P5')).toBeInTheDocument()
+    // ページを切り替えても再取得せず、表示も変わらない
+    fireEvent.click(thumbnail)
+    await waitFor(() => expect(screen.getAllByText('外形図(P16)').length).toBeGreaterThan(0))
+    expect(screen.getByText('表示元: 外形図(2) P5')).toBeInTheDocument()
+    expect(fetchSteelOutline).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not break the screen, shows a fixed message, and leaks no error text when the fetch fails', async () => {
+    const { fetchSteelOutline } = await import('./api/client')
+    vi.mocked(fetchSteelOutline).mockImplementation(async () => {
+      throw new Error('C:\secret\path A1GV2421')
+    })
+    render(<App />)
+    expect(await screen.findByRole('img', { name: 'P16' })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: /鋼材/ }))
+    expect(await screen.findByText('鋼材データを取得できませんでした')).toBeInTheDocument()
+    expect(document.querySelector('.app-layout__error')).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('secret')
   })
 })

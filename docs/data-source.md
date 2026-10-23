@@ -65,6 +65,14 @@ SekisanNaviData が設計データの`*.boxspec`(CP932)から作る、製番直�
   Sekisan Naviは「材料情報なし」と表示し、他の画面・CSVの読み込みには影響しない。
 - 読み込みは`GET /api/products/{製番}/materials`(`app/services/material_csv.py`)。読み取りのみで、
   積算ロジック・AI検出結果の積算反映・他のCSV契約には関与しない。
+- 図面情報パネルの折りたたみ「鋼材」欄は `GET /api/products/{製番}/steel`(`app/services/steel_outline.py`)で、
+  **製番の外形図1ページぶん**だけを返す(選択中の図面ページには連動しない)。外形図 = `product_df.csv` の ZUMEI から連番を除いた図面種別が「外形図」と完全一致するページ。
+  複数ある場合は情報量が最大のページ: ①材料仕様が実際に記載された行数(空・`未記載`・`無し`を除く)→ ②CABTYPE のある行数 → ③構成部名のある行数 → ④総行数、
+  同点はページ番号(整数)が小さい方。`PAGE` は文字列のまま扱い、`product_df.csv` のページ(整数)と対応づけるのは先頭ゼロの無い整数表記(`16`)だけ
+  (`01`・`x1` は対応づけない。`01` と `1` は別ページ)。
+  `status`(ok/empty/missing/invalid/no_outline)で結果を返し、例外文言・実パス・製番・ファイル名は応答に含めない。
+  CABTYPE と箱体型式(estcode_df の MODEL)の照合は、全角→半角・前後の空白除去・大文字化の後の**完全一致だけ**を「一致」とし、
+  未一致・CABTYPE なし・箱体型式なしは固定文言で表示する(画面側 `SteelSection.tsx`)。
 
 サンプル数点 (A1AA0722, A1AB2225, A1AB2395) でも同一パターン (フラットなページファイル群 +
 `dwg\` サブディレクトリ + `WIRING.SCR` + 各種CSV) であることを確認した。

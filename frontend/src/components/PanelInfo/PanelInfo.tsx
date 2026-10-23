@@ -1,5 +1,13 @@
-import type { AttributeSource, EstimatePanelInfo, MaterialRow, Panel, PanelPreview } from '../../types/domain'
+import type {
+  AttributeSource,
+  EstimatePanelInfo,
+  MaterialRow,
+  Panel,
+  PanelPreview,
+  SteelOutline,
+} from '../../types/domain'
 import { MaterialInfo } from './MaterialInfo'
+import { SteelSection } from './SteelSection'
 import { banGroupKey, panelKey } from '../../utils/panel'
 import './PanelInfo.css'
 
@@ -25,6 +33,8 @@ interface Props {
   /** 製番全体の材料一覧 (material.csv。ページに依存しない)。省略時は材料情報の欄自体を出さない
    * (既存の呼び出し・テストへの影響を避けるため)。空配列なら「材料情報なし」を表示する。 */
   materials?: MaterialRow[]
+  /** 外形図の鋼材データ (折りたたみの「鋼材」欄。選択ページに依存しない)。省略時は欄自体を出さない。null=取得中。 */
+  steel?: SteelOutline | null
   /** 中央Viewerで現在選択中の盤 (Phase 1.9)。 */
   selectedPanel: { key: string; panel: PanelPreview } | null
   /** カードクリックで中央Viewerと同じ盤選択状態にする (次work指示3章: 「盤情報を
@@ -191,6 +201,7 @@ export function PanelInfo({
   panels,
   estimatePanels,
   materials,
+  steel,
   selectedPanel,
   onSelectPanel,
 }: Props) {
@@ -300,6 +311,7 @@ export function PanelInfo({
       )}
 
       {materials !== undefined && <MaterialInfo materials={materials} />}
+      <SteelSection steel={steel} panelModels={estimatePanels.map((e) => e.model)} />
     </section>
   )
 }

@@ -249,6 +249,24 @@ export interface MaterialRow {
   material_spec: string
 }
 
+/** 鋼材欄の1行(構成部 × 材料仕様)。`material_spec`の`未記載`/`無し`はBackendが返した文字列のまま持つ。 */
+export interface SteelItem {
+  symbol_name: string
+  cabtype: string
+  component_name: string
+  material_spec: string
+}
+
+/** 図面情報の「鋼材」欄用。製番の外形図のうち情報量が最大の1ページぶん(選択中の図面には連動しない)。
+ * status: ok / empty / missing / invalid / no_outline。`source_page`はmaterial.csvのPAGEの表記のまま(文字列)。
+ * `unavailable`はフロント側の取得失敗(Backendは返さない)。 */
+export interface SteelOutline {
+  status: 'ok' | 'empty' | 'missing' | 'invalid' | 'no_outline' | 'unavailable'
+  source_page: string | null
+  source_drawing_name: string | null
+  items: SteelItem[]
+}
+
 /** detected_df.csv (YOLO検出結果) 由来の検出BBoxプレビュー (Phase 1.12)。
  * DBの`Detection`とは別データ源であり、`id`はDBのDetection.idとは異なる体系
  * (ページ内のYOLO_INDEXそのもの) であることに注意 (混同して同一視しない)。
