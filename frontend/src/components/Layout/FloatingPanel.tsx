@@ -56,9 +56,10 @@ interface Props {
 // 1px刻みで二分探索的に特定)により、クリップが発生し始める境界が
 // ちょうど430px(429pxで1px分クリップが発生)であることを確認した。
 // 環境間のフォントレンダリング差を吸収する安全マージンとして+4pxし、434pxを
-// 採用する(詳細な実測ログはIssue #38 Phase 2報告コメント参照)。
+// 採用した(詳細な実測ログはIssue #38 Phase 2報告コメント参照)。
+// [画面全体の文字拡大(15px→17.5px)] 列幅をremへ換算し、型式・接続列を広げたため、実測のうえ 560px に引き上げた。
 const MIN_WIDTH_BY_KIND: Record<FloatingPanelKind, number> = {
-  panelInfo: 434,
+  panelInfo: 560,
   aggregation: 260,
   detail: 260,
   master: 260,
@@ -117,7 +118,8 @@ const DEFAULT_WIDTH_BY_KIND: Record<FloatingPanelKind, number> = {
   // [Issue #38 Phase 2] カラム型1行一覧(7列)を1行で成立させるため、
   // 300→480pxへ拡大した(実測では省略記号なしの完全表示に約500px必要だが、
   // Viewer占有とのバランスを優先し、まず480pxで実装・確認する。指示書7章)。
-  panelInfo: 480,
+  // [画面全体の文字拡大(15px→17.5px)] 文字・列幅の拡大に合わせて、盤名称・接続が省略されない幅として 580px にした。
+  panelInfo: 580,
   // [Issue #36] 上部compact row(製番/合計/件数/対象select/確定/履歴)を
   // 通常幅で1行に収めるため、480→500pxへ微調整した(他kindの幅は変更しない。
   // 実ブラウザ実測で500px時に1行へ収まることを確認済み)。
