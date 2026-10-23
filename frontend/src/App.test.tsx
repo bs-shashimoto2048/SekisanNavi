@@ -1493,13 +1493,13 @@ describe('App: 左ペインのリサイズ・右ペイン廃止 (UIレイアウ�
   it('resizes the left pane by dragging its splitter, and clamps at the minimum width', async () => {
     await renderApp()
     const nav = document.querySelector('.app-workspace__nav') as HTMLElement
-    expect(nav.style.width).toBe('220px')
+    expect(nav.style.width).toBe('260px') // 既定の左ペイン幅(文字拡大に合わせて220→260)
 
     const handle = screen.getByRole('separator', { name: '図面一覧の幅を変更' })
     fireEvent.mouseDown(handle, { clientX: 200, button: 0 })
-    fireEvent.mouseMove(window, { clientX: 260 })
-    fireEvent.mouseUp(window, { clientX: 260 })
-    expect(nav.style.width).toBe('280px')
+    fireEvent.mouseMove(window, { clientX: 230 })
+    fireEvent.mouseUp(window, { clientX: 230 })
+    expect(nav.style.width).toBe('290px')
 
     // 最小幅(140px)を下回らない
     fireEvent.mouseDown(handle, { clientX: 260, button: 0 })
@@ -1520,17 +1520,17 @@ describe('App: 左ペインのリサイズ・右ペイン廃止 (UIレイアウ�
   })
 
   it('restores previously saved left pane width from localStorage on mount', async () => {
-    window.localStorage.setItem('sekisan-navi:left-pane-width', '260')
+    window.localStorage.setItem('sekisan-navi:left-pane-width', '300')
     await renderApp()
     const nav = document.querySelector('.app-workspace__nav') as HTMLElement
-    expect(nav.style.width).toBe('260px')
+    expect(nav.style.width).toBe('300px')
   })
 
   it('falls back to the initial width when a stored value is invalid', async () => {
     window.localStorage.setItem('sekisan-navi:left-pane-width', 'garbage')
     await renderApp()
     const nav = document.querySelector('.app-workspace__nav') as HTMLElement
-    expect(nav.style.width).toBe('220px')
+    expect(nav.style.width).toBe('260px')
   })
 })
 

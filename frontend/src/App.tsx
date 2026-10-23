@@ -122,7 +122,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 // Issue #19 Phase 4: 右ペインは廃止した(盤情報もfloating panel化したため、
 // 右ペイン自体が不要になった)。旧`RIGHT_PANE_*`定数・
 // `sekisan-navi:right-pane-width`のlocalStorageキーは削除済み(残さない)。
-const LEFT_PANE_INITIAL = 220
+const LEFT_PANE_INITIAL = 260
 const LEFT_PANE_MIN = 140
 const LEFT_PANE_MAX_VW_RATIO = 0.3
 const LEFT_PANE_STORAGE_KEY = 'sekisan-navi:left-pane-width'
