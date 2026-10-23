@@ -147,6 +147,12 @@ PRODUCT_NO_PATTERN = r"^[A-Za-z0-9]{4,20}$"
 # app/db/master_importer.py からのみ参照し、他箇所へパスを直書きしない。
 PROJECT_ROOT = BACKEND_DIR.parent
 MASTER_EXCEL_PATH = PROJECT_ROOT / "data" / "master" / "estimate_master_a.xlsx"
+
+# design.csv基準の図面一覧で、推論用PNGの無い図面に使う「表示用プレビューPNG」の保存先
+# ({PREVIEW_ROOT}/{製番}/{PDF名}__preview.png)。データ参照ルート(出力フォルダ)とは別の場所で、
+# バックエンドは読み取りのみ。環境変数 SEKISAN_NAVI_PREVIEW_ROOT で差し替えられる。
+# 未配置なら、その図面は「画像なし」と表示するだけで、他の表示には影響しない。
+PREVIEW_ROOT = Path(os.environ.get("SEKISAN_NAVI_PREVIEW_ROOT") or PROJECT_ROOT / "data" / "design-previews")
 # 実データ調査の結果、対象品目の全件データは "Sheet2" (912行、コード/品名/型式/定格/
 # 総合価格A/箱・部品価格/塗装価格/設A/板金/組立/検査 の11列構成) に格納されている。
 # "Sheet1" は同一データを一部のみコピーした作業用シートのため使用しない

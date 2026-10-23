@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildSearchWithProductPage,
+  parseDesignKeyFromSearch,
   parsePageNoFromSearch,
   parseProductNoFromSearch,
 } from './urlState'
@@ -66,5 +67,22 @@ describe('buildSearchWithProductPage (Phase 1.11 UI改修指示22章)', () => {
     const params = new URLSearchParams(search)
     expect(params.getAll('product')).toEqual(['A1GV2421'])
     expect(params.getAll('page')).toEqual(['16'])
+  })
+})
+
+describe('design (design.csv基準の一覧のキー)', () => {
+  it('reads the key as a string, keeping leading zeros and case', () => {
+    expect(parseDesignKeyFromSearch('?product=A1&design=01')).toBe('01')
+    expect(parseDesignKeyFromSearch('?design=MK01')).toBe('MK01')
+    expect(parseDesignKeyFromSearch('?design=')).toBeNull()
+    expect(parseDesignKeyFromSearch('?product=A1')).toBeNull()
+  })
+
+  it('writes and removes the design param while keeping other params', () => {
+    expect(new URLSearchParams(buildSearchWithProductPage('?x=1', 'A1', null, 'mk01')).get('design')).toBe('mk01')
+    const withKey = buildSearchWithProductPage('?x=1&design=01', 'A1', 3)
+    expect(new URLSearchParams(withKey).has('design')).toBe(false)
+    expect(new URLSearchParams(withKey).get('x')).toBe('1')
+    expect(new URLSearchParams(withKey).get('page')).toBe('3')
   })
 })

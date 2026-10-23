@@ -15,6 +15,7 @@ import type {
   EstimateConfirmationSummary,
   EstimateItem,
   EstimateMasterItem,
+  DesignPages,
   EstimatePanelInfo,
   MaterialRow,
   EstimateResult,
@@ -226,6 +227,18 @@ export function fetchEstimatePanels(productNo: string): Promise<EstimatePanelInf
  * (Backend側で保証済み)。 */
 export function fetchMaterials(productNo: string): Promise<MaterialRow[]> {
   return getJson(`/api/products/${encodeURIComponent(productNo)}/materials`)
+}
+
+/** design.csv(ページ番号・図名)を基準にした図面一覧。対応するPDFがある行だけが返る。
+ * ファイルが無い・空・不正でもエラーにならず`status`で返る(Backend側で保証済み)。 */
+export function fetchDesignPages(productNo: string): Promise<DesignPages> {
+  return getJson(`/api/products/${encodeURIComponent(productNo)}/design-pages`)
+}
+
+/** design.csv基準の一覧の1ページぶんの画像URL(推論用PNGがあればその元PNG、無ければ表示用プレビュー)。
+ * `key`は一覧に載っている値(文字列。数値にしない)。 */
+export function designPageImageUrl(productNo: string, key: string): string {
+  return `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/design-pages/${encodeURIComponent(key)}/image`
 }
 
 // --- Phase 1.8: 製番検索・左ペインPNGサムネイル ---
