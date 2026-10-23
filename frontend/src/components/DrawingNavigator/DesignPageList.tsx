@@ -15,6 +15,12 @@ interface Props {
   /** 積算集約(②)の対象選択に連動した絞り込み(既存の図面一覧と同じ)。指定時は、推論用PNGがあり
    * `inference_page_no`がこの集合に含まれる行だけを表示する。 */
   visiblePageNos?: Set<number> | null
+  /** 図面の選択(ダイアログ)を開く。指定すると、一覧の上に「表示 N / M 件」と「図面の選択」ボタンを出す。 */
+  onOpenPicker?: () => void
+  /** design.csv にある図面の総数(選択前)。「表示 N / M 件」のMに使う。 */
+  totalCount?: number
+  /** 製番を選んだ直後で、まだ表示する図面を選んでいない間はtrue。図面は出さず、選択を促す。 */
+  awaitingSelection?: boolean
 }
 
 const MODE_BADGE: Record<DesignPage['mode'], { text: string; title: string }> = {
@@ -63,7 +69,16 @@ function Thumb({ item, src }: ThumbProps) {
  * design.csv(ページ番号・図名)を基準にした図面一覧。各行は図面のサムネイル付きで、ページ番号は
  * 文字列のまま表示する(`01`と`1`は別の行)。図面を選ぶと中央ビューアーに表示される。
  */
-export function DesignPageList({ designPages, selectedKey, onSelect, thumbnailUrl, visiblePageNos = null }: Props) {
+export function DesignPageList({
+  designPages,
+  selectedKey,
+  onSelect,
+  thumbnailUrl,
+  visiblePageNos = null,
+  onOpenPicker,
+  totalCount,
+  awaitingSelection = false,
+}: Props) {
   const listRef = useRef<HTMLUListElement>(null)
   // 選択が変わったとき(別の経路での選択を含む)に、選択中のカードが一覧の表示範囲に入るようスクロールする。
   // 最小限の移動(nearest)にとどめ、すでに見えているときは動かさない。
@@ -91,15 +106,35 @@ export function DesignPageList({ designPages, selectedKey, onSelect, thumbnailUr
   return (
     <nav className="drawing-navigator design-page-list" aria-label="design.csv の図面一覧">
       <h2 className="drawing-navigator__heading">図面一覧</h2>
+      {awaitingSelection && (
+        <div className="design-page-list__awaiting">
+          <p className="drawing-navigator__status">表示する図面を選択してください</p>
+          {onOpenPicker && (
+            <button type="button" className="design-page-list__pick-button" onClick={onOpenPicker}>
+              図面の選択
+            </button>
+          )}
+        </div>
+      )}
+      {!awaitingSelection && onOpenPicker && (
+        <div className="design-page-list__select-bar">
+          <span className="design-page-list__select-count">
+            表示 {designPages.items.length} / {totalCount ?? designPages.items.length} 件
+          </span>
+          <button type="button" className="design-page-list__pick-button" onClick={onOpenPicker}>
+            図面の選択
+          </button>
+        </div>
+      )}
       {designPages.status !== 'ok' && (
         <p className="drawing-navigator__status drawing-navigator__status--error">
           {STATUS_MESSAGE[designPages.status]}
         </p>
       )}
-      {designPages.status === 'ok' && items.length === 0 && (
+      {designPages.status === 'ok' && !awaitingSelection && items.length === 0 && (
         <p className="drawing-navigator__status">該当する図面はありません</p>
       )}
-      {items.length > 0 && (
+      {!awaitingSelection && items.length > 0 && (
         <ul className="design-page-list__items" ref={listRef}>
           {items.map((item) => {
             const badge = MODE_BADGE[item.mode]
