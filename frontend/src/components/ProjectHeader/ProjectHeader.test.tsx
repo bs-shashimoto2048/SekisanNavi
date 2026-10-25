@@ -100,7 +100,7 @@ describe('ProjectHeader', () => {
     // headerHeightが変化していないことは実ブラウザ(Playwright)で確認済み
     // (Issue #9コメント参照)。
     const header = container.querySelector('.project-header') as HTMLElement
-    expect(getComputedStyle(header).padding).toBe('0.5rem 1rem')
+    expect(getComputedStyle(header).padding).toBe('0.4rem 0.8rem') // 文字拡大(+17%)に合わせて、ヘッダーの高さが増えないよう余白を詰めた(0.5rem 1rem から)
   })
 
   it('gives the brand title its own visually-separated "block" (background/padding/border-radius/margin), not just bare text (Issue #9 追加修正: タイトルをブランドブロックとして分離)', () => {

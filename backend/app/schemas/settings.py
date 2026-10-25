@@ -96,6 +96,31 @@ class EstimatePanelInfoOut(BaseModel):
     sort_order: int | None = None
 
 
+class DesignPageOut(BaseModel):
+    """design.csvの1行(対応するPDFがあるもの)。`key`は実在するPDFのファイル名(拡張子を除く)の綴りで、
+    `page_label`はdesign.csvの「ページ番号」(文字列。先頭ゼロ・大文字小文字はそのまま)。
+    mode: inference=推論用PNGあり(`inference_page_no`で従来の表示) / preview=表示用プレビューPNGで表示 /
+    unavailable=表示用の画像が未作成。"""
+
+    key: str
+    page_label: str
+    drawing_name: str = ""
+    mode: str
+    inference_page_no: int | None = None
+    #: 元データ(product_df.csvのBAN_MENNO/BAN_NO)の「面番号/盤番号」(`1/1`の形、重複を除き出現順)。
+    #: 元データに無いページ(書類ページ等)は空。再採番・加工はしない。
+    ban_labels: list[str] = []
+
+
+class DesignPagesOut(BaseModel):
+    """design.csvを基準にした図面一覧。ファイルが無い・空・不正でもエラーにはせず`status`で返す
+    (例外文言・実パスは含めない)。status: ok / empty / missing / invalid"""
+
+    status: str
+    items: list[DesignPageOut] = []
+    skipped_rows: int = 0
+
+
 class DetectedPreviewItemOut(BaseModel):
     """detected_df.csv (YOLO検出結果) 1行相当。中央Viewerへの検出BBoxプレビュー
     表示用 (Phase 1.12指示書11章)。CSVの生データをそのまま渡さず、正規化済みの

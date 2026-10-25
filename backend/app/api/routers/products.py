@@ -3,11 +3,14 @@
 製番・図面参照はユーザー認証不要 (要件18: 通常の製番・図面参照に管理者パスワードは
 不要)。ただしパスの安全性検証は必ずBackendで行う (app.services.data_source)。
 """
+import logging
 import sqlite3
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
+from app import config
 from app.api.deps import get_db
 from app.repositories.decision_analysis import (
     list_confirmation_analysis_for_product,
@@ -38,6 +41,8 @@ from app.schemas.estimate_confirmations import (
 )
 from app.schemas.settings import (
     DetectedPreviewItemOut,
+    DesignPageOut,
+    DesignPagesOut,
     EstimatePanelInfoOut,
     MaterialRowOut,
     NormalizedRectOut,
@@ -58,6 +63,7 @@ from app.services.data_source import (
     resolve_product_dir,
     search_product_dirs,
 )
+from app.services.design_pages import load_design_pages
 from app.services.detected_df import load_detected_df
 from app.services.estcode_df import load_estcode_df
 from app.services.material_csv import load_material_csv
@@ -68,6 +74,10 @@ from app.services.estimate_confirmation_builder import (
 from app.services.product_df import load_page_scales, load_product_df
 
 router = APIRouter(prefix="/api/products", tags=["products"])
+
+# design.csv基準の図面一覧で、推論用PNGが無い図面の表示用プレビューPNG({PREVIEW_ROOT}/{製番}/{PDF名}__preview.png)の保存先。
+# 設定は app.config.PREVIEW_ROOT(環境変数 SEKISAN_NAVI_PREVIEW_ROOT)。バックエンドは読み取りのみ。テストでは差し替える。
+PREVIEW_ROOT = config.PREVIEW_ROOT
 
 
 def _error_to_http(e: DataSourceError) -> HTTPException:
@@ -176,6 +186,124 @@ def read_product_drawings(
         )
         for p in pages
     ]
+
+
+def _preview_png_for_key(product_no: str, key: str) -> Path | None:
+    """design.csv基準の一覧のキー(実在するPDFのファイル名の綴り)に対応する、表示用プレビューPNG。
+    `{PREVIEW_ROOT}/{製番}/{キー}__preview.png`。解決後のパスがPREVIEW_ROOT配下の実在ファイルのときだけ返す。
+    キーは呼び出し側で、実在するPDF名との照合を済ませたものだけを渡す。"""
+    try:
+        root = PREVIEW_ROOT.resolve(strict=False)
+        path = (root / product_no / f"{key}__preview.png").resolve(strict=False)
+        if root not in path.parents or not path.is_file():
+            return None
+    except (OSError, ValueError):
+        return None
+    return path
+
+
+def _inference_png_for_key(ccv_dir: Path, key: str) -> Path | None:
+    """推論用PNG(`{キー}.png`)。リンク自体を拒否し、解決後のパスが製番ディレクトリ直下の実在ファイル
+    のときだけ返す(外部を指すシンボリックリンク等は配信しない)。"""
+    try:
+        root = ccv_dir.resolve(strict=False)
+        raw = ccv_dir / f"{key}.png"
+        if raw.is_symlink():
+            return None
+        path = raw.resolve(strict=False)
+        if path.parent != root or not path.is_file():
+            return None
+    except (OSError, ValueError):
+        return None
+    return path
+
+
+@router.get("/{product_no}/design-pages", response_model=DesignPagesOut)
+def read_design_pages(
+    product_no: str, conn: sqlite3.Connection = Depends(get_db)
+) -> DesignPagesOut:
+    """製番の`design.csv`(ページ番号・図名)を基準にした図面一覧。対応するPDFがある行だけを返す。
+    読み取り専用。`design.csv`が無い・空・不正でもエラーにはせず`status`で返す。
+    例外文言・実パスは応答に含めない。"""
+    root = get_data_source_root(conn)
+    try:
+        resolution = resolve_product_dir(root, product_no)
+    except DataSourceError as e:
+        raise _error_to_http(e) from e
+
+    # 「面番号/盤番号」は、既存の図面一覧と同じ元データ(product_df.csvのBAN_MENNO/BAN_NO)から、
+    # `1/1`の形で重複を除き出現順に作る(再採番・加工はしない)。
+    # product_df.csvが壊れていても一覧自体は壊さない(面番号/盤番号が空になるだけ。例外の詳細は出さない)。
+    ban_labels_by_page: dict[int, list[str]] = {}
+    try:
+        product_df = load_product_df(resolution.ccv_dir, resolution.product_no)
+        for page_no, panels in product_df.panels_by_page.items():
+            labels: list[str] = []
+            for panel in panels:
+                label = f"{panel.ban_menno}/{panel.ban_no}"
+                if label not in labels:
+                    labels.append(label)
+            ban_labels_by_page[page_no] = labels
+    except Exception as e:  # noqa: BLE001 - csv.Error等。一覧の表示を優先し、型名だけを記録する
+        logging.getLogger(__name__).warning(
+            "product_df.csv could not be read for ban labels (product_no=%s): %s", resolution.product_no, type(e).__name__
+        )
+        ban_labels_by_page = {}
+
+    result = load_design_pages(
+        resolution.ccv_dir,
+        resolution.product_no,
+        lambda key: _preview_png_for_key(resolution.product_no, key) is not None,
+        ban_labels_by_page,
+    )
+    return DesignPagesOut(
+        status=result.status,
+        items=[
+            DesignPageOut(
+                key=p.key,
+                page_label=p.page_label,
+                drawing_name=p.drawing_name,
+                mode=p.mode,
+                inference_page_no=p.inference_page_no,
+                ban_labels=p.ban_labels,
+            )
+            for p in result.pages
+        ],
+        skipped_rows=result.skipped_rows,
+    )
+
+
+@router.get("/{product_no}/design-pages/{key}/image")
+def read_design_page_image(
+    product_no: str, key: str, conn: sqlite3.Connection = Depends(get_db)
+):
+    """design.csv基準の一覧の1ページぶんの画像。推論用PNGがあるページはその元PNG、無いページは
+    表示用プレビューPNG。`key`は一覧(`design-pages`)に載っているものだけを受け付け、任意の
+    ファイル名は受け取らない(実在するPDF名との照合済みの値のみ)。見つからない場合は固定文言の404。"""
+    root = get_data_source_root(conn)
+    try:
+        resolution = resolve_product_dir(root, product_no)
+    except DataSourceError as e:
+        raise _error_to_http(e) from e
+
+    result = load_design_pages(
+        resolution.ccv_dir,
+        resolution.product_no,
+        lambda k: _preview_png_for_key(resolution.product_no, k) is not None,
+    )
+    page = next((p for p in result.pages if p.key == key), None)
+    if page is None:
+        raise HTTPException(status_code=404, detail="図面が見つかりません。")
+    if page.mode == "inference":
+        inference = _inference_png_for_key(resolution.ccv_dir, page.key)
+        if inference is not None:
+            return FileResponse(str(inference), media_type="image/png")
+        raise HTTPException(status_code=404, detail="この図面の表示用画像は作成されていません。")
+    if page.mode == "preview":
+        preview = _preview_png_for_key(resolution.product_no, page.key)
+        if preview is not None:
+            return FileResponse(str(preview), media_type="image/png")
+    raise HTTPException(status_code=404, detail="この図面の表示用画像は作成されていません。")
 
 
 @router.get("/{product_no}/drawings/{page_no}/file")

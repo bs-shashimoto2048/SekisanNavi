@@ -29,15 +29,29 @@ export function parsePageNoFromSearch(search: string): number | null {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
 }
 
+const DESIGN_PARAM = 'design'
+
+/** URL queryから、design.csv基準の図面一覧で選択中の行のキー(ページ番号の文字列。数値にしない)を
+ * 読み取る。無ければ(または空文字なら)nullを返す。実在確認はしない。 */
+export function parseDesignKeyFromSearch(search: string): string | null {
+  const value = new URLSearchParams(search).get(DESIGN_PARAM)
+  if (value == null) return null
+  const trimmed = value.trim()
+  return trimmed === '' ? null : trimmed
+}
+
 /**
  * 現在のURLのquery文字列を、指定した製番・PAGEを反映した新しいquery文字列へ
  * 差し替える。他のquery paramは保持する。pageがnullの場合はpage paramを削除する
  * (例: ページ一覧取得前の一時的な状態)。
+ * `designKey`(省略可)は、design.csv基準の一覧で推論用PNGの無い行(表示用プレビュー等)を
+ * 選んでいるときのキー。null/省略ならdesign paramを削除する。
  */
 export function buildSearchWithProductPage(
   currentSearch: string,
   productNo: string,
   pageNo: number | null,
+  designKey: string | null = null,
 ): string {
   const params = new URLSearchParams(currentSearch)
   params.set(PRODUCT_PARAM, productNo)
@@ -45,6 +59,11 @@ export function buildSearchWithProductPage(
     params.set(PAGE_PARAM, String(pageNo))
   } else {
     params.delete(PAGE_PARAM)
+  }
+  if (designKey != null) {
+    params.set(DESIGN_PARAM, designKey)
+  } else {
+    params.delete(DESIGN_PARAM)
   }
   return params.toString()
 }

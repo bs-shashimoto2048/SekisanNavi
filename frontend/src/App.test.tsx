@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { MockResizeObserver } from './testUtils/mockResizeObserver'
@@ -414,6 +414,11 @@ vi.mock('./api/client', () => ({
   fetchEstimatePanels: vi.fn(async () => estimatePanelsFixture),
   // material.csv由来の材料一覧。既存テストへの影響を避けるため既定では空配列(材料情報なし)。
   fetchMaterials: vi.fn(async () => []),
+  // design.csv基準の図面一覧。既存テストの対象外のため、既定ではデータ無し(missing = 従来の図面一覧を使う)を返す。
+  fetchDesignPages: vi.fn(async () => ({ status: 'missing', items: [], skipped_rows: 0 })),
+  designPageImageUrl: vi.fn(
+    (productNo: string, key: string) => `/api/products/${productNo}/design-pages/${encodeURIComponent(key)}/image`,
+  ),
   fetchMasterItems: vi.fn(async () => masterItems),
   // [Issue #40 Phase 5] 積算集約・積算明細の正本。`liveDetectionsById`の現在状態
   // (BBox作成/移動/削除・Undo/Redo反映後)から都度導出する。
@@ -1488,13 +1493,13 @@ describe('App: 左ペインのリサイズ・右ペイン廃止 (UIレイアウ�
   it('resizes the left pane by dragging its splitter, and clamps at the minimum width', async () => {
     await renderApp()
     const nav = document.querySelector('.app-workspace__nav') as HTMLElement
-    expect(nav.style.width).toBe('220px')
+    expect(nav.style.width).toBe('260px') // 既定の左ペイン幅(文字拡大に合わせて220→260)
 
     const handle = screen.getByRole('separator', { name: '図面一覧の幅を変更' })
     fireEvent.mouseDown(handle, { clientX: 200, button: 0 })
-    fireEvent.mouseMove(window, { clientX: 260 })
-    fireEvent.mouseUp(window, { clientX: 260 })
-    expect(nav.style.width).toBe('280px')
+    fireEvent.mouseMove(window, { clientX: 230 })
+    fireEvent.mouseUp(window, { clientX: 230 })
+    expect(nav.style.width).toBe('290px')
 
     // 最小幅(140px)を下回らない
     fireEvent.mouseDown(handle, { clientX: 260, button: 0 })
@@ -1515,17 +1520,17 @@ describe('App: 左ペインのリサイズ・右ペイン廃止 (UIレイアウ�
   })
 
   it('restores previously saved left pane width from localStorage on mount', async () => {
-    window.localStorage.setItem('sekisan-navi:left-pane-width', '260')
+    window.localStorage.setItem('sekisan-navi:left-pane-width', '300')
     await renderApp()
     const nav = document.querySelector('.app-workspace__nav') as HTMLElement
-    expect(nav.style.width).toBe('260px')
+    expect(nav.style.width).toBe('300px')
   })
 
   it('falls back to the initial width when a stored value is invalid', async () => {
     window.localStorage.setItem('sekisan-navi:left-pane-width', 'garbage')
     await renderApp()
     const nav = document.querySelector('.app-workspace__nav') as HTMLElement
-    expect(nav.style.width).toBe('220px')
+    expect(nav.style.width).toBe('260px')
   })
 })
 
@@ -3201,5 +3206,118 @@ describe('App: 材料情報 (material.csv。設計データの*.boxspec由来)',
     expect(await screen.findByRole('img', { name: 'P16' })).toBeInTheDocument()
     expect(await screen.findByText('材料情報なし')).toBeInTheDocument()
     expect(document.querySelector('.app-layout__error')).not.toBeInTheDocument()
+  })
+})
+
+describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧機能)', () => {
+  const designItems = [
+    { key: '16', page_label: '16', drawing_name: '外形図', mode: 'inference', inference_page_no: 16, ban_labels: ['1/1', '2/2'] },
+    { key: '01', page_label: '01', drawing_name: '質量計算書', mode: 'preview', inference_page_no: null, ban_labels: [] },
+    { key: '1', page_label: '1', drawing_name: '単線系統図', mode: 'preview', inference_page_no: null, ban_labels: [] },
+    { key: 'mk01', page_label: 'MK01', drawing_name: '金具一括手配表', mode: 'preview', inference_page_no: null, ban_labels: [] },
+    { key: 'ms01', page_label: 'MS01', drawing_name: '定格銘板', mode: 'unavailable', inference_page_no: null, ban_labels: [] },
+  ]
+
+  async function useDesignList() {
+    const { fetchDesignPages } = await import('./api/client')
+    vi.mocked(fetchDesignPages).mockResolvedValue({
+      status: 'ok',
+      items: designItems as never,
+      skipped_rows: 0,
+    })
+  }
+
+  afterEach(async () => {
+    const { fetchDesignPages } = await import('./api/client')
+    vi.mocked(fetchDesignPages).mockReset()
+    vi.mocked(fetchDesignPages).mockImplementation(async () => ({ status: 'missing', items: [], skipped_rows: 0 }))
+  })
+
+  function listItem(key: string): HTMLElement {
+    return document.querySelector(`[data-design-key="${key}"]`) as HTMLElement
+  }
+
+  it('lists page numbers (as strings, 01 and 1 separately) with drawing names, and opens the first inference page by default', async () => {
+    await useDesignList()
+    render(<App />)
+    await waitFor(() => expect(listItem('01')).toBeInTheDocument())
+    expect(listItem('1')).toBeInTheDocument()
+    expect(listItem('01')).not.toBe(listItem('1'))
+    expect(within(listItem('01')).getByText('01', { selector: '.design-page-list__no' })).toBeInTheDocument()
+    expect(within(listItem('1')).getByText('1', { selector: '.design-page-list__no' })).toBeInTheDocument()
+    expect(within(listItem('mk01')).getByText('MK01', { selector: '.design-page-list__no' })).toBeInTheDocument()
+    expect(within(listItem('mk01')).getByText('金具一括手配表')).toBeInTheDocument()
+    // 各行にサムネイル(中央ビューアーと同じ画像URL)が付き、遅延読み込みになっている
+    const thumbOf = (key: string) => listItem(key).querySelector('img') as HTMLImageElement
+    expect(thumbOf('01').getAttribute('src')).toBe('/api/products/A1GV2421/design-pages/01/image')
+    expect(thumbOf('1').getAttribute('src')).toBe('/api/products/A1GV2421/design-pages/1/image')
+    expect(thumbOf('16').getAttribute('src')).toBe('/api/products/A1GV2421/design-pages/16/image')
+    expect(thumbOf('mk01').getAttribute('loading')).toBe('lazy')
+    expect(listItem('ms01').querySelector('img')).toBeNull()
+    // 既定は、推論用PNGのある最初の行(従来の表示: 盤領域Overlayあり)
+    await waitFor(() => expect(listItem('16')).toHaveAttribute('aria-current', 'true'))
+    await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+  })
+
+  it('shows a preview page with 表示用プレビュー and no overlays, and returns to the inference page with its overlays (no mixing)', async () => {
+    await useDesignList()
+    render(<App />)
+    await waitFor(() => expect(listItem('01')).toBeInTheDocument())
+    await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+
+    fireEvent.click(listItem('01'))
+    await waitFor(() => expect(screen.getByText('質量計算書(ページ番号 01・表示用プレビュー)')).toBeInTheDocument())
+    expect(listItem('01')).toHaveAttribute('aria-current', 'true')
+    expect(listItem('16')).not.toHaveAttribute('aria-current')
+    expect(document.querySelectorAll('.product-panel-overlay__area')).toHaveLength(0)
+    expect(document.querySelector('.detected-preview-overlay__bbox')).not.toBeInTheDocument()
+    expect(document.querySelector('.detection-overlay')?.children.length ?? 0).toBe(0)
+    expect(screen.getByTestId('drawing-canvas-stub').getAttribute('data-bbox-add-mode')).toBe('false')
+
+    // 01 と 1 は別のページ(別のプレビュー)
+    fireEvent.click(listItem('1'))
+    await waitFor(() => expect(screen.getByText('単線系統図(ページ番号 1・表示用プレビュー)')).toBeInTheDocument())
+    expect(screen.queryByText('質量計算書(ページ番号 01・表示用プレビュー)')).not.toBeInTheDocument()
+
+    fireEvent.click(listItem('16'))
+    await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+    expect(screen.queryByText(/表示用プレビュー/)).not.toBeInTheDocument()
+    expect(screen.getByText('外形図(P16)')).toBeInTheDocument()
+  })
+
+  it('shows a fixed message (no overlays, no canvas) for a page whose display image has not been created', async () => {
+    await useDesignList()
+    render(<App />)
+    await waitFor(() => expect(listItem('ms01')).toBeInTheDocument())
+    fireEvent.click(listItem('ms01'))
+    await waitFor(() => expect(screen.getByText('この図面の表示用画像は作成されていません')).toBeInTheDocument())
+    expect(screen.queryByTestId('drawing-canvas-stub')).not.toBeInTheDocument()
+  })
+
+  it('restores a preview page from the URL (?design=) with the key kept as a string, and writes it back', async () => {
+    await useDesignList()
+    window.history.replaceState(null, '', '/?product=A1GV2421&design=mk01')
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('金具一括手配表(ページ番号 MK01・表示用プレビュー)')).toBeInTheDocument())
+    expect(new URLSearchParams(window.location.search).get('design')).toBe('mk01')
+    expect(new URLSearchParams(window.location.search).has('page')).toBe(false)
+    fireEvent.click(listItem('16'))
+    await waitFor(() => expect(new URLSearchParams(window.location.search).has('design')).toBe(false))
+    expect(new URLSearchParams(window.location.search).get('page')).toBe('16')
+  })
+
+  it('falls back to the existing drawing list with a fixed note when design.csv is missing or invalid, without any error text', async () => {
+    const { fetchDesignPages } = await import('./api/client')
+    vi.mocked(fetchDesignPages).mockResolvedValue({ status: 'invalid', items: [], skipped_rows: 0 })
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('design.csv を読み込めないため、従来の図面一覧を表示しています')).toBeInTheDocument())
+    expect(document.querySelector('[data-design-key]')).not.toBeInTheDocument()
+    expect(screen.getByText('図面一覧')).toBeInTheDocument()
+    expect(document.querySelector('.app-layout__error')).not.toBeInTheDocument()
+    vi.mocked(fetchDesignPages).mockRejectedValue(new Error('C:\\secret\\path'))
+    cleanup()
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('design.csv を読み込めないため、従来の図面一覧を表示しています')).toBeInTheDocument())
+    expect(document.body.textContent).not.toContain('secret')
   })
 })

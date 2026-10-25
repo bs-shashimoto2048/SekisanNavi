@@ -83,7 +83,10 @@
    約430px前後の最小幅のいずれでもクリップが発生しないことを確認した値。 */
 .panel-info__row {
   display: grid;
-  grid-template-columns: 38px minmax(70px, 2fr) 60px 86px 34px 36px minmax(40px, 1fr);
+  /* [画面全体の文字拡大] 列幅を文字サイズに追従させるため、px(15px基準で実測した値)を rem に換算した。
+     型式列は、拡大前から「OS2GTVDK」等が見切れていたため 4rem→4.7rem に、盤名称の下限は5文字(高圧受電盤)が、接続列の下限は「箱･左右(L)」が省略されない
+     4.4rem(2.67rem から)に広げた。 */
+  grid-template-columns: 2.53rem minmax(5.1rem, 2fr) 4.7rem 5.73rem 2.27rem 2.4rem minmax(4.4rem, 1fr);
   align-items: center;
   column-gap: 0.4rem;
 }

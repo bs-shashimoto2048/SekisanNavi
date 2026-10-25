@@ -6,6 +6,8 @@ import {
   createManualDetection,
   deleteDetection,
   evaluateEstimateResults,
+  designPageImageUrl,
+  fetchDesignPages,
   fetchDetectedPreview,
   fetchDetections,
   fetchDrawingEvidenceTypes,
@@ -47,6 +49,8 @@ import type {
   Detection,
   DrawingPage,
   EstimateMasterItem,
+  DesignPage,
+  DesignPages,
   EstimatePanelInfo,
   MaterialRow,
   EstimateResult,
@@ -60,11 +64,14 @@ import { shiftLabelWithBBox } from './utils/bbox'
 import type { NormalizedRect } from './utils/bbox'
 import {
   buildSearchWithProductPage,
+  parseDesignKeyFromSearch,
   parsePageNoFromSearch,
   parseProductNoFromSearch,
 } from './utils/urlState'
 import { ProjectHeader } from './components/ProjectHeader/ProjectHeader'
 import { DrawingNavigator } from './components/DrawingNavigator/DrawingNavigator'
+import { DesignPageList } from './components/DrawingNavigator/DesignPageList'
+import { designPagesFallbackNote } from './utils/designPagesNote'
 import { DrawingViewer } from './components/DrawingViewer/DrawingViewer'
 import { PanelInfo } from './components/PanelInfo/PanelInfo'
 import { EstimateAggregation } from './components/EstimateAggregation/EstimateAggregation'
@@ -115,7 +122,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 // Issue #19 Phase 4: 右ペインは廃止した(盤情報もfloating panel化したため、
 // 右ペイン自体が不要になった)。旧`RIGHT_PANE_*`定数・
 // `sekisan-navi:right-pane-width`のlocalStorageキーは削除済み(残さない)。
-const LEFT_PANE_INITIAL = 220
+const LEFT_PANE_INITIAL = 260
 const LEFT_PANE_MIN = 140
 const LEFT_PANE_MAX_VW_RATIO = 0.3
 const LEFT_PANE_STORAGE_KEY = 'sekisan-navi:left-pane-width'
@@ -149,6 +156,11 @@ function getInitialPageNo(): number | null {
   return parsePageNoFromSearch(window.location.search)
 }
 
+function getInitialDesignKey(): string | null {
+  if (typeof window === 'undefined') return null
+  return parseDesignKeyFromSearch(window.location.search)
+}
+
 function App() {
   const [project, setProject] = useState<ProjectInfo | null>(null)
   // ダミーDetection/PanelAreaと紐付けるためだけに保持するDB上の図面ページ一覧。
@@ -178,6 +190,13 @@ function App() {
   const [productPagesLoading, setProductPagesLoading] = useState(true)
   const [productPagesError, setProductPagesError] = useState<string | null>(null)
   const [selectedProductPageNo, setSelectedProductPageNo] = useState<number | null>(getInitialPageNo)
+  // design.csv(ページ番号・図名)基準の図面一覧(取得前はnull)と、推論用PNGの無い行(表示用プレビュー等)を
+  // 選んでいるときのキー(ページ番号の文字列。数値にしない)。推論用PNGのある行の選択は、従来どおり
+  // selectedProductPageNo(整数のページ番号)で表す(選択ページが空のときだけ、このキーが有効)。
+  const [designPages, setDesignPages] = useState<DesignPages | null>(null)
+  const [selectedDesignKey, setSelectedDesignKey] = useState<string | null>(getInitialDesignKey)
+  const designKeyFromUrlRef = useRef<string | null>(getInitialDesignKey())
+  const urlPageNoRef = useRef<number | null>(getInitialPageNo())
   // URLから復元した製番が実在しなかった場合の既定製番への自動fallbackは、
   // 二重発火・無限ループを避けるため1回だけ試みる (指示書23章)。
   const urlFallbackAttempted = useRef(false)
@@ -417,7 +436,10 @@ function App() {
         setSelectedProductPageNo((current) =>
           current != null && drawings.some((d) => d.page_no === current)
             ? current
-            : (drawings[0]?.page_no ?? null),
+            : // URLでdesign.csv基準の行(キー)が指定されている間は、先頭ページを既定にしない
+              designKeyFromUrlRef.current != null
+              ? null
+              : (drawings[0]?.page_no ?? null),
         )
       })
       .catch((e: unknown) => {
@@ -446,10 +468,79 @@ function App() {
       window.location.search,
       activeProductNo,
       selectedProductPageNo,
+      selectedProductPageNo == null ? selectedDesignKey : null,
     )
     const newUrl = `${window.location.pathname}?${search}${window.location.hash}`
     window.history.replaceState(null, '', newUrl)
-  }, [activeProductNo, selectedProductPageNo])
+  }, [activeProductNo, selectedProductPageNo, selectedDesignKey])
+
+  // design.csv基準の図面一覧を取得する(製番単位)。取得に失敗しても既存の表示を壊さないよう、
+  // `setError`は使わず「読み込めなかった」状態(invalid)として扱い、従来の図面一覧を使う
+  // (例外文言・実パスを画面へ出さない)。
+  useEffect(() => {
+    setDesignPages(null)
+    if (activeProductNo == null) return
+    let cancelled = false
+    fetchDesignPages(activeProductNo)
+      .then((fetched) => {
+        if (!cancelled) setDesignPages(fetched)
+      })
+      .catch(() => {
+        if (!cancelled) setDesignPages({ status: 'invalid', items: [], skipped_rows: 0 })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeProductNo])
+
+  const designItems = useMemo(
+    () => (designPages?.status === 'ok' ? designPages.items : []),
+    [designPages],
+  )
+  const useDesignList = designItems.length > 0
+
+  // 一覧で選択中の行。整数のページ番号が選ばれていれば(推論用PNGのある行・積算明細からの
+  // 根拠図面ジャンプ等)、その行が正。ページが空のときだけ、キーで選んだ行(プレビュー等)になる。
+  const selectedDesignItem = useMemo<DesignPage | null>(() => {
+    if (!useDesignList) return null
+    if (selectedProductPageNo != null) {
+      return designItems.find((i) => i.inference_page_no === selectedProductPageNo) ?? null
+    }
+    return designItems.find((i) => i.key === selectedDesignKey) ?? null
+  }, [useDesignList, designItems, selectedProductPageNo, selectedDesignKey])
+
+  // 一覧とページ一覧の両方が揃ってから、選択を整える(一覧の取得前・ページ一覧の既定選択との競合を避ける)。
+  // - 選択中のページが推論用PNGのある行ならそのまま
+  // - `?page=`が推論用PNGの無い数値ページなら、同じキーの行(プレビュー等)へ移す
+  // - 何も選ばれていなければ、最初の推論用PNGのある行(無ければ最初の行)を選ぶ
+  useEffect(() => {
+    if (!useDesignList || productPagesLoading) return
+    if (selectedDesignItem != null) {
+      // URLのキーが推論用PNGのある行を指していた場合は、従来どおり整数のページ番号で選び直す
+      if (selectedProductPageNo == null && selectedDesignItem.inference_page_no != null) {
+        setSelectedProductPageNo(selectedDesignItem.inference_page_no)
+      }
+      return
+    }
+    // URLの`?page=`で指定された数値ページだけを、同じキーの行へ移す(ページ一覧側の既定の選択=先頭ページ
+    // と取り違えない)。一度使ったら消す。
+    const urlPageNo = urlPageNoRef.current
+    urlPageNoRef.current = null
+    if (selectedProductPageNo != null && selectedProductPageNo === urlPageNo) {
+      const byKey = designItems.find((i) => i.key === String(selectedProductPageNo))
+      if (byKey) {
+        setSelectedDesignKey(byKey.key)
+        setSelectedProductPageNo(byKey.inference_page_no)
+        return
+      }
+    }
+    const first =
+      designItems.find((i) => i.mode === 'inference') ??
+      designItems.find((i) => i.mode === 'preview') ??
+      designItems[0]
+    setSelectedDesignKey(first.key)
+    setSelectedProductPageNo(first.inference_page_no)
+  }, [useDesignList, productPagesLoading, selectedDesignItem, selectedProductPageNo, designItems])
 
   // 現在選択中の実ページ(製番+ページ番号)に対応する、ダミーDB側のDrawingPage行。
   // Detection/PanelArea/盤パラメータはこのIDを介してのみ取得する。対応するダミー行が
@@ -599,6 +690,26 @@ function App() {
     [productPages, selectedProductPageNo],
   )
 
+  // design.csv基準の一覧で、推論用PNGの無い行(表示用プレビュー・画像なし)を選んでいるとき。
+  // 推論用PNGの座標系のオーバーレイ(盤枠・検出枠)は出さず、見出しに「表示用プレビュー」と明示する。
+  const designPreviewItem =
+    selectedDesignItem != null && selectedDesignItem.inference_page_no == null ? selectedDesignItem : null
+  const isDesignPreview = designPreviewItem != null
+  const designPreviewImageUrl =
+    designPreviewItem != null && designPreviewItem.mode === 'preview'
+      ? designPageImageUrl(activeProductNo, designPreviewItem.key)
+      : null
+  const designPreviewLabel =
+    designPreviewItem != null
+      ? `${designPreviewItem.drawing_name}(ページ番号 ${designPreviewItem.page_label}${designPreviewImageUrl ? '・表示用プレビュー' : ''})`
+      : ''
+  // 行ごとに別のCanvasとして扱う(切替時にFit・表示状態を持ち越さない)ため、プレビュー行は一意な負の番号にする
+  const viewerPageNo =
+    designPreviewItem != null
+      ? designPreviewImageUrl
+        ? -(designItems.findIndex((i) => i.key === designPreviewItem.key) + 1)
+        : null
+      : selectedProductPageNo
   const pageLabel = activeProductPage
     ? (activeProductPage.drawing_name ?? `P${activeProductPage.page_no}`)
     : ''
@@ -1143,7 +1254,7 @@ function App() {
 
   // 左の図面一覧からの手動ページ切替 (要件26: 別図面ページへ移動でBBox選択を解除する)。
   // Phase 1.9 要件8: ページ切替時は選択中盤(product_df)も解除する。
-  function handleSelectPage(pageNo: number) {
+  function handleSelectPage(pageNo: number | null) {
     setSelectedProductPageNo(pageNo)
     setSelectedDetectionId(null)
     setHighlightedDetectionId(null)
@@ -1152,12 +1263,24 @@ function App() {
     setDetailSelectedResultId(null)
   }
 
+  // design.csv基準の図面一覧からの選択。推論用PNGのある行は従来どおり整数のページ番号で選び
+  // (元PNG・推論結果・オーバーレイ)、無い行(表示用プレビュー等)はページを空にしてキーで選ぶ。
+  // どちらもBBox選択・盤選択などを解除する(別図面へ移動するため)。
+  function handleSelectDesignPage(item: DesignPage) {
+    designKeyFromUrlRef.current = null
+    setSelectedDesignKey(item.key)
+    handleSelectPage(item.inference_page_no)
+  }
+
   // 製番切替 (Phase 1.8)。ProductSelectorから呼ばれる。ページ選択・BBox選択・
   // 選択中盤(product_df, Phase 1.9)もリセットする (新しい製番のページ一覧が
   // 届き次第、先頭ページへ切り替わる)。積算集約(②)の対象選択も、別製番では
   // 盤の識別子(面番号/盤番号)が意味を持たなくなるためリセットする。
   function handleSelectProduct(productNo: string) {
     setActiveProductNo(productNo)
+    designKeyFromUrlRef.current = null
+    urlPageNoRef.current = null
+    setSelectedDesignKey(null)
     setSelectedProductPageNo(null)
     setSelectedDetectionId(null)
     setHighlightedDetectionId(null)
@@ -1722,14 +1845,32 @@ function App() {
         <div className="app-workspace__main">
           <div className="app-workspace__upper">
             <div className="app-workspace__nav" style={{ width: leftPaneWidth }}>
-              <DrawingNavigator
-                pages={productPages}
-                selectedPageNo={selectedProductPageNo}
-                onSelectPage={handleSelectPage}
-                loading={productPagesLoading}
-                error={productPagesError}
-                visiblePageNos={visiblePageNos}
-              />
+              {useDesignList ? (
+                <DesignPageList
+                  designPages={designPages}
+                  selectedKey={selectedDesignItem?.key ?? null}
+                  onSelect={handleSelectDesignPage}
+                  thumbnailUrl={(key) => designPageImageUrl(activeProductNo, key)}
+                  visiblePageNos={visiblePageNos}
+                />
+              ) : (
+                <>
+                  {/* design.csvが無い・不正などで基準の一覧を使えないときは、固定文言でその旨を示し、従来の図面一覧にする */}
+                  {designPagesFallbackNote(designPages) && (
+                    <p className="drawing-navigator__status drawing-navigator__status--note">
+                      {designPagesFallbackNote(designPages)}
+                    </p>
+                  )}
+                  <DrawingNavigator
+                    pages={productPages}
+                    selectedPageNo={selectedProductPageNo}
+                    onSelectPage={handleSelectPage}
+                    loading={productPagesLoading}
+                    error={productPagesError}
+                    visiblePageNos={visiblePageNos}
+                  />
+                </>
+              )}
             </div>
             <PaneSplitter onDrag={resizeLeftPaneBy} ariaLabel="図面一覧の幅を変更" />
             {/* Issue #19 Phase 2: 積算集約・積算明細を右ペインから外し、この
@@ -1741,10 +1882,11 @@ function App() {
             <div className="app-workspace__viewer-wrap" ref={viewerWrapRef}>
               <DrawingViewer
                 productNo={activeProductNo}
-                pageNo={selectedProductPageNo}
-                pageImageUrl={activeProductPage?.thumbnail_url ?? null}
-                pageLabel={pageLabel}
-                panels={activeProductPage?.panels ?? []}
+                pageNo={viewerPageNo}
+                pageImageUrl={designPreviewImageUrl ?? (isDesignPreview ? null : (activeProductPage?.thumbnail_url ?? null))}
+                pageLabel={isDesignPreview ? designPreviewLabel : pageLabel}
+                emptyMessage={isDesignPreview ? 'この図面の表示用画像は作成されていません' : undefined}
+                panels={isDesignPreview ? [] : (activeProductPage?.panels ?? [])}
                 selectedPanelKey={selectedPanel?.key ?? null}
                 onSelectPanel={handleSelectPanel}
                 masterItemById={masterItemById}
@@ -1752,13 +1894,13 @@ function App() {
                 // 見た目(カーソル等)にする(両モードとも排他選択のため、常に
                 // どちらか一方のみがtrueになる)。
                 masterItemSelected={selectedMasterItemId != null || selectedEvidenceTypeKey != null}
-                detectedPreview={detectedPreview}
-                detections={viewerDetections}
+                detectedPreview={isDesignPreview ? [] : detectedPreview}
+                detections={isDesignPreview ? [] : viewerDetections}
                 selectedDetectionId={selectedDetectionId}
                 highlightedDetectionId={highlightedDetectionId}
                 onSelectDetection={handleSelectDetection}
                 bboxAddMode={
-                  (selectedMasterItemId != null || selectedEvidenceTypeKey != null) && matchingDbPage != null
+                  !isDesignPreview && (selectedMasterItemId != null || selectedEvidenceTypeKey != null) && matchingDbPage != null
                 }
                 onCreateBBox={
                   selectedEvidenceTypeKey != null ? handleCreateEvidenceBBox : handleCreateManualBBox
