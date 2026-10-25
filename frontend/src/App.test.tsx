@@ -3227,7 +3227,19 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
     })
   }
 
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  // 製番を選んだあと、図面一覧を開く前の「図面の選択」を、既定(すべて選択)のまま開く
+  async function confirmPicker() {
+    const dialog = await screen.findByRole('dialog', { name: '表示する図面を選択' })
+    fireEvent.click(within(dialog).getByRole('button', { name: '開く' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '表示する図面を選択' })).not.toBeInTheDocument())
+  }
+
   afterEach(async () => {
+    window.localStorage.clear()
     const { fetchDesignPages } = await import('./api/client')
     vi.mocked(fetchDesignPages).mockReset()
     vi.mocked(fetchDesignPages).mockImplementation(async () => ({ status: 'missing', items: [], skipped_rows: 0 }))
@@ -3240,6 +3252,7 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
   it('lists page numbers (as strings, 01 and 1 separately) with drawing names, and opens the first inference page by default', async () => {
     await useDesignList()
     render(<App />)
+    await confirmPicker()
     await waitFor(() => expect(listItem('01')).toBeInTheDocument())
     expect(listItem('1')).toBeInTheDocument()
     expect(listItem('01')).not.toBe(listItem('1'))
@@ -3262,6 +3275,7 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
   it('shows a preview page with 表示用プレビュー and no overlays, and returns to the inference page with its overlays (no mixing)', async () => {
     await useDesignList()
     render(<App />)
+    await confirmPicker()
     await waitFor(() => expect(listItem('01')).toBeInTheDocument())
     await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
 
@@ -3288,6 +3302,7 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
   it('shows a fixed message (no overlays, no canvas) for a page whose display image has not been created', async () => {
     await useDesignList()
     render(<App />)
+    await confirmPicker()
     await waitFor(() => expect(listItem('ms01')).toBeInTheDocument())
     fireEvent.click(listItem('ms01'))
     await waitFor(() => expect(screen.getByText('この図面の表示用画像は作成されていません')).toBeInTheDocument())
@@ -3298,12 +3313,125 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
     await useDesignList()
     window.history.replaceState(null, '', '/?product=A1GV2421&design=mk01')
     render(<App />)
+    await confirmPicker()
     await waitFor(() => expect(screen.getByText('金具一括手配表(ページ番号 MK01・表示用プレビュー)')).toBeInTheDocument())
     expect(new URLSearchParams(window.location.search).get('design')).toBe('mk01')
     expect(new URLSearchParams(window.location.search).has('page')).toBe(false)
     fireEvent.click(listItem('16'))
     await waitFor(() => expect(new URLSearchParams(window.location.search).has('design')).toBe(false))
     expect(new URLSearchParams(window.location.search).get('page')).toBe('16')
+  })
+
+  describe('図面の選択(製番を選んだあと、図面一覧を開く前)', () => {
+    const pickerName = '表示する図面を選択'
+    const box = (dialog: HTMLElement, key: string) => dialog.querySelector(`input[data-design-key="${key}"]`) as HTMLInputElement
+
+    it('opens the picker before the list: all drawings are checked by default, and nothing is shown until confirmed', async () => {
+      await useDesignList()
+      render(<App />)
+      const dialog = await screen.findByRole('dialog', { name: pickerName })
+      // ページ番号(元の表記)と図名が並び、既定はすべて選択済み
+      for (const item of designItems) {
+        expect(box(dialog, item.key).checked).toBe(true)
+      }
+      expect(within(dialog).getByText('5 / 5 件を選択')).toBeInTheDocument()
+      expect(within(dialog).getByText('MK01')).toBeInTheDocument()
+      expect(within(dialog).getByText('金具一括手配表')).toBeInTheDocument()
+      // 確定前は、左のサムネイル一覧にも中央にも図面を出さない
+      expect(document.querySelector('[data-design-key]:not(input)')).not.toBeInTheDocument()
+      expect(document.querySelectorAll('.product-panel-overlay__area')).toHaveLength(0)
+      // 初回はキャンセルできない
+      expect(within(dialog).queryByRole('button', { name: 'キャンセル' })).not.toBeInTheDocument()
+    })
+
+    it('shows only the selected drawings in the left list, and keeps the original order and notation', async () => {
+      await useDesignList()
+      render(<App />)
+      const dialog = await screen.findByRole('dialog', { name: pickerName })
+      fireEvent.click(box(dialog, '1'))
+      fireEvent.click(box(dialog, 'ms01'))
+      expect(within(dialog).getByText('3 / 5 件を選択')).toBeInTheDocument()
+      fireEvent.click(within(dialog).getByRole('button', { name: '開く' }))
+      await waitFor(() => expect(listItem('16')).toBeInTheDocument())
+      expect(listItem('1')).toBeNull()
+      expect(listItem('ms01')).toBeNull()
+      const keys = Array.from(document.querySelectorAll('[data-design-key]')).map((e) => e.getAttribute('data-design-key'))
+      expect(keys).toEqual(['16', '01', 'mk01'])
+      expect(within(listItem('mk01')).getByText('MK01', { selector: '.design-page-list__no' })).toBeInTheDocument()
+      expect(screen.getByText(/表示 3 \/ 5 件/)).toBeInTheDocument()
+      // クリックすると中央に表示される(プレビュー)
+      fireEvent.click(listItem('01'))
+      await waitFor(() => expect(screen.getByText('質量計算書(ページ番号 01・表示用プレビュー)')).toBeInTheDocument())
+    })
+
+    it('does not allow opening with no drawing selected', async () => {
+      await useDesignList()
+      render(<App />)
+      const dialog = await screen.findByRole('dialog', { name: pickerName })
+      fireEvent.click(within(dialog).getByRole('button', { name: 'すべて解除' }))
+      expect(within(dialog).getByRole('button', { name: '開く' })).toBeDisabled()
+      fireEvent.click(within(dialog).getByRole('button', { name: 'すべて選択' }))
+      expect(within(dialog).getByRole('button', { name: '開く' })).toBeEnabled()
+    })
+
+    it('stores the selection per product in localStorage (excluded keys only) and restores it without asking again', async () => {
+      await useDesignList()
+      const first = render(<App />)
+      const dialog = await screen.findByRole('dialog', { name: pickerName })
+      fireEvent.click(box(dialog, 'mk01'))
+      fireEvent.click(within(dialog).getByRole('button', { name: '開く' }))
+      await waitFor(() => expect(listItem('16')).toBeInTheDocument())
+      const stored = Object.entries(window.localStorage).filter(([k]) => k.startsWith('sekisan-navi:design-selection'))
+      expect(stored).toHaveLength(1)
+      expect(JSON.parse(stored[0][1])).toEqual({ excluded: ['mk01'] })
+      first.unmount()
+      // 再読み込み: ダイアログは出ず、保存済みの選択で一覧が出る
+      render(<App />)
+      await waitFor(() => expect(listItem('16')).toBeInTheDocument())
+      expect(listItem('mk01')).toBeNull()
+      expect(screen.queryByRole('dialog', { name: pickerName })).not.toBeInTheDocument()
+    })
+
+    it('can reopen the picker from the list, keeping the current selection, and cancel without changes', async () => {
+      await useDesignList()
+      render(<App />)
+      await confirmPicker()
+      await waitFor(() => expect(listItem('16')).toBeInTheDocument())
+      fireEvent.click(screen.getByRole('button', { name: '図面の選択' }))
+      const dialog = await screen.findByRole('dialog', { name: pickerName })
+      fireEvent.click(box(dialog, '01'))
+      fireEvent.click(within(dialog).getByRole('button', { name: 'キャンセル' }))
+      expect(screen.queryByRole('dialog', { name: pickerName })).not.toBeInTheDocument()
+      expect(listItem('01')).toBeInTheDocument()
+      // 今度は確定する
+      fireEvent.click(screen.getByRole('button', { name: '図面の選択' }))
+      const dialog2 = await screen.findByRole('dialog', { name: pickerName })
+      fireEvent.click(box(dialog2, '01'))
+      fireEvent.click(within(dialog2).getByRole('button', { name: '開く' }))
+      await waitFor(() => expect(listItem('01')).toBeNull())
+      expect(listItem('16')).toBeInTheDocument()
+    })
+
+    it('moves the center view to a visible drawing when the selected one is deselected', async () => {
+      await useDesignList()
+      render(<App />)
+      await confirmPicker()
+      await waitFor(() => expect(listItem('16')).toHaveAttribute('aria-current', 'true'))
+      fireEvent.click(listItem('01'))
+      await waitFor(() => expect(listItem('01')).toHaveAttribute('aria-current', 'true'))
+      fireEvent.click(screen.getByRole('button', { name: '図面の選択' }))
+      const dialog = await screen.findByRole('dialog', { name: pickerName })
+      fireEvent.click(box(dialog, '01'))
+      fireEvent.click(within(dialog).getByRole('button', { name: '開く' }))
+      await waitFor(() => expect(listItem('01')).toBeNull())
+      await waitFor(() => expect(listItem('16')).toHaveAttribute('aria-current', 'true'))
+    })
+
+    it('does not show the picker when design.csv is missing (falls back to the existing list)', async () => {
+      render(<App />)
+      await waitFor(() => expect(screen.getByText('図面一覧')).toBeInTheDocument())
+      expect(screen.queryByRole('dialog', { name: pickerName })).not.toBeInTheDocument()
+    })
   })
 
   it('falls back to the existing drawing list with a fixed note when design.csv is missing or invalid, without any error text', async () => {

@@ -71,7 +71,9 @@ import {
 import { ProjectHeader } from './components/ProjectHeader/ProjectHeader'
 import { DrawingNavigator } from './components/DrawingNavigator/DrawingNavigator'
 import { DesignPageList } from './components/DrawingNavigator/DesignPageList'
+import { DesignPagePicker } from './components/DrawingNavigator/DesignPagePicker'
 import { designPagesFallbackNote } from './utils/designPagesNote'
+import { loadExcludedKeys, saveExcludedKeys, selectedItems } from './utils/designSelection'
 import { DrawingViewer } from './components/DrawingViewer/DrawingViewer'
 import { PanelInfo } from './components/PanelInfo/PanelInfo'
 import { EstimateAggregation } from './components/EstimateAggregation/EstimateAggregation'
@@ -197,6 +199,15 @@ function App() {
   const [selectedDesignKey, setSelectedDesignKey] = useState<string | null>(getInitialDesignKey)
   const designKeyFromUrlRef = useRef<string | null>(getInitialDesignKey())
   const urlPageNoRef = useRef<number | null>(getInitialPageNo())
+  // 図面の選択(製番を選んだあと、図面一覧を開く前に、表示する図面を選ぶ工程)。
+  // - designExcluded: 選択から外した図面のキー(既定は空 = PDFがある図面をすべて選択済み)。製番ごとに localStorage へ保存する
+  // - designConfirmed: この製番で選択を確定した(または保存済みの選択を読み込んだ)。確定するまで一覧・中央には図面を出さない
+  // - isDesignPickerOpen: 選択ダイアログの表示。pickerOnNextLoadRefは「製番を選び直した直後は、保存済みの選択があっても
+  //   ダイアログを出す」ための印(一覧の取得後に1回だけ使う)
+  const [designExcluded, setDesignExcluded] = useState<Set<string>>(() => new Set())
+  const [designConfirmed, setDesignConfirmed] = useState(false)
+  const [isDesignPickerOpen, setDesignPickerOpen] = useState(false)
+  const pickerOnNextLoadRef = useRef(false)
   // URLから復元した製番が実在しなかった場合の既定製番への自動fallbackは、
   // 二重発火・無限ループを避けるため1回だけ試みる (指示書23章)。
   const urlFallbackAttempted = useRef(false)
@@ -499,22 +510,58 @@ function App() {
   )
   const useDesignList = designItems.length > 0
 
+  // 製番の一覧を取得したら、保存済みの選択を読み込む。保存が無い(初回)、または製番を選び直した直後は、
+  // 図面の選択ダイアログを開く(確定するまで、一覧・中央には図面を出さない)。
+  useEffect(() => {
+    if (designPages == null) return // 取得中
+    const forced = pickerOnNextLoadRef.current
+    pickerOnNextLoadRef.current = false
+    if (!useDesignList) {
+      setDesignExcluded(new Set())
+      setDesignConfirmed(false)
+      setDesignPickerOpen(false)
+      return
+    }
+    const stored = loadExcludedKeys(activeProductNo)
+    setDesignExcluded(stored ?? new Set())
+    setDesignConfirmed(stored != null)
+    setDesignPickerOpen(stored == null || forced)
+  }, [designPages, useDesignList, activeProductNo])
+
+  // 選択した図面(左ペインに表示するもの)。確定前は空(図面を出さない)。並びはAPIの順(ページ番号の昇順)のまま。
+  const visibleDesignItems = useMemo(
+    () => (designConfirmed ? selectedItems(designItems, designExcluded) : []),
+    [designConfirmed, designItems, designExcluded],
+  )
+  const visibleDesignPages = useMemo<DesignPages | null>(
+    () => (designPages == null ? null : { ...designPages, items: visibleDesignItems }),
+    [designPages, visibleDesignItems],
+  )
+
+  function handleConfirmDesignSelection(excluded: Set<string>) {
+    saveExcludedKeys(activeProductNo, excluded)
+    setDesignExcluded(excluded)
+    setDesignConfirmed(true)
+    setDesignPickerOpen(false)
+  }
+
   // 一覧で選択中の行。整数のページ番号が選ばれていれば(推論用PNGのある行・積算明細からの
   // 根拠図面ジャンプ等)、その行が正。ページが空のときだけ、キーで選んだ行(プレビュー等)になる。
+  // 選択から外した図面は対象外(選択中の図面を外したときは、下の effect が既定の図面へ移す)。
   const selectedDesignItem = useMemo<DesignPage | null>(() => {
-    if (!useDesignList) return null
+    if (!useDesignList || !designConfirmed) return null
     if (selectedProductPageNo != null) {
-      return designItems.find((i) => i.inference_page_no === selectedProductPageNo) ?? null
+      return visibleDesignItems.find((i) => i.inference_page_no === selectedProductPageNo) ?? null
     }
-    return designItems.find((i) => i.key === selectedDesignKey) ?? null
-  }, [useDesignList, designItems, selectedProductPageNo, selectedDesignKey])
+    return visibleDesignItems.find((i) => i.key === selectedDesignKey) ?? null
+  }, [useDesignList, designConfirmed, visibleDesignItems, selectedProductPageNo, selectedDesignKey])
 
   // 一覧とページ一覧の両方が揃ってから、選択を整える(一覧の取得前・ページ一覧の既定選択との競合を避ける)。
   // - 選択中のページが推論用PNGのある行ならそのまま
   // - `?page=`が推論用PNGの無い数値ページなら、同じキーの行(プレビュー等)へ移す
   // - 何も選ばれていなければ、最初の推論用PNGのある行(無ければ最初の行)を選ぶ
   useEffect(() => {
-    if (!useDesignList || productPagesLoading) return
+    if (!useDesignList || !designConfirmed || productPagesLoading || visibleDesignItems.length === 0) return
     if (selectedDesignItem != null) {
       // URLのキーが推論用PNGのある行を指していた場合は、従来どおり整数のページ番号で選び直す
       if (selectedProductPageNo == null && selectedDesignItem.inference_page_no != null) {
@@ -527,7 +574,7 @@ function App() {
     const urlPageNo = urlPageNoRef.current
     urlPageNoRef.current = null
     if (selectedProductPageNo != null && selectedProductPageNo === urlPageNo) {
-      const byKey = designItems.find((i) => i.key === String(selectedProductPageNo))
+      const byKey = visibleDesignItems.find((i) => i.key === String(selectedProductPageNo))
       if (byKey) {
         setSelectedDesignKey(byKey.key)
         setSelectedProductPageNo(byKey.inference_page_no)
@@ -535,12 +582,12 @@ function App() {
       }
     }
     const first =
-      designItems.find((i) => i.mode === 'inference') ??
-      designItems.find((i) => i.mode === 'preview') ??
-      designItems[0]
+      visibleDesignItems.find((i) => i.mode === 'inference') ??
+      visibleDesignItems.find((i) => i.mode === 'preview') ??
+      visibleDesignItems[0]
     setSelectedDesignKey(first.key)
     setSelectedProductPageNo(first.inference_page_no)
-  }, [useDesignList, productPagesLoading, selectedDesignItem, selectedProductPageNo, designItems])
+  }, [useDesignList, designConfirmed, productPagesLoading, selectedDesignItem, selectedProductPageNo, visibleDesignItems])
 
   // 現在選択中の実ページ(製番+ページ番号)に対応する、ダミーDB側のDrawingPage行。
   // Detection/PanelArea/盤パラメータはこのIDを介してのみ取得する。対応するダミー行が
@@ -710,6 +757,8 @@ function App() {
         ? -(designItems.findIndex((i) => i.key === designPreviewItem.key) + 1)
         : null
       : selectedProductPageNo
+  // 図面の選択を確定するまでは、中央にも図面を出さない
+  const awaitingDesignSelection = useDesignList && !designConfirmed
   const pageLabel = activeProductPage
     ? (activeProductPage.drawing_name ?? `P${activeProductPage.page_no}`)
     : ''
@@ -1280,6 +1329,8 @@ function App() {
     setActiveProductNo(productNo)
     designKeyFromUrlRef.current = null
     urlPageNoRef.current = null
+    pickerOnNextLoadRef.current = true // 製番を選び直した直後は、図面一覧を開く前に図面の選択を出す
+    setDesignConfirmed(false)
     setSelectedDesignKey(null)
     setSelectedProductPageNo(null)
     setSelectedDetectionId(null)
@@ -1470,7 +1521,7 @@ function App() {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
-      if (isSettingsOpen || isProductSelectorOpen || isHelpOpen) return
+      if (isSettingsOpen || isProductSelectorOpen || isHelpOpen || isDesignPickerOpen) return
       if (selectedDetectionId != null) {
         setSelectedDetectionId(null)
         return
@@ -1496,6 +1547,7 @@ function App() {
     isSettingsOpen,
     isProductSelectorOpen,
     isHelpOpen,
+    isDesignPickerOpen,
     selectedDetectionId,
     selectedMasterItemId,
     selectedEvidenceTypeKey,
@@ -1721,7 +1773,7 @@ function App() {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (isSettingsOpen || isProductSelectorOpen || isHelpOpen) return
+      if (isSettingsOpen || isProductSelectorOpen || isHelpOpen || isDesignPickerOpen) return
       if (!(e.ctrlKey || e.metaKey)) return
       if (e.key.toLowerCase() !== 'z') return
       // input/textarea等ではブラウザ/input自身のUndo/Redoを奪わない (指示6章)。
@@ -1736,7 +1788,7 @@ function App() {
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isSettingsOpen, isProductSelectorOpen, isHelpOpen])
+  }, [isSettingsOpen, isProductSelectorOpen, isHelpOpen, isDesignPickerOpen])
 
   return (
     <div
@@ -1847,11 +1899,14 @@ function App() {
             <div className="app-workspace__nav" style={{ width: leftPaneWidth }}>
               {useDesignList ? (
                 <DesignPageList
-                  designPages={designPages}
+                  designPages={visibleDesignPages}
                   selectedKey={selectedDesignItem?.key ?? null}
                   onSelect={handleSelectDesignPage}
                   thumbnailUrl={(key) => designPageImageUrl(activeProductNo, key)}
                   visiblePageNos={visiblePageNos}
+                  onOpenPicker={() => setDesignPickerOpen(true)}
+                  totalCount={designItems.length}
+                  awaitingSelection={!designConfirmed}
                 />
               ) : (
                 <>
@@ -1882,10 +1937,16 @@ function App() {
             <div className="app-workspace__viewer-wrap" ref={viewerWrapRef}>
               <DrawingViewer
                 productNo={activeProductNo}
-                pageNo={viewerPageNo}
-                pageImageUrl={designPreviewImageUrl ?? (isDesignPreview ? null : (activeProductPage?.thumbnail_url ?? null))}
+                pageNo={awaitingDesignSelection ? null : viewerPageNo}
+                pageImageUrl={awaitingDesignSelection ? null : (designPreviewImageUrl ?? (isDesignPreview ? null : (activeProductPage?.thumbnail_url ?? null)))}
                 pageLabel={isDesignPreview ? designPreviewLabel : pageLabel}
-                emptyMessage={isDesignPreview ? 'この図面の表示用画像は作成されていません' : undefined}
+                emptyMessage={
+                  awaitingDesignSelection
+                    ? '表示する図面を選択してください'
+                    : isDesignPreview
+                      ? 'この図面の表示用画像は作成されていません'
+                      : undefined
+                }
                 panels={isDesignPreview ? [] : (activeProductPage?.panels ?? [])}
                 selectedPanelKey={selectedPanel?.key ?? null}
                 onSelectPanel={handleSelectPanel}
@@ -2044,6 +2105,17 @@ function App() {
         />
       )}
       {isHelpOpen && <HelpPdfModal onClose={() => setHelpOpen(false)} />}
+      {isDesignPickerOpen && useDesignList && (
+        <DesignPagePicker
+          key={activeProductNo}
+          productNo={activeProductNo}
+          items={designItems}
+          initialExcluded={designExcluded}
+          cancelable={designConfirmed}
+          onConfirm={handleConfirmDesignSelection}
+          onCancel={() => setDesignPickerOpen(false)}
+        />
+      )}
     </div>
   )
 }
