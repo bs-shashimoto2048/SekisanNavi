@@ -137,6 +137,37 @@ def test_api_image_serves_inference_png_or_preview_by_key_and_never_mixes_them(c
     assert client.get("/api/products/A1TEST01/design-pages/..%2F1/image").status_code == 404
 
 
+def _symlink_or_skip(link: Path, target: Path):
+    import os
+    import pytest
+    try:
+        os.symlink(target, link)
+    except (OSError, NotImplementedError):
+        pytest.skip("シンボリックリンクを作れない環境")
+
+
+def test_api_image_never_serves_inference_png_that_links_outside_the_product_dir(client, monkeypatch, tmp_path):
+    root, prod = _setup(tmp_path, monkeypatch, [("1", "a"), ("2", "b")], ["1", "2"], png=["2"], previews=["1"])
+    outside = tmp_path / "outside_secret.png"
+    outside.write_bytes(PNG_INFER + b"SECRET")
+    _symlink_or_skip(prod / "1.png", outside)         # 外部を指す推論PNG
+    _configure_root(client, monkeypatch, root)
+    res = client.get("/api/products/A1TEST01/design-pages/1/image")
+    assert res.status_code == 404 and b"SECRET" not in res.content
+    assert res.json()["detail"] == "この図面の表示用画像は作成されていません。"
+    assert str(tmp_path) not in res.text
+    ok = client.get("/api/products/A1TEST01/design-pages/2/image")      # 通常の推論PNGは従来どおり
+    assert (ok.status_code, ok.content) == (200, PNG_INFER)
+    assert outside.read_bytes().endswith(b"SECRET")                      # 読み取り専用: 外部ファイルは無変更
+
+
+def test_api_image_rejects_even_a_link_to_a_file_inside_the_product_dir(client, monkeypatch, tmp_path):
+    root, prod = _setup(tmp_path, monkeypatch, [("1", "a"), ("2", "b")], ["1", "2"], png=["2"])
+    _symlink_or_skip(prod / "1.png", prod / "2.png")
+    _configure_root(client, monkeypatch, root)
+    assert client.get("/api/products/A1TEST01/design-pages/1/image").status_code == 404
+
+
 def test_api_errors_use_fixed_text_and_hide_paths(client, monkeypatch, tmp_path):
     root, prod = _setup(tmp_path, monkeypatch, [("1", "a")], ["1"])
     prod.joinpath("design.csv").write_bytes(b"\xff\xfe\x00broken")
