@@ -202,6 +202,22 @@ def _preview_png_for_key(product_no: str, key: str) -> Path | None:
     return path
 
 
+def _inference_png_for_key(ccv_dir: Path, key: str) -> Path | None:
+    """推論用PNG(`{キー}.png`)。リンク自体を拒否し、解決後のパスが製番ディレクトリ直下の実在ファイル
+    のときだけ返す(外部を指すシンボリックリンク等は配信しない)。"""
+    try:
+        root = ccv_dir.resolve(strict=False)
+        raw = ccv_dir / f"{key}.png"
+        if raw.is_symlink():
+            return None
+        path = raw.resolve(strict=False)
+        if path.parent != root or not path.is_file():
+            return None
+    except (OSError, ValueError):
+        return None
+    return path
+
+
 @router.get("/{product_no}/design-pages", response_model=DesignPagesOut)
 def read_design_pages(
     product_no: str, conn: sqlite3.Connection = Depends(get_db)
@@ -279,7 +295,10 @@ def read_design_page_image(
     if page is None:
         raise HTTPException(status_code=404, detail="図面が見つかりません。")
     if page.mode == "inference":
-        return FileResponse(str(resolution.ccv_dir / f"{page.key}.png"), media_type="image/png")
+        inference = _inference_png_for_key(resolution.ccv_dir, page.key)
+        if inference is not None:
+            return FileResponse(str(inference), media_type="image/png")
+        raise HTTPException(status_code=404, detail="この図面の表示用画像は作成されていません。")
     if page.mode == "preview":
         preview = _preview_png_for_key(resolution.product_no, page.key)
         if preview is not None:
