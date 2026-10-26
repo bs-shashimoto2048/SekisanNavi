@@ -194,20 +194,31 @@ export function DrawingCanvas({
   // 非表示のプリロード用<img>でnaturalWidth/naturalHeight (=画像の実ピクセル寸法) を
   // 取得する。product_df由来の盤領域Overlayはこの寸法を正規化の基準にしている
   // (指示書5章: PNG画像そのものを座標基準にする)。
-  useEffect(() => {
-    if (mode !== 'png') return
-    setLoading(true)
-    setError(null)
-    setImageReady(false)
-  }, [fileUrl, mode])
+  const preloadImgRef = useRef<HTMLImageElement>(null)
 
-  function handlePngPreloadLoad(e: React.SyntheticEvent<HTMLImageElement>) {
-    const img = e.currentTarget
+  function applyPngLoaded(img: HTMLImageElement) {
     const size = { width: img.naturalWidth, height: img.naturalHeight }
     setNativeSize(size)
     onNativeSizeChange?.(size)
     setImageReady(true)
     setLoading(false)
+  }
+
+  useEffect(() => {
+    if (mode !== 'png') return
+    setLoading(true)
+    setError(null)
+    setImageReady(false)
+    // 画像がすでに読み込み済み(キャッシュ・高速な応答で、loadイベントがこのeffectより先に発火した)場合、
+    // 上の初期化でその完了を打ち消してしまい「読み込み中」のまま止まるため、ここで完了として扱う。
+    const img = preloadImgRef.current
+    if (img && img.complete && img.naturalWidth > 0) applyPngLoaded(img)
+    // applyPngLoadedは毎回作り直される関数のため依存に含めない(fileUrl/modeが変わったときだけ実行する)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileUrl, mode])
+
+  function handlePngPreloadLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+    applyPngLoaded(e.currentTarget)
   }
 
   function handlePngPreloadError() {
@@ -526,6 +537,7 @@ export function DrawingCanvas({
           原寸検出とレイアウト計算を同じ画像ソースから行う)。 */}
       {mode === 'png' && (
         <img
+          ref={preloadImgRef}
           src={fileUrl}
           alt=""
           aria-hidden="true"

@@ -77,6 +77,8 @@ interface Props {
    * 積算コード側(リード線・BBox)のフィルタは、App.tsx側で`detections`propに
    * 絞り込み済みの配列を渡すことで実現しているため、ここでは盤BBoxのみを扱う。 */
   focusPanel?: { banMenno: number; banNo: number } | null
+  /** 表示する図面が無いときに、中央に出す固定文言。未指定なら従来の案内文。 */
+  emptyMessage?: string
 }
 
 // フォールバック表示サイズ。実画像ロード完了後は実サイズ(naturalWidth/Height)へ切り替わる。
@@ -107,6 +109,7 @@ export function DrawingViewer({
   detailSelectedDetectionIds,
   evidenceDisplayNameByKey,
   focusPanel = null,
+  emptyMessage = '左の図面一覧からページを選択してください',
 }: Props) {
   const selectedDetection = detections.find((d) => d.id === selectedDetectionId) ?? null
   const hasPage = productNo != null && pageNo != null && pageImageUrl != null
@@ -140,7 +143,7 @@ export function DrawingViewer({
       {!hasPage && <h2 className="drawing-viewer__heading">図面名</h2>}
       <div className="drawing-viewer__stage">
         {!hasPage && (
-          <div className="drawing-viewer__empty">左の図面一覧からページを選択してください</div>
+          <div className="drawing-viewer__empty">{emptyMessage}</div>
         )}
         {hasPage && (
           <DrawingCanvas

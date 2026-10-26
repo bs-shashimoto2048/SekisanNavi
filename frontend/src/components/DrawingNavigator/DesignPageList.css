@@ -1,0 +1,227 @@
+/* design.csv基準の図面一覧。1枚ずつ枠で囲んだカード(上部=面/盤と図名、中央=サムネイル、下部=種類とページ番号)。 */
+.design-page-list__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem; /* カード同士の間隔(隣のカードと混ざらないよう、枠の外に余白を取る) */
+}
+
+.design-page-list__item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: #1f2937;
+  background: #fff;
+  border: 2px solid #94a3b8; /* 通常のカード枠: 一覧の背景(#fafafa)とはっきり区別できる濃さ */
+  border-radius: 6px;
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+}
+
+.design-page-list__item:hover {
+  border-color: #3b82f6;
+}
+
+.design-page-list__item:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 1px;
+}
+
+/* 選択中: 太い青枠+外側の輪+ヘッダー背景で、一覧を速く見ても分かるようにする(色だけでなく「表示中」の文字も出す) */
+.design-page-list__item--selected {
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 3px #bfdbfe, 0 2px 6px rgba(29, 78, 216, 0.35);
+}
+
+/* カード上部: ページ番号→図名(サムネイルの上)。面/盤番号は元データがあるページだけ、その下に出す */
+.design-page-list__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.1rem;
+  width: 100%;
+}
+
+.design-page-list__no {
+  font-size: 1.02rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.design-page-list__head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.35rem 0.5rem;
+  background: #e2e8f0;
+  border-bottom: 2px solid #94a3b8;
+  line-height: 1.35;
+}
+
+.design-page-list__item--selected .design-page-list__head {
+  background: #1d4ed8;
+  border-bottom-color: #1d4ed8;
+  color: #fff;
+}
+
+.design-page-list__ban {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.design-page-list__ban-label {
+  font-size: 0.7rem;
+  color: #475569;
+}
+
+.design-page-list__ban-value {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid #64748b;
+  border-radius: 4px;
+  padding: 0 0.35rem;
+}
+
+.design-page-list__name {
+  flex: 1 1 6rem;
+  min-width: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.design-page-list__item--selected .design-page-list__ban-label {
+  color: #dbeafe;
+}
+
+.design-page-list__current {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #1d4ed8;
+  background: #fff;
+  border-radius: 999px;
+  padding: 0 0.45rem;
+  white-space: nowrap;
+}
+
+/* サムネイル枠。画像の読み込み前後で一覧の高さが変わらないよう、縦横比を先に確保する(A3横 ≒ 1.4)。 */
+.design-page-list__thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1.4;
+  background: #f3f4f6;
+}
+
+.design-page-list__thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+}
+
+.design-page-list__thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #9ca3af;
+  font-size: 0.85rem;
+  background: #1f2937;
+}
+
+/* カード下部: 表示の種類(推論/プレビュー/画像なし)と design.csv のページ番号 */
+.design-page-list__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.2rem 0.5rem;
+  padding: 0.3rem 0.5rem;
+  background: #f8fafc;
+  border-top: 1px solid #cbd5e1;
+}
+
+.design-page-list__item--selected .design-page-list__foot {
+  background: #eff6ff;
+}
+
+.design-page-list__badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  white-space: nowrap;
+}
+
+.design-page-list__badge--inference {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.design-page-list__badge--preview {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.design-page-list__badge--unavailable {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+/* 従来の図面一覧へ切り替えているときの固定の案内文 */
+.drawing-navigator__status--note {
+  font-size: 0.8rem;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  margin: 0 0 0.4rem;
+}
+
+/* 図面の選択: 「表示 N / M 件」と、選び直すボタン */
+.design-page-list__select-bar,
+.design-page-list__awaiting {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+  margin: 0 0 0.5rem;
+}
+
+.design-page-list__select-count {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.design-page-list__pick-button {
+  margin-left: auto;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid #1d4ed8;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.design-page-list__pick-button:hover {
+  background: #dbeafe;
+}

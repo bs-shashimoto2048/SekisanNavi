@@ -400,6 +400,34 @@ describe('DrawingCanvas: pngモード (Phase 1.8重要仕様訂正 — 実製番
     expect(content.style.height).toBe(`${0.49 * NATIVE_HEIGHT}px`)
   })
 
+  it('does not stay stuck on "読み込み中" when the image has already finished loading before the state reset (load event raced ahead of the effect)', async () => {
+    // loadイベントがeffectより先に発火した状況を、「マウント時点で既に complete かつ naturalWidth>0」で再現する
+    // (キャッシュ・高速な応答で実際に起きる)。このとき loadイベントはもう来ない。
+    const complete = vi.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockReturnValue(true)
+    const width = vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(NATIVE_WIDTH)
+    const height = vi.spyOn(HTMLImageElement.prototype, 'naturalHeight', 'get').mockReturnValue(NATIVE_HEIGHT)
+    const onNativeSizeChange = vi.fn()
+    try {
+      render(
+        <DrawingCanvas
+          title="外形図"
+          fileUrl="/api/products/A1TEST01/drawings/9/thumbnail"
+          mode="png"
+          fallbackSize={{ width: 1, height: 1 }}
+          onNativeSizeChange={onNativeSizeChange}
+        />,
+      )
+      await vi.waitFor(() => expect(onNativeSizeChange).toHaveBeenCalledWith({ width: NATIVE_WIDTH, height: NATIVE_HEIGHT }))
+      expect(screen.queryByText(/読み込み中/)).not.toBeInTheDocument()
+      const content = document.querySelector('.drawing-canvas__content') as HTMLElement
+      expect(content).not.toBeNull()
+    } finally {
+      complete.mockRestore()
+      width.mockRestore()
+      height.mockRestore()
+    }
+  })
+
   it('renders the visible <img> with the given fileUrl inside the content area', async () => {
     const { viewport } = await renderPngCanvas({ fileUrl: '/api/products/A1TEST01/drawings/16/thumbnail' })
     const img = viewport.querySelector('.drawing-canvas__canvas') as HTMLImageElement

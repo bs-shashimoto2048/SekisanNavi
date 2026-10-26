@@ -267,6 +267,29 @@ export interface SteelOutline {
   items: SteelItem[]
 }
 
+/** design.csv基準の図面一覧の1行(対応するPDFがあるもの)。`key`は実在するPDFのファイル名
+ * (拡張子を除く)の綴り、`page_label`は「ページ番号」(文字列。先頭ゼロ・大文字小文字はそのまま。
+ * 数値にしない)。mode: inference=推論用PNGあり(`inference_page_no`で従来の表示) /
+ * preview=表示用プレビューPNG(オーバーレイなし) / unavailable=表示用の画像が未作成。 */
+export interface DesignPage {
+  key: string
+  page_label: string
+  drawing_name: string
+  mode: 'inference' | 'preview' | 'unavailable'
+  inference_page_no: number | null
+  /** 元データ(product_df.csvのBAN_MENNO/BAN_NO)の「面番号/盤番号」(`1/1`の形、重複を除き出現順)。
+   * 元データに無いページ(書類ページ等)は空。再採番・加工はしない。 */
+  ban_labels: string[]
+}
+
+/** design.csvを基準にした図面一覧。ファイルが無い・空・不正でもエラーにならず`status`で返る
+ * (例外文言・実パスは含まれない)。 */
+export interface DesignPages {
+  status: 'ok' | 'empty' | 'missing' | 'invalid'
+  items: DesignPage[]
+  skipped_rows: number
+}
+
 /** detected_df.csv (YOLO検出結果) 由来の検出BBoxプレビュー (Phase 1.12)。
  * DBの`Detection`とは別データ源であり、`id`はDBのDetection.idとは異なる体系
  * (ページ内のYOLO_INDEXそのもの) であることに注意 (混同して同一視しない)。

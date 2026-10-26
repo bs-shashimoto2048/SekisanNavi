@@ -17,7 +17,9 @@
      (各コンポーネントCSSのコメント参照)。line-height/font-weightは既存の1.5/
      通常ウェイトを維持しつつ、表データ・操作ラベル等で個別にfont-weightを
      やや強めた箇所がある。 */
-  font: 15px/1.5 'Yu Gothic UI', 'Meiryo UI', 'Meiryo', 'Segoe UI', system-ui,
+  /* [画面全体の文字拡大] 作業者要望により、ルート基準を15px→17.5px(約+17%)へ引き上げる。全font-sizeがremのため、
+     見出し・ボタン・表・図面情報パネル・図面一覧がまとめて拡大される(px固定の幅は個別に確認済み)。 */
+  font: 17.5px/1.5 'Yu Gothic UI', 'Meiryo UI', 'Meiryo', 'Segoe UI', system-ui,
     'Hiragino Sans', 'Yu Gothic', sans-serif;
   color-scheme: light;
 

@@ -1,0 +1,149 @@
+/* 図面の選択ダイアログ(製番を選んだあと、図面一覧を開く前に表示)。他のmodal(ProductSelector等)と同じ前面順にそろえる。 */
+.design-page-picker__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.design-page-picker {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem;
+  width: min(640px, 94vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  outline: none;
+}
+
+.design-page-picker__title {
+  font-size: 1.1rem;
+  margin: 0 0 0.3rem;
+}
+
+.design-page-picker__lead {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.design-page-picker__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.design-page-picker__bar button,
+.design-page-picker__actions button {
+  padding: 0.35rem 0.9rem;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.design-page-picker__count {
+  margin-left: auto;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.design-page-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  min-height: 8rem;
+}
+
+.design-page-picker__row {
+  display: grid;
+  grid-template-columns: auto minmax(3.2rem, 5.5rem) 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid #e5e7eb;
+  cursor: pointer;
+}
+
+.design-page-picker__row:hover {
+  background: #f1f5f9;
+}
+
+.design-page-picker__row input {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.design-page-picker__no {
+  font-weight: 800;
+  color: #0f172a;
+  overflow-wrap: anywhere;
+}
+
+.design-page-picker__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.design-page-picker__mode {
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  white-space: nowrap;
+}
+
+.design-page-picker__mode--inference {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.design-page-picker__mode--preview {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.design-page-picker__mode--unavailable {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.design-page-picker__warn {
+  margin: 0.4rem 0 0;
+  color: #b91c1c;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.design-page-picker__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+}
+
+.design-page-picker__actions .design-page-picker__open {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+  font-weight: 700;
+}
+
+.design-page-picker__actions .design-page-picker__open:disabled {
+  background: #cbd5e1;
+  border-color: #cbd5e1;
+  color: #64748b;
+  cursor: not-allowed;
+}
