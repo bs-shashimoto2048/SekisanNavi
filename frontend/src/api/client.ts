@@ -17,6 +17,7 @@ import type {
   EstimateMasterItem,
   DesignPages,
   EstimatePanelInfo,
+  SteelOutline,
   MaterialRow,
   EstimateResult,
   EstimateResultEvaluateResponse,
@@ -227,6 +228,12 @@ export function fetchEstimatePanels(productNo: string): Promise<EstimatePanelInf
  * (Backend側で保証済み)。 */
 export function fetchMaterials(productNo: string): Promise<MaterialRow[]> {
   return getJson(`/api/products/${encodeURIComponent(productNo)}/materials`)
+}
+
+/** 図面情報の「鋼材」欄用。製番の外形図のうち情報量が最大の1ページぶんの鋼材データ。
+ * ファイルが無い・不正などもエラーにはならず、`status`で返る(Backend側で保証済み)。 */
+export function fetchSteelOutline(productNo: string): Promise<SteelOutline> {
+  return getJson(`/api/products/${encodeURIComponent(productNo)}/steel`)
 }
 
 /** design.csv(ページ番号・図名)を基準にした図面一覧。対応するPDFがある行だけが返る。

@@ -79,6 +79,27 @@ class MaterialRowOut(BaseModel):
     material_spec: str = ""
 
 
+class SteelItemOut(BaseModel):
+    """鋼材欄の1行(構成部 × 材料仕様)。`material_spec` の `未記載`/`無し` は元の文字列のまま返す。
+    製番・ファイル名・実パスは含めない。"""
+
+    symbol_name: str = ""
+    cabtype: str = ""
+    component_name: str = ""
+    material_spec: str = ""
+
+
+class SteelOutlineOut(BaseModel):
+    """図面情報の「鋼材」欄用。製番の「外形図」のうち、情報量が最大の1ページぶんだけを返す(選択中の図面には連動しない)。
+    status: ok / empty(データ行なし) / missing(material.csvなし) / invalid(読めない・列不足) / no_outline(外形図のデータなし)。
+    `source_page` は material.csv の PAGE の表記のまま(文字列)。"""
+
+    status: str
+    source_page: str | None = None
+    source_drawing_name: str | None = None
+    items: list[SteelItemOut] = []
+
+
 class EstimatePanelInfoOut(BaseModel):
     """estcode_df.csv 1行相当。右ペイン上部「盤情報」表示用 (Phase 1.14指示書26章)。
     CSVの生データをそのまま渡さず、正規化済みの表示用モデルへ変換してから返す。

@@ -278,3 +278,109 @@
   color: #111827;
   font-weight: 700;
 }
+
+/* 鋼材(外形図1ページぶん。折りたたみ)。盤情報パネル自体が内部スクロールするため、この欄は高さを制限しない。 */
+.steel-section {
+  flex-shrink: 0;
+  margin-top: 0.4rem;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 0.3rem;
+}
+
+.steel-section__heading {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.steel-section__toggle {
+  all: unset;
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--panel-accent-fg);
+}
+
+.steel-section__toggle:focus-visible {
+  outline: 2px solid var(--panel-accent-fg);
+  outline-offset: 2px;
+}
+
+.steel-section__empty {
+  margin: 0.2rem 0 0;
+  font-size: 0.92rem;
+  color: #6b7280;
+}
+
+.steel-section__body {
+  margin-top: 0.2rem;
+}
+
+.steel-section__source {
+  margin: 0 0 0.2rem;
+  font-size: 0.82rem;
+  color: #6b7280;
+}
+
+.steel-section__group + .steel-section__group {
+  margin-top: 0.4rem;
+}
+
+.steel-section__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.8rem;
+  margin: 0;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #374151;
+  background: #f3f4f6;
+}
+
+.steel-section__head div {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.steel-section__head dt {
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.steel-section__head dd {
+  margin: 0;
+}
+
+.steel-section__match {
+  margin: 0.15rem 0.4rem;
+  font-size: 0.84rem;
+}
+
+.steel-section__match--ok {
+  color: #166534;
+}
+
+.steel-section__match--ng {
+  color: #b91c1c;
+}
+
+.steel-section__match--warn {
+  color: #92400e;
+}
+
+.steel-section__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.steel-section__table th,
+.steel-section__table td {
+  text-align: left;
+  padding: 0.05rem 0.4rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.steel-section__table th {
+  color: #4b5563;
+  font-weight: 500;
+}

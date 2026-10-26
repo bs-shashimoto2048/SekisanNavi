@@ -50,6 +50,8 @@ from app.schemas.settings import (
     ProductDrawingOut,
     ProductInfoOut,
     ProductSearchOut,
+    SteelItemOut,
+    SteelOutlineOut,
 )
 from app.services.data_source import (
     DEFAULT_PRODUCT_SEARCH_LIMIT,
@@ -67,6 +69,7 @@ from app.services.design_pages import load_design_pages
 from app.services.detected_df import load_detected_df
 from app.services.estcode_df import load_estcode_df
 from app.services.material_csv import load_material_csv
+from app.services.steel_outline import select_outline_steel
 from app.services.estimate_confirmation_builder import (
     NeedsReviewResultsExistError,
     build_confirmation_items,
@@ -409,6 +412,56 @@ def read_materials(
         )
         for row in result.rows
     ]
+
+
+@router.get("/{product_no}/steel", response_model=SteelOutlineOut)
+def read_steel_outline(
+    product_no: str, conn: sqlite3.Connection = Depends(get_db)
+) -> SteelOutlineOut:
+    """図面情報の「鋼材」欄用。`material.csv` のうち、製番の「外形図」(`product_df.csv` の ZUMEI から連番を
+    除いた図面種別が完全一致するページ)で情報量が最大の1ページぶんを返す。選択中の図面ページには連動しない。
+    選び方・同点時の規則は `select_outline_steel` を参照。読み取り専用。
+
+    `material.csv` が無い・空・不正・外形図のデータが無い場合もエラーにはせず `status`
+    (missing/empty/invalid/no_outline)で返す。例外の文言・実パス・製番・ファイル名は応答に含めない。
+    """
+    root = get_data_source_root(conn)
+    try:
+        resolution = resolve_product_dir(root, product_no)
+    except DataSourceError as e:
+        raise _error_to_http(e) from e
+
+    result = load_material_csv(resolution.ccv_dir, resolution.product_no)
+    if not result.file_present:
+        return SteelOutlineOut(status="missing")
+    if not result.rows:
+        # 行が1件も無い: 列不足・読み取り失敗(warnings あり)か、見出しのみ(warnings なし)
+        return SteelOutlineOut(status="invalid" if result.warnings else "empty")
+
+    try:
+        product_df = load_product_df(resolution.ccv_dir, resolution.product_no)
+        drawing_type_by_page = product_df.drawing_type_by_page
+        drawing_name_by_page = product_df.drawing_name_by_page
+    except Exception:  # noqa: BLE001 - 図面種別が分からないだけで、画面全体を止めない
+        return SteelOutlineOut(status="no_outline")
+
+    selection = select_outline_steel(result.rows, drawing_type_by_page)
+    if selection.page is None:
+        return SteelOutlineOut(status="no_outline")
+    return SteelOutlineOut(
+        status="ok",
+        source_page=selection.page,
+        source_drawing_name=drawing_name_by_page.get(selection.page_no) if selection.page_no is not None else None,
+        items=[
+            SteelItemOut(
+                symbol_name=r.symbol_name.strip(),
+                cabtype=r.cabtype.strip(),
+                component_name=r.component_name.strip(),
+                material_spec=r.material_spec.strip(),
+            )
+            for r in selection.rows
+        ],
+    )
 
 
 @router.get("/{product_no}/estimate-panels", response_model=list[EstimatePanelInfoOut])

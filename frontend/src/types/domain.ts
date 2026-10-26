@@ -249,6 +249,24 @@ export interface MaterialRow {
   material_spec: string
 }
 
+/** 鋼材欄の1行(構成部 × 材料仕様)。`material_spec`の`未記載`/`無し`はBackendが返した文字列のまま持つ。 */
+export interface SteelItem {
+  symbol_name: string
+  cabtype: string
+  component_name: string
+  material_spec: string
+}
+
+/** 図面情報の「鋼材」欄用。製番の外形図のうち情報量が最大の1ページぶん(選択中の図面には連動しない)。
+ * status: ok / empty / missing / invalid / no_outline。`source_page`はmaterial.csvのPAGEの表記のまま(文字列)。
+ * `unavailable`はフロント側の取得失敗(Backendは返さない)。 */
+export interface SteelOutline {
+  status: 'ok' | 'empty' | 'missing' | 'invalid' | 'no_outline' | 'unavailable'
+  source_page: string | null
+  source_drawing_name: string | null
+  items: SteelItem[]
+}
+
 /** design.csv基準の図面一覧の1行(対応するPDFがあるもの)。`key`は実在するPDFのファイル名
  * (拡張子を除く)の綴り、`page_label`は「ページ番号」(文字列。先頭ゼロ・大文字小文字はそのまま。
  * 数値にしない)。mode: inference=推論用PNGあり(`inference_page_no`で従来の表示) /
