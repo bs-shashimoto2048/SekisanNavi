@@ -808,6 +808,36 @@ describe('EstimateAggregation: 1行compact row (Issue #36)', () => {
     expect(compactRow!.querySelector('.estimate-aggregation__target-select-label')).toBeNull()
   })
 
+  // 旧「1行compact row (Issue #36)」の並び順/レイアウト検証を、対象select抜きの現構成で再作成。
+  it('lays the compact row out as a flex row and orders it visually 製番 → 合計 → 件数 → 確定 → 履歴 via CSS order (対象selectは含まない)', () => {
+    const { container } = render(
+      <EstimateAggregation
+        targets={[makeTarget()]}
+        lineItems={[makeLineItem()]}
+        totalLineItems={[makeTotalLineItem()]}
+        selectedTargetId={null}
+        productNo="A1GV2421"
+      />,
+    )
+    const compactRow = container.querySelector('.estimate-aggregation__compact-row') as HTMLElement
+    const rowStyle = getComputedStyle(compactRow)
+    expect(rowStyle.display).toBe('flex')
+    expect(rowStyle.alignItems).toBe('center')
+
+    const orderOf = (selector: string) =>
+      Number(getComputedStyle(compactRow.querySelector(selector) as HTMLElement).getPropertyValue('order'))
+    const orders = [
+      orderOf('.estimate-confirmation-action__label'),
+      orderOf('.estimate-aggregation__grand-total'),
+      orderOf('.estimate-aggregation__code-count'),
+      orderOf('.estimate-confirmation-action__button'),
+      orderOf('.estimate-confirmation-history__trigger'),
+    ]
+    expect(orders.every((n) => Number.isFinite(n) && n > 0)).toBe(true)
+    expect([...orders].sort((a, b) => a - b)).toEqual(orders)
+    expect(new Set(orders).size).toBe(orders.length)
+  })
+
   it('件数の表示文言が「17件」のように短縮されている(「積算コード」という前置きを含まない)', () => {
     render(
       <EstimateAggregation

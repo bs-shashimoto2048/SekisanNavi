@@ -37,7 +37,7 @@
 
 /* [Issue #36] DOM上の宣言順(`EstimateConfirmationAction`→
    `EstimateConfirmationHistory`→合計/件数/対象の順)と、視覚上の並び順
-   (製番→合計→件数→対象→確定→履歴)が異なるため、CSSの`order`で並び替える。
+   (製番→合計→件数→確定→履歴。対象selectは共通`TargetSelector`へ移動済み)が異なるため、CSSの`order`で並び替える。
    コンポーネント境界(`EstimateConfirmationAction`/`EstimateConfirmationHistory`
    がそれぞれ独立したcomponentであること)を変えずに済む、最小差分での実現方法。
    `EstimateConfirmationAction.tsx`/`EstimateConfirmationHistory.tsx`側の
@@ -55,10 +55,6 @@
 
 .estimate-aggregation__code-count {
   order: 3;
-}
-
-.estimate-aggregation__target-select-label {
-  order: 4;
 }
 
 .estimate-confirmation-action__button {

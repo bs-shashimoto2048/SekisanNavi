@@ -18,7 +18,7 @@ const OPERATIONS: OperationRow[] = [
   { operation: 'BBox選択', method: '左クリック' },
   { operation: 'BBox移動', method: 'BBox内を左drag' },
   { operation: 'BBoxサイズ変更', method: '四隅を左drag' },
-  { operation: 'BBox追加', method: '図面情報で項目選択 → 図面上を左drag' },
+  { operation: 'BBox追加', method: '図面情報追加で項目選択 → 図面上を左drag' },
   { operation: 'ラベル移動', method: 'ラベルを左drag' },
   { operation: '元に戻す', method: '「元に戻す」' },
   { operation: 'やり直す', method: '「やり直す」' },
@@ -29,11 +29,11 @@ interface ScreenRow {
   description: string
 }
 
-// [Issue #40 Phase 6-C指示10章] 新ワークフローの主導線である「図面情報」を
+// [Issue #40 Phase 6-C指示10章] 新ワークフローの主導線である「図面情報追加」を
 // 先頭にし、「部品台帳」には補助機能であることを明記する。
 const SCREENS: ScreenRow[] = [
-  { name: '図面情報', description: '図面上で見えている根拠(VCT/CH等)を選ぶ' },
-  { name: '盤情報', description: '盤の寸法・型式' },
+  { name: '図面情報', description: '盤の寸法・型式' },
+  { name: '図面情報追加', description: '図面上で見えている根拠(VCT/CH等)を選ぶ' },
   { name: '積算集約', description: '数量・金額の集計' },
   { name: '積算明細', description: 'BBox単位の根拠・数量/係数の修正' },
   { name: '部品台帳', description: '(補助) 積算コードを直接指定したい場合のみ使用' },
@@ -44,7 +44,7 @@ const SCREENS: ScreenRow[] = [
 // 修正→根拠へ戻る→要確認を解消→確定」という主操作フローを、作業中にその場で
 // 確認できる短いステップへ要約したもの(指示: 「短く」)。
 const WORKFLOW_STEPS: string[] = [
-  '図面情報を選ぶ',
+  '図面情報追加で項目を選ぶ',
   '図面を囲む',
   '積算結果を確認',
   '必要なら数量/係数を修正',
