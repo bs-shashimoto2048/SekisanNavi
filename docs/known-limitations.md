@@ -117,7 +117,9 @@
   migrationで作成済みだが、行が1件も投入されていない)。そのため、現状の
   本番データでは「図面情報」floating panelを開いても選べる項目が無く、
   新ワークフローの主導線を実際に使うには、別途`drawing_evidence_types`・
-  対応する`estimate_rule_masters`へ実データを投入する運用作業が必要になる
+  対応する`estimate_rule_masters`へ実データを投入する運用作業が必要になる。
+  なお0件の間は、図面情報追加パネルに候補マニフェスト(`GET /api/drawing-evidence-types/
+  candidates`)の「候補／確認待ち」一覧を読み取り専用で表示する(選択・BBox登録は不可)
   (投入手順・投入すべきマスタデータの確定自体は今回のスコープ外)。
 - **新旧同一コード衝突のdedupe方針は引き続き未確定**: 33章の暫定対応
   (dedupeせず両方をneeds_reviewとして残す)は本フェーズでも変更していない。

@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.api.deps import get_db
 from app.domain.estimate_rules import EstimateResultEvidence
 from app.repositories.drawing_evidence_types import list_evidence_types
+from app.services.drawing_evidence_candidates import list_drawing_evidence_type_candidates
 from app.repositories.estimate_results import (
     FactorNotAllowedError,
     list_results_for_product,
@@ -23,6 +24,7 @@ from app.repositories.estimate_results import (
 from app.repositories.estimate_rule_masters import get_allowed_factors
 from app.repositories.system_settings import get_data_source_root
 from app.schemas.estimate_rules import (
+    DrawingEvidenceTypeCandidateOut,
     DrawingEvidenceTypeOut,
     EstimateResultEvaluateOut,
     EstimateResultEvidenceOut,
@@ -63,6 +65,22 @@ def read_evidence_types(conn: sqlite3.Connection = Depends(get_db)) -> list[Draw
     ため、通常は空配列を返す(Phase 3以降で投入スクリプト/管理画面から
     登録される想定)。"""
     return [DrawingEvidenceTypeOut(**e.__dict__) for e in list_evidence_types(conn)]
+
+
+@evidence_types_router.get("/candidates", response_model=list[DrawingEvidenceTypeCandidateOut])
+def read_evidence_type_candidates() -> list[DrawingEvidenceTypeCandidateOut]:
+    """Issue #40 追加修正: 図面情報パネルの「候補/確認待ち」表示向け。
+
+    `drawing_evidence_types`(上の`read_evidence_types`)が0件のときに、
+    画面を空白のまま見せず「何が検討中で、何が確認待ちなのか」を示すための
+    読み取り専用API。候補マニフェスト(`backend/data_candidates/
+    phase6f_drawing_evidence_types.json`)をファイルから読むだけで、DBへは
+    一切接続しない(本番DB・検証DBいずれにも書き込まない)。
+    """
+    return [
+        DrawingEvidenceTypeCandidateOut(**c.__dict__)
+        for c in list_drawing_evidence_type_candidates()
+    ]
 
 
 @router.get("/{product_no}/estimate-results", response_model=list[EstimateResultOut])

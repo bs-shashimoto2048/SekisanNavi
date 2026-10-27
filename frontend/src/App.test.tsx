@@ -443,6 +443,10 @@ vi.mock('./api/client', () => ({
     skipped_rule_master_ids: [],
   })),
   fetchDrawingEvidenceTypes: vi.fn(async () => []),
+  // 図面情報追加パネルの「候補／確認待ち」読み取り専用表示用。
+  // 他のテストは中身を検証しないため空配列で十分(表示そのものは
+  // DrawingEvidencePanel.test.tsx側で個別に検証済み)。
+  fetchDrawingEvidenceTypeCandidates: vi.fn(async () => []),
   createEvidenceDetection: vi.fn(),
   // Phase 1.8: 製番選択・左ペインPNGサムネイル。
   fetchProductDrawings: vi.fn(async () => [productPageFoundation, productPageOutline]),

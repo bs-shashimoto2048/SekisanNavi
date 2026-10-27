@@ -1,8 +1,8 @@
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DrawingEvidencePanel } from './DrawingEvidencePanel'
-import { fetchDrawingEvidenceTypes } from '../../api/client'
-import type { DrawingEvidenceType } from '../../types/domain'
+import { fetchDrawingEvidenceTypeCandidates, fetchDrawingEvidenceTypes } from '../../api/client'
+import type { DrawingEvidenceType, DrawingEvidenceTypeCandidate } from '../../types/domain'
 
 function makeType(overrides: Partial<DrawingEvidenceType> = {}): DrawingEvidenceType {
   return {
@@ -47,14 +47,22 @@ const DISABLED_TYPE: DrawingEvidenceType = makeType({
 })
 
 let mockDataset: DrawingEvidenceType[] = [makeType(), CH, SIDE_DOOR, DISABLED_TYPE]
+// [追加修正] 候補マニフェストの読み取り専用一覧。既存テスト(登録済み
+// マスタが存在するケース)では候補セクション自体を表示しないため、
+// 既定は空配列にしておく(allTypesが非0件の間、candidatesの中身は
+// 表示へ影響しない)。
+let mockCandidates: DrawingEvidenceTypeCandidate[] = []
 
 vi.mock('../../api/client', () => ({
   fetchDrawingEvidenceTypes: vi.fn(() => Promise.resolve(mockDataset)),
+  fetchDrawingEvidenceTypeCandidates: vi.fn(() => Promise.resolve(mockCandidates)),
 }))
 
 beforeEach(() => {
   mockDataset = [makeType(), CH, SIDE_DOOR, DISABLED_TYPE]
+  mockCandidates = []
   vi.mocked(fetchDrawingEvidenceTypes).mockClear()
+  vi.mocked(fetchDrawingEvidenceTypeCandidates).mockClear()
   window.localStorage.clear()
 })
 
@@ -135,15 +143,114 @@ describe('DrawingEvidencePanel (Issue #40 Phase 3: 図面情報floating panel)',
     expect(screen.queryByText('最近使用')).not.toBeInTheDocument()
   })
 
-  it('[PR #47レビュー指摘対応] falls back to the empty-list message (its existing, unchanged behavior) when its own fetchDrawingEvidenceTypes() rejects, without crashing', async () => {
+  it('[PR #47レビュー指摘対応] falls back to an explanatory empty message (no crash) when its own fetchDrawingEvidenceTypes() rejects and there are also no candidates', async () => {
     vi.mocked(fetchDrawingEvidenceTypes).mockImplementationOnce(() => Promise.reject(new Error('network error')))
     render(<DrawingEvidencePanel selectedKey={null} onSelectKey={() => {}} />)
 
-    // 失敗時もクラッシュせず、既存の「0件」fallback表示(該当する図面情報が
-    // ありません)がそのまま出る(このcomponent自身の挙動は今回変更していない。
-    // App.tsx側の責務(App共通errorへ入れない)とは独立した確認)。
-    expect(await screen.findByText('該当する図面情報がありません')).toBeInTheDocument()
-    // [追加修正: 図面情報パネルの表示内容] パネル自体のラベルは「図面情報追加」へ変更した。
+    // 失敗時もクラッシュせず、0件fallback表示が出る([追加修正]
+    // allTypes=0件かつcandidatesも0件のときの新しい文言。登録済み一覧
+    // 取得失敗という状況自体の扱いはApp.tsx側の責務で、このcomponent自身は
+    // 変更していない)。
+    expect(await screen.findByText('登録済みの図面情報も、確認中の候補もありません。')).toBeInTheDocument()
+    // [追加修正: 図面情報パネルの表示内容] このpanel自体のラベルは「図面情報追加」
+    // へ変更した(内容・ロジックは不変)。
     expect(screen.getByRole('heading', { name: '図面情報追加' })).toBeInTheDocument()
+  })
+})
+
+describe('DrawingEvidencePanel: 候補マニフェストの読み取り専用表示 (追加修正)', () => {
+  const CANDIDATE_SIDE_DOOR: DrawingEvidenceTypeCandidate = {
+    key: 'side_door',
+    display_name: '側面扉',
+    category: '扉',
+    status: 'needs_business_confirmation',
+    blocker: '標準含有枚数のカウント変換規則が未確定',
+  }
+  const CANDIDATE_VCT: DrawingEvidenceTypeCandidate = {
+    key: 'vct',
+    display_name: 'VCT',
+    category: '受電機器',
+    status: 'blocked',
+    blocker: '発注者区分データの所在が未確認',
+  }
+
+  it('shows the candidate list (読み取り専用) only when registered evidence types are 0 件', async () => {
+    mockDataset = []
+    mockCandidates = [CANDIDATE_SIDE_DOOR, CANDIDATE_VCT]
+    render(<DrawingEvidencePanel selectedKey={null} onSelectKey={() => {}} />)
+
+    expect(await screen.findByText('側面扉')).toBeInTheDocument()
+    expect(screen.getByText('VCT')).toBeInTheDocument()
+    expect(screen.getByText(/候補／確認待ち/)).toBeInTheDocument()
+  })
+
+  it('does not show the candidate list when at least one registered evidence type exists, even if candidates are returned', async () => {
+    // mockDataset(既定)は非0件のまま。
+    mockCandidates = [CANDIDATE_SIDE_DOOR]
+    render(<DrawingEvidencePanel selectedKey={null} onSelectKey={() => {}} />)
+    await screen.findByText('VCT') // 登録済み一覧が通常どおり表示される
+
+    expect(screen.queryByText(/候補／確認待ち/)).not.toBeInTheDocument()
+    expect(fetchDrawingEvidenceTypeCandidates).toHaveBeenCalled() // 取得自体は行うが表示はしない
+  })
+
+  it('shows status and blocker text verbatim from the manifest, without inventing new Japanese reasons (指示6)', async () => {
+    mockDataset = []
+    mockCandidates = [CANDIDATE_SIDE_DOOR]
+    render(<DrawingEvidencePanel selectedKey={null} onSelectKey={() => {}} />)
+
+    await screen.findByText('側面扉')
+    expect(screen.getByText('標準含有枚数のカウント変換規則が未確定')).toBeInTheDocument()
+    expect(screen.getByText('カテゴリ: 扉')).toBeInTheDocument()
+    expect(screen.getByText(/業務確認待ち/)).toBeInTheDocument()
+  })
+
+  it('renders blocked candidates with a distinct status label from needs_business_confirmation ones', async () => {
+    mockDataset = []
+    mockCandidates = [CANDIDATE_SIDE_DOOR, CANDIDATE_VCT]
+    render(<DrawingEvidencePanel selectedKey={null} onSelectKey={() => {}} />)
+
+    await screen.findByText('VCT')
+    expect(screen.getByText(/対応不可/)).toBeInTheDocument()
+    expect(screen.getByText(/業務確認待ち/)).toBeInTheDocument()
+  })
+
+  it('does not call onSelectKey when a candidate row is clicked, and never sends it to the BBox-add selection (candidates are not interactive, 指示4)', async () => {
+    mockDataset = []
+    mockCandidates = [CANDIDATE_SIDE_DOOR]
+    const onSelectKey = vi.fn()
+    render(<DrawingEvidencePanel selectedKey={null} onSelectKey={onSelectKey} />)
+
+    const name = await screen.findByText('側面扉')
+    fireEvent.click(name)
+    fireEvent.click(name.closest('li') as HTMLElement)
+
+    expect(onSelectKey).not.toHaveBeenCalled()
+    // 候補行はbuttonではない(クリック可能なUIとして描画されていないこと)。
+    expect(name.closest('button')).toBeNull()
+  })
+
+  it('shows an explanatory empty message (not a blank panel) when there are 0 registered types and 0 candidates', async () => {
+    mockDataset = []
+    mockCandidates = []
+    render(<DrawingEvidencePanel selectedKey={null} onSelectKey={() => {}} />)
+
+    expect(await screen.findByText('登録済みの図面情報も、確認中の候補もありません。')).toBeInTheDocument()
+  })
+
+  it('treats "only disabled masters registered" as 0 件, showing the candidate list, and excludes a candidate whose key matches a registered (even disabled) master to avoid double display (指示3/5)', async () => {
+    // DISABLED_TYPEはenabled:falseのため選択可能な一覧には出ないが、
+    // allTypes自体には含まれる(byKeyにも含まれる)。このkeyと一致する候補
+    // (disabled_one)は候補一覧側から除外され、一致しない候補(side_door)の
+    // みが表示されることを確認する。
+    mockDataset = [DISABLED_TYPE]
+    mockCandidates = [
+      { ...CANDIDATE_SIDE_DOOR, key: 'disabled_one', display_name: '無効化された図面情報(候補)' },
+      CANDIDATE_SIDE_DOOR,
+    ]
+    render(<DrawingEvidencePanel selectedKey={null} onSelectKey={() => {}} />)
+
+    expect(await screen.findByText('側面扉')).toBeInTheDocument()
+    expect(screen.queryByText('無効化された図面情報(候補)')).not.toBeInTheDocument()
   })
 })

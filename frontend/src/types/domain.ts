@@ -563,6 +563,19 @@ export interface DrawingEvidenceType {
   enabled: boolean
 }
 
+/** 候補マニフェスト(本番seedではない、レビュー専用)の読み取り専用ビュー
+ * (Issue #40 追加修正: 図面情報追加パネルの「候補／確認待ち」表示)。`status`/
+ * `blocker`はBackendがファイルの値をそのまま返す(ここで加工しない)。
+ * DB由来の`DrawingEvidenceType`とは別の型にして、登録済みマスタと型レベル
+ * でも混同しない。 */
+export interface DrawingEvidenceTypeCandidate {
+  key: string
+  display_name: string
+  category: string | null
+  status: 'ready' | 'needs_business_confirmation' | 'blocked'
+  blocker: string | null
+}
+
 /** 積算結果⇔根拠の多対多、1件分 (Issue #40 9章/12章)。 */
 export interface EstimateResultEvidence {
   id: number
