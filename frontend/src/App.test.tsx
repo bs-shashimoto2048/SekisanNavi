@@ -165,6 +165,7 @@ const estimatePanelsFixture: EstimatePanelInfo[] = [
     ban_d: 2200,
     ban_connect: '箱・左右(R)',
     sort_order: 5,
+    box_type_analysis: null,
   },
   {
     model: 'IS2',
@@ -176,6 +177,7 @@ const estimatePanelsFixture: EstimatePanelInfo[] = [
     ban_d: 1200,
     ban_connect: '箱・中央',
     sort_order: 4,
+    box_type_analysis: null,
   },
 ]
 
@@ -2723,9 +2725,10 @@ describe('App: 盤選択 → 盤情報連動 (Phase 1.9、Issue #19 Phase 4で�
     // Issue #38 Phase 2: 寸法は「高さ/幅/奥行」の個別セルへ分割されている
     // (旧「H 2300 : W 900 : D 2200」という結合1行表示は廃止)。
     const cells = within(getPanelInfoCard('高圧受電盤')).getAllByRole('cell')
-    expect(cells[3].textContent).toBe('2300') // 高さ (ban_h1=ban_h2=2300のため単一値)
-    expect(cells[4].textContent).toBe('900') // 幅
-    expect(cells[5].textContent).toBe('2200') // 奥行
+    // [追加機能: 箱体型式解析] 「型式」列を削除して6列(面/盤・盤名称・高さ・幅・奥行・接続)になった。
+    expect(cells[2].textContent).toBe('2300') // 高さ (ban_h1=ban_h2=2300のため単一値)
+    expect(cells[3].textContent).toBe('900') // 幅
+    expect(cells[4].textContent).toBe('2200') // 奥行
   })
 
   it('switches the selected card immediately when a different panel is clicked in the Viewer, without removing either card from the list (要件6/次work指示3章)', async () => {

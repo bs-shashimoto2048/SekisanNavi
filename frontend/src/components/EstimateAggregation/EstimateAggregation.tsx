@@ -404,7 +404,7 @@ export function EstimateAggregation({
       {totalCodeCount > 0 && (
         <>
           <div className="estimate-aggregation__table-scroll">
-            <table className="estimate-aggregation__table">
+            <table className="estimate-aggregation__table auto-fit-table">
               <thead>
                 <tr>
                   {COLUMN_DEFS.map(({ column, label, className }) => {

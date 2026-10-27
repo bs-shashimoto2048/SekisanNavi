@@ -385,6 +385,11 @@ function App() {
   // 表し、`FloatingPanel`側が初回描画時にViewerの実際のサイズを見て計算する。
   // localStorageへは永続化しない(指示: 今回はセッション内保持で良い)。
   const [panelInfoRect, setPanelInfoRect] = useState<FloatingPanelRect | null>(null)
+  // [2026-10 追加修正: 内容量に応じたウィンドウサイズ] `PanelInfo`自身が実測して
+  // 報告してくる「現在の表示内容を折り返し・省略無しで表示するために必要な
+  // 自然なサイズ」。`FloatingPanel`の`maxContentSize`へそのまま渡し、
+  // リサイズ上限・内容変化時の自動フィットに使う(他panelは影響を受けない)。
+  const [panelInfoNaturalSize, setPanelInfoNaturalSize] = useState<{ width: number; height: number } | null>(null)
   const [aggregationRect, setAggregationRect] = useState<FloatingPanelRect | null>(null)
   const [detailRect, setDetailRect] = useState<FloatingPanelRect | null>(null)
   const [masterRect, setMasterRect] = useState<FloatingPanelRect | null>(null)
@@ -2018,6 +2023,7 @@ function App() {
                 containerRef={viewerWrapRef}
                 rect={panelInfoRect}
                 onRectChange={setPanelInfoRect}
+                maxContentSize={panelInfoNaturalSize}
               >
                 <PanelInfo
                   panel={panel}
@@ -2027,6 +2033,7 @@ function App() {
                   steel={steel}
                   selectedPanel={selectedPanel}
                   onSelectPanel={handleSelectPanel}
+                  onNaturalSizeChange={setPanelInfoNaturalSize}
                 />
               </FloatingPanel>
               <FloatingPanel

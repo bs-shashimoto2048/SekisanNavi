@@ -39,21 +39,85 @@
   border-radius: 0 4px 4px 0;
 }
 
+/* [追加機能: 箱体型式解析] 盤情報テーブルより上に置く「箱体型式」の折り畳み
+   タブ。「鋼材」「材料情報」は盤情報テーブルの下の`SteelSection`/
+   `MaterialInfo`(実データ表示)が担うため、ここにはタブを置かない。
+   展開しても高さは常に中身どおり(残り高さを強制的に割り当てて空白を作らない)。
+   データ量が領域に収まらない場合のスクロールは`.box-type-detail`/
+   `.box-type-detail__table-scroll`側の`overflow-y: auto`が個別に担う。 */
+.panel-info__tabs {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.35rem;
+}
+
+.panel-info__tab {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* トグルボタン自体は`.panel-info__tabs`/`.panel-info__tab`が圧縮される状況
+   でも必ず押せる高さを保つ(潰れて見えなくならないように)。 */
+.panel-info__tab-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  flex-shrink: 0;
+  text-align: left;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #334155;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+}
+
+.panel-info__tab-toggle:hover {
+  background: #e2e8f0;
+}
+
+.panel-info__tab-caret {
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
 .panel-info__empty {
   font-size: 0.92rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
   color: #9ca3af;
   margin: 0;
 }
 
-/* データ行だけをスクロールさせる領域 (指示4章: 見出し固定・一覧のみスクロール)。
-   [Issue #38 Phase 2] 横スクロールは禁止のため(instructions 6/7/13章)、
-   `overflow-x: hidden`を明示し、下記Gridの列幅計算に万一の誤差があっても
-   横スクロールバーそのものは出ない設計にしている(クリップされるのみ)。 */
+/* [Issue #40 追加修正: 表カラム幅の共通自動調整] 見出し行・データ行を
+   この同じ領域の内側に置き、縦横両方のスクロールをここで行う(指示4章の
+   「見出し固定・一覧のみスクロール」自体は、ヘッダ行を`position: sticky`に
+   することで維持する。`.panel-info__row--header`参照)。以前は
+   `overflow-x: hidden`でクリップのみ許容していたが(Issue #38 Phase 2)、
+   列幅を内容の自然幅に合わせる方式(`useAutoFitGridColumns`)へ変更した
+   ことに伴い、内容の合計幅がpanel幅を超える場合は折り返し・切り捨てでは
+   なく横スクロールで見られるようにする(他の`<table>`ベースの表と同じ方針。
+   ヘッダを外に出す旧方式のままだと、横スクロール時にヘッダとデータ列が
+   ずれてしまうため、ヘッダもこの同じ領域内に含めた)。 */
+/* [2026-10 追加修正: 常に内容量どおりの高さに] 以前は`flex: 1 1 auto`で
+   パネルの残り高さを常に引き受けていたが、指示により「最下部の盤情報一覧も
+   内容に応じた高さとし」(タブの開閉状態に関わらず常に、に変更)、行数が
+   少ない場合に一覧の下へ大きな空白を残さないようにする。`flex-shrink: 1`は
+   残すため、パネル自体が内容の合計より小さい場合はこの一覧も圧縮され、
+   `overflow-y: auto`により内部スクロールする(指示: 「データ行が領域に
+   収まらない場合だけ内部スクロールを有効に」)。 */
 .panel-info__list-scroll {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 1 auto;
+  /* 下の材料情報・鋼材欄を展開して内容の合計がパネル高さを超えても、一覧が高さ0まで
+     潰れて見えなくならないよう、見出し行+数行分を下限にする(超過分は
+     `.floating-panel__body`の縦スクロールで見る)。 */
+  min-height: 7.5rem;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
 }
 
 /* 盤一覧 (Issue #38 Phase 2でカラム型1行一覧へ再設計)。ul自体の既定装飾
@@ -68,34 +132,50 @@
   list-style: none;
 }
 
-/* 見出し行・データ行で共有するCSS Grid列定義 (Issue #38 Phase 2 指示6章)。
-   均等幅を禁止し、実測(Issue #38 Phase 1調査コメント参照)に基づき
-   数値列(面/盤・型式・高さ・幅・奥行)は必要最小限、盤名称・接続へ
-   優先的に幅を配分する。「2300 / 2000」が高さ列で1行に収まることが
-   最重要要件のため、高さ列は他の数値列よりも広めに確保している。
-   [Issue #38 Phase 2 実測後の調整] 指示書6章の初期値(面/盤44px・盤名称
-   minmax(130px,2fr)・型式70px・高さ90px・幅42px・奥行44px・接続
-   minmax(72px,1fr))をそのまま使うと、既定幅480px時点で列内容の合計が
-   panel幅を上回り、`overflow-x: hidden`により接続列が無音でクリップされて
-   しまうことをPlaywrightでの実測で確認した(詳細な数値根拠はIssue #38
-   Phase 2報告コメント参照)。各数値列は実測済みの自然幅+小さな余白まで
-   詰め、浮いた分を盤名称・接続のminmax下限へ回すことで、480px既定幅・
-   約430px前後の最小幅のいずれでもクリップが発生しないことを確認した値。 */
+/* 見出し行・データ行で共有するCSS Grid列定義。
+   [Issue #40 追加修正: 表カラム幅の共通自動調整] 各行(button)は独立した
+   grid containerのため、以前は実測pxを手動チューニングした固定値
+   (Issue #38 Phase 2)を全行で共有するclassに書いていたが、データが変われば
+   必要な幅も変わるため崩れうる方式だった。`useAutoFitGridColumns`
+   (共通hook、`PanelInfo.tsx`)が見出し/全データ行を横断して計測した
+   自然幅をCSS変数(`--auto-col-N`)として`.panel-info`要素へ設定するため、
+   ここでは個別pxの代わりにその変数を参照するだけでよい。
+   (`--auto-col-N`未設定時のfallback値は、JS実行前の一瞬・テスト環境等の
+   保険であり、実際の表示はhookが計測した値で決まる)。
+   `width: max-content; min-width: 100%;`は、内容が短い間は行の見た目上の
+   幅をpanel幅いっぱいに保ちつつ(選択/hover背景が自然に見えるように)、
+   内容の合計がpanel幅を超える場合は行自体がそれに応じて広がり、
+   親(`.panel-info__list-scroll`、`overflow: auto`)の横スクロールを
+   引き起こせるようにするためのパターン。 */
 .panel-info__row {
   display: grid;
-  /* [画面全体の文字拡大] 列幅を文字サイズに追従させるため、px(15px基準で実測した値)を rem に換算した。
-     型式列は、拡大前から「OS2GTVDK」等が見切れていたため 4rem→4.7rem に、盤名称の下限は5文字(高圧受電盤)が、接続列の下限は「箱･左右(L)」が省略されない
-     4.4rem(2.67rem から)に広げた。 */
-  grid-template-columns: 2.53rem minmax(5.1rem, 2fr) 4.7rem 5.73rem 2.27rem 2.4rem minmax(4.4rem, 1fr);
+  grid-template-columns:
+    var(--auto-col-0, 38px)
+    var(--auto-col-1, 130px)
+    var(--auto-col-2, 90px)
+    var(--auto-col-3, 42px)
+    var(--auto-col-4, 44px)
+    var(--auto-col-5, 72px);
   align-items: center;
   column-gap: 0.4rem;
+  width: max-content;
+  min-width: 100%;
 }
 
+/* [Issue #40 追加修正] 見出し行は`.panel-info__list-scroll`の内側にあるため、
+   縦スクロール時も見た目上固定されるよう`position: sticky`にする(他の表の
+   thead thと同じ方式)。横スクロール時はデータ行と一緒に動くことで、列が
+   ずれない。sticky要素はスクロール中に下のデータ行が透けて見えないよう、
+   不透明な背景(他の表のsticky headerと同じ`#f1f5f9`)を明示する。 */
 .panel-info__row--header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   flex-shrink: 0;
   font-size: 0.82rem;
   font-weight: 600;
   color: #6b7280;
+  background: #f1f5f9;
   border-bottom: 1px solid var(--border-table-outer, #cbd5e1);
   padding: 0.2rem 0.5rem;
   margin-bottom: 0.15rem;
@@ -105,7 +185,6 @@
    button要素のまま(クリック可能・キーボード操作性・aria-pressedを
    一切変更しない、Issue #38 Phase 1調査コメント参照)。 */
 .panel-info__data-row {
-  width: 100%;
   text-align: left;
   font: inherit;
   background: #fff;
@@ -133,18 +212,18 @@
   background: rgba(37, 99, 235, 0.1);
 }
 
-/* セル共通: 型式/高さ/幅/奥行は原則nowrap(指示8章)。盤名称/接続のみ
-   `--ellipsis`修飾で折り返し・省略記号を許可する。 */
+/* セル共通: 全列nowrap(1行表示、指示8章)。[Issue #40 追加修正] 列幅が
+   内容の自然幅へ自動で合わせられるようになったため、盤名称/接続のみ
+   `text-overflow: ellipsis`で切り捨てていた旧仕様(`--ellipsis`修飾)は
+   廃止した(内容を折り返し・切り捨てずに表示する方針へ統一、`overflow:
+   hidden`自体は列幅ぴったりの内容で罫線より僅かにはみ出ないようにする
+   保険として残す)。 */
 .panel-info__cell {
   font-size: 0.88rem;
   font-weight: 500;
   color: #4b5563;
   white-space: nowrap;
   overflow: hidden;
-}
-
-.panel-info__cell--ellipsis {
-  text-overflow: ellipsis;
 }
 
 .panel-info__cell--menban {
@@ -174,34 +253,27 @@
   margin-bottom: 0.35rem;
 }
 
-/* 追加UI修正指示3章: このtable(product_df由来の盤情報が無い場合の
-   フォールバック表示のみで使われる、属性名/値/取得元の3列key-value表)にも
-   列幅の最適化を適用する。属性名(型式・定格等、短い)と取得元
-   (SOURCE_LABEL、短い)は必要最小限へ、値列(内容によっては長くなりうる)へ
-   優先的に幅を回す。table-layout: fixedにして列幅指定を確定させる。 */
+/* [Issue #40 追加修正: 表カラム幅の共通自動調整] このtable(product_df由来の
+   盤情報が無い場合のフォールバック表示のみで使われる、属性名/値/取得元の
+   3列key-value表)の列幅も`auto-fit-table`(index.css)へ一本化した
+   (`table-layout: fixed`+`%`個別指定は廃止)。 */
 .panel-info__table {
-  width: 100%;
   border-collapse: collapse;
   font-size: 0.92rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
-  table-layout: fixed;
 }
 
 .panel-info__table th {
-  width: 30%;
   text-align: left;
   color: #6b7280;
   font-weight: 500;
   padding: 0.15rem 0.35rem;
-  white-space: nowrap;
 }
 
 .panel-info__table td {
   padding: 0.15rem 0.35rem;
-  overflow-wrap: break-word;
 }
 
 .panel-info__source {
-  width: 20%;
   color: #9ca3af;
   text-align: right;
   white-space: nowrap;

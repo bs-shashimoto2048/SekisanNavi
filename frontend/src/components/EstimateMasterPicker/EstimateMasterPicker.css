@@ -127,35 +127,15 @@
   border-top: 1px solid var(--border-table-outer);
 }
 
-/* [追加修正: 部品台帳への再設計 指示3章/4章] コード/型式/定格の3列のみに
-   なったため、`table-layout: fixed`で列幅を確定値にし、文字数が少ない
-   コード列は必要最小限、型式・定格は残りの幅を配分する(積算明細・積算集約と
-   同じ「短い列は詰め、長い列へ優先配分する」方針)。定格は品目によっては
-   長い文字列になりうるため`white-space: nowrap`にはせず、既存の
-   `overflow-wrap: break-word`(文字を途中で切らない方針)で折り返しを許容する。
-   [追加修正: floating panel初期幅の実測ベース再調整] 実測自然幅(コード≈36px/
-   型式≈59px/定格≈125px、いずれも実データ全231件中の最長セル基準)の比率に
-   合わせて列幅配分も再調整した(旧配分は定格列がやや手薄だった)。floating
-   panelの既定幅自体も300→320pxへ微増している
-   (`FloatingPanel.tsx`の`DEFAULT_WIDTH_BY_KIND`)。 */
+/* [Issue #40 追加修正: 表カラム幅の共通自動調整] 列幅は`auto-fit-table`
+   (index.css)へ一本化した。以前は`table-layout: fixed`+実測px値基準の`%`で
+   コード/型式/定格の配分を個別チューニングしていたが、`table-layout: auto`
+   (ブラウザ既定)に委ね、見出し/実データの実際の自然幅に追従するようにした。
+   表がpanel幅を超える場合は既存の`.master-picker__table-wrap`の横スクロール
+   へ任せる(方針自体は変えていない)。 */
 .master-picker__table {
-  width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
   font-size: 0.9rem; /* 全体フォント拡大 指示1章: 旧0.82rem→引き上げ */
-}
-
-.master-picker__col-code {
-  width: 19%;
-  white-space: nowrap;
-}
-
-.master-picker__col-model {
-  width: 28%;
-}
-
-.master-picker__col-rating {
-  width: 53%;
 }
 
 .master-picker__table th,
@@ -163,7 +143,6 @@
   border-bottom: 1px solid #f3f4f6;
   padding: 0.3rem 0.5rem;
   text-align: left;
-  overflow-wrap: break-word;
   /* 表セル境界の統一 指示3章/4章/16章: 縦罫線を薄く追加する
      (横罫線#f3f4f6は変更しない)。 */
   border-right: 1px solid var(--border-cell);

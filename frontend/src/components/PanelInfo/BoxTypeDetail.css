@@ -1,0 +1,208 @@
+/* 箱体型式タブの中身。[2026-10 追加修正] 当初、添付画像(不具合報告の資料)に
+   引っ張られたダーク背景+シアン系アクセントの独自配色で実装していたが、
+   アプリ本来のWeb UI(白背景・既存の罫線・見出し色トークン)から浮いて
+   見えるとの指摘を受け、PanelInfo自体や他のfloating panel(`DrawingEvidencePanel`
+   の`__related`カード等)と同じ、白背景+淡い罫線+共通status tokenの配色へ
+   作り直した。新しい色を増やさず、`index.css`で定義済みの共通token
+   (`--border-table-outer`/`--border-cell`/`--accent-section`/`--status-*`)
+   のみを再利用する(指示: 「既存の共通CSS変数・コンポーネントのスタイルを
+   優先して再利用する」)。内容・構造(記号説明・積算情報表)は変更していない。 */
+/* [2026-10 追加修正: レイアウト] 固定`max-height`(旧260px)は廃止したが、
+   親から渡されるstretchにも追従しない(`flex: 0 1 auto`)。中身(見出し・
+   記号説明・警告・補足・積算に使用できる情報表)の自然な合計高さのまま表示し、
+   内容が少ないときに箱の下へ余白を残して引き伸ばさない(指示:
+   「内容が少ないときに残りの高さを埋めて引き伸ばさないでください」)。
+   パネル自体が小さく、この合計高さが収まらない場合のみ`flex-shrink: 1`で
+   縮小され、可変長になりうる「積算に使用できる情報」表
+   (`.box-type-detail__table-scroll`、`flex-shrink`可)だけが実質的に
+   圧縮されて内部スクロールする(それ以外の見出し・記号説明・警告・補足は
+   `flex-shrink: 0`で内容量を維持する)。 */
+.box-type-detail {
+  background: #fff;
+  color: #111827;
+  border: 1px solid var(--border-table-outer, #cbd5e1);
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.box-type-detail__empty {
+  color: #9ca3af;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.box-type-detail__header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.box-type-detail__label {
+  color: #6b7280;
+}
+
+.box-type-detail__symbol {
+  font-size: 1rem;
+  font-weight: 700;
+  /* 他の見出し強調色(`.panel-info__heading`等)と同じ濃紺を再利用する。 */
+  color: var(--accent-section, #1e3a8a);
+}
+
+.box-type-detail__status {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: #fff;
+  background: var(--status-neutral);
+  white-space: nowrap;
+}
+
+.box-type-detail__status--parsed {
+  background: var(--status-success);
+}
+
+.box-type-detail__status--partial,
+.box-type-detail__status--ambiguous {
+  background: var(--status-warning-chip-bg);
+  color: var(--status-warning-text);
+  border-color: var(--status-warning-chip-border);
+}
+
+.box-type-detail__status--conflict,
+.box-type-detail__status--unknown {
+  background: var(--status-error);
+}
+
+.box-type-detail__symbol-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex-shrink: 0;
+}
+
+.box-type-detail__symbol-list li {
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
+  border-bottom: 1px solid var(--border-cell, #edf1f5);
+  padding: 0.1rem 0;
+}
+
+.box-type-detail__symbol-group {
+  flex: 0 0 auto;
+  color: #9ca3af;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.box-type-detail__symbol-code {
+  flex: 0 0 auto;
+  color: var(--accent-section, #1e3a8a);
+  font-weight: 700;
+}
+
+.box-type-detail__symbol-meaning {
+  color: #374151;
+}
+
+.box-type-detail__warnings,
+.box-type-detail__notes {
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  border-left: 3px solid var(--status-warning-chip-border, #f59e0b);
+  background: var(--status-warning-soft-bg);
+  color: var(--status-warning-text);
+  font-size: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex-shrink: 0;
+}
+
+.box-type-detail__notes {
+  border-left-color: var(--accent-section, #1e3a8a);
+  background: #eff6ff;
+  color: #1e3a8a;
+}
+
+.box-type-detail__table-caption {
+  color: #6b7280;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-top: 0.1rem;
+  flex-shrink: 0;
+}
+
+/* [2026-10 追加修正: レイアウト] 固定`max-height`(旧160px)をやめ、
+   `.box-type-detail`(flex column)内の残り高さをこの表だけが受け取って
+   広がるようにする(`flex: 1 1 auto; min-height`は表の見出し行+数行分の
+   最低限の高さを確保する下限)。表の行数が多く、割り当てられた高さに
+   収まらない場合はこの領域内で`overflow-y: auto`によりスクロールする。 */
+.box-type-detail__table-scroll {
+  flex: 1 1 auto;
+  min-height: 72px;
+  overflow-y: auto;
+  border: 1px solid var(--border-table-outer, #cbd5e1);
+  border-radius: 4px;
+}
+
+.box-type-detail__table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.box-type-detail__table th,
+.box-type-detail__table td {
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--border-cell, #edf1f5);
+  text-align: left;
+  vertical-align: top;
+}
+
+.box-type-detail__table thead th {
+  position: sticky;
+  top: 0;
+  background: #f1f5f9;
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-table-outer, #cbd5e1);
+}
+
+.box-type-detail__table tbody th {
+  color: #6b7280;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.box-type-detail__table tbody td {
+  color: #111827;
+}
+
+.box-type-detail__row--attention td {
+  color: var(--status-warning-text);
+  font-weight: 600;
+}
+
+.box-type-detail__alternatives-note {
+  margin: 0;
+  color: var(--status-warning-text);
+  font-size: 0.78rem;
+  flex-shrink: 0;
+}

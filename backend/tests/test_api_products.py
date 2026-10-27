@@ -416,6 +416,29 @@ def test_read_estimate_panels_real_data_row(client, monkeypatch, tmp_path):
     assert item["sort_order"] == 1
 
 
+def test_read_estimate_panels_includes_box_type_analysis_for_the_real_model(client, monkeypatch, tmp_path):
+    """[2026-10 追加修正: 画面に「この型式は解析できませんでした」と誤表示される
+    不具合報告への回帰確認] `/estimate-panels`が返す`model`("IS2"、実データ
+    A1GV2421そのもの)に対し、`box_type_analysis`が`status="parsed"`かつ
+    マスタに根拠のある箱体分類・設置環境を含んで返ること。Parser単体が正しくても
+    API層のキー名・変換漏れで`null`になる退行を防ぐための結合テスト。"""
+    product = tmp_path / "A1TEST01"
+    product.mkdir()
+    _write_cp932_csv(product / "estcode_df.csv", _ESTCODE_DF_HEADER, [_ESTCODE_ROW_5])
+    _configure_root(client, monkeypatch, tmp_path)
+
+    res = client.get("/api/products/A1TEST01/estimate-panels")
+    assert res.status_code == 200
+    item = res.json()[0]
+    analysis = item["box_type_analysis"]
+    assert analysis is not None
+    assert analysis["status"] == "parsed"
+    assert analysis["requires_review"] is False
+    assert analysis["primary"]["code"] == "IS2"
+    assert analysis["box_category"] == "A製品用・屋内キュービクル"
+    assert analysis["environment"] == "屋内"
+
+
 def test_read_estimate_panels_returns_all_panels_for_the_product_not_page_scoped(client, monkeypatch, tmp_path):
     """指示書1章: estcode_df.csvはPAGE列を持たない製番単位のデータのため、
     ページに関係なく製番配下の全盤を返す。"""

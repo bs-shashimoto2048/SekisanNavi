@@ -89,86 +89,17 @@
 }
 
 .estimate-detail__table {
-  width: 100%;
-  /* [2026-09 追加修正: 列幅配分の再最適化] 実データ(製番A1GV2421 P23、
-     積算コード44253「入力（主回路銅帯）」)の定格
-     「3Φ 50kVA 200V級　公共建築 (225A)」を実ブラウザで実測したところ、
-     このUIフォント(Yu Gothic UI系, 0.88rem)で約211px必要だった。旧来の
-     700pxのままでは定格列にこれだけの幅を割けず(他列の縮小だけでは
-     不足)、700→730pxへわずかに引き上げたうえで、以下の列幅再配分と
-     組み合わせて定格列に十分な幅(約34%)を確保した。
-     floating panel自体の既定幅(360px)は変更していない。表側の
-     min-widthを超える分は`.estimate-detail__table-scroll`の内部横
-     スクロールに任せる(パネル自体を無理に広げて解決しない指示に対応)。 */
-  min-width: 730px;
+  /* [Issue #40 追加修正: 表カラム幅の共通自動調整] 列幅は`auto-fit-table`
+     (index.css)へ一本化した。以前はここで`table-layout: fixed`+手動計測の
+     `%`幅・`min-width`を個別にチューニングしていたが(実データの特定の
+     長さを基準にした値のため、データが変わるたびに崩れうる)、
+     `table-layout: auto`(ブラウザ既定、`auto-fit-table`が明示する)に
+     委ねることで、見出し/実データの実際の自然幅に追従するようにした。
+     表がpanel幅を超える場合は`.estimate-detail__table-scroll`の既存の
+     横スクロールへ任せる(方針自体は変えていない)。 */
   border-collapse: separate;
   border-spacing: 0;
   font-size: 0.88rem; /* 旧0.78rem→引き上げ (表データも本文相当まで拡大) */
-  /* 追加UI修正指示3章: 従来`table-layout`未指定(=auto)だったため、各列の
-     width指定はブラウザ側で内容量に応じて再計算される弱いヒントに過ぎず、
-     本来幅に余裕がある列でも不自然な1〜2文字だけの折り返しが起きうる状態
-     だった。`fixed`にして列幅指定を確定値として機能させ、以下の再配分と
-     組み合わせて意図した配分を安定させる(積算集約表と同じ方針)。 */
-  table-layout: fixed;
-}
-
-/* [2026-09 追加修正: 列幅配分の再最適化] 各列の実測content幅(実ブラウザ、
-   Playwrightで計測した実データ・見出しラベルの自然幅)を基準に再配分した。
-   面/盤・コード・図面・状態は表示に必要な最小限へ、品名・型式は通常の
-   値が1文字単位で折り返さない程度へ抑え、余った幅は最も長い可変長列
-   「定格」へ最優先で配分する。編集順は日時表示(container query full
-   モード、例: "2024-01-01 12:34")が1行で収まる幅を確保する。
-   既存のellipsis省略は使わず(このリポジトリの既存方針: PanelInfo等でも
-   「文字が途中で切れない」ことを優先しているため)、
-   overflow-wrap: break-word(既存の`.estimate-detail__table td`ルールで
-   全列に適用済み)による折り返しのみで対応する。 */
-.estimate-detail__col-panel {
-  width: 6%;
-  white-space: nowrap;
-}
-
-.estimate-detail__col-name {
-  /* 実データ(製番A1GV2421)の最長級の品名「入力（主回路銅帯）」
-     (実測約119px)が1行に収まる幅+余裕を確保する。 */
-  width: 19%;
-}
-
-.estimate-detail__col-code {
-  width: 7%;
-  white-space: nowrap;
-}
-
-.estimate-detail__col-model {
-  /* 実データの最長級の型式「3×30　L=2.6m×3本」(実測約107px)が1行に
-     収まる幅+余裕を確保する。旧配分(16%)では実ブラウザ確認でこの値が
-     ちょうど1px未満の差で2行へ折り返しており、余裕を持たせた。 */
-  width: 17%;
-}
-
-.estimate-detail__col-rating {
-  /* 実データの最長級の定格「3Φ 50kVA 200V級　公共建築 (225A)」
-     (実測約211px)が1行に収まる幅を最優先で確保する。他列を必要最小限へ
-     詰めたうえで、余った幅をこの列へ最優先配分している。 */
-  width: 31%;
-}
-
-.estimate-detail__col-page {
-  width: 6%;
-  white-space: nowrap;
-}
-
-.estimate-detail__col-status {
-  width: 4%;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.estimate-detail__col-edit-order {
-  /* 「-」や短い通し番号が主な表示内容のため必要最小限へ。日時フル表示
-     (container query full mode)はコンテナ全体が広い時のみ有効になり、
-     その時は%配分に伴い絶対幅も比例して増えるため実用上問題ない。 */
-  width: 10%;
-  white-space: nowrap;
 }
 
 /* ヘッダ内のソートボタン。既存のth見た目(sticky背景等)はth自身が持つため、
@@ -240,7 +171,6 @@
   padding: 0.35rem 0.3rem;
   border-bottom: 1px solid #f1f5f9;
   vertical-align: top;
-  overflow-wrap: break-word;
   border-right: 1px solid var(--border-cell);
 }
 
@@ -329,47 +259,12 @@
   font-weight: 700;
 }
 
-/* [Issue #40 Phase 4] 「ルール結果」タブ専用の表。既存8列表とは列構成が
-   異なるため独立したwidth配分を持つ(既存min-widthより狭くてよい列が
-   多いため、既定のfloating panel幅でも実用的に見えるよう詰める)。 */
-.estimate-detail__table--rule-result {
-  min-width: 560px;
-}
-
-.estimate-detail__col-rr-code {
-  width: 12%;
-  white-space: nowrap;
-}
-
-.estimate-detail__col-rr-name {
-  width: 22%;
-}
-
-.estimate-detail__col-rr-qty {
-  width: 8%;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.estimate-detail__col-rr-unit {
-  width: 12%;
-  white-space: nowrap;
-}
-
-.estimate-detail__col-rr-factor {
-  width: 24%;
-  white-space: nowrap;
-}
-
+/* [Issue #40 追加修正] 「ルール結果」タブ専用の表の列幅も`auto-fit-table`に
+   任せる(個別の`width`/`min-width`指定は廃止)。数量・金額のみ右寄せを
+   維持する(幅とは無関係な配置の指定のため残す)。 */
+.estimate-detail__col-rr-qty,
 .estimate-detail__col-rr-price {
-  width: 12%;
   text-align: right;
-  white-space: nowrap;
-}
-
-.estimate-detail__col-rr-method {
-  width: 10%;
-  white-space: nowrap;
 }
 
 .estimate-detail__reason-button {

@@ -219,6 +219,60 @@ export interface ProductSearchResult {
   truncated: boolean
 }
 
+/** 箱体型式解析で特定できた記号1件(1項目1行表示用)。
+ * `backend/app/schemas/settings.py::BoxTypeSymbolMatchOut`と対応する。 */
+export interface BoxTypeSymbolMatch {
+  group: 'primary' | 'aux1' | 'aux2' | 'aux3'
+  code: string
+  meaning: string
+}
+
+/** 同一の積算対象項目に対して異なる値を主張する記号があった場合の記録。
+ * `values`は`[コード, 値]`の組の配列。 */
+export interface BoxTypeSpecConflict {
+  field: string
+  values: [string, string][]
+}
+
+/** 箱体型式(キュービクル等)の記号解析結果 (Issue #40 追加機能)。正本資料
+ * 「QS-SA020-N 箱体記号一覧表 N版」に基づく解析であり、型式の記号だけから
+ * 製作可否・正式承認・未記載の仕様を確定するものではない(不明・競合・
+ * 曖昧な箇所は`conflicts`/`warnings`/`requires_review`に残す)。
+ * `backend/app/schemas/settings.py::BoxTypeAnalysisOut`と対応する。 */
+export interface BoxTypeAnalysis {
+  raw: string
+  normalized: string
+  status: 'parsed' | 'partial' | 'ambiguous' | 'conflict' | 'unknown'
+  requires_review: boolean
+  primary: BoxTypeSymbolMatch | null
+  aux_matches: BoxTypeSymbolMatch[]
+  segments: [string, string][]
+  unparsed: string[]
+
+  box_category: string | null
+  product_category: string | null
+  environment: string | null
+  usage: string | null
+  structure: string | null
+
+  material: string | null
+  coating: string | null
+  surface_treatment: string | null
+  base_finish: string | null
+  certification: string | null
+  ip55: boolean
+  processing_target: 'complete_box' | 'partial_fabrication' | 'other_vendor_product' | 'unknown'
+
+  custom_estimate_conditions: string[]
+  other_notes: string[]
+  notes: string[]
+  conflicts: BoxTypeSpecConflict[]
+  warnings: string[]
+
+  alternatives: BoxTypeAnalysis[]
+  candidate_index: number
+}
+
 /** estcode_df.csv (盤ごとの積算コード基本情報) 由来の盤情報 (Phase 1.14)。
  * PAGE列を持たない製番単位のデータのため、`ban_menno`/`ban_no`で選択中盤
  * (product_df由来のPanelPreview) と突き合わせて使う。CSVの列名(MODEL/BAN_H等)を
@@ -234,6 +288,8 @@ export interface EstimatePanelInfo {
   ban_d: number | null
   ban_connect: string | null
   sort_order: number | null
+  /** [追加機能: 箱体型式解析] `model`を解析した結果。`model`がnullの場合はnull。 */
+  box_type_analysis: BoxTypeAnalysis | null
 }
 
 /** material.csv (製番の材料一覧。設計データの*.boxspec由来) 1行。ページ × 材料シンボル × 構成部。

@@ -92,6 +92,43 @@
   --reference-pdf-accent-hover: #cf1322;
 }
 
+/* 表・データグリッド形式の一覧の共通カラム幅調整(Issue #40 追加修正:
+   積算明細を例に、カラム幅が内容に合わず折り返しや列間の余白不均衡が
+   発生していた問題への対応)。
+
+   各表コンポーネント([`xxx__table`]等)が個別に持っていた
+   `table-layout: fixed` + 手動計測の`%`幅指定(実データの特定の長さを基準に
+   都度チューニングする方式)を廃止し、この共通クラスを対象の`<table>`へ
+   追加するだけで、ブラウザ標準のtable auto layoutアルゴリズムに列幅計算を
+   委ねる。
+
+   - 列幅は見出し/表示データのうち最大の自然幅(max-content)に自動で
+     合わせる(`table-layout: auto`、ブラウザの既定動作をそのまま使う)。
+     短い値の列を必要以上に広げず、長い値がある列はそれに応じて広がる。
+   - セルは既定でnowrap(1行表示)にする。折り返しによる行高不揃いを防ぐ
+     (個別に折り返しを許可したい列がある場合のみ、その表側で
+     `white-space: normal`を上書きする。現状そのような列はない)。
+   - `<table>`自身にはwidthを指定しない(`width: auto`)。表が親の表示領域に
+     収まる場合は、その自然な幅のまま詰めて表示され、列間に余分な余白が
+     配分されない。表の方が広い場合は、各表が既に持つスクロール領域
+     (`overflow: auto`のラッパー、各表のCSS側で個別に用意済み)で横スクロール
+     する(切り捨て・強制折り返しはしない)。
+   - データ変更・絞り込み・画面幅の変更時も、ブラウザが再描画のたびに
+     自動で列幅を再計算するため、JS側で幅を追従させる処理は不要。
+   - CSS Grid(`display: grid`)ベースの疑似表(`PanelInfo`等、1行=button
+     全体がクリック対象になる構造)は、`hooks/useAutoFitGridColumns.ts`が
+     各セル(`data-auto-col`)の自然幅を計測して列幅(`--auto-col-N`)を
+     設定する(`PanelInfo.css`参照。考え方はこのclassと同じ)。 */
+.auto-fit-table {
+  width: auto;
+  table-layout: auto;
+}
+
+.auto-fit-table th,
+.auto-fit-table td {
+  white-space: nowrap;
+}
+
 * {
   box-sizing: border-box;
 }

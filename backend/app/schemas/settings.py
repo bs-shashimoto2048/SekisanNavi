@@ -100,6 +100,61 @@ class SteelOutlineOut(BaseModel):
     items: list[SteelItemOut] = []
 
 
+class BoxTypeSymbolMatchOut(BaseModel):
+    """箱体型式解析で特定できた記号1件(1項目1行表示用)。"""
+
+    group: str
+    code: str
+    meaning: str
+
+
+class BoxTypeSpecConflictOut(BaseModel):
+    """同一の積算対象項目に対して異なる値を主張する記号があった場合の記録。"""
+
+    field: str
+    values: list[list[str]]
+
+
+class BoxTypeAnalysisOut(BaseModel):
+    """箱体型式(キュービクル等)の記号解析結果 (Issue #40 追加機能)。
+    `app/services/box_type_parser.py::BoxTypeAnalysis`のAPI外部契約。
+    正本資料「QS-SA020-N 箱体記号一覧表 N版」に基づく解析であり、型式の記号
+    だけから製作可否・正式承認・未記載の仕様を確定するものではない
+    (不明・競合・曖昧な箇所は`conflicts`/`warnings`/`requires_review`に残す)。"""
+
+    raw: str
+    normalized: str
+    status: str
+    requires_review: bool
+    primary: BoxTypeSymbolMatchOut | None = None
+    aux_matches: list[BoxTypeSymbolMatchOut] = []
+    segments: list[list[str]] = []
+    unparsed: list[str] = []
+
+    box_category: str | None = None
+    product_category: str | None = None
+    environment: str | None = None
+    usage: str | None = None
+    structure: str | None = None
+
+    material: str | None = None
+    coating: str | None = None
+    surface_treatment: str | None = None
+    base_finish: str | None = None
+    certification: str | None = None
+    ip55: bool = False
+    processing_target: str
+
+    custom_estimate_conditions: list[str] = []
+    other_notes: list[str] = []
+    notes: list[str] = []
+    conflicts: list[BoxTypeSpecConflictOut] = []
+    warnings: list[str] = []
+
+    alternatives: list["BoxTypeAnalysisOut"] = []
+    candidate_index: int = 0
+
+
 class EstimatePanelInfoOut(BaseModel):
     """estcode_df.csv 1行相当。右ペイン上部「盤情報」表示用 (Phase 1.14指示書26章)。
     CSVの生データをそのまま渡さず、正規化済みの表示用モデルへ変換してから返す。
@@ -115,6 +170,9 @@ class EstimatePanelInfoOut(BaseModel):
     ban_d: float | None = None
     ban_connect: str | None = None
     sort_order: int | None = None
+    #: [追加機能: 箱体型式解析] `model`を解析した結果。`model`がNoneの場合は
+    #: Noneのまま返す(解析対象が無いため)。
+    box_type_analysis: BoxTypeAnalysisOut | None = None
 
 
 class DesignPageOut(BaseModel):
