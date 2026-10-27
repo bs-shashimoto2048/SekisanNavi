@@ -24,6 +24,9 @@ vi.mock('../../pdf/pdfjs', () => ({
       }),
     }),
   },
+  // [日本語PDF文字化け修正] component側が`...PDF_DOCUMENT_RESOURCE_OPTIONS`を
+  // spreadするため、named exportとして存在だけ合わせておく。
+  PDF_DOCUMENT_RESOURCE_OPTIONS: {},
 }))
 
 async function renderCanvas(props: Partial<ComponentProps<typeof DrawingCanvas>> = {}) {
