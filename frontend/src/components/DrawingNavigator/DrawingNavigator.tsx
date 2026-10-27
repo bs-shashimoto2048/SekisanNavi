@@ -53,17 +53,13 @@ function uniqueBanPairs(panels: PanelPreview[]): string[] {
   return pairs
 }
 
-// 図面種別見出しの短い説明文 (Phase 1.11 UI改修指示20章)。サムネイル左上ラベルが
-// 「ページ番号 / クロスリファレンス番号・盤番号」を表していることが、外形図等の
-// 見出しからも分かるようにする。特定のdrawing_type文字列をハードコードするのではなく、
-// そのグループに実際にBAN情報(product_df由来のpanels)を持つページが1件でもあるかで
-// 判定する (外形図は実データ上BAN情報を持つが、基礎図等は持たない場合がある)。
-// 長い説明文にはしない (指示書20章)。
-function groupDescription(type: string, groupPages: ProductDrawing[]): string | null {
-  if (type === UNCLASSIFIED_GROUP) return null
-  const hasBanInfo = groupPages.some((p) => p.panels.length > 0)
-  return hasBanInfo ? 'P：ページ / クロスリファレンス番号・盤番号' : 'P：ページ番号'
-}
+// 図面一覧の説明表記を共通化・簡素化 指示1章/2章: サムネイル左上ラベルが
+// 「ページ番号 / 面番号・盤番号」を表していることを示す説明文。旧仕様は
+// drawing_type(外形図/基礎図/内部機器配置図等)ごとにBAN情報の有無で文言を
+// 出し分けていた(長短2パターン+「その他」は非表示)が、今回そのグループ別の
+// 出し分けを廃止し、セクション全体で固定文言を1回だけ表示する形に簡素化した。
+// 「クロスリファレンス番号」という表現はもう使わない (指示1章)。
+const DRAWING_LIST_LEGEND = 'P：ページ、面番号 / 盤番号'
 
 interface ThumbnailCardProps {
   page: ProductDrawing
@@ -138,6 +134,7 @@ export function DrawingNavigator({
   return (
     <nav className="drawing-navigator">
       <h2 className="drawing-navigator__heading">図面一覧</h2>
+      <p className="drawing-navigator__legend">{DRAWING_LIST_LEGEND}</p>
       {loading && <p className="drawing-navigator__status">読み込み中...</p>}
       {!loading && error && <p className="drawing-navigator__status drawing-navigator__status--error">{error}</p>}
       {!loading && !error && pages.length === 0 && (
@@ -151,11 +148,6 @@ export function DrawingNavigator({
         groups.map(([type, groupPages]) => (
           <section key={type} className="drawing-navigator__group">
             <h3 className="drawing-navigator__group-title">{type}</h3>
-            {groupDescription(type, groupPages) && (
-              <p className="drawing-navigator__group-description">
-                {groupDescription(type, groupPages)}
-              </p>
-            )}
             <div className="drawing-navigator__cards">
               {groupPages.map((page) => (
                 <ThumbnailCard
