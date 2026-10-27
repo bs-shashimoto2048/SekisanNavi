@@ -36,6 +36,12 @@
   border-radius: 0 4px 4px 0;
 }
 
+/* [追加修正] 表示対象(盤/製番仕様/要確認/総合計)選択リストは、積算集約(②)側に
+   あった同じ選択リストと重複していたため、共通の`TargetSelector`
+   (`components/Layout/TargetSelector.css`)へ統合した。このファイルに
+   あった`.estimate-detail__target-select-label`/`.estimate-detail__target-
+   select`は未使用になったため削除した(指示: 重複をなくし1つにまとめる)。 */
+
 .estimate-detail__source-tabs {
   display: flex;
   flex-wrap: wrap;

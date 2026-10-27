@@ -59,9 +59,9 @@ beforeEach(() => {
 })
 
 describe('DrawingEvidencePanel (Issue #40 Phase 3: 図面情報floating panel)', () => {
-  it('shows the heading as 図面情報 with a count, not raw enum values', async () => {
+  it('shows the heading as 図面情報追加 with a count, not raw enum values', async () => {
     render(<DrawingEvidencePanel selectedKey={null} onSelectKey={() => {}} />)
-    expect(await screen.findByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /図面情報追加/ })).toBeInTheDocument()
   })
 
   it('lists all enabled evidence types by default (すべて), excluding disabled ones', async () => {
@@ -143,6 +143,7 @@ describe('DrawingEvidencePanel (Issue #40 Phase 3: 図面情報floating panel)',
     // ありません)がそのまま出る(このcomponent自身の挙動は今回変更していない。
     // App.tsx側の責務(App共通errorへ入れない)とは独立した確認)。
     expect(await screen.findByText('該当する図面情報がありません')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '図面情報' })).toBeInTheDocument()
+    // [追加修正: 図面情報パネルの表示内容] パネル自体のラベルは「図面情報追加」へ変更した。
+    expect(screen.getByRole('heading', { name: '図面情報追加' })).toBeInTheDocument()
   })
 })

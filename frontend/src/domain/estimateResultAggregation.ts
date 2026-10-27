@@ -4,7 +4,7 @@
 // 「全て/AI/設計情報/マニュアル」タブ向けに残すが、積算集約(このファイル)は
 // Phase 5方針(積算結果の正本はEstimateResult)に合わせてこちらへ切り替える。
 //
-// **集約軸** (Phase 5指示3章): 対象(盤/製品全体)× コード。数量は
+// **集約軸** (Phase 5指示3章): 対象(盤/製番仕様)× コード。数量は
 // `EstimateResult.quantity`をそのままSUMする(既存rule evaluatorの
 // quantity算定結果を尊重し、ここで数量を再算定しない。指示3章の
 // 「1台×3成立→数量3」等は、評価器が既にその通りの`quantity`を持つ
@@ -12,7 +12,7 @@
 // 正しい値になる)。
 //
 // **要確認(旧'tie')バケット**: `status === 'needs_review'`の結果は、
-// 本来の対象(盤/製品全体)の行へは混ぜず、専用の「要確認」対象バケットへ
+// 本来の対象(盤/製番仕様)の行へは混ぜず、専用の「要確認」対象バケットへ
 // まとめる(盤所属が機械的に一意へ決定できなかった場合、または新旧経路が
 // 同一コードを算出し一意に統合できなかった場合の両方を含む。Phase 5指示13章
 // 「一意に判断できない場合は要確認として残す」)。旧`__tie__`と同じtarget id/
@@ -51,7 +51,7 @@ export interface EstimateResultAggregationData {
 interface BuildParams {
   results: EstimateResult[]
   masterItemById: Map<number, EstimateMasterItem>
-  /** 対象(盤/製品全体)一覧の元データ。既存`estimateAggregationReal.ts`の
+  /** 対象(盤/製番仕様)一覧の元データ。既存`estimateAggregationReal.ts`の
    * `buildRealEstimateAggregation(...).targets`をそのまま渡す想定
    * (`type: 'tie'`の要素は無視して、このモジュール自身が算出した
    * needs_reviewバケットへ差し替える)。 */

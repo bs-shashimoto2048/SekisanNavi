@@ -198,82 +198,11 @@
   margin: 0 0 0.4rem;
 }
 
-/* 対象セレクト。[Issue #36] 「対象」ラベルとselectを縦積み(column)から
-   横並び(row)へ変更した(1行compact rowの表示イメージ「対象 [総合計▼]」に
-   合わせる)。`.estimate-aggregation__compact-row`内の1要素になったため、
-   自身のmargin-bottomは行側のgapに委ねて0にする。 */
-.estimate-aggregation__target-select-label {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.15rem;
-  font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.75rem→引き上げ */
-  color: #6b7280;
-  font-weight: 500;
-  /* selectの`max-width`(下記)込みで、compact row内の1要素として振る舞える
-     よう、この要素自体もwidthを内容にfitさせる(親のflex-wrap上、他要素を
-     押しのけて広がらないようにする)。 */
-  min-width: 0;
-}
-
-/* Issue #6 追加修正(色変更が実画面へ反映されていない件): 初回実装は
-   border-widthを1px→1.5pxにしたが、Chromiumが1x DPIで1.5pxを1pxへ丸めて
-   描画するため実際には旧来とほぼ同じ太さのまま(実ブラウザ実測で確認済み)、
-   かつ背景が白のままだったため、色相のみの違いが既存のコバルト系装飾
-   (見出し・splitter・sort indicator等)に紛れて「一目で重要操作だと分かる」
-   ほどの強調になっていなかった。CSS自体は正しく適用されていた(競合する
-   セレクタ・!important・select系グローバルルールは無い。実ブラウザの
-   getComputedStyle/matched CSS rulesで確認済み)ため、原因は視覚的な強さの
-   不足であり、適用漏れではない。
-   今回は「枠線の色だけ」から「淡い塗り+太めの枠+濃い文字」の組み合わせへ
-   変更し、通常状態でも一目で分かる強さにする。既存の構造色(濃紺/コバルト/
-   白/灰)の範囲内。状態色(--status-*)やAI/Manualの意味色とは重ならない。
-   padding/高さは増やさない(border-boxのためborder-widthを2pxにしても
-   外形サイズは変わらない)。 */
-/* [Issue #36] `<select>`は既定でwidth未指定の場合、閉じた状態の表示幅が
-   `<option>`の中で最も長い文字列(実データでは面番号/盤番号付きの長い盤名称等)
-   に引きずられて広がってしまい、現在選択中が短い「総合計」であっても
-   1行compact rowを圧迫する主要因になっていた(Phase 1調査で実測: 対象
-   なし・padding調整前で288px)。`max-width`を指定し、収まらない場合は
-   `text-overflow: ellipsis`で視覚的に省略する(`<option>`一覧自体・
-   value/onChange/Viewer連動のロジックはいずれも変更していない。ドロップ
-   ダウンを開いた際の各`<option>`は省略されず全文表示される)。 */
-.estimate-aggregation__target-select {
-  font: inherit;
-  font-size: 0.95rem; /* 全体フォント拡大 指示1章: 旧0.85rem→引き上げ */
-  color: #1e3a8a;
-  font-weight: 700;
-  background: #eff6ff;
-  border: 2px solid #2563eb;
-  border-radius: 4px;
-  padding: 0.2rem 0.3rem;
-  cursor: pointer;
-  /* [Issue #36] 実ブラウザ実測で「総合計」(既定の選択肢)が省略されずに
-     収まる最小限の値として82pxを採用した(1行compact rowを500px幅で
-     成立させるため)。長い盤名称等を選んだ場合はtext-overflow: ellipsisで
-     視覚的に省略する(下記)。 */
-  max-width: 82px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.estimate-aggregation__target-select:hover {
-  border-color: #1d4ed8;
-}
-
-/* Viewerが現在この対象へフォーカスしている(個別盤選択中)ことを示す
-   (指示8章「Viewer連動中の対象表示」)。常時強調(上記)よりもう一段強くする。
-   背景の塗り自体は同じ淡い青(#eff6ff)のまま「同系統の強調が続いている」
-   ことを示しつつ、枠を濃色化+外側リングを追加することで、通常状態と
-   ほぼ同じ見た目に潰れないようにする(通常=中強度、Viewer連動中=最強度)。 */
-.estimate-aggregation__target-select--focused {
-  border-color: #1d4ed8;
-  background: #eff6ff;
-  /* 通常状態にはリングが無いため、この外側リング(2px、通常状態の枠と同系色
-     だがより濃い#1d4ed8)自体が「通常よりもう一段強い」ことの明確な目印になる。 */
-  box-shadow: 0 0 0 2px #1d4ed8;
-}
+/* 対象セレクト(`.estimate-aggregation__target-select-label`/`select`/
+   `select--focused`)は、積算明細(③)側にあった同じ選択リストと重複していた
+   ため、共通の`TargetSelector`(`components/Layout/TargetSelector.css`)へ
+   統合した(指示: 重複をなくし1つにまとめる)。このファイルにあったCSSは
+   未使用になったため削除した。 */
 
 /* 表データ行だけをスクロールさせる領域 (指示5章)。
    UI視覚階層改善 指示13章: 表外周(Level3)をセル内部の罫線(#f3f4f6)より

@@ -216,7 +216,7 @@ const COLUMN_HEADERS: { key: keyof PanelRowCells; label: string }[] = [
  *   1. 現在ページに1件以上product_df盤があれば、盤単位で一覧を表示する。
  *   2. product_df盤が1件も無く、旧来のダミーDB由来`panel`がある場合のみ、
  *      後方互換のため従来の属性テーブル表示にフォールバックする(今回変更しない)。
- *   3. どちらも無ければ「このページには盤情報がありません」。
+ *   3. どちらも無ければ「このページには図面情報がありません」。
  */
 export function PanelInfo({
   panel,
@@ -229,7 +229,7 @@ export function PanelInfo({
   onNaturalSizeChange,
 }: Props) {
   const cards = buildPanelCards(panels, estimatePanels, selectedPanel)
-  const heading = cards.length > 0 ? `盤情報　${cards.length}件` : '盤情報'
+  const heading = cards.length > 0 ? `図面情報　${cards.length}件` : '図面情報'
 
   // [追加機能: 箱体型式解析] 「箱体型式」タブに表示する型式は、中央Viewerで
   // 選択中の盤(`isSelected`、既存のハイライト対象と同じ)を優先し、未選択
@@ -359,7 +359,7 @@ export function PanelInfo({
       </div>
 
       {cards.length === 0 && !panel && (
-        <p className="panel-info__empty">このページには盤情報がありません</p>
+        <p className="panel-info__empty">このページには図面情報がありません</p>
       )}
 
       {cards.length > 0 && (

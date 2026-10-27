@@ -55,7 +55,13 @@ interface Props {
 }
 
 /**
- * 「図面情報」floating panel (Issue #40 Phase 3)。
+ * [追加修正: 図面情報パネルの表示内容] このcomponent自体の内容(図面情報タイプ選択・
+ * BBox作成の入口)は変更していないが、表示先のfloating panelのラベルは
+ * 「図面情報」から「図面情報追加」へ変更した(旧「図面情報」の位置には代わりに
+ * 旧「盤情報」パネルの内容(`PanelInfo.tsx`)を表示する)。見出し文言のみ
+ * `heading`で追従させ、BBox作成の挙動・取得するデータはいずれも変更していない。
+ *
+ * 「図面情報追加」floating panel (Issue #40 Phase 3)。
  *
  * 既存の「部品台帳」(`EstimateMasterPicker`、積算コードMasterをmaster_item_id
  * 経由で直接選ぶ)とは異なり、作業者はここで「図面上で見えている意味」
@@ -132,7 +138,9 @@ export function DrawingEvidencePanel({
     })
   }
 
-  const heading = allTypes.length > 0 ? `図面情報　${visibleTypes.length}件` : '図面情報'
+  // [追加修正: 図面情報パネルの表示内容] パネル自体のラベルを「図面情報追加」へ変更
+  // (内容・取得ロジックは不変、上記component docコメント参照)。
+  const heading = allTypes.length > 0 ? `図面情報追加　${visibleTypes.length}件` : '図面情報追加'
 
   return (
     <section className="drawing-evidence-panel" style={height != null ? { height } : undefined}>

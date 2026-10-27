@@ -658,13 +658,13 @@ describe('App: 積算集約で個別盤を選択した際のViewerフォーカ�
     await navigateToOutlinePage()
 
     // 初期状態(総合計): 2盤とも見える。masterLinkedDetectionOnOutline(18999)は
-    // どちらの盤とも交差しないため製品全体扱いだが、総合計では表示される
+    // どちらの盤とも交差しないため製番仕様扱いだが、総合計では表示される
     // (リード線ラベルは通常表示なので、これで存在を確認できる)。
     await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area')).toHaveLength(2))
     expect(screen.getByText('18999 テスト品目')).toBeInTheDocument()
 
     // 積算集約(②)のセレクトで「低圧動力盤」(面番号2/盤番号1)を選択する。
-    const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+    const select = document.querySelector('.target-selector__select') as HTMLSelectElement
     fireEvent.change(select, { target: { value: 'panel:2:1' } })
 
     // 他盤(高圧受電盤)のBBoxは非表示になり、選択した盤(低圧動力盤)だけが残る。
@@ -675,7 +675,7 @@ describe('App: 積算集約で個別盤を選択した際のViewerフォーカ�
     expect(within(viewer).getByText('2/1')).toBeInTheDocument()
     expect(within(viewer).queryByText('1/1')).not.toBeInTheDocument()
 
-    // 製品全体所属(18999)の引出線・BBoxも、この盤には属さないため非表示になる。
+    // 製番仕様所属(18999)の引出線・BBoxも、この盤には属さないため非表示になる。
     expect(screen.queryByText('18999 テスト品目')).not.toBeInTheDocument()
 
     // 「総合計」へ戻すと、非表示にしていた表示が全て復元される (指示13章)。
@@ -686,23 +686,23 @@ describe('App: 積算集約で個別盤を選択した際のViewerフォーカ�
     expect(screen.getByText('18999 テスト品目')).toBeInTheDocument()
   })
 
-  it('does not filter panel BBoxes when 製品全体 is selected (盤BBox自体は維持してよい)', async () => {
+  it('does not filter panel BBoxes when 製番仕様 is selected (盤BBox自体は維持してよい)', async () => {
     render(<App />)
     await navigateToOutlinePage()
 
-    const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+    const select = document.querySelector('.target-selector__select') as HTMLSelectElement
     fireEvent.change(select, { target: { value: 'product' } })
 
-    // 製品全体所属(18999)のリード線ラベルは表示され続ける。
+    // 製番仕様所属(18999)のリード線ラベルは表示され続ける。
     await waitFor(() => expect(screen.getByText('18999 テスト品目')).toBeInTheDocument())
-    // 製品全体選択時も盤BBox自体は絞り込まない (指示1章)。
+    // 製番仕様選択時も盤BBox自体は絞り込まない (指示1章)。
     expect(document.querySelectorAll('.product-panel-overlay__area')).toHaveLength(2)
   })
 })
 
 describe('App: 積算対象連動の図面一覧絞り込み・自動ページ移動 (積算対象連動の金額表示・図面一覧絞り込み 指示4章〜7章)', () => {
   function getEstimateTargetSelect(): HTMLSelectElement {
-    return document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+    return document.querySelector('.target-selector__select') as HTMLSelectElement
   }
 
   function getDrawingNavigator(): HTMLElement {
@@ -746,14 +746,14 @@ describe('App: 積算対象連動の図面一覧絞り込み・自動ページ�
     expect(screen.queryAllByRole('button', { name: /BBoxサイズ変更/ }).length).toBeGreaterThan(0)
   })
 
-  it('shows only the page(s) with detail items belonging to 製品全体 when 製品全体 is selected (指示5章)', async () => {
+  it('shows only the page(s) with detail items belonging to 製番仕様 when 製番仕様 is selected (指示5章)', async () => {
     render(<App />)
     await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
 
     fireEvent.change(await waitFor(() => getEstimateTargetSelect()), { target: { value: 'product' } })
 
-    // 18999(masterLinkedDetectionOnOutline)はどの盤とも交差しないため製品全体扱いで、
-    // P16由来。製品全体選択時はP16のみが図面一覧に残るはず。
+    // 18999(masterLinkedDetectionOnOutline)はどの盤とも交差しないため製番仕様扱いで、
+    // P16由来。製番仕様選択時はP16のみが図面一覧に残るはず。
     await waitFor(() => expect(screen.getAllByText('外形図(P16)').length).toBeGreaterThan(0))
     await waitFor(() => {
       const nav = getDrawingNavigator()
@@ -802,7 +802,7 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
 
   // masterLinkedDetectionOnOutline(18999)を選択し、面1/盤1(高圧受電盤、
   // rect x:0.1-0.15/y:0.1-0.2)の内側へドラッグで移動する。移動前はどの盤とも
-  // 交差しないため対象は「製品全体」。
+  // 交差しないため対象は「製番仕様」。
   async function selectAndDragOnto11001() {
     // 引出線ラベル(button)をクリックして選択する (BBox本体は選択されるまで非表示のため)。
     // 所属変更通知トーストも同じ文字列("18999 テスト品目")を表示しうるため、
@@ -823,7 +823,7 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
 
     // 積算集約の対象が新所属(面1/盤1)へ切り替わる (指示10章)。
     await waitFor(() => {
-      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      const select = document.querySelector('.target-selector__select') as HTMLSelectElement
       expect(select.value).toBe('panel:1:1')
     })
 
@@ -832,7 +832,7 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
     expect(toast).not.toBeNull()
     expect(within(toast).getByText('積算先が変更されました')).toBeInTheDocument()
     expect(within(toast).getByText('18999 テスト品目')).toBeInTheDocument()
-    expect(within(toast).getByText('製品全体 → 面1 / 盤1')).toBeInTheDocument()
+    expect(within(toast).getByText('製番仕様 → 面1 / 盤1')).toBeInTheDocument()
 
     // 選択状態は残さず、Viewer側は既存flashで一時強調するだけ (指示13章)。
     const bbox = getOverlayBBoxByTitle(/18999/)
@@ -859,7 +859,7 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
     fireEvent.mouseDown(bbox, { clientX: 500, clientY: 500 })
     fireEvent.mouseMove(window, { clientX: 110, clientY: 140 }) // ドラッグ中(mouseup前)
 
-    const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+    const select = document.querySelector('.target-selector__select') as HTMLSelectElement
     expect(select.value).toBe('') // まだ総合計のまま (指示8章: 編集中はUIを切り替えない)
 
     fireEvent.mouseUp(window, { clientX: 110, clientY: 140 })
@@ -871,19 +871,19 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
     await navigateToOutlinePage()
     await selectAndDragOnto11001()
     await waitFor(() => {
-      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      const select = document.querySelector('.target-selector__select') as HTMLSelectElement
       expect(select.value).toBe('panel:1:1')
     })
 
     fireEvent.keyDown(document, { key: 'z', ctrlKey: true })
 
     await waitFor(() => {
-      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
-      // 移動前の所属は「製品全体」(実対象。総合計=nullとは別物) なので、Undoで
+      const select = document.querySelector('.target-selector__select') as HTMLSelectElement
+      // 移動前の所属は「製番仕様」(実対象。総合計=nullとは別物) なので、Undoで
       // そこへ追従して戻る。
       expect(select.value).toBe('product')
     })
-    expect(screen.getByText('面1 / 盤1 → 製品全体')).toBeInTheDocument()
+    expect(screen.getByText('面1 / 盤1 → 製番仕様')).toBeInTheDocument()
   })
 
   it('Redo re-applies the move after an Undo, using Ctrl+Shift+Z', async () => {
@@ -891,19 +891,19 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
     await navigateToOutlinePage()
     await selectAndDragOnto11001()
     await waitFor(() => {
-      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      const select = document.querySelector('.target-selector__select') as HTMLSelectElement
       expect(select.value).toBe('panel:1:1')
     })
 
     fireEvent.keyDown(document, { key: 'z', ctrlKey: true }) // Undo
     await waitFor(() => {
-      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      const select = document.querySelector('.target-selector__select') as HTMLSelectElement
       expect(select.value).toBe('product')
     })
 
     fireEvent.keyDown(document, { key: 'Z', ctrlKey: true, shiftKey: true }) // Redo
     await waitFor(() => {
-      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      const select = document.querySelector('.target-selector__select') as HTMLSelectElement
       expect(select.value).toBe('panel:1:1')
     })
   })
@@ -930,7 +930,7 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
     await navigateToOutlinePage()
     await selectAndDragOnto11001()
     await waitFor(() => {
-      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      const select = document.querySelector('.target-selector__select') as HTMLSelectElement
       expect(select.value).toBe('panel:1:1')
     })
 
@@ -1003,7 +1003,7 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
     // クリックすると積算集約/積算明細の対象が「要確認」へ切り替わる。
     fireEvent.click(screen.getByText('⚠ 積算先を確定できない項目が 1件あります'))
     await waitFor(() => {
-      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      const select = document.querySelector('.target-selector__select') as HTMLSelectElement
       expect(select.value).toBe('__tie__')
     })
     const estimateDetail = document.querySelector('.estimate-detail') as HTMLElement
@@ -1036,7 +1036,7 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
     // 「要確認タブで確認する」リンクから、総合計+要確認タブへ誘導される。
     fireEvent.click(screen.getByRole('button', { name: '要確認タブで確認する' }))
     await waitFor(() => {
-      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      const select = document.querySelector('.target-selector__select') as HTMLSelectElement
       expect(select.value).toBe('')
     })
     expect(screen.getByRole('tab', { name: /^要確認/ })).toHaveAttribute('aria-selected', 'true')
@@ -1059,7 +1059,7 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
     await navigateToOutlinePage()
     await selectAndDragOnto11001()
     await waitFor(() => {
-      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      const select = document.querySelector('.target-selector__select') as HTMLSelectElement
       expect(select.value).toBe('panel:1:1')
     })
 
@@ -1068,7 +1068,7 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
     try {
       fireEvent.keyDown(input, { key: 'z', ctrlKey: true })
       // input内でのCtrl+Zはアプリ側のUndoとして処理されないため、対象は切り替わらない。
-      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      const select = document.querySelector('.target-selector__select') as HTMLSelectElement
       expect(select.value).toBe('panel:1:1')
     } finally {
       document.body.removeChild(input)
@@ -1161,7 +1161,10 @@ describe('App: 図面情報→BBox作成 (Issue #40 Phase 6-C指示3章/4章)', 
     // 既存のViewer/floating panelは通常どおり使える(回帰無し、部品台帳は
     // Phase 6-Cで既定非表示へ変更済みのため、既定表示中のpanelで確認する)。
     expect(screen.getByRole('heading', { name: '積算明細' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
+    // [追加修正: 図面情報パネルの表示内容] 「図面情報」(旧盤情報)・「図面情報追加」
+    // (旧図面情報)のどちらも見出しに"図面情報"を含むため、ここでは一意に
+    // `DrawingEvidencePanel`側を指す「図面情報追加」で検証する。
+    expect(screen.getByRole('heading', { name: /図面情報追加/ })).toBeInTheDocument()
     const thumbnail = await screen.findByRole('img', { name: 'P16' })
     fireEvent.click(thumbnail)
     await screen.findByTitle(/roof_fan/)
@@ -1720,7 +1723,7 @@ describe('App: 積算コードMasterのfloating panel化 (Issue #19 追加修正
     // 見出し(h2)も同じ`--panel-accent`系統(継承経由)を参照しており、
     // heading側でも同様にkindごとに異なる値を参照していることを確認する。
     const masterHeading = within(masterFloat).getByRole('heading', { name: /部品台帳/ })
-    const infoHeading = within(infoFloat).getByRole('heading', { name: /盤情報/ })
+    const infoHeading = within(infoFloat).getByRole('heading', { name: /図面情報/ })
     const masterHeadingAccent = getComputedStyle(masterHeading).getPropertyValue('--panel-accent')
     const infoHeadingAccent = getComputedStyle(infoHeading).getPropertyValue('--panel-accent')
     expect(masterHeadingAccent).not.toBe('')
@@ -1743,21 +1746,21 @@ describe('App: 盤情報のfloating panel化・右ペイン廃止 (Issue #19 Pha
 
     const panelInfoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
     expect(panelInfoFloat).toBeInTheDocument()
-    expect(within(panelInfoFloat).getByRole('heading', { name: /盤情報/ })).toBeInTheDocument()
+    expect(within(panelInfoFloat).getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
     // 折りたたみ用のchevronトグルボタンは無い(見出しはプレーンな<h2>)。
-    expect(within(panelInfoFloat).queryByRole('button', { name: /盤情報/ })).not.toBeInTheDocument()
+    expect(within(panelInfoFloat).queryByRole('button', { name: /図面情報/ })).not.toBeInTheDocument()
   })
 
   it('shows 盤情報 by default, and can be hidden/shown via its toggle (追加UI修正: ボタン文言は常に固定「盤情報」、ON/OFFはaria-pressedと配色のみで表現)', async () => {
     await renderApp()
-    const toggle = screen.getByRole('button', { name: '盤情報' })
+    const toggle = screen.getByRole('button', { name: '図面情報' })
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
 
     fireEvent.click(toggle)
     expect(document.querySelector('.floating-panel--panelInfo')).not.toBeInTheDocument()
     expect(toggle).toHaveAttribute('aria-pressed', 'false')
     // 文言自体はON/OFFで変化しない(旧「盤情報を隠す/を表示」の出し分けは廃止)。
-    expect(toggle).toHaveTextContent('盤情報')
+    expect(toggle).toHaveTextContent('図面情報')
 
     fireEvent.click(toggle)
     expect(document.querySelector('.floating-panel--panelInfo')).toBeInTheDocument()
@@ -1781,7 +1784,7 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
     await waitFor(() => expect(screen.getAllByText('基礎図(P18)').length).toBeGreaterThan(0))
   }
 
-  it('renders the panel toggles inside the edit toolbar (not as a floating bar over the Viewer), in 図面情報→盤情報→積算集約→積算明細→部品台帳→操作ガイド order (Issue #40 Phase 6-C指示2章)', async () => {
+  it('renders the panel toggles inside the edit toolbar (not as a floating bar over the Viewer), in 操作ガイド→図面情報→図面情報追加→積算集約→積算明細→部品台帳 order, with the 対象 select at the far right (指示: ヘッダーボタン群の並び替え。操作ガイドを一番左、対象プルダウンを一番右端へ)', async () => {
     await renderApp()
     const toolbar = document.querySelector('.app-layout__edit-toolbar') as HTMLElement
     const toggleGroup = document.querySelector('.panel-visibility-toggles') as HTMLElement
@@ -1792,21 +1795,32 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
 
     const buttons = within(toggleGroup).getAllByRole('button')
     // 追加UI修正指示1章: ボタン表示文字はON/OFFに関わらず常に固定ラベル。
-    // [Issue #40 Phase 6-C指示1章/2章] 新ワークフローに合わせ表示順・既定値を
-    // 整理した: 図面情報(既定ON、主導線)/盤情報/積算集約/積算明細(既定ON)/
-    // 部品台帳(既定OFF、補助機能)/操作ガイド(既定OFF、クイックリファレンス)。
+    // [追加修正: ヘッダーボタン群の並び替え]指示により、「操作ガイド」を
+    // 一番左へ、「対象」selectをボタン群の一番右端へ移動した。
+    // [追加修正: 図面情報パネルの表示内容]指示により、旧「盤情報」専用ボタンは
+    // 廃止し、その内容(`panelInfoVisible`配線)は「図面情報」というボタンで
+    // 表示する。旧「図面情報」(`drawingEvidenceVisible`配線)は「図面情報追加」
+    // というボタンに変わった。それ以外のボタン(積算集約/積算明細/部品台帳)の
+    // 相対順序・既定値は変更していない: 図面情報(既定ON)/図面情報追加
+    // (既定ON、主導線)/積算集約/積算明細(既定ON)/部品台帳(既定OFF、補助機能)/
+    // 操作ガイド(既定OFF、クイックリファレンス)。
     expect(buttons.map((b) => b.textContent)).toEqual([
+      '操作ガイド',
       '図面情報',
-      '盤情報',
+      '図面情報追加',
       '積算集約',
       '積算明細',
       '部品台帳',
-      '操作ガイド',
     ])
-    expect(buttons[0].getAttribute('aria-pressed')).toBe('true') // 図面情報
-    expect(buttons.slice(1, 4).every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true) // 盤情報/積算集約/積算明細
-    expect(buttons[4].getAttribute('aria-pressed')).toBe('false') // 部品台帳
-    expect(buttons[5].getAttribute('aria-pressed')).toBe('false') // 操作ガイド
+    expect(buttons[0].getAttribute('aria-pressed')).toBe('false') // 操作ガイド
+    expect(buttons[1].getAttribute('aria-pressed')).toBe('true') // 図面情報(旧盤情報)
+    expect(buttons.slice(2, 5).every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true) // 図面情報追加/積算集約/積算明細
+    expect(buttons[5].getAttribute('aria-pressed')).toBe('false') // 部品台帳
+
+    // 対象selectはボタン群の一番右端(最後の子要素)にある。
+    const children = Array.from(toggleGroup.children)
+    const selectLabelIndex = children.findIndex((el) => el.className === 'target-selector__label')
+    expect(selectLabelIndex).toBe(children.length - 1)
   })
 
   it('gives the panel-visibility toggles a filled ON vs. muted OFF look, distinct from Undo/Redo (追加UI修正指示2章、Issue #34でkind別theme化)', async () => {
@@ -1892,14 +1906,14 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
 
   it('does not change selectedEstimateTargetId or aggregation data when a floating panel is hidden/shown (指示: floating panelの表示/非表示だけで積算ロジックやデータは変化しないこと)', async () => {
     await renderApp()
-    const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+    const select = document.querySelector('.target-selector__select') as HTMLSelectElement
     fireEvent.change(select, { target: { value: 'panel:1:1' } })
     await waitFor(() => expect(select.value).toBe('panel:1:1'))
 
     fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
     fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
 
-    expect((document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement).value).toBe(
+    expect((document.querySelector('.target-selector__select') as HTMLSelectElement).value).toBe(
       'panel:1:1',
     )
   })
@@ -1911,10 +1925,10 @@ describe('App: 積算集約・積算明細のfloating panel化 (Issue #19 Phase 
     expect(undoButton).toBeDisabled()
     expect(redoButton).toBeDisabled()
 
-    fireEvent.click(screen.getByRole('button', { name: '盤情報' }))
+    fireEvent.click(screen.getByRole('button', { name: '図面情報' }))
     fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
     fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
-    fireEvent.click(screen.getByRole('button', { name: '盤情報' }))
+    fireEvent.click(screen.getByRole('button', { name: '図面情報' }))
     fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
     fireEvent.click(screen.getByRole('button', { name: '積算明細' }))
 
@@ -1945,7 +1959,7 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     await renderApp()
     setViewerWrapRect(1200, 700)
     const panel = document.querySelector('.floating-panel--panelInfo') as HTMLElement
-    const heading = within(panel).getByRole('heading', { name: /盤情報/ })
+    const heading = within(panel).getByRole('heading', { name: /図面情報/ })
     const startLeft = parseFloat(panel.style.left)
     const startTop = parseFloat(panel.style.top)
 
@@ -1957,17 +1971,21 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     expect(parseFloat(panel.style.top)).toBe(startTop + 40)
   })
 
-  it('does not start a drag when pointerdown originates outside the heading (e.g. the 対象 select)', async () => {
+  it('does not start a drag when pointerdown originates outside the heading (e.g. the 確定 button)', async () => {
+    // 指示(対象プルダウンの統合)により、対象selectは積算集約パネル自身の
+    // 外(`PanelVisibilityToggles`内の共通`TargetSelector`)へ移動したため、
+    // 「heading以外から始めてもドラッグしない」ことの確認対象を、引き続き
+    // このpanel内にある別の非heading要素(確定button)へ差し替える。
     await renderApp()
     setViewerWrapRect(1200, 700)
     const panel = document.querySelector('.floating-panel--aggregation') as HTMLElement
-    const select = within(panel).getByRole('combobox')
+    const confirmButton = panel.querySelector('.estimate-confirmation-action__button') as HTMLElement
     const startLeft = panel.style.left
     const startTop = panel.style.top
 
-    fireEvent.pointerDown(select, { pointerId: 1, clientX: 100, clientY: 100, button: 0 })
-    fireEvent.pointerMove(select, { pointerId: 1, clientX: 300, clientY: 300 })
-    fireEvent.pointerUp(select, { pointerId: 1, clientX: 300, clientY: 300 })
+    fireEvent.pointerDown(confirmButton, { pointerId: 1, clientX: 100, clientY: 100, button: 0 })
+    fireEvent.pointerMove(confirmButton, { pointerId: 1, clientX: 300, clientY: 300 })
+    fireEvent.pointerUp(confirmButton, { pointerId: 1, clientX: 300, clientY: 300 })
 
     expect(panel.style.left).toBe(startLeft)
     expect(panel.style.top).toBe(startTop)
@@ -1977,7 +1995,7 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     await renderApp()
     setViewerWrapRect(1200, 700)
     const panel = document.querySelector('.floating-panel--panelInfo') as HTMLElement
-    const heading = within(panel).getByRole('heading', { name: /盤情報/ })
+    const heading = within(panel).getByRole('heading', { name: /図面情報/ })
 
     fireEvent.pointerDown(heading, { pointerId: 1, clientX: 0, clientY: 0, button: 0 })
     fireEvent.pointerMove(heading, { pointerId: 1, clientX: -100000, clientY: -100000 })
@@ -2025,13 +2043,13 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     const aggregationFloat = document.querySelector('.floating-panel--aggregation') as HTMLElement
     const zBefore = parseInt(panelInfoFloat.style.zIndex, 10)
 
-    fireEvent.pointerDown(within(panelInfoFloat).getByRole('heading', { name: /盤情報/ }), {
+    fireEvent.pointerDown(within(panelInfoFloat).getByRole('heading', { name: /図面情報/ }), {
       pointerId: 1,
       clientX: 50,
       clientY: 50,
       button: 0,
     })
-    fireEvent.pointerUp(within(panelInfoFloat).getByRole('heading', { name: /盤情報/ }), {
+    fireEvent.pointerUp(within(panelInfoFloat).getByRole('heading', { name: /図面情報/ }), {
       pointerId: 1,
       clientX: 50,
       clientY: 50,
@@ -2062,7 +2080,7 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     expect(parseInt(aggregationFloat.style.zIndex, 10)).toBeGreaterThan(parseInt(panelInfoFloat.style.zIndex, 10))
 
     // 盤情報をOFF→ONにすると、クリック等の操作をしていなくても最前面へ来る。
-    const toggle = screen.getByRole('button', { name: '盤情報' })
+    const toggle = screen.getByRole('button', { name: '図面情報' })
     fireEvent.click(toggle) // OFF
     fireEvent.click(toggle) // ON
     const panelInfoFloatAfter = document.querySelector('.floating-panel--panelInfo') as HTMLElement
@@ -2132,6 +2150,15 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     expect(panel.style.width).toBe('500px')
   })
 
+  it('[2026-10 追加修正: レイアウト] gives 図面情報 an initial width of 590px, wide enough for the 盤情報一覧(最下部テーブル)の全6列を実データの最長値でも折り返さず・横スクロール無しで表示できる幅(FloatingPanel.tsx::MIN_WIDTH_BY_KIND.panelInfo、実データ測定に基づく値)', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+    fireEvent.click(screen.getByRole('button', { name: '図面情報' }))
+    fireEvent.click(screen.getByRole('button', { name: '図面情報' }))
+    const panel = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    expect(panel.style.width).toBe('590px')
+  })
+
   it('does not affect BBox selection/Zoom/Fit when dragging a panel heading', async () => {
     await renderApp()
     setViewerWrapRect(1200, 700)
@@ -2142,7 +2169,7 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     await screen.findAllByRole('button', { name: /BBoxサイズ変更/ })
 
     const panel = document.querySelector('.floating-panel--panelInfo') as HTMLElement
-    const heading = within(panel).getByRole('heading', { name: /盤情報/ })
+    const heading = within(panel).getByRole('heading', { name: /図面情報/ })
     fireEvent.pointerDown(heading, { pointerId: 1, clientX: 100, clientY: 100, button: 0 })
     fireEvent.pointerMove(heading, { pointerId: 1, clientX: 130, clientY: 120 })
     fireEvent.pointerUp(heading, { pointerId: 1, clientX: 130, clientY: 120 })
@@ -2172,15 +2199,15 @@ describe('App: floating panelの初期配置(右端寄せ・積み重ね)とView
     setViewerWrapRect(1600, 900)
 
     // 5panelすべてOFFにしてから、1つずつONにして積み重ねを確認する
-    // (Issue #40 Phase 6-Cで「図面情報」が既定表示ONへ変わったため、
-    // こちらも明示的にOFFにする。「部品台帳」は既定表示OFFへ変わったため
-    // 元々OFFであり、ここではクリックしない)。
-    for (const name of ['図面情報', '盤情報', '積算集約', '積算明細']) {
+    // (Issue #40 Phase 6-Cで「図面情報追加」(旧「図面情報」)が既定表示ONへ
+    // 変わったため、こちらも明示的にOFFにする。「部品台帳」は既定表示OFFへ
+    // 変わったため元々OFFであり、ここではクリックしない)。
+    for (const name of ['図面情報', '図面情報追加', '積算集約', '積算明細']) {
       fireEvent.click(screen.getByRole('button', { name }))
     }
     expect(document.querySelectorAll('.floating-panel')).toHaveLength(0)
 
-    fireEvent.click(screen.getByRole('button', { name: '盤情報' }))
+    fireEvent.click(screen.getByRole('button', { name: '図面情報' }))
     const panelInfo = document.querySelector('.floating-panel--panelInfo') as HTMLElement
     expect(panelInfo.style.top).toBe('48px') // TOP_CLEARANCE、他に表示中panelが無い(1段目)
 
@@ -2269,7 +2296,7 @@ describe('App: floating panelの初期配置(右端寄せ・積み重ね)とView
     })
 
     const panel = document.querySelector('.floating-panel--panelInfo') as HTMLElement
-    const heading = within(panel).getByRole('heading', { name: /盤情報/ })
+    const heading = within(panel).getByRole('heading', { name: /図面情報/ })
     const heightBefore = parseFloat(panel.style.height)
 
     // 上端からの距離(topGap=200)の方が下端からの距離より小さくなる位置へ
@@ -2356,7 +2383,7 @@ describe('App: Viewer内「操作ガイド」floating panel (Issue #31)', () => 
     await renderApp()
     setViewerWrapRect(1600, 900)
 
-    // 既存4panelは既定でON。積み重ね順(盤情報=1段目)を先に記録する。
+    // 既存4panelは既定でON。積み重ね順(図面情報=1段目)を先に記録する。
     const panelInfoTopBefore = (document.querySelector('.floating-panel--panelInfo') as HTMLElement).style.top
 
     fireEvent.click(screen.getByRole('button', { name: '操作ガイド' }))
@@ -2364,7 +2391,7 @@ describe('App: Viewer内「操作ガイド」floating panel (Issue #31)', () => 
     expect(parseFloat(guide.style.left)).toBeCloseTo(20, 5) // SIDE_MARGIN、左端寄せ(右端カスケードに混ざらない)
     expect(guide.style.top).toBe('48px') // TOP_CLEARANCE、既存4panelの段数計算とは無関係に単独配置
 
-    // 操作ガイドを表示しても、既存4panel(盤情報)の積み重ね位置は変わらない。
+    // 操作ガイドを表示しても、既存4panel(図面情報)の積み重ね位置は変わらない。
     expect((document.querySelector('.floating-panel--panelInfo') as HTMLElement).style.top).toBe(panelInfoTopBefore)
   })
 
@@ -2378,12 +2405,13 @@ describe('App: Viewer内「操作ガイド」floating panel (Issue #31)', () => 
     // この5panelとは無関係にstackIndexが常に0になる設計なので、先にON/OFFを
     // 済ませてから最後に操作ガイドを表示しても、検証したい「既存panelの
     // 積み重ねが乱れないこと」自体には影響しない。[Issue #40 Phase 6-C]
-    // 「図面情報」も既定表示ONへ変わったため、他panelと同様に一度OFFにする
-    // (盤情報/積算集約の相対的な積み重ね段数(1段目/2段目)を検証したいため)。
-    for (const name of ['図面情報', '盤情報', '積算集約', '積算明細', '部品台帳']) {
+    // 「図面情報追加」(旧「図面情報」)も既定表示ONへ変わったため、他panelと
+    // 同様に一度OFFにする(図面情報/積算集約の相対的な積み重ね段数
+    // (1段目/2段目)を検証したいため)。
+    for (const name of ['図面情報', '図面情報追加', '積算集約', '積算明細', '部品台帳']) {
       fireEvent.click(screen.getByRole('button', { name }))
     }
-    for (const name of ['盤情報', '積算集約']) {
+    for (const name of ['図面情報', '積算集約']) {
       fireEvent.click(screen.getByRole('button', { name }))
     }
 
@@ -2522,7 +2550,7 @@ describe('App: FloatingPanelのkind別theme・最前面強調 (Issue #34)', () =
 
     const kindClasses = [
       ['操作ガイド', 'panel-visibility-toggles__button--guide'],
-      ['盤情報', 'panel-visibility-toggles__button--panelInfo'],
+      ['図面情報', 'panel-visibility-toggles__button--panelInfo'],
       ['積算集約', 'panel-visibility-toggles__button--aggregation'],
       ['積算明細', 'panel-visibility-toggles__button--detail'],
       ['部品台帳', 'panel-visibility-toggles__button--tool'],
@@ -2548,7 +2576,7 @@ describe('App: FloatingPanelのkind別theme・最前面強調 (Issue #34)', () =
 
     const headingByKind: Record<string, RegExp> = {
       guide: /操作ガイド/,
-      panelInfo: /盤情報/,
+      panelInfo: /図面情報/,
       aggregation: /積算集約/,
       detail: /積算明細/,
       master: /部品台帳/,
@@ -2596,13 +2624,13 @@ describe('App: FloatingPanelのkind別theme・最前面強調 (Issue #34)', () =
     // (`visible`がtrueへ変わった瞬間に毎回bringToFront()が呼ばれるため)。
     expect(frontCount()).toBe(1)
 
-    fireEvent.pointerDown(within(panelInfoFloat).getByRole('heading', { name: /盤情報/ }), {
+    fireEvent.pointerDown(within(panelInfoFloat).getByRole('heading', { name: /図面情報/ }), {
       pointerId: 1,
       clientX: 10,
       clientY: 10,
       button: 0,
     })
-    fireEvent.pointerUp(within(panelInfoFloat).getByRole('heading', { name: /盤情報/ }), {
+    fireEvent.pointerUp(within(panelInfoFloat).getByRole('heading', { name: /図面情報/ }), {
       pointerId: 1,
       clientX: 10,
       clientY: 10,
@@ -2648,9 +2676,9 @@ describe('App: FloatingPanelのkind別theme・最前面強調 (Issue #34)', () =
     // 盤情報をOFF→ONし直すと、表示ONの瞬間に前面へ来る
     // (表示OFFになったpanelがfront kindのまま残っても、非表示中は
     // どのみち描画されないため不自然な状態にはならない)。
-    fireEvent.click(screen.getByRole('button', { name: '盤情報' }))
+    fireEvent.click(screen.getByRole('button', { name: '図面情報' }))
     expect(document.querySelector('.floating-panel--panelInfo')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '盤情報' }))
+    fireEvent.click(screen.getByRole('button', { name: '図面情報' }))
     const panelInfoFloatAfter = document.querySelector('.floating-panel--panelInfo') as HTMLElement
     expect(panelInfoFloatAfter.className).toContain('floating-panel--front')
     expect(detailFloat.className).not.toContain('floating-panel--front')
@@ -2663,13 +2691,13 @@ describe('App: FloatingPanelのkind別theme・最前面強調 (Issue #34)', () =
     const detailHandle = detailFloat.querySelector('.floating-panel__resize-handle') as HTMLElement
 
     // 盤情報を先に前面化しておく。
-    fireEvent.pointerDown(within(panelInfoFloat).getByRole('heading', { name: /盤情報/ }), {
+    fireEvent.pointerDown(within(panelInfoFloat).getByRole('heading', { name: /図面情報/ }), {
       pointerId: 1,
       clientX: 10,
       clientY: 10,
       button: 0,
     })
-    fireEvent.pointerUp(within(panelInfoFloat).getByRole('heading', { name: /盤情報/ }), {
+    fireEvent.pointerUp(within(panelInfoFloat).getByRole('heading', { name: /図面情報/ }), {
       pointerId: 1,
       clientX: 10,
       clientY: 10,
@@ -2687,7 +2715,7 @@ describe('App: FloatingPanelのkind別theme・最前面強調 (Issue #34)', () =
   it('allows floating-panel--front and floating-panel--interacting to coexist while dragging, without error', async () => {
     await renderApp()
     const panelInfoFloat = document.querySelector('.floating-panel--panelInfo') as HTMLElement
-    const heading = within(panelInfoFloat).getByRole('heading', { name: /盤情報/ })
+    const heading = within(panelInfoFloat).getByRole('heading', { name: /図面情報/ })
 
     fireEvent.pointerDown(heading, { pointerId: 1, clientX: 50, clientY: 50, button: 0 })
     // dragを開始した時点で、bringToFront()(front付与)とinteracting(drag中)の
@@ -2771,7 +2799,7 @@ describe('App: 盤選択 → 盤情報連動 (Phase 1.9、Issue #19 Phase 4で�
     fireEvent.click(foundationThumbnail)
 
     // P18(基礎図)はfixture上product_df盤を持たないページのため、盤情報は空表示に戻る。
-    await waitFor(() => expect(screen.getByText('このページには盤情報がありません')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('このページには図面情報がありません')).toBeInTheDocument())
     expect(screen.queryByText('高圧受電盤')).not.toBeInTheDocument()
   })
 
@@ -3051,7 +3079,7 @@ describe('App: 「資料」ウィンドウ (資料機能の一本化。旧「積
     fireEvent.click(thumbnail)
     await screen.findByTitle(/roof_fan/)
 
-    const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+    const select = document.querySelector('.target-selector__select') as HTMLSelectElement
     fireEvent.change(select, { target: { value: 'panel:1:1' } })
     await waitFor(() => expect(select.value).toBe('panel:1:1'))
     fireEvent.click(screen.getByTitle(/roof_fan/))
@@ -3065,7 +3093,7 @@ describe('App: 「資料」ウィンドウ (資料機能の一本化。旧「積
     expect(screen.queryByRole('heading', { name: '資料' })).not.toBeInTheDocument()
     expect(screen.getByTitle(/roof_fan/)).toBeInTheDocument()
     expect(
-      (document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement).value,
+      (document.querySelector('.target-selector__select') as HTMLSelectElement).value,
     ).toBe('panel:1:1')
     expect(screen.getAllByRole('button', { name: /BBoxサイズ変更/ }).length).toBeGreaterThan(0)
   })
@@ -3089,7 +3117,7 @@ describe('App: 「資料」ウィンドウ (資料機能の一本化。旧「積
     fireEvent.mouseMove(window, { clientX: 110, clientY: 140 })
     fireEvent.mouseUp(window, { clientX: 110, clientY: 140 })
     await waitFor(() => {
-      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      const select = document.querySelector('.target-selector__select') as HTMLSelectElement
       expect(select.value).toBe('panel:1:1')
     })
 
@@ -3101,7 +3129,7 @@ describe('App: 「資料」ウィンドウ (資料機能の一本化。旧「積
     // 資料ウィンドウは背景操作を妨げないため、その必要がなくなった)。
     fireEvent.keyDown(document, { key: 'z', ctrlKey: true })
     await waitFor(() => {
-      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      const select = document.querySelector('.target-selector__select') as HTMLSelectElement
       expect(select.value).toBe('product')
     })
     // ウィンドウ自体はUndo操作と無関係に開いたまま維持される。

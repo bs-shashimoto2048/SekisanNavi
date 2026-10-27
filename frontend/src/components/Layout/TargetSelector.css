@@ -1,0 +1,55 @@
+/* 「対象」共通プルダウン(指示: 積算集約・積算明細で重複していた選択リストを
+   1つにまとめる。配置場所はボタン群の右端)。見た目は旧
+   `.estimate-aggregation__target-select`をそのまま引き継ぐ(濃い青系の強調、
+   Viewer連動中の外側リング)。`PanelVisibilityToggles`内、編集ツールバー
+   (`.app-layout__edit-toolbar`)の一部として並ぶため、他ボタンと高さ・
+   余白感を揃える。 */
+.target-selector__label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+  color: #6b7280;
+  font-weight: 500;
+  white-space: nowrap;
+  /* [追加修正: ヘッダーボタン群の並び替え] 配置先の`.panel-visibility-
+     toggles`は横スクロール(overflow-x: auto)で狭い画面幅に対応する設計へ
+     変更したため、この要素自身は縮まずに常に自然な幅を保つ(縮んで
+     selectのoptionテキストが読みにくくなることを防ぐ。足りない分は
+     ツールバー側の横スクロールで吸収する)。 */
+  flex-shrink: 0;
+}
+
+/* 指示: 「積算明細と積算集約の『対象』プルダウンの幅を積算明細側の指定幅
+   (220px)に統一する。共通CSS変数で一元管理する」。両パネルの個別selectを
+   この共通componentへ統合した後も、同じtoken(`--target-selector-width`、
+   index.css)で幅を管理する。 */
+.target-selector__select {
+  font: inherit;
+  font-size: 0.95rem;
+  color: #1e3a8a;
+  font-weight: 700;
+  background: #eff6ff;
+  border: 2px solid #2563eb;
+  border-radius: 4px;
+  padding: 0.2rem 0.3rem;
+  cursor: pointer;
+  max-width: var(--target-selector-width);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-selector__select:hover {
+  border-color: #1d4ed8;
+}
+
+/* Viewerが現在この対象へフォーカスしている(個別盤選択中)ことを示す
+   (旧`.estimate-aggregation__target-select--focused`を引き継ぐ、指示8章
+   「Viewer連動中の対象表示」)。 */
+.target-selector__select--focused {
+  border-color: #1d4ed8;
+  background: #eff6ff;
+  box-shadow: 0 0 0 2px #1d4ed8;
+}

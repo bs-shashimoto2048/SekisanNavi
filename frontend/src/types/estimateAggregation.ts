@@ -10,7 +10,7 @@ import type { DetectionStatus } from './domain'
 
 /** 積算対象の種類。
  *
- * - `product`: 製品全体 (どの盤BBoxとも交差しなかった積算コードの集計)。
+ * - `product`: 製番仕様 (どの盤BBoxとも交差しなかった積算コードの集計)。
  * - `panel`: 個別の盤 (根拠BBoxが盤BBoxと交差面積を持つ積算コードの集計)。
  *   同一の物理盤(面番号+盤番号)は、複数の図面(ページ)にまたがって存在しても
  *   1つの対象として扱う (次々work指示: 積算集約・積算明細UI再構成)。
@@ -19,12 +19,12 @@ import type { DetectionStatus } from './domain'
  */
 export type EstimateTargetType = 'product' | 'panel' | 'tie'
 
-/** 積算対象 (製品全体 / 各盤 / 要確認)。
+/** 積算対象 (製番仕様 / 各盤 / 要確認)。
  *
- * 重要: `type: 'product'`(製品全体)は他の対象(盤)の集計結果ではなく、
+ * 重要: `type: 'product'`(製番仕様)は他の対象(盤)の集計結果ではなく、
  * どの盤BBoxとも交差しなかった積算コードのみを集めた独立対象である。
- * 製番総積算金額は「製品全体の積算金額 + 各盤の個別積算金額の合計」であり、
- * 製品全体を他対象から再集計することは決して行わない。
+ * 製番総積算金額は「製番仕様の積算金額 + 各盤の個別積算金額の合計」であり、
+ * 製番仕様を他対象から再集計することは決して行わない。
  */
 export interface EstimateTarget {
   id: string
@@ -46,7 +46,7 @@ export type EstimateSource = 'ai' | 'manual'
  * (積算集約側の数量集約キー。詳細は`estimateAggregationReal.ts`のコメント参照)。
  *
  * Sekisan Navi 追加修正指示(積算集約の数量集約)により、対象別集約
- * (`targetId`が実在する対象を指す。個別盤/製品全体/要確認の各対象を選んだ時に使う)
+ * (`targetId`が実在する対象を指す。個別盤/製番仕様/要確認の各対象を選んだ時に使う)
  * に加えて、対象を横断して1つのmasterItemIdへさらに束ねた「総合計」専用の行
  * (`targetId === null`)も同じ型で表現する。`targetId`がnullの行は複数の対象に
  * またがる合算であり、単一の対象バッジを持たない。 */
@@ -131,7 +131,7 @@ export interface EstimateDetailItem {
 /** `EstimateAggregation`/`EstimateDetail`コンポーネントが受け取るデータ全体。 */
 export interface EstimateAggregationData {
   targets: EstimateTarget[]
-  /** 対象別に数量集約した行(`targetId`が実在する対象を指す)。個別盤/製品全体/
+  /** 対象別に数量集約した行(`targetId`が実在する対象を指す)。個別盤/製番仕様/
    * 要確認のいずれかを選択している間、`EstimateAggregation`はこちらを対象idで
    * 絞り込んで表示する。 */
   lineItems: EstimateLineItem[]

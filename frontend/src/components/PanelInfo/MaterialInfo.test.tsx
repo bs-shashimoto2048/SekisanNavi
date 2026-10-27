@@ -103,7 +103,7 @@ describe('PanelInfo materials prop (backward compatibility)', () => {
   it('does not render the material section when the prop is omitted (old callers)', () => {
     render(<PanelInfo {...base} />)
     expect(screen.queryByLabelText('材料情報')).toBeNull()
-    expect(screen.getByText('このページには盤情報がありません')).toBeInTheDocument()
+    expect(screen.getByText('このページには図面情報がありません')).toBeInTheDocument()
   })
 
   it('renders "材料情報なし" for an empty array and rows when present', () => {

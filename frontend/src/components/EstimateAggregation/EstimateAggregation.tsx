@@ -5,12 +5,6 @@ import { EstimateConfirmationAction } from './EstimateConfirmationAction'
 import { EstimateConfirmationHistory } from './EstimateConfirmationHistory'
 import './EstimateAggregation.css'
 
-/** 対象セレクトの「総合計」を表す値。実対象(製品全体/各盤/要確認)のidとは
- * 衝突しない空文字を使い、`onSelectTarget`にはnullを渡す (総合計は実データ上の
- * 分類バケットではなく「フィルタなし」というUI上の見方であるため、
- * `domain/estimateAggregationReal.ts`側には実体を持たせない)。 */
-const ALL_OPTION_VALUE = ''
-
 // Sekisan Navi PR #2 追加修正指示(積算集約テーブルにソート機能を追加) 6章/13章:
 // 積算明細(EstimateDetail)の既存ソートUI/挙動(1回目クリック=昇順・2回目=降順、
 // ▲/▼表示)をそのまま踏襲する。ただしソート状態自体は積算明細と完全に独立させる
@@ -102,17 +96,19 @@ function sortAggregationItems(
 
 interface Props {
   targets: EstimateTarget[]
-  /** 対象別に数量集約した行(個別盤/製品全体/要確認を選んでいる間、対象idで
+  /** 対象別に数量集約した行(個別盤/製番仕様/要確認を選んでいる間、対象idで
    * 絞り込んで使う)。 */
   lineItems: EstimateLineItem[]
   /** 「総合計」専用に、対象を横断してmasterItemId+情報源単位で再集約した行
    * (Sekisan Navi 追加修正指示: 積算集約の数量集約 6章)。`targetId`は常にnull。 */
   totalLineItems: EstimateLineItem[]
   /** 現在選択中の対象。nullは「総合計」(フィルタなし、全対象合算)を表す。
-   * 積算明細(③)・Viewer盤フォーカスと共有する状態のため、App.tsxで一元管理し、
-   * ここへcontrolledで渡す。 */
+   * 積算明細(③)・Viewer盤フォーカスと共有する状態のため、App.tsxで一元管理する。
+   * 選択を変更するUI(`<select>`)自体は積算明細側と重複していたため、共通の
+   * `TargetSelector`(`PanelVisibilityToggles`内、ボタン群の右端)へ
+   * 統合した。このcomponentは選択状態を受け取って表示・絞り込みに使うのみで、
+   * 変更する手段(`onSelectTarget`)はもう持たない。 */
   selectedTargetId: string | null
-  onSelectTarget: (targetId: string | null) => void
   /** Issue #4 Phase B-3: 積算確定操作のボタンに使う、現在Viewerで開いている
    * 実製番。積算確定は対象セレクトの選択状態とは無関係に常に製番全体が対象の
    * ため、既存の`selectedTargetId`とは別に受け取る(意味を混同しない)。 */
@@ -160,15 +156,6 @@ function sumAmounts(items: EstimateLineItem[]): AmountSum {
   return { total, unknownCount }
 }
 
-/** 対象セレクトの選択肢ラベル。盤の選択肢には必ず面番号/盤番号/盤名称を表示し、
- * 盤名称だけにはしない。 */
-function targetOptionLabel(target: EstimateTarget): string {
-  if (target.type === 'panel' && target.banMenno != null && target.banNo != null) {
-    return `面番号 ${target.banMenno} / 盤番号 ${target.banNo} : ${target.name}`
-  }
-  return target.name
-}
-
 /** 上部金額表示のラベル (積算対象連動の金額表示・図面一覧絞り込み 指示1章)。
  * 「総合計」以外を選択している間に「製番合計」のまま表示すると全製番の合計と
  * 誤認しうるため、選択中の対象に応じてラベル自体を切り替える。個別盤は
@@ -193,14 +180,20 @@ function headerAmountLabel(selectedTargetId: string | null, target: EstimateTarg
  * 根拠にしているか」を追跡する役割は右ペイン③「積算明細」(`EstimateDetail`)が
  * 担う。両者を混同しない。
  *
- * **対象の切替はセレクト方式**: `<select>`で総合計/製品全体/各盤を切り替える。
- * 盤の選択肢は表示文字列ではなく`target.id`(実識別子、`panel:面番号:盤番号`形式)
- * で内部判定する。個別盤を選択すると、中央ViewerもApp.tsx側でその盤へ絞り込まれる
- * (盤フォーカス・積算明細再設計 指示1章)。
+ * **対象の切替UIは共通化済み**: 以前はこのcomponent自身が総合計/製番仕様/各盤を
+ * 切り替える`<select>`を持っていたが、積算明細(③)側にあった同じ選択リストと
+ * 重複していたため、共通の`TargetSelector`(`components/Layout/
+ * TargetSelector.tsx`、`PanelVisibilityToggles`内ボタン群の右端)へ
+ * 統合した(指示: 重複をなくし1つにまとめる)。このcomponentは`selectedTargetId`
+ * (App.tsxが一元管理する共有state)を受け取って表示・絞り込みに使うのみで、
+ * 選択を変更する手段は持たない。盤の選択肢は表示文字列ではなく`target.id`
+ * (実識別子、`panel:面番号:盤番号`形式)で内部判定する点、個別盤を選択すると
+ * 中央ViewerもApp.tsx側でその盤へ絞り込まれる点(盤フォーカス・積算明細再設計
+ * 指示1章)は変更していない。
  *
- * **「製品全体」の独立性**: 「製品全体」は各盤の合計ではなく、どの盤BBoxとも
+ * **「製番仕様」の独立性**: 「製番仕様」は各盤の合計ではなく、どの盤BBoxとも
  * 交差しなかった積算コードのみの独立集計 (BBox所属判定ロジックは変更していない)。
- * 「総合計」は製品全体+全盤(要確認を含む)の単純合算であり、対象別の再集計ではなく
+ * 「総合計」は製番仕様+全盤(要確認を含む)の単純合算であり、対象別の再集計ではなく
  * 対象フィルタを外して全明細を単純合算するだけ。
  *
  * **`単価`列は暫定表示**: `estimate_master_items.total_price_a`(総合価格A)を
@@ -209,7 +202,7 @@ function headerAmountLabel(selectedTargetId: string | null, target: EstimateTarg
  *
  * **上部金額表示は選択中の対象に連動する** (積算対象連動の金額表示・図面一覧絞り込み
  * 指示1章/2章)。総合計(全対象合算)を選択中は従来通り「製番合計」、それ以外は
- * 「製品全体 小計」「面X / 盤Y 小計」のように対象専用のラベル+金額を表示し、
+ * 「製番仕様 小計」「面X / 盤Y 小計」のように対象専用のラベル+金額を表示し、
  * 全製番合計と誤認されないようにする。この金額は表下部にあった旧`小計`と全く同じ
  * 計算(`visibleItems`の合算)を1箇所で行った結果を使い回しているだけで、
  * 上下で別々に再計算していない (指示2章: 計算ロジックは1つのまま)。旧`小計`表示は
@@ -224,27 +217,26 @@ function headerAmountLabel(selectedTargetId: string | null, target: EstimateTarg
  * 「確定操作群」「合計/件数/対象select」がそれぞれ独立したflex-wrap行
  * (2段)だったが、通常のpanel既定幅(500px)で以下が原則1行に収まる
  * `estimate-aggregation__compact-row`へ統合した:
- * `製番 {productNo} | 合計 {金額} | {N}件 | 対象 [select] | 確定 | 履歴`。
- * 文言も長い説明文から短い単語へ変更した(`製番合計`→`合計`、
- * `積算コード{N}件`→`{N}件`、`積算確定する`→`確定`、`確定履歴を見る`→`履歴`。
- * 個別対象選択時の`○○ 小計`は対象を一意に示す情報のため維持)。
- * 対象selectの機能(value/onChange/Viewer連動)・確定/履歴の機能
- * (disabled条件・イベント処理)はいずれも変更していない。詳細は
- * `docs/ui-spec.md` 5.5章参照。
+ * `製番 {productNo} | 合計 {金額} | {N}件 | 確定 | 履歴`
+ * (対象selectは上記のとおり後に共通の`TargetSelector`へ移動したため、
+ * この行からは外れた)。文言も長い説明文から短い単語へ変更した
+ * (`製番合計`→`合計`、`積算コード{N}件`→`{N}件`、`積算確定する`→`確定`、
+ * `確定履歴を見る`→`履歴`。個別対象選択時の`○○ 小計`は対象を一意に示す
+ * 情報のため維持)。確定/履歴の機能(disabled条件・イベント処理)は変更して
+ * いない。詳細は`docs/ui-spec.md` 5.5章参照。
  */
 export function EstimateAggregation({
   targets,
   lineItems,
   totalLineItems,
   selectedTargetId,
-  onSelectTarget,
   productNo = null,
   needsReviewCount = 0,
   onNavigateToNeedsReview,
   overriddenCount = 0,
   onNavigateToOverridden,
 }: Props) {
-  // ソート列/方向は「ユーザーが選んだ表示上の好み」であり、対象切替(総合計/製品全体/
+  // ソート列/方向は「ユーザーが選んだ表示上の好み」であり、対象切替(総合計/製番仕様/
   // 個別盤/要確認)やBBox編集によるデータ更新とは無関係のため、積算明細と同様に
   // このコンポーネント自身のuseStateとして持つ (9章/10章/11章: 対象切替・データ更新の
   // どちらでもリセットされない。親の再描画では値は保持される)。初期値はコード昇順
@@ -264,7 +256,7 @@ export function EstimateAggregation({
   // (selectedTargetId===null)は対象別`lineItems`を単純結合するのではなく、
   // 対象を横断して既にmasterItemId+情報源単位で集約済みの`totalLineItems`を使う。
   // これにより、同一積算コードが複数の盤にまたがっていても総合計では1行にまとまる。
-  // 個別盤/製品全体/要確認を選択している間は、従来どおり対象別`lineItems`を
+  // 個別盤/製番仕様/要確認を選択している間は、従来どおり対象別`lineItems`を
   // 対象idで絞り込む(この時点で既に対象内で数量集約済みのため、絞り込むだけでよい)。
   const visibleItems = useMemo(
     () =>
@@ -280,9 +272,6 @@ export function EstimateAggregation({
   )
   const selectedTarget = targets.find((t) => t.id === selectedTargetId) ?? null
   const headerLabel = headerAmountLabel(selectedTargetId, selectedTarget)
-  // Viewerが現在この対象へフォーカスしている(=個別盤を選択中)ことをセレクト自体の
-  // 見た目でも示す (指示8章「Viewer連動中の対象表示」)。
-  const isViewerFocused = selectedTarget != null
 
   // ソートは常にvisibleItems(対象絞り込み・数量集約が確定した後の行配列)に対して
   // 行う (12章)。上部金額表示(headerAmount)はsumAmounts(visibleItems)のままで、
@@ -366,29 +355,6 @@ export function EstimateAggregation({
               <span className="estimate-aggregation__code-count">
                 <strong>{totalCodeCount}</strong>件
               </span>
-
-              {/* [Issue #36] 「対象」ラベルはselectの意味を判別するため維持しつつ、
-                  縦積み(flex-direction: column)から横並び(row)へ変更した。
-                  selectには`max-width`+省略表示を追加している(CSS側、
-                  value/onChange/Viewer連動のロジックは無変更)。 */}
-              <label className="estimate-aggregation__target-select-label">
-                対象
-                <select
-                  className={
-                    'estimate-aggregation__target-select' +
-                    (isViewerFocused ? ' estimate-aggregation__target-select--focused' : '')
-                  }
-                  value={selectedTargetId ?? ALL_OPTION_VALUE}
-                  onChange={(e) => onSelectTarget(e.target.value === ALL_OPTION_VALUE ? null : e.target.value)}
-                >
-                  <option value={ALL_OPTION_VALUE}>総合計</option>
-                  {targets.map((target) => (
-                    <option key={target.id} value={target.id}>
-                      {targetOptionLabel(target)}
-                    </option>
-                  ))}
-                </select>
-              </label>
             </>
           )}
         </div>
@@ -446,7 +412,7 @@ export function EstimateAggregation({
                     <td className="estimate-aggregation__col-code">{item.code}</td>
                     <td className="estimate-aggregation__col-content">
                       {/* 対象バッジは「この行がどの対象に属するか」を示すためのもの。
-                          個別盤/製品全体/要確認を選択中の行は対象idを持つが、対象自体が
+                          個別盤/製番仕様/要確認を選択中の行は対象idを持つが、対象自体が
                           表示上部で既に分かっているため出さない(従来どおり)。「総合計」
                           は対象を横断して集約した行(item.targetId===null)のため、
                           単一の対象を代表できずバッジ自体を出さない(Sekisan Navi
