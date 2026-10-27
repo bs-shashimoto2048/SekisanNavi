@@ -1,4 +1,6 @@
-/* Issue #19 Phase 3: 積算資料PDF Help modal。
+/* DesignDocumentModal(図面一覧の共通製作仕様書・設計作図完了シート表示)用のmodal CSS。
+   旧「積算資料」HelpPdfModalのCSSをそのまま移設したもの(HelpPdfModalは「資料」
+   ウィンドウ(ReferencePdfModal)へ一本化して廃止した。クラス名・見た目は不変)。
    SystemSettings.cssと同じbackdrop+中央パネルパターンを踏襲するが、PDF閲覧に
    十分な表示領域を確保するため、幅・高さはSystemSettingsより大きく取る。 */
 .help-pdf-modal__backdrop {
@@ -51,12 +53,6 @@
   flex: 1;
   min-height: 0;
   display: flex;
-}
-
-.help-pdf-modal__message {
-  margin: auto;
-  color: #6b7280;
-  font-size: 0.95rem;
 }
 
 /* PDF表示領域: 図面Viewerとは別に、この枠内だけで独立してスクロール/ページ

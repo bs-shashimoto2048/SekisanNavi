@@ -2,6 +2,7 @@ import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach } from 'vitest'
 import '@testing-library/jest-dom/vitest'
 import { installMockResizeObserver } from './testUtils/mockResizeObserver'
+import { installMockIntersectionObserver } from './testUtils/mockIntersectionObserver'
 
 afterEach(() => {
   cleanup()
@@ -9,8 +10,11 @@ afterEach(() => {
 
 // jsdomは`ResizeObserver`を実装していないため、全テスト共通でモックへ差し替える
 // (DrawingCanvas.tsxのViewer自動Fit機能が使用する。実画面未達 追加修正指示35章)。
+// jsdomは`IntersectionObserver`も実装していないため、同様にモックへ差し替える
+// (ReferencePdfViewerのページ遅延描画が使用する)。
 beforeEach(() => {
   installMockResizeObserver()
+  installMockIntersectionObserver()
 })
 
 // jsdomは`Element.scrollIntoView`も実装していないため、no-opスタブを用意する

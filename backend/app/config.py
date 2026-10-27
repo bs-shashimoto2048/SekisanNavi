@@ -159,9 +159,15 @@ PREVIEW_ROOT = Path(os.environ.get("SEKISAN_NAVI_PREVIEW_ROOT") or PROJECT_ROOT 
 # (docs/data-model.md, docs/implementation-plan.md 参照)。
 MASTER_EXCEL_SHEET = "Sheet2"
 
-# 積算資料PDF Help (Issue #19 Phase 3)。積算コードMaster(MASTER_EXCEL_PATH)と
-# 同様、社内業務資料はGit管理対象外とし、プロジェクト直下 data/help/ に配置する
+# 「資料」(参考PDF一覧)ウィンドウ用フォルダ。積算コードMaster(MASTER_EXCEL_PATH)
+# と同様、社内業務資料はGit管理対象外とし、プロジェクト直下 data/help/ に配置する
 # 運用とする(`.gitignore`の`/data/`で既に除外済み)。積算コードMasterを置き換える
-# ものではなく、あくまでHelp/参考資料としての位置付け。ファイルが無くてもアプリ
-# 自体は起動する(Help機能のみ「未配置」応答になる。app/api/routers/help_pdf.py参照)。
-HELP_PDF_PATH = PROJECT_ROOT / "data" / "help" / "estimate-help.pdf"
+# ものではなく、あくまでHelp/参考資料としての位置付け。フォルダ自体が無くても
+# アプリは起動する(一覧APIが空扱いで返す。app/api/routers/reference_pdfs.py参照)。
+#
+# 旧「積算資料PDF Help」(Issue #19 Phase 3、単一固定ファイル`estimate-help.pdf`
+# をHELP_PDF_PATHから配信するAPIだった)は、資料機能の一本化によりこちらへ統合し
+# 廃止した(`app/api/routers/help_pdf.py`・`app/schemas/help.py`は削除済み)。
+# `data/help/estimate-help.pdf`自体は配置済みの実データファイルの可能性があるため
+# 削除していない(配信APIが無くなっただけで、ファイルには触れていない)。
+REFERENCE_PDF_DIR = PROJECT_ROOT / "data" / "help" / "reference-pdfs"

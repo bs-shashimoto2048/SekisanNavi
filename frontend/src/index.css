@@ -83,6 +83,13 @@
   --status-error-soft-bg: #fee2e2;
   --status-neutral: #4b5563;
   --status-neutral-soft: #6b7280;
+
+  /* 「資料」ボタン・資料ウィンドウ枠専用のアクセント色。意味色(Status token、
+     上記)とは別系統で、「資料」機能だけを画面上で一目で見分けられるようにする
+     専用アクセント(--status-error(業務上の「不備・エラー」の意味色)を流用すると
+     エラー表示全般の色にも波及するため、意図的に別トークンとして分離する)。 */
+  --reference-pdf-accent: #f5222d;
+  --reference-pdf-accent-hover: #cf1322;
 }
 
 * {

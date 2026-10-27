@@ -348,19 +348,19 @@ Detectionが既に削除されていても取得できる)。
 
 ## help — `/api/help`
 
-積算資料PDF(Help)のread-only配信API(Issue #19 Phase 3)。積算コードMasterを
-置き換えるものではなく、あくまでHelp/参考資料。配信対象は常に固定パス
-(`app.config.HELP_PDF_PATH`)1ファイルのみで、リクエストから任意のパスを
-指定できる仕組みは無い。書き込み・アップロード・削除のエンドポイントは無い。
+「資料」ウィンドウ(複数PDF参照)のread-only配信API。積算コードMasterを
+置き換えるものではなく、あくまでHelp/参考資料。配信対象は`app.config.
+REFERENCE_PDF_DIR`配下のPDFのみで、リクエストから任意のパスを指定できる
+仕組みは無い。書き込み・アップロード・削除のエンドポイントは無い。
+
+(旧「積算資料PDF Help」(Issue #19 Phase 3、`/api/help/estimate-pdf/*`、単一
+固定ファイル配信)は、資料機能の一本化により下記`reference-pdfs`系APIへ統合し
+廃止した。)
 
 | Method | Path | 説明 | レスポンス |
 |---|---|---|---|
-| GET | `/api/help/estimate-pdf/status` | 積算資料PDFが配置されているかどうかだけを軽量に返す(ファイル自体は読まない) | `HelpPdfStatusOut` |
-| GET | `/api/help/estimate-pdf/file` | 積算資料PDFの実ファイルを返す(無ければ404、`{"detail": "積算資料PDFが配置されていません。"}`) | `application/pdf` |
-
-`HelpPdfStatusOut`: `available`(bool)。Frontend側はmodalを開いた時点でまず`status`を
-呼び、`available=true`の場合のみ`<iframe>`の`src`へ`file`のURLを設定する
-(modalを開くまでPDFファイル自体はリクエストしない)。
+| GET | `/api/help/reference-pdfs` | 資料フォルダ直下のPDF一覧(フォルダが無い場合も`folder_exists=false`を返し、エラーにはしない) | `ReferencePdfListOut` |
+| GET | `/api/help/reference-pdfs/{filename}` | 資料フォルダ配下の1PDFを返す(ファイル名はフォルダ外参照を防ぐため検証する。無ければ404) | `application/pdf` |
 
 ## health
 

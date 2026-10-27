@@ -454,11 +454,23 @@ export interface DecisionEvent {
   after_bbox_h: number | null
 }
 
-/** 積算資料PDF(Help)の配置状況 (Issue #19 Phase 3、
- * `GET /api/help/estimate-pdf/status`のレスポンス)。ファイル自体の中身は
- * 含まない軽量な存在確認のみ。 */
-export interface HelpPdfStatus {
-  available: boolean
+/** 「資料」ウィンドウ(複数PDF参照)1件分 (`GET /api/help/reference-pdfs`)。
+ * ファイル名を最初のアンダーバーで分割できた場合のみ`code`/`target`を持ち
+ * `valid=true`になる。分割できない場合は両方`null`で`valid=false`
+ * (Frontend側はファイル名のみを「形式不正」として表示する)。 */
+export interface ReferencePdfItem {
+  filename: string
+  code: string | null
+  target: string | null
+  valid: boolean
+}
+
+/** 「資料」ポップアップの一覧API全体の応答。`folder_exists=false`(フォルダ
+ * 自体が無い)と`folder_exists=true`かつ`items=[]`(フォルダはあるがPDFが
+ * 無い)を区別する。 */
+export interface ReferencePdfList {
+  folder_exists: boolean
+  items: ReferencePdfItem[]
 }
 
 // --- Issue #40 Phase 2: 積算コード選定〜数量・係数・金額/工数算出の一貫ルール化 ---
