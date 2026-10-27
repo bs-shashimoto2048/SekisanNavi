@@ -6,9 +6,10 @@
 import logging
 import sqlite3
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from app import config
 from app.api.deps import get_db
@@ -71,6 +72,7 @@ from app.services.detected_df import load_detected_df
 from app.services.estcode_df import load_estcode_df
 from app.services.material_csv import load_material_csv
 from app.services.steel_outline import select_outline_steel
+from app.services.estimate_export import build_product_export_workbook
 from app.services.estimate_confirmation_builder import (
     NeedsReviewResultsExistError,
     build_confirmation_items,
@@ -558,6 +560,41 @@ def read_estimate_panels(
         )
         for panel in result.panels
     ]
+
+
+@router.get("/{product_no}/export")
+def export_product_estimate(
+    product_no: str, conn: sqlite3.Connection = Depends(get_db)
+) -> Response:
+    """[追加修正: Excel出力] 「図面情報」パネル(`PanelInfo.tsx`、旧「盤情報」)に
+    現在表示する盤情報と、アプリが保持している他の積算仕様情報(`estimate_results`)
+    を、製番単位でExcel(.xlsx)へ出力する。
+
+    読み取り専用: `build_product_export_workbook`は既存の読み取り専用
+    repository/serviceのみを使い、DB・ファイルシステムへの書き込みは一切
+    行わない(指示: 「Excel出力は読み取り専用とし、既存DBや積算データを
+    変更しない」)。旧「図面情報」パネル(現在は「図面情報追加」、図面情報
+    タイプ選択+BBox作成の入口)にあった情報はこの出力に含めない。
+    """
+    root = get_data_source_root(conn)
+    try:
+        content = build_product_export_workbook(conn, root, product_no)
+    except DataSourceError as e:
+        raise _error_to_http(e) from e
+
+    filename = f"{product_no}_積算仕様.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            # 日本語ファイル名はASCII制約のあるfilenameではなくfilename*
+            # (RFC 5987、UTF-8 percent-encoding)で指定する。
+            "Content-Disposition": (
+                "attachment; filename=\"export.xlsx\"; "
+                f"filename*=UTF-8''{quote(filename)}"
+            )
+        },
+    )
 
 
 @router.post(

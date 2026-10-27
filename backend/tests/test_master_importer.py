@@ -51,6 +51,31 @@ def test_real_master_excel_category_counts_match_source(client):
     assert len(res.json()) == 19
 
 
+def test_copper_bus_code_options_returns_only_target_categories(client):
+    """Issue #40 Phase 6-H: 主回路銅帯コード選択UI向け
+    `GET /api/master-items/copper-bus-code-options` は、品名(仕様区分)が
+    「入力（主回路銅帯）」「銅帯」の2つのみ(実データ計85件: 66+19)を返し、
+    他の11品名は含まないこと。"""
+    res = client.get("/api/master-items/copper-bus-code-options")
+    items = res.json()
+    assert len(items) == 85
+    categories = {item["category"] for item in items}
+    assert categories == {"入力（主回路銅帯）", "銅帯"}
+
+
+def test_copper_bus_code_options_category_model_rating_uniquely_determine_code(client):
+    """仕様区分(品名)→型式→定格の組は、実データ上常に1件のコードへ一意に
+    対応すること(Frontendのcascading selectが最後にコードを一意に表示できる
+    ための前提)。"""
+    res = client.get("/api/master-items/copper-bus-code-options")
+    items = res.json()
+    seen: dict[tuple[str, str, str], str] = {}
+    for item in items:
+        key = (item["category"], item["model"], item["rating"])
+        assert key not in seen, f"重複した仕様区分/型式/定格の組: {key}"
+        seen[key] = item["code"]
+
+
 def test_real_master_excel_excludes_struck_through_rows(client):
     """コード19957/19958/19960はコード・品名の双方に取り消し線があり、除外されること。"""
     for code in ("19957", "19958", "19960"):

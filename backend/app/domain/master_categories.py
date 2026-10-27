@@ -26,3 +26,11 @@ ALLOWED_CATEGORIES: tuple[str, ...] = (
     "銅帯",
 )
 
+# 主回路銅帯コード選択UI (Issue #40 Phase 6-H) が対象とする品名(仕様区分)。
+# `ALLOWED_CATEGORIES`のうち「主回路銅帯」に該当する2品名のみを使う
+# (新しい分類を作らず、既存の実データ品名をそのまま「仕様区分」として使う)。
+COPPER_BUS_CODE_CATEGORIES: tuple[str, ...] = (
+    "入力（主回路銅帯）",
+    "銅帯",
+)
+
