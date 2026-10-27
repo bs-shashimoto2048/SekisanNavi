@@ -11,6 +11,9 @@ backend/.env
 frontend/node_modules/
 frontend/dist/
 frontend/coverage/
+# pdfjs-dist同梱のCMap・標準フォント。vite.config.tsのプラグインが
+# node_modules/pdfjs-distから都度コピーする生成物のためコミット対象外。
+frontend/public/pdfjs/
 
 # 環境変数 (実パスワード・ローカル固有のBackend接続先ポート等)。
 # *.example で終わるテンプレートファイルのみコミット対象とする。
