@@ -133,6 +133,15 @@ class DesignPageOut(BaseModel):
     ban_labels: list[str] = []
 
 
+class DesignDocumentOut(BaseModel):
+    """図面一覧の最上段に固定表示する書類。`key`は`0_S0`(共通製作仕様書)・`0_A1`(設計作図完了シート)のどちらかだけ
+    (ページ番号ではない)。ファイルが実在するものだけが返る。PDFは`/design-documents/{key}/file`。"""
+
+    key: str
+    kind: str
+    label: str
+
+
 class DesignPagesOut(BaseModel):
     """design.csvを基準にした図面一覧。ファイルが無い・空・不正でもエラーにはせず`status`で返す
     (例外文言・実パスは含めない)。status: ok / empty / missing / invalid"""
@@ -140,6 +149,8 @@ class DesignPagesOut(BaseModel):
     status: str
     items: list[DesignPageOut] = []
     skipped_rows: int = 0
+    #: 最上段に固定表示する書類(共通製作仕様書 → 設計作図完了シートの順。無いものは含まれない)。design.csvの状態とは独立。
+    documents: list[DesignDocumentOut] = []
 
 
 class DetectedPreviewItemOut(BaseModel):

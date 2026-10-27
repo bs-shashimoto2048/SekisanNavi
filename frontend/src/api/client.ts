@@ -248,6 +248,11 @@ export function designPageImageUrl(productNo: string, key: string): string {
   return `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/design-pages/${encodeURIComponent(key)}/image`
 }
 
+/** 図面一覧の最上段の書類(`0_S0`=共通製作仕様書、`0_A1`=設計作図完了シート)のPDFのURL。図面ページ番号の経路は使わない。 */
+export function designDocumentFileUrl(productNo: string, key: string): string {
+  return `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/design-documents/${encodeURIComponent(key)}/file`
+}
+
 // --- Phase 1.8: 製番検索・左ペインPNGサムネイル ---
 
 // ルート直下の製番を無条件全件取得しない (要件2/3)。前方一致候補のみ返す。
