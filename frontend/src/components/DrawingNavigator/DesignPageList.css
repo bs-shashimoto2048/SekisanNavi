@@ -11,9 +11,9 @@
 
 .design-page-list__document {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
   width: 100%;
   text-align: left;
   font: inherit;
@@ -22,8 +22,40 @@
   background: #f1f5f9;
   border: 2px solid #94a3b8;
   border-radius: 6px;
-  padding: 0.45rem 0.6rem;
+  padding: 0.4rem;
   cursor: pointer;
+}
+
+.design-page-list__document-thumb {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1.52;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+}
+
+.design-page-list__document-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.design-page-list__document-placeholder {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.design-page-list__document-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.1rem 0.2rem;
 }
 
 .design-page-list__document:hover {

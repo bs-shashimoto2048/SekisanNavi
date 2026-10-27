@@ -79,8 +79,8 @@ from app.services.product_df import load_page_scales, load_product_df
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
-# design.csv基準の図面一覧で、推論用PNGが無い図面の表示用プレビューPNG({PREVIEW_ROOT}/{製番}/{PDF名}__preview.png)の保存先。
-# 設定は app.config.PREVIEW_ROOT(環境変数 SEKISAN_NAVI_PREVIEW_ROOT)。バックエンドは読み取りのみ。テストでは差し替える。
+# 旧隔離データの表示用プレビューPNG({PREVIEW_ROOT}/{製番}/{PDF名}__preview.png)の互換参照先。
+# 新しい出力のPNGは製番フォルダ直下から読み、ここは旧配置のフォールバックとして使う。
 PREVIEW_ROOT = config.PREVIEW_ROOT
 
 
@@ -192,18 +192,42 @@ def read_product_drawings(
     ]
 
 
-def _preview_png_for_key(product_no: str, key: str) -> Path | None:
-    """design.csv基準の一覧のキー(実在するPDFのファイル名の綴り)に対応する、表示用プレビューPNG。
-    `{PREVIEW_ROOT}/{製番}/{キー}__preview.png`。解決後のパスがPREVIEW_ROOT配下の実在ファイルのときだけ返す。
-    キーは呼び出し側で、実在するPDF名との照合を済ませたものだけを渡す。"""
+def _safe_direct_child(root_dir: Path, filename: str) -> Path | None:
+    """指定ディレクトリ直下の通常ファイルだけを返す。リンクと別階層への脱出を拒否する。"""
     try:
-        root = PREVIEW_ROOT.resolve(strict=False)
-        path = (root / product_no / f"{key}__preview.png").resolve(strict=False)
-        if root not in path.parents or not path.is_file():
+        root = root_dir.resolve(strict=False)
+        raw = root_dir / filename
+        if raw.is_symlink():
+            return None
+        path = raw.resolve(strict=False)
+        if path.parent != root or not path.is_file():
             return None
     except (OSError, ValueError):
         return None
     return path
+
+
+def _preview_png_for_key(ccv_dir: Path, product_no: str, key: str) -> Path | None:
+    """PDFの表示用プレビューPNG。新しい出力は製番フォルダ直下、旧隔離プレビューはPREVIEW_ROOTから読む。
+    キーは呼び出し側でPDF実在確認済みのものだけを渡す。"""
+    local = _safe_direct_child(ccv_dir, f"{key}__preview.png")
+    if local is not None:
+        return local
+    try:
+        root = PREVIEW_ROOT.resolve(strict=False)
+        product_dir = (root / product_no).resolve(strict=False)
+        if product_dir.parent != root:
+            return None
+        return _safe_direct_child(product_dir, f"{key}__preview.png")
+    except (OSError, ValueError):
+        return None
+
+
+def _document_preview_png(ccv_dir: Path, key: str) -> Path | None:
+    """固定書類キーに対応し、対応PDFも実在するときだけ書類用PNGを返す。"""
+    if design_document_path(ccv_dir, key) is None:
+        return None
+    return _safe_direct_child(ccv_dir, f"{key}__preview.png")
 
 
 def _inference_png_for_key(ccv_dir: Path, key: str) -> Path | None:
@@ -257,7 +281,7 @@ def read_design_pages(
     result = load_design_pages(
         resolution.ccv_dir,
         resolution.product_no,
-        lambda key: _preview_png_for_key(resolution.product_no, key) is not None,
+        lambda key: _preview_png_for_key(resolution.ccv_dir, resolution.product_no, key) is not None,
         ban_labels_by_page,
     )
     return DesignPagesOut(
@@ -297,6 +321,22 @@ def read_design_document_file(
     return FileResponse(str(path), media_type="application/pdf")
 
 
+@router.get("/{product_no}/design-documents/{key}/image")
+def read_design_document_image(
+    product_no: str, key: str, conn: sqlite3.Connection = Depends(get_db)
+):
+    """最上段の固定書類のサムネイルPNG。PDFとPNGの両方が実在する場合のみ配信する。"""
+    root = get_data_source_root(conn)
+    try:
+        resolution = resolve_product_dir(root, product_no)
+    except DataSourceError as e:
+        raise _error_to_http(e) from e
+    path = _document_preview_png(resolution.ccv_dir, key)
+    if path is None:
+        raise HTTPException(status_code=404, detail="この書類の表示用画像は作成されていません。")
+    return FileResponse(str(path), media_type="image/png")
+
+
 @router.get("/{product_no}/design-pages/{key}/image")
 def read_design_page_image(
     product_no: str, key: str, conn: sqlite3.Connection = Depends(get_db)
@@ -313,7 +353,7 @@ def read_design_page_image(
     result = load_design_pages(
         resolution.ccv_dir,
         resolution.product_no,
-        lambda k: _preview_png_for_key(resolution.product_no, k) is not None,
+        lambda k: _preview_png_for_key(resolution.ccv_dir, resolution.product_no, k) is not None,
     )
     page = next((p for p in result.pages if p.key == key), None)
     if page is None:
@@ -324,7 +364,7 @@ def read_design_page_image(
             return FileResponse(str(inference), media_type="image/png")
         raise HTTPException(status_code=404, detail="この図面の表示用画像は作成されていません。")
     if page.mode == "preview":
-        preview = _preview_png_for_key(resolution.product_no, page.key)
+        preview = _preview_png_for_key(resolution.ccv_dir, resolution.product_no, page.key)
         if preview is not None:
             return FileResponse(str(preview), media_type="image/png")
     raise HTTPException(status_code=404, detail="この図面の表示用画像は作成されていません。")

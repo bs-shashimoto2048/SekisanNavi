@@ -253,6 +253,11 @@ export function designDocumentFileUrl(productNo: string, key: string): string {
   return `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/design-documents/${encodeURIComponent(key)}/file`
 }
 
+/** 図面一覧の最上段の固定書類(0_S0/0_A1)の表示用サムネイルPNG。 */
+export function designDocumentImageUrl(productNo: string, key: string): string {
+  return `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/design-documents/${encodeURIComponent(key)}/image`
+}
+
 // --- Phase 1.8: 製番検索・左ペインPNGサムネイル ---
 
 // ルート直下の製番を無条件全件取得しない (要件2/3)。前方一致候補のみ返す。

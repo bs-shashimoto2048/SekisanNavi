@@ -23,6 +23,8 @@ interface Props {
   awaitingSelection?: boolean
   /** 最上段の書類を開く(PDFを表示する)。指定しなければ、書類の欄は出さない。書類は図面の選択(表示 N / M 件)の対象外。 */
   onOpenDocument?: (document: DesignDocument) => void
+  /** 書類PDFから作成した表示用PNG。無い場合は書類カード内に固定プレースホルダーを出す。 */
+  documentThumbnailUrl?: (key: string) => string
 }
 
 const MODE_BADGE: Record<DesignPage['mode'], { text: string; title: string }> = {
@@ -81,6 +83,7 @@ export function DesignPageList({
   totalCount,
   awaitingSelection = false,
   onOpenDocument,
+  documentThumbnailUrl,
 }: Props) {
   const listRef = useRef<HTMLUListElement>(null)
   // 選択が変わったとき(別の経路での選択を含む)に、選択中のカードが一覧の表示範囲に入るようスクロールする。
@@ -123,8 +126,11 @@ export function DesignPageList({
                 onClick={() => onOpenDocument?.(doc)}
                 title={`${doc.label}(PDF)を開く`}
               >
-                <span className="design-page-list__document-name">{doc.label}</span>
-                <span className="design-page-list__badge design-page-list__badge--document">PDF</span>
+                {documentThumbnailUrl && <DocumentThumb key={doc.key} label={doc.label} src={documentThumbnailUrl(doc.key)} />}
+                <span className="design-page-list__document-meta">
+                  <span className="design-page-list__document-name">{doc.label}</span>
+                  <span className="design-page-list__badge design-page-list__badge--document">PDF</span>
+                </span>
               </button>
             </li>
           ))}
@@ -208,5 +214,18 @@ export function DesignPageList({
         </ul>
       )}
     </nav>
+  )
+}
+
+function DocumentThumb({ label, src }: { label: string; src: string }) {
+  const [failed, setFailed] = useState(false)
+  return (
+    <span className="design-page-list__document-thumb">
+      {!failed ? (
+        <img src={src} alt={`${label}のサムネイル`} loading="lazy" decoding="async" onError={() => setFailed(true)} />
+      ) : (
+        <span className="design-page-list__document-placeholder">画像なし</span>
+      )}
+    </span>
   )
 }

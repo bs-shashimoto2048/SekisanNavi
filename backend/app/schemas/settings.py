@@ -135,7 +135,7 @@ class DesignPageOut(BaseModel):
 
 class DesignDocumentOut(BaseModel):
     """図面一覧の最上段に固定表示する書類。`key`は`0_S0`(共通製作仕様書)・`0_A1`(設計作図完了シート)のどちらかだけ
-    (ページ番号ではない)。ファイルが実在するものだけが返る。PDFは`/design-documents/{key}/file`。"""
+    (ページ番号ではない)。PDFが実在するものだけが返る。サムネイルは`/design-documents/{key}/image`、PDFは`/design-documents/{key}/file`。"""
 
     key: str
     kind: str

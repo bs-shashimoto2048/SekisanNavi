@@ -23,6 +23,7 @@ function renderList(designPages: DesignPages, over: Partial<Parameters<typeof De
       selectedKey={null}
       onSelect={() => {}}
       thumbnailUrl={(k) => `/img/${k}`}
+      documentThumbnailUrl={(k) => `/documents/${k}.png`}
       onOpenDocument={() => {}}
       {...over}
     />,
@@ -65,6 +66,16 @@ describe('design documents (共通製作仕様書 / 設計作図完了シート)
     fireEvent.click(document.querySelector('[data-design-document="0_A1"]') as HTMLElement)
     expect(onOpenDocument).toHaveBeenCalledWith(CHECK)
     expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('shows separate lazy PNG thumbnails for each document while retaining the PDF click action', () => {
+    renderList(pages([item()], [SPEC, CHECK]))
+    const spec = document.querySelector('[data-design-document="0_S0"]') as HTMLButtonElement
+    const check = document.querySelector('[data-design-document="0_A1"]') as HTMLButtonElement
+    expect(spec.querySelector('img')?.getAttribute('src')).toBe('/documents/0_S0.png')
+    expect(check.querySelector('img')?.getAttribute('src')).toBe('/documents/0_A1.png')
+    expect(spec.querySelector('img')?.getAttribute('loading')).toBe('lazy')
+    expect(spec).toHaveAttribute('title', '共通製作仕様書(PDF)を開く')
   })
 
   it('keeps a normal page 0 row (design.csv) separate from the documents', () => {
