@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import os
 import re
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -175,45 +177,173 @@ def resolve_page_file(ccv_dir: Path, page_no: int, extension: str = "pdf") -> Pa
     return file_path
 
 
-_PRODUCT_QUERY_RE = re.compile(r"^[A-Za-z0-9]{1,20}$")
-DEFAULT_PRODUCT_SEARCH_LIMIT = 20
+_PRODUCT_QUERY_RE = re.compile(r"^[A-Za-z0-9]{0,20}$")
+DEFAULT_PRODUCT_SEARCH_LIMIT = 500
+
+# [製番選択の検索高速化] ルート直下には製番ディレクトリが900件超存在しうるが
+# (docs/data-source.md)、実測の結果 `os.listdir()` 自体は高速(約15ms/900件)で、
+# 遅かったのは各エントリに対する `Path.resolve()` + `is_dir()` (パストラバーサル
+# 対策のルート内確認・実在確認) で、UNC共有越しに1件あたり数msかかり、900件超
+# では検索1回あたり約5.7〜7.6秒(8回計測の中央値6.3秒、最大7.6秒)かかって
+# いた。この検証済み一覧を `_DIR_CACHE_TTL_SECONDS`秒キャッシュし、入力の
+# たびの絞り込みはキャッシュ済み一覧への文字列比較のみで行う(文字列比較自体は
+# マイクロ秒オーダー)。
+#
+# [追加修正: 初回走査・TTL失効直後の走査そのものの高速化] 上記キャッシュだけでは
+# 「TTL失効後の最初の1回」は依然として数秒かかっていた。実測の結果、
+# `os.listdir()`で遅いのではなく、「名前一覧を取った後に1件ずつ個別へ
+# `Path.resolve()`→別途`is_dir()`と2回ネットワーク往復していたこと」が原因と
+# 判明したため、`os.scandir()`に置き換えた。`scandir()`が返す`DirEntry`は
+# ディレクトリ列挙(Windows上はFindFirstFile/FindNextFile)の結果として
+# ファイル属性を既に保持しており、`entry.stat(follow_symlinks=False)`は
+# その場で取得済みの属性を返すだけで追加のネットワーク往復を発生させない
+# (実測: 914件に対し scandir一覧+属性ベースの判定で約15〜36ms、8回計測の
+# 中央値15.7ms・最大18.2ms。旧方式(中央値6.3秒)比で約400倍)。
+#
+# 安全性(ルート外パスを返さない): 単純に「`is_symlink()`がFalseなら安全」とは
+# 判定していない。検証の結果、Windowsの`DirEntry.is_symlink()`は通常の
+# シンボリックリンクは検出するが **NTFSジャンクション(mklink /J)は検出しない**
+# ことを実機で確認した(ジャンクションもルート外の実体を指しうるため、これを
+# 見逃すと安全性が退行する)。そのため、`is_symlink()`ではなく
+# `st_file_attributes`の`FILE_ATTRIBUTE_REPARSE_POINT`ビット(シンボリック
+# リンク・ジャンクションを含む「reparse point」全般を示す、scandir結果に
+# 含まれる属性でこちらも追加往復なし)で判定する。reparse pointだった場合に
+# 限り、従来どおり`Path.resolve()`+`_is_relative_to()`+`_safe_is_dir()`で
+# 個別に実体を解決してルート内かどうかを確認する(実データでは0件だったため
+# 通常はこの低速経路に入らない。シンボリックリンク/ジャンクションでない
+# 通常の子ディレクトリは、`os.scandir(root)`が返す直接の子要素名であり
+# パス区切り文字や`..`を含み得ないため、そもそも`root / name`がルート外に
+# 解決されることはない)。
+#
+# 削除・変更中の扱い: `entry.stat()`がエントリ列挙後に対象が削除される等で
+# 失敗した場合は、既存の`_safe_is_dir`と同じ方針でそのエントリを除外する
+# (例外を外へ伝播させない)。
+#
+# 鮮度: TTLを超えたら次の呼び出しで必ず再走査する(フォルダ一覧が更新されても
+# 古い候補がTTL以上残り続けることはない)。60秒は「検索モーダルを開いて
+# 数文字入力する間は同じ一覧を使い回したいが、運用中の製番フォルダ追加/削除を
+# 長時間反映しないのも避けたい」というバランスで選んだ値(今回変更していない)。
+_DIR_CACHE_TTL_SECONDS = 60.0
+
+# 同時アクセス: キャッシュ期限切れ直後に複数リクエストが同時に来ると、何も
+# しなければ全リクエストが同時に高コストな再走査(thundering herd)を行って
+# しまう。`threading.Lock`で再走査を直列化し、ロック取得後に再度キャッシュを
+# 確認して、既に別スレッドが更新済みならその結果をそのまま使う(二重走査防止)。
+# (今回の変更後も、走査自体が約15〜36msまで短縮されたため、仮に複数リクエストが
+# 直列化されて待たされても体感できるほどの遅延にはならない。)
+_dir_cache_lock = threading.Lock()
+_dir_cache: dict[str, tuple[float, list[str]]] = {}
+
+_FILE_ATTRIBUTE_REPARSE_POINT = 0x400  # Windows: stat.FILE_ATTRIBUTE_REPARSE_POINTと同値
+
+
+def _is_reparse_point(entry: "os.DirEntry[str]") -> bool:
+    """このエントリがシンボリックリンク/NTFSジャンクション等のreparse pointか。
+
+    `entry.is_symlink()`はジャンクションを検出しないため使わない(上記コメント
+    参照)。`entry.stat(follow_symlinks=False)`はWindows上ではscandir時に
+    取得済みの属性を返すのみで追加のネットワーク往復を発生させない。
+    """
+    try:
+        attrs = entry.stat(follow_symlinks=False).st_file_attributes
+    except (AttributeError, OSError):
+        # 非Windows環境(`st_file_attributes`が存在しない)、またはstat取得に
+        # 失敗した場合は、`is_symlink()`(ジャンクションは検出できないポータブルな
+        # 代替手段)にフォールバックする。判定自体に失敗した場合は安全側
+        # (=個別解決の低速経路)に倒す。
+        try:
+            return entry.is_symlink()
+        except OSError:
+            return True
+    return bool(attrs & _FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def _list_cached_valid_product_dirs(root: Path) -> list[str]:
+    """ルート直下の「検証済み(`_`始まりを除く・ルート内にresolve・実在する
+    ディレクトリ)」製番フォルダ名一覧 (昇順ソート済み) を、TTLの間キャッシュして返す。
+    """
+    root_key = str(root)
+    now = time.monotonic()
+    cached = _dir_cache.get(root_key)
+    if cached is not None and now - cached[0] < _DIR_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    with _dir_cache_lock:
+        # ロック待ちの間に別スレッドが既に再走査済みかもしれないため再確認する。
+        cached = _dir_cache.get(root_key)
+        now = time.monotonic()
+        if cached is not None and now - cached[0] < _DIR_CACHE_TTL_SECONDS:
+            return cached[1]
+
+        try:
+            with os.scandir(root) as it:
+                entries = list(it)
+        except OSError as e:
+            raise RootUnavailable(_friendly_os_error(e)) from e
+
+        valid: list[str] = []
+        for entry in entries:
+            name = entry.name
+            if name.startswith("_"):
+                continue  # 「_」始まりの製番フォルダは常に除外する
+            if _is_reparse_point(entry):
+                # シンボリックリンク/ジャンクション等: 実体がルート外を指す
+                # 可能性があるため、個別に解決してルート内か・実在する
+                # ディレクトリかを確認する(実データでは0件、低頻度想定の経路)。
+                candidate = (root / name).resolve(strict=False)
+                if not _is_relative_to(candidate, root):
+                    continue
+                if not _safe_is_dir(candidate):
+                    continue
+            else:
+                try:
+                    is_dir = entry.is_dir(follow_symlinks=False)
+                except OSError:
+                    continue  # 列挙後に削除された等は既存の_safe_is_dirと同じ方針で除外する
+                if not is_dir:
+                    continue
+            valid.append(name)
+
+        valid.sort()
+        _dir_cache[root_key] = (time.monotonic(), valid)
+        return valid
 
 
 def search_product_dirs(
     root_str: str, query: str, limit: int = DEFAULT_PRODUCT_SEARCH_LIMIT
 ) -> tuple[list[str], bool]:
-    """製番の前方一致候補検索 (Phase 1.8、要件2/3)。
+    """製番の部分一致候補検索 (Phase 1.8、要件2/3。[追加修正: 製番選択の一覧表示]
+    前方一致→部分一致へ、空文字列クエリは「絞り込みなし」として全件返すよう変更)。
 
-    ルート直下には製番ディレクトリが900件超存在しうるため (docs/data-source.md)、
-    全件をFrontendへ送らない。前方一致した製番ディレクトリ名のうち、最大 `limit` 件のみ
-    返す。戻り値の2番目の要素は「実際の一致件数がlimitを超えて打ち切られたか」を示す
-    (Frontend側で「もっと絞り込んでください」等の案内に使える)。
+    `limit` 件を超える場合は打ち切る。戻り値の2番目の要素は「実際の一致件数が
+    limitを超えて打ち切られたか」を示す(Frontend側で「もっと絞り込んでください」
+    等の案内に使える)。打ち切られても、絞り込みはキャッシュ済みの全件一覧に対して
+    毎回行うため、クエリをさらに絞り込めば打ち切られた分の候補にも到達できる
+    (黙って除外されたままにはならない)。
+
+    [追加修正: 製番選択の一覧表示] `query`が空文字列の場合は絞り込みを行わず、
+    ルート直下の製番フォルダ名一覧を返す(入力欄の下に一覧表示するための挙動)。
+    1文字以上の`query`は、大文字小文字を区別しない部分一致(contains)で絞り込む
+    (以前の前方一致から変更)。名前の先頭が`_`のフォルダは、絞り込みの有無に
+    関わらず常に除外する。
 
     製番の完全一致確認 (検索候補に出ない場合でも直接開けるようにする、要件3) は、
     この関数ではなく既存の `resolve_product_dir()` を呼び出し側が別途使う。
     """
     query = (query or "").strip()
-    if not query or not _PRODUCT_QUERY_RE.match(query):
+    if query and not _PRODUCT_QUERY_RE.match(query):
         raise InvalidProductNo("検索文字列の形式が不正です (英数字のみ)。")
     if limit <= 0:
         limit = DEFAULT_PRODUCT_SEARCH_LIMIT
 
     root = _resolve_root(root_str)
-    try:
-        names = os.listdir(root)
-    except OSError as e:
-        raise RootUnavailable(_friendly_os_error(e)) from e
+    valid_names = _list_cached_valid_product_dirs(root)
 
     query_upper = query.upper()
     matches: list[str] = []
     truncated = False
-    for name in sorted(names):
-        candidate = (root / name).resolve(strict=False)
-        if not _is_relative_to(candidate, root):
-            continue  # シンボリックリンク等でルート外を指す名前は無視する
-        if not name.upper().startswith(query_upper):
-            continue
-        if not _safe_is_dir(candidate):
+    for name in valid_names:
+        if query_upper and query_upper not in name.upper():
             continue
         if len(matches) >= limit:
             truncated = True

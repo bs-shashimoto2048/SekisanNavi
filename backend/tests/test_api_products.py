@@ -92,7 +92,8 @@ def test_download_product_drawing_file_missing_page(client, monkeypatch, tmp_pat
     assert res.status_code == 404
 
 
-# --- 製番検索 (Phase 1.8, 要件2/3) ---
+# --- 製番検索 (Phase 1.8, 要件2/3。[追加修正: 製番選択の一覧表示]
+#     前方一致→部分一致、空文字列=全件一覧、「_」始まり除外へ変更) ---
 
 
 def test_search_products_prefix_match(client, monkeypatch, tmp_path):
@@ -107,6 +108,17 @@ def test_search_products_prefix_match(client, monkeypatch, tmp_path):
     assert body["truncated"] is False
 
 
+def test_search_products_substring_match(client, monkeypatch, tmp_path):
+    # [追加修正] 前方一致ではなく部分一致(contains、大文字小文字を区別しない)。
+    for name in ["A1GV2421", "A1GV2422", "A1AA0379"]:
+        (tmp_path / name).mkdir()
+    _configure_root(client, monkeypatch, tmp_path)
+
+    res = client.get("/api/products/search", params={"q": "gv24"})
+    assert res.status_code == 200
+    assert res.json()["matches"] == ["A1GV2421", "A1GV2422"]
+
+
 def test_search_products_no_match(client, monkeypatch, tmp_path):
     (tmp_path / "A1GV2421").mkdir()
     _configure_root(client, monkeypatch, tmp_path)
@@ -114,6 +126,29 @@ def test_search_products_no_match(client, monkeypatch, tmp_path):
     res = client.get("/api/products/search", params={"q": "ZZZZ"})
     assert res.status_code == 200
     assert res.json()["matches"] == []
+
+
+def test_search_products_empty_query_returns_full_list(client, monkeypatch, tmp_path):
+    # [追加修正: 製番選択の一覧表示] クエリ省略/空文字列は絞り込みなしの全件一覧を返す。
+    for name in ["A1GV2421", "A1GV2422", "A1AA0379"]:
+        (tmp_path / name).mkdir()
+    _configure_root(client, monkeypatch, tmp_path)
+
+    res = client.get("/api/products/search")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["matches"] == ["A1AA0379", "A1GV2421", "A1GV2422"]
+    assert body["truncated"] is False
+
+
+def test_search_products_excludes_underscore_prefixed_dirs(client, monkeypatch, tmp_path):
+    for name in ["A1GV2421", "_ARCHIVE01"]:
+        (tmp_path / name).mkdir()
+    _configure_root(client, monkeypatch, tmp_path)
+
+    res = client.get("/api/products/search")
+    assert res.status_code == 200
+    assert res.json()["matches"] == ["A1GV2421"]
 
 
 def test_search_products_respects_limit_param(client, monkeypatch, tmp_path):
