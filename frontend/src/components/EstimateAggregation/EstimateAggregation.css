@@ -286,54 +286,30 @@
 }
 
 .estimate-aggregation__table {
-  width: 100%;
+  /* [Issue #40 追加修正: 表カラム幅の共通自動調整] 列幅は`auto-fit-table`
+     (index.css)へ一本化した。以前は`table-layout: fixed`+実測px値を基準に
+     した`%`配分を個別チューニングしていたが、`table-layout: auto`
+     (ブラウザ既定)に委ねることで見出し/実データの実際の自然幅に追従する。
+     「内容」列も以前は`overflow-wrap: break-word`で2段表示を許容していたが、
+     他の表と同じく1行表示+横スクロール方針へ統一した(下記`.estimate-
+     aggregation__col-content`)。表がpanel幅を超える場合は既存の
+     `.estimate-aggregation__table-scroll`の横スクロールへ任せる。 */
   border-collapse: separate;
   border-spacing: 0;
   font-size: 0.85rem; /* 全体フォント拡大 指示1章: 旧0.78rem→引き上げ (単価/金額列は
     白抜きnowrap+右寄せのため、極端な拡大はせず折り返し・はみ出しを避ける) */
-  table-layout: fixed;
-}
-
-/* [追加修正: floating panel初期幅の実測ベース再調整] 各列の実測自然幅
-   (隠しnowrap要素による計測。ヘッダ文言・実データのうち最長セル基準)は
-   コード≈39px/内容≈198px/単価≈59px/数量≈26px/金額≈57pxで、
-   これにcell padding等を加えた必要量の比率へ列幅配分を合わせ直した
-   (詳細はIssue #19への報告コメント参照)。floating panelの既定幅自体も
-   360→480pxへ拡大している(`FloatingPanel.tsx`の`DEFAULT_WIDTH_BY_KIND`)。 */
-.estimate-aggregation__col-code {
-  width: 11%;
-  white-space: nowrap; /* 短い列はヘッダ・値とも折り返させない */
 }
 
 .estimate-aggregation__col-content {
-  width: 49%;
   text-align: left;
-  min-width: 0;
-  overflow-wrap: break-word; /* 内容は必要に応じて2段表示を許容する */
 }
 
-.estimate-aggregation__col-price {
-  width: 16%;
-}
-
-.estimate-aggregation__col-qty {
-  width: 8%;
-}
-
-.estimate-aggregation__col-amount {
-  width: 16%;
-}
-
-/* 単価・金額は右寄せ、常に1行で収まる幅を確保する。 */
+/* 単価・金額・数量は右寄せ(幅とは無関係な配置の指定、`auto-fit-table`の
+   nowrapと組み合わせて使う)。 */
 .estimate-aggregation__col-price,
-.estimate-aggregation__col-amount {
-  text-align: right;
-  white-space: nowrap;
-}
-
+.estimate-aggregation__col-amount,
 .estimate-aggregation__col-qty {
   text-align: right;
-  white-space: nowrap; /* 数量も短い列として折り返させない */
 }
 
 /* 表ヘッダは常に見える (position:sticky。指示5章)。表ヘッダの背景は

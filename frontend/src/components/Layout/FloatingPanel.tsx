@@ -43,23 +43,35 @@ interface Props {
    * `null`は「まだ初期配置が計算されていない」ことを表す。 */
   rect: FloatingPanelRect | null
   onRectChange: (update: FloatingPanelRect | ((prev: FloatingPanelRect | null) => FloatingPanelRect | null)) => void
+  /** [2026-10 追加修正: 内容量に応じたサイズ上限] 子(`children`)が自身の
+   * 「折り返し・省略無しで表示するために必要な自然なサイズ」を実測して
+   * 報告してくる場合に渡す。渡された場合、このpanelの幅/高さは
+   * `Math.min(Viewer残り領域, この値)`(ただしkind別最小サイズを下回らない)
+   * を上限とし、この値が変化するたび(タブ開閉・データ増減等)現在のサイズを
+   * この値へ同期する(内容が少ない時に残り領域を埋めて伸びること・内容が
+   * 全て収まった状態からさらに空白目的で拡大することの両方を防ぐ)。
+   * 渡さない(`undefined`/`null`)kindは従来どおりViewer領域のみを上限とする
+   * (他のfloating panelの挙動は変更しない)。 */
+  maxContentSize?: Size | null
   children: ReactNode
 }
 
 // [Issue #38 Phase 2] 従来は全kind共通の単一MIN_WIDTH(260px)だったが、
-// panelInfoがカラム型1行一覧(CSS Grid、7列)へ再設計されたことで、260pxでは
+// panelInfoがカラム型1行一覧(CSS Grid)へ再設計されたことで、260pxでは
 // 数値列(型式/高さ/幅/奥行)のnowrapを維持できず`overflow-x: hidden`により
 // 接続列等が無音でクリップされてしまう。他panelは従来通り260pxのままでよいため、
 // `MIN_HEIGHT_BY_KIND`と同じ考え方でkind別へ変更した。
-// panelInfoの値はPlaywrightでの実測(実際のCSS/フォントで`.panel-info__row`の
-// scrollWidthがclientWidthを超えない=クリップが発生しない最小panel幅を、
-// 1px刻みで二分探索的に特定)により、クリップが発生し始める境界が
-// ちょうど430px(429pxで1px分クリップが発生)であることを確認した。
-// 環境間のフォントレンダリング差を吸収する安全マージンとして+4pxし、434pxを
-// 採用した(詳細な実測ログはIssue #38 Phase 2報告コメント参照)。
-// [画面全体の文字拡大(15px→17.5px)] 列幅をremへ換算し、型式・接続列を広げたため、実測のうえ 560px に引き上げた。
+// panelInfoの最小幅は、「型式」列を削除して6列になった盤情報一覧(`useAutoFitGridColumns`
+// が列幅を内容へ自動調整する)が、文字サイズ17.5px(画面全体の拡大後)で横スクロール
+// 無しに収まる幅を下限とする。実ブラウザ(Chromium、実製番A1LW0626の13盤、盤名称
+// 最長「動力盤No.1,2変圧器一次盤」・接続最長「箱･左右(L)」)で、盤情報一覧の自然幅
+// (見出し行scrollWidth+左右padding)が586pxであることを実測した。旧値560pxでは
+// この実データでもクリップ(横スクロール)が発生するため、安全マージン+4pxの590pxへ
+// 引き上げた。なお実際の表示幅は`maxContentSize`(`PanelInfo`が実測する自然幅)へ
+// 自動で同期されるため、これより長い盤名称が来た場合は最小幅ではなく自然幅が優先される
+// (下限はあくまで内容が極端に少ない場合の保険)。
 const MIN_WIDTH_BY_KIND: Record<FloatingPanelKind, number> = {
-  panelInfo: 560,
+  panelInfo: 590,
   aggregation: 260,
   detail: 260,
   master: 260,
@@ -187,16 +199,52 @@ function clampPosition(rect: FloatingPanelRect, container: Size): FloatingPanelR
   }
 }
 
-function clampSize(rect: FloatingPanelRect, container: Size, kind: FloatingPanelKind): FloatingPanelRect {
+// [2026-10 追加修正: 内容量に応じたサイズ上限] `contentMax`が渡された場合、
+// 「Viewer残り領域」と「内容が必要とする自然なサイズ」のうち小さい方を上限に
+// する(ただしkind別最小サイズは下回らない)。これにより、内容がすべて
+// 収まっているにもかかわらず、空白を増やす目的でそれ以上拡大することを防ぐ
+// (`contentMax`省略時は従来どおりViewer領域のみが上限)。
+function clampSize(
+  rect: FloatingPanelRect,
+  container: Size,
+  kind: FloatingPanelKind,
+  contentMax?: Size | null,
+): FloatingPanelRect {
   const minWidth = MIN_WIDTH_BY_KIND[kind]
   const minHeight = MIN_HEIGHT_BY_KIND[kind]
-  const maxWidth = Math.max(minWidth, container.width - rect.left)
-  const maxHeight = Math.max(minHeight, container.height - rect.top)
+  const containerMaxWidth = Math.max(minWidth, container.width - rect.left)
+  const containerMaxHeight = Math.max(minHeight, container.height - rect.top)
+  const maxWidth = contentMax ? Math.max(minWidth, Math.min(containerMaxWidth, contentMax.width)) : containerMaxWidth
+  const maxHeight = contentMax
+    ? Math.max(minHeight, Math.min(containerMaxHeight, contentMax.height))
+    : containerMaxHeight
   return {
     ...rect,
     width: Math.min(Math.max(minWidth, rect.width), maxWidth),
     height: Math.min(Math.max(minHeight, rect.height), maxHeight),
   }
+}
+
+// [2026-10 追加修正: リサイズ上限を親(Viewer)領域内に収める] `clampSize`の
+// `maxWidth`/`maxHeight`はkind別の最小サイズを下回らないよう下駄を履かせて
+// いるため、「Viewerの表示領域がそのkindの最小サイズより狭い」場合には
+// 最小サイズの方を優先してしまい、結果としてpanelがViewer表示領域を超えて
+// しまうことがある(panelInfoのMIN_WIDTHを590pxへ引き上げた際、Viewer幅が
+// 590px未満の環境で実際に発生することをPlaywrightで確認した)。
+// `clampSize`自体の仕様(「十分な余白があれば、position側の再配置
+// (`clampPosition`/`reflowForResize`の確定済みanchorに基づく再配置)で
+// kind別最小サイズを維持する」という既存の意図的な挙動。Viewerが縮んだ際に
+// 「サイズを最小限守ってpositionをずらす」ことで対応できるケースの回帰防止
+// テストが既存する)は変更せず、「それでもなお収まらない場合の最終手段」
+// としてだけ、position確定後の最後にコンテナ実寸へ強制的に収める。
+// 実測前(container.width/height===0)の場合は制約をかけない(退避的動作)。
+function clampToContainerBounds(rect: FloatingPanelRect, container: Size): FloatingPanelRect {
+  if (container.width <= 0 || container.height <= 0) return rect
+  const width = Math.min(rect.width, container.width)
+  const height = Math.min(rect.height, container.height)
+  const left = Math.min(Math.max(0, rect.left), Math.max(0, container.width - width))
+  const top = Math.min(Math.max(0, rect.top), Math.max(0, container.height - height))
+  return { left, top, width, height }
 }
 
 /**
@@ -238,7 +286,7 @@ function computeInitialRect(kind: FloatingPanelKind, container: Size, stackIndex
   const desiredHeight = Math.max(minHeight, container.height * HEIGHT_FRACTION_BY_KIND[kind])
   const height = Math.min(desiredHeight, Math.max(minHeight, container.height - BOTTOM_MARGIN - top))
 
-  return clampPosition(clampSize({ top, left, width, height }, container, kind), container)
+  return clampToContainerBounds(clampPosition(clampSize({ top, left, width, height }, container, kind), container), container)
 }
 
 /** [Issue #25 追加修正] panelが「どちらの辺から測った距離を基準に追従するか」を
@@ -303,11 +351,15 @@ function reflowForResize(
   anchor: Anchor,
   nextContainer: Size,
   kind: FloatingPanelKind,
+  contentMax?: Size | null,
 ): FloatingPanelRect {
   const left = anchor.xAnchor === 'right' ? nextContainer.width - anchor.xGap - rect.width : anchor.xGap
   const top = anchor.yAnchor === 'bottom' ? nextContainer.height - anchor.yGap - rect.height : anchor.yGap
 
-  return clampPosition(clampSize({ ...rect, left, top }, nextContainer, kind), nextContainer)
+  return clampToContainerBounds(
+    clampPosition(clampSize({ ...rect, left, top }, nextContainer, kind, contentMax), nextContainer),
+    nextContainer,
+  )
 }
 
 /**
@@ -364,7 +416,16 @@ function reflowForResize(
  * classを付与するかどうかを決める(`App.tsx`側のstate・propsは一切増やさない、
  * Phase 1調査で提示した案Aを採用)。
  */
-export function FloatingPanel({ visible, kind, visibleKinds, containerRef, rect, onRectChange, children }: Props) {
+export function FloatingPanel({
+  visible,
+  kind,
+  visibleKinds,
+  containerRef,
+  rect,
+  onRectChange,
+  maxContentSize,
+  children,
+}: Props) {
   const [zIndex, setZIndex] = useState(100)
   const [interacting, setInteracting] = useState(false)
   // [Issue #34] 自分(kind)が現在の最前面kindと一致するかどうかを購読する
@@ -404,29 +465,89 @@ export function FloatingPanel({ visible, kind, visibleKinds, containerRef, rect,
   // ため、Reactのcommit順序上、useLayoutEffectだと初回マウント時に
   // `containerRef.current`がまだnullのままになる(floating panelが一切
   // 描画されない不具合として顕在化した実績がある)。
+  // [2026-10 追加修正: 内容量に応じた自動フィット] 従来は「Viewerサイズ変化への
+  // 追従」専用だったが、`maxContentSize`(子が実測して報告する「内容を全て
+  // 表示するために必要な自然なサイズ」)が変化した場合にも、同じ1つの関数
+  // (`recompute`)の中で処理するよう統合した。2つの独立したeffectに分けて
+  // いた際、どちらも同じ依存配列(`maxContentSize`の変化)で同時に発火し、
+  // 互いの`onRectChange`呼び出し順序に依存した競合(片方が算出した正しい幅を
+  // もう片方が古い`rect.width`で上書きしてしまう等)が実ブラウザで発生したため、
+  // 単一の処理に一本化して競合の可能性自体を無くした。
+  //
+  // `maxContentSize`が指定されている場合: 現在のサイズを「内容が必要とする
+  // 自然なサイズ」へ同期する(大きくも小さくもなる。指示:
+  // 「ウィンドウの高さは、表示中の内容に必要な高さを基準にしてください」
+  // 「将来鋼材テーブルに行が追加されたら必要な高さが増える構成に」)。
+  // `maxContentSize`が無いkindは、従来どおり現在のサイズをそのまま維持しつつ
+  // Viewer領域内に収める(`clampSize`のcontentMax引数がundefinedになるだけで
+  // 既存の計算式自体は変えない)。
+  //
+  // useLayoutEffectではなくuseEffect(passive)を使う理由は既存どおり:
+  // `containerRef`は親(`App.tsx`側の`.app-workspace__viewer-wrap`)が持つrefの
+  // ため、Reactのcommit順序上、useLayoutEffectだと初回マウント時に
+  // `containerRef.current`がまだnullのままになる(floating panelが一切
+  // 描画されない不具合として顕在化した実績がある)。
   useEffect(() => {
     const container = containerRef.current
     if (!container || !visible) return
 
-    function reflow() {
+    function recompute() {
       const { width, height } = container!.getBoundingClientRect()
       const nextContainer = { width, height }
       const anchor = confirmedAnchorRef.current
       onRectChange((prev) => {
         if (prev == null) return prev // 初期配置は表示ON検知用のeffectが担当する
-        if (anchor == null) return clampPosition(clampSize(prev, nextContainer, kind), nextContainer)
-        return reflowForResize(prev, anchor, nextContainer, kind)
+
+        if (maxContentSize != null) {
+          // 内容量への同期: `left`/`top`を`prev`のまま変えずに`width`/`height`
+          // だけ書き換えると、右端/下端アンカーの場合に「幅を広げたら右端から
+          // はみ出す分だけ`container.width - left`が小さくなり、本来の内容
+          // サイズまで広がれない」という不具合が生じる(実ブラウザで確認)。
+          // `reflowForResize`と同じく確定済みanchorを使い、目標サイズに対して
+          // 正しい`left`/`top`を先に算出してから`clampSize`へ渡す。
+          const left =
+            anchor == null
+              ? prev.left
+              : anchor.xAnchor === 'right'
+                ? nextContainer.width - anchor.xGap - maxContentSize.width
+                : anchor.xGap
+          const top =
+            anchor == null
+              ? prev.top
+              : anchor.yAnchor === 'bottom'
+                ? nextContainer.height - anchor.yGap - maxContentSize.height
+                : anchor.yGap
+          const synced = { ...prev, left, top, width: maxContentSize.width, height: maxContentSize.height }
+          const next = clampToContainerBounds(
+            clampPosition(clampSize(synced, nextContainer, kind, maxContentSize), nextContainer),
+            nextContainer,
+          )
+          // サイズが内容に合わせて変わると右端/下端からの距離も変わるため、
+          // resize-drag終了時(`endResize`)と同様にanchorを更新しておく。
+          confirmedAnchorRef.current = deriveAnchor(next, nextContainer)
+          return next
+        }
+
+        if (anchor == null)
+          return clampToContainerBounds(
+            clampPosition(clampSize(prev, nextContainer, kind, maxContentSize), nextContainer),
+            nextContainer,
+          )
+        return reflowForResize(prev, anchor, nextContainer, kind, maxContentSize)
       })
     }
 
-    reflow()
-    const observer = new ResizeObserver(reflow)
+    recompute()
+    const observer = new ResizeObserver(recompute)
     observer.observe(container)
     return () => observer.disconnect()
     // containerRef自体・kindが変わらない限り再計測の仕組み自体は張り直さなくてよい
     // (onRectChangeは`App.tsx`のuseStateセッターで安定した参照のため依存に含めない)。
+    // `maxContentSize`はオブジェクト参照ではなく値(width/height)を依存配列に
+    // 入れる(呼び出し側で同じ値でも新しいobject literalが渡され、参照比較だと
+    // 無駄にeffectが張り直されるのを避けるため)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [containerRef, kind, visible])
+  }, [containerRef, kind, visible, maxContentSize?.width, maxContentSize?.height])
 
   // [Issue #25] 表示ONにした瞬間(初回マウント時を含む)、既存panel群を踏まえた
   // 右端寄せ+積み重ねの初期配置を計算し直す。`visibleKinds`(他panelの表示
@@ -549,10 +670,14 @@ export function FloatingPanel({ visible, kind, visibleKinds, containerRef, rect,
     onRectChange((prev) =>
       prev == null
         ? prev
-        : clampSize(
-            { ...prev, width: resize.startWidth + dx, height: resize.startHeight + dy },
+        : clampToContainerBounds(
+            clampSize(
+              { ...prev, width: resize.startWidth + dx, height: resize.startHeight + dy },
+              { width, height },
+              kind,
+              maxContentSize,
+            ),
             { width, height },
-            kind,
           ),
     )
   }

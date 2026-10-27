@@ -1135,23 +1135,72 @@ front`等)で検証している。実際の色の判別性・見た目はPlaywri
 カード型+中点区切りからCSS Gridベースのカラム型1行一覧へ再設計**した。以下は
 Issue #38時点の現行仕様。
 
-- **列構成 (原則1盤=1行)**:
+- **[Issue #40 追加機能: 箱体型式解析] 列構成 (原則1盤=1行)**:
   ```text
-  面/盤 | 盤名称 | 型式 | 高さ | 幅 | 奥行 | 接続
+  面/盤 | 盤名称 | 高さ | 幅 | 奥行 | 接続
   ```
-  見出し行(`.panel-info__row--header`)はスクロール領域の外に固定表示し、
-  データ行(`.panel-info__list-scroll`内)だけが縦スクロールする。1盤=1行を
+  「型式」列は廃止した。同じ値(`EstimatePanelInfo.model`)は、この表の上に
+  配置した折り畳みタブ「箱体型式」でより詳しく(記号ごとの意味・積算に
+  使える情報)表示する(次項「箱体型式タブ・鋼材欄・材料情報欄の構成」参照)。それ以外のカラム・
+  データ・並び順は変更していない。
+  見出し行(`.panel-info__row--header`)は`.panel-info__list-scroll`の内側に置き、
+  `position: sticky`で縦スクロール時に固定表示する(横スクロール時もデータ行と
+  列がずれない)。列幅は固定pxではなく、見出し/全データ行の自然幅を
+  `useAutoFitGridColumns`(下記「表カラム幅の自動調整」)が計測して
+  `--auto-col-N`として設定する。1盤=1行を
   `<button class="panel-info__row panel-info__data-row">`(CSS Gridコンテナ、
-  `grid-template-columns`で7列を定義)として描画し、クリックでViewerの
+  `grid-template-columns`で6列を定義)として描画し、クリックでViewerの
   `onSelectPanel`と連動する。既存のキーボード操作性・`aria-pressed`は
   `<table><tr>`化せず`<button>`のまま維持することで変更していない
   (`role="row"`/`role="columnheader"`/`role="cell"`を各要素へ付与しているが、
   `<button>`自身のroleは上書きしない)。
   列がズレないよう、値が無い項目もセルごと省略せず必ず`-`を描画する
-  (`PanelInfo.tsx::buildRowCells`)。均等幅は禁止し、数値列(面/盤・型式・
-  高さ・幅・奥行)は必要最小限、盤名称・接続へ優先的に幅を配分する
-  (`PanelInfo.css`の`.panel-info__row`、実測に基づく値。Issue #38 Phase 1/
-  Phase 2報告コメント参照)。
+  (`PanelInfo.tsx::buildRowCells`)。均等幅は禁止し、数値列(面/盤・
+  高さ・幅・奥行)は必要最小限の自然幅になり、盤名称・接続は内容に応じて広がる
+  (`PanelInfo.css`の`.panel-info__row`)。内容の合計がパネル幅を超える場合は
+  折り返し・切り捨てではなく`.panel-info__list-scroll`の横スクロールで見る。
+
+- **[Issue #40 追加機能] 箱体型式タブ・鋼材欄・材料情報欄の構成**:
+  パネルのタイトル(`<h2>`、`FloatingPanel`のドラッグハンドル兼用)は従来どおり
+  「盤情報　N件」のまま(「図面情報」への改名は、ヘッダーのトグルボタンの
+  並び替え・改名と同時に別途行う)。パネル内は上から次の順に並ぶ。
+  1. 見出し(`.panel-info__heading`)
+  2. **箱体型式タブ**(折り畳み、既定は折りたたみ。`PanelInfo.tsx`の
+     `isBoxTypeExpanded`)。盤情報テーブルの上に置く。
+  3. 盤情報テーブル(6列、下記)
+  4. **材料情報**(`MaterialInfo`、常時表示。material.csv 全体の一覧)
+  5. **鋼材**(`SteelSection`、折り畳み、既定は折りたたみ。`/steel` API由来の
+     外形図1ページぶんの実データ。箱体型式との一致/不一致も表示する)
+
+  「鋼材」は`SteelSection`の1か所だけで表示する(箱体型式タブと同じ場所に
+  並べるタブとしては持たない。開発途中にあった「仕様検討中」とだけ表示する
+  仮の鋼材タブは採用していない)。箱体型式タブと鋼材欄は独立して開閉できる。
+  - **箱体型式**: 中央Viewerで選択中の盤(未選択時は一覧先頭の盤)の
+    `EstimatePanelInfo.model`(型式)と、Backend側で解析した
+    `box_type_analysis`(`BoxTypeAnalysis`、`backend/app/services/
+    box_type_parser.py`)を表示する(`BoxTypeDetail.tsx`/`.css`)。
+    見た目はダーク配色ではなく、白背景+既存の罫線色+共通status token
+    (`index.css`の`--border-table-outer`/`--accent-section`/`--status-*`
+    等)を再利用し、他のPanelInfo/floating panelと統一した配色にしている
+    (2026-10 追加修正: 当初ダーク背景+シアン系で実装していたが、既存UIから
+    浮くとの指摘を受けて作り直した)。
+    - 上部に「箱体型式：&lt;型式の原文&gt;」と解析状態
+      (`parsed`/`partial`/`ambiguous`/`conflict`/`unknown`)を表示する。
+    - 第1記号・補助記号1/2/3のうち実際に一致した記号を、1記号1行で
+      「記号種別・記号・資料記載の意味」として表示する(基本記号+補助記号
+      1〜3の構成・順序は正本資料「QS-SA020-N 箱体記号一覧表」の定義に従う。
+      例: `OS2VDK` = `OS2`(第1記号)+`VD`(補助記号1)+`K`(補助記号2))。
+    - 未解析文字・警告(競合・非標準順序・複数候補等)がある場合は、
+      警告色の帯で明示する(要確認を黙って隠さない)。
+    - その下に「積算に使用できる情報」表(積算分類/情報の2列、スクロール
+      可能)を表示する。同一項目(材質・本体塗装・本体表面処理・ベース
+      表面処理・認定区分)に競合する記号がある場合は、どちらか一方を
+      勝手に採用せず「要確認(競合)」と表示する(`BoxTypeDetail.tsx::
+      buildInfoRows`)。
+    - 記号マスタ・解析アルゴリズム・独自積算条件(正式規格の記号定義とは
+      別管理)の詳細は`backend/app/domain/box_type_symbols.py`/
+      `backend/app/services/box_type_parser.py`のモジュールdocstring、
+      および正本資料「QS-SA020-N 箱体記号一覧表 N版」を参照。
 - **高さ表示**: `PanelPreview.ban_h1`(正面として扱う)/`ban_h2`(背面として
   扱う)を優先し、両方欠損している場合のみ`EstimatePanelInfo.ban_h`を
   fallbackにする(`PanelInfo.tsx::formatHeight`)。
@@ -1168,12 +1217,13 @@ Issue #38時点の現行仕様。
 - **幅/奥行**: `EstimatePanelInfo.ban_w`/`ban_d`を優先し、無ければ
   `PanelPreview.ban_w`/`ban_d`をfallbackにする(`PanelInfo.tsx::
   formatWithFallback`)。値が無ければ`-`。
-- **型式/接続/盤名称**: 型式は`EstimatePanelInfo.model`(fallback無し、無ければ
-  `-`)。接続は`EstimatePanelInfo.ban_connect`(同上)。盤名称は
-  `EstimatePanelInfo.ban_meisyou`を優先し、`PanelPreview.ban_meisyou`を
-  fallbackにする。盤名称・接続のみ長い値をellipsis(`text-overflow: ellipsis`)
-  で省略し、`title`属性で全文を確認できる。型式/高さ/幅/奥行は
-  `white-space: nowrap`のまま(省略記号は使わない)。
+- **接続/盤名称**: 接続は`EstimatePanelInfo.ban_connect`(fallback無し、無ければ
+  `-`)。盤名称は`EstimatePanelInfo.ban_meisyou`を優先し、
+  `PanelPreview.ban_meisyou`をfallbackにする。全列`white-space: nowrap`
+  (1行表示)で、列幅を内容の自然幅へ自動調整するため省略記号は使わない
+  (盤名称・接続セルの`title`属性は全文確認用として残している)。
+  型式(`EstimatePanelInfo.model`)はテーブルの列からは削除し、上記「箱体型式」
+  タブで表示する。
 - **欠損値**: null/undefined/NaN/空文字はそのまま出さず`-`で統一する
   (`PanelInfo.tsx::formatValue`)。CSVのfloat表記(`2300.0`等)はJSの
   数値→文字列変換で自動的に整数表記(`2300`)になるため、個別の丸め処理は
@@ -1204,6 +1254,24 @@ Issue #38時点の現行仕様。
   実データで値・意味とも完全に一致することを確認済み (`ban_menno`+`ban_no`の
   組み合わせが同一製番内で一意)。詳細は`docs/implementation-plan.md`
   「Phase 1.14」章、データ構造は`docs/data-model.md`参照。
+
+- **[Issue #40 追加修正] 表カラム幅の自動調整(共通)**: 手動で実測した
+  `table-layout: fixed`+`%`/px幅の個別チューニングを廃止し、列幅を内容の
+  自然幅へ自動で合わせる。`<table>`には共通クラス`.auto-fit-table`
+  (`index.css`、`table-layout: auto`・セルnowrap・`width: auto`)を付け、
+  対象は積算集約・積算明細(ルール結果タブ)・積算確定履歴・部品台帳・
+  操作ガイドの表と、PanelInfoのフォールバック属性表。表がパネル幅を超える
+  場合は、各表が元々持つスクロール領域の横スクロールで見る(切り捨て・強制
+  折り返しはしない)。`<table>`ではなくCSS Gridで作っているPanelInfoの
+  盤一覧は`hooks/useAutoFitGridColumns.ts`が`data-auto-col`付きセルの自然幅を
+  計測し、CSS変数`--auto-col-N`として`.panel-info`に設定する。
+- **[Issue #40 追加機能] 自動サイズ**: `PanelInfo`が、表示中の内容(箱体型式
+  タブの開閉・盤の行数・材料情報/鋼材欄の開閉)を折り返し・省略無しで表示する
+  のに必要な自然なサイズを実測して`onNaturalSizeChange`で報告し、`App.tsx`が
+  `FloatingPanel`の`maxContentSize`へ渡す。`FloatingPanel`は幅/高さの上限を
+  `min(Viewerの残り領域, 内容の自然サイズ)`(ただしkind別最小サイズ未満には
+  しない)にし、内容が変わるたびに現在サイズをそれへ同期する。`maxContentSize`を
+  渡さないkindの挙動は変えていない。
 
 ## 5.5. EstimateAggregation (Viewer上のfloating panel: 積算集約。2026-09 Issue #19 Phase 2で右ペインから移動、1.7章参照)
 

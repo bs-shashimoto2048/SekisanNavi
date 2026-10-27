@@ -152,7 +152,7 @@ describe('buildRealEstimateAggregation (積算集約・積算明細UI再構成: 
     const panel = makePanel({ ban_menno: 5, ban_no: 5, ban_meisyou: 'No.2-1低圧動力盤' })
     const detection = makeDetection({ bbox_x: 0.15, bbox_y: 0.15, bbox_w: 0.05, bbox_h: 0.05 })
     const estimatePanels: EstimatePanelInfo[] = [
-      { model: 'IS2', ban_menno: 5, ban_no: 5, ban_meisyou: 'No.2-1低圧動力盤', ban_h: 2300, ban_w: 1700, ban_d: 2200, ban_connect: '箱・左右(L)', sort_order: 1 },
+      { model: 'IS2', ban_menno: 5, ban_no: 5, ban_meisyou: 'No.2-1低圧動力盤', ban_h: 2300, ban_w: 1700, ban_d: 2200, ban_connect: '箱・左右(L)', sort_order: 1, box_type_analysis: null },
     ]
     const masterItemById = new Map([[10, makeMasterItem()]])
     const result = buildRealEstimateAggregation({

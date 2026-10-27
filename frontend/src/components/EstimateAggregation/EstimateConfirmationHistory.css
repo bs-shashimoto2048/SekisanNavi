@@ -154,8 +154,13 @@
   overflow-y: auto;
 }
 
+/* [Issue #40 追加修正: 表カラム幅の共通自動調整] 列幅は`auto-fit-table`
+   (index.css)へ一本化した。以前の`width: 100%`はtable-layout既定(auto)と
+   組み合わさると、内容が狭い列にも余白が配分され列間の余白が不均衡に
+   見える原因になっていたため、表自体の幅は内容に合わせた自然な幅
+   (width指定なし)にする。表がpanel幅を超える場合は既存の
+   `.estimate-confirmation-history__table-wrap`の横スクロールへ任せる。 */
 .estimate-confirmation-history__table {
-  width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
 }

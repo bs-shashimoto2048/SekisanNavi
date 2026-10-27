@@ -41,6 +41,9 @@ from app.schemas.estimate_confirmations import (
     EstimateConfirmationSummaryOut,
 )
 from app.schemas.settings import (
+    BoxTypeAnalysisOut,
+    BoxTypeSpecConflictOut,
+    BoxTypeSymbolMatchOut,
     DetectedPreviewItemOut,
     DesignDocumentOut,
     DesignPageOut,
@@ -77,6 +80,7 @@ from app.services.estimate_confirmation_builder import (
     NeedsReviewResultsExistError,
     build_confirmation_items,
 )
+from app.services.box_type_parser import BoxTypeAnalysis, parse_box_type
 from app.services.product_df import load_page_scales, load_product_df
 
 router = APIRouter(prefix="/api/products", tags=["products"])
@@ -529,6 +533,53 @@ def read_steel_outline(
     )
 
 
+def _box_type_analysis_out(analysis: BoxTypeAnalysis) -> BoxTypeAnalysisOut:
+    """[追加機能: 箱体型式解析] `BoxTypeAnalysis`(dataclass)をAPIスキーマへ変換する。
+
+    `alternatives`は同じ型の入れ子になるため再帰的に変換する。`segments`/
+    `conflicts.values`はdataclassのtupleのtupleをそのままpydanticへ渡せない
+    (list[list[str]]として明示的に変換する必要がある)ため、ここで整形する。
+    """
+    return BoxTypeAnalysisOut(
+        raw=analysis.raw,
+        normalized=analysis.normalized,
+        status=analysis.status,
+        requires_review=analysis.requires_review,
+        primary=(
+            BoxTypeSymbolMatchOut(group=analysis.primary.group, code=analysis.primary.code, meaning=analysis.primary.meaning)
+            if analysis.primary is not None
+            else None
+        ),
+        aux_matches=[
+            BoxTypeSymbolMatchOut(group=m.group, code=m.code, meaning=m.meaning) for m in analysis.aux_matches
+        ],
+        segments=[[kind, text] for kind, text in analysis.segments],
+        unparsed=list(analysis.unparsed),
+        box_category=analysis.box_category,
+        product_category=analysis.product_category,
+        environment=analysis.environment,
+        usage=analysis.usage,
+        structure=analysis.structure,
+        material=analysis.material,
+        coating=analysis.coating,
+        surface_treatment=analysis.surface_treatment,
+        base_finish=analysis.base_finish,
+        certification=analysis.certification,
+        ip55=analysis.ip55,
+        processing_target=analysis.processing_target,
+        custom_estimate_conditions=list(analysis.custom_estimate_conditions),
+        other_notes=list(analysis.other_notes),
+        notes=list(analysis.notes),
+        conflicts=[
+            BoxTypeSpecConflictOut(field=c.field, values=[[code, value] for code, value in c.values])
+            for c in analysis.conflicts
+        ],
+        warnings=list(analysis.warnings),
+        alternatives=[_box_type_analysis_out(alt) for alt in analysis.alternatives],
+        candidate_index=analysis.candidate_index,
+    )
+
+
 @router.get("/{product_no}/estimate-panels", response_model=list[EstimatePanelInfoOut])
 def read_estimate_panels(
     product_no: str, conn: sqlite3.Connection = Depends(get_db)
@@ -559,6 +610,9 @@ def read_estimate_panels(
             ban_d=panel.ban_d,
             ban_connect=panel.ban_connect,
             sort_order=panel.sort_order,
+            box_type_analysis=(
+                _box_type_analysis_out(parse_box_type(panel.model)) if panel.model is not None else None
+            ),
         )
         for panel in result.panels
     ]

@@ -140,7 +140,7 @@ export function EstimateMasterPicker({ selectedItemId, onSelectItem, height }: P
       </label>
 
       <div className="master-picker__table-wrap">
-        <table className="master-picker__table">
+        <table className="master-picker__table auto-fit-table">
           <thead>
             <tr>
               {COLUMNS.map((col) => (

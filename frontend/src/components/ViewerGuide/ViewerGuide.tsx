@@ -80,7 +80,7 @@ export function ViewerGuide() {
         </ol>
 
         <h3 className="viewer-guide__section-title">基本操作</h3>
-        <table className="viewer-guide__table">
+        <table className="viewer-guide__table auto-fit-table">
           <thead>
             <tr>
               <th>操作</th>

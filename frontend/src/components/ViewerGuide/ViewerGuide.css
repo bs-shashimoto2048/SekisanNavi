@@ -56,8 +56,11 @@
   margin-bottom: 0.15rem;
 }
 
+/* [Issue #40 追加修正: 表カラム幅の共通自動調整] 列幅は`auto-fit-table`
+   (index.css)へ一本化した(`width: 100%`を外し、内容に合わせた自然な幅に
+   する)。この表は横スクロール可能な`.viewer-guide__scroll`の中にあるため、
+   内容が幅を超える場合もそちらで横スクロールできる。 */
 .viewer-guide__table {
-  width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
 }

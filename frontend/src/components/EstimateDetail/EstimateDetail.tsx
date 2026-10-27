@@ -213,7 +213,7 @@ export function EstimateDetail({
       </div>
 
       <div className="estimate-detail__table-scroll">
-        <table className="estimate-detail__table estimate-detail__table--rule-result">
+        <table className="estimate-detail__table estimate-detail__table--rule-result auto-fit-table">
           <thead>
             <tr>
               <th className="estimate-detail__col-rr-code">コード</th>

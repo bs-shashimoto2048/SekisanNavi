@@ -235,7 +235,7 @@ export function EstimateConfirmationHistory({ productNo }: Props) {
                         Phase 6-A以前に確定された過去snapshotは新列(数量以外)が
                         全てnullのため、その場合は「-」のまま表示し壊れない
                         (値を推測で埋めない)。 */}
-                    <table className="estimate-confirmation-history__table">
+                    <table className="estimate-confirmation-history__table auto-fit-table">
                       <thead>
                         <tr>
                           <th>コード</th>

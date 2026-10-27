@@ -2,7 +2,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { PanelInfo } from './PanelInfo'
 import { panelKey } from '../../utils/panel'
-import type { EstimatePanelInfo, Panel, PanelPreview } from '../../types/domain'
+import type { BoxTypeAnalysis, EstimatePanelInfo, Panel, PanelPreview, SteelOutline } from '../../types/domain'
 
 function makeProductPanel(overrides: Partial<PanelPreview> = {}): PanelPreview {
   return {
@@ -31,6 +31,7 @@ function makeEstimatePanel(overrides: Partial<EstimatePanelInfo> = {}): Estimate
     ban_d: 2200,
     ban_connect: '箱・左右(L)',
     sort_order: 1,
+    box_type_analysis: null,
     ...overrides,
   }
 }
@@ -64,7 +65,7 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
     expect(screen.getByText('このページには盤情報がありません')).toBeInTheDocument()
   })
 
-  it('renders a fixed header row with the 7 columns in order, outside the scrollable list', () => {
+  it('renders a header row with the 6 columns in order, kept visually fixed via position:sticky inside the scrollable list (Issue #40 追加修正: ヘッダを外に出す旧方式から、他の表と同じ sticky 方式へ変更。横スクロール時もヘッダと列が揃うようにするため)', () => {
     render(
       <PanelInfo
         panel={null}
@@ -79,13 +80,17 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
     const labels = within(header)
       .getAllByRole('columnheader')
       .map((el) => el.textContent)
-    expect(labels).toEqual(['面/盤', '盤名称', '型式', '高さ', '幅', '奥行', '接続'])
+    expect(labels).toEqual(['面/盤', '盤名称', '高さ', '幅', '奥行', '接続'])
 
+    // ヘッダは今は`.panel-info__list-scroll`の内側にあり(横スクロールが
+    // ヘッダ・データ行で同期するようにするため)、`position: sticky`で
+    // 縦スクロール時のみ見た目上固定される(他の表のthead thと同じ方式)。
     const scrollArea = document.querySelector('.panel-info__list-scroll')
-    expect(scrollArea?.contains(header)).toBe(false)
+    expect(scrollArea?.contains(header)).toBe(true)
+    expect(getComputedStyle(header).position).toBe('sticky')
   })
 
-  it('always renders exactly 7 cells per row, showing "-" for missing values instead of omitting the cell (指示書8章: 列ズレ禁止)', () => {
+  it('always renders exactly 6 cells per row, showing "-" for missing values instead of omitting the cell (指示書8章: 列ズレ禁止)', () => {
     render(
       <PanelInfo
         panel={null}
@@ -100,18 +105,18 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
     // 盤名称はestcode_df側がnullのためproduct_df側('No.2-1低圧動力盤')へfallbackする。
     const row = getRow('No.2-1低圧動力盤')
     const cells = within(row).getAllByRole('cell')
-    expect(cells).toHaveLength(7)
-    // 型式・接続はestcode_df側の値が無く、product_dfにも対応fieldが無いため"-"。
-    expect(cells[2].textContent).toBe('-') // 型式
-    expect(cells[6].textContent).toBe('-') // 接続
+    expect(cells).toHaveLength(6)
+    // [追加機能: 箱体型式解析] 「型式」列は盤情報テーブルから削除済み。
+    // 接続はestcode_df側の値が無く、product_dfにも対応fieldが無いため"-"。
+    expect(cells[5].textContent).toBe('-') // 接続
     // 高さ/幅/奥行はestcode_dfがnullでもproduct_df側(ban_h1=2100, ban_w=1900, ban_d=1200)へ
     // fallbackするため"-"にはならない。
-    expect(cells[3].textContent).toBe('2100') // 高さ (ban_h1のみ、ban_h2はnull)
-    expect(cells[4].textContent).toBe('1900') // 幅
-    expect(cells[5].textContent).toBe('1200') // 奥行
+    expect(cells[2].textContent).toBe('2100') // 高さ (ban_h1のみ、ban_h2はnull)
+    expect(cells[3].textContent).toBe('1900') // 幅
+    expect(cells[4].textContent).toBe('1200') // 奥行
   })
 
-  it('shows the matched estcode_df fields for a single panel across the 7 columns', () => {
+  it('shows the matched estcode_df fields for a single panel across the 6 columns', () => {
     render(
       <PanelInfo
         panel={null}
@@ -125,14 +130,13 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
     const cells = within(row).getAllByRole('cell')
     expect(cells[0].textContent).toBe('5/5') // 面/盤
     expect(cells[1].textContent).toBe('No.2-1低圧動力盤') // 盤名称
-    expect(cells[2].textContent).toBe('IS2') // 型式
     // 高さ: product_df側 ban_h1=2100/ban_h2=null が優先されるため、
     // estcode_df側のban_h=2300は使われない (指示書3章の優先順位)。
-    expect(cells[3].textContent).toBe('2100')
+    expect(cells[2].textContent).toBe('2100')
     // 幅/奥行: estcode_df側が優先 (指示書4章)。
-    expect(cells[4].textContent).toBe('1700')
-    expect(cells[5].textContent).toBe('2200')
-    expect(cells[6].textContent).toBe('箱・左右(L)')
+    expect(cells[3].textContent).toBe('1700')
+    expect(cells[4].textContent).toBe('2200')
+    expect(cells[5].textContent).toBe('箱・左右(L)')
     // 見出しに件数が出る (指示書4章の表示例「盤情報 5件」に相当)。
     expect(document.querySelector('.panel-info__heading')?.textContent).toContain('盤情報　1件')
   })
@@ -225,7 +229,7 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
     expect(screen.queryByText(/5\.0/)).not.toBeInTheDocument()
   })
 
-  it('shows "-" for 型式/接続 (and falls back for 幅/奥行) for a panel with no matching estcode_df row, without dropping the row itself (指示書10章)', () => {
+  it('shows "-" for 接続 (and falls back for 幅/奥行) for a panel with no matching estcode_df row, without dropping the row itself (指示書10章)', () => {
     render(
       <PanelInfo
         panel={null}
@@ -238,11 +242,10 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
     // 行自体(盤名称)はproduct_df由来の値で表示され続ける。
     const row = getRow('No.2-1低圧動力盤')
     const cells = within(row).getAllByRole('cell')
-    expect(cells[2].textContent).toBe('-') // 型式(estcode_df専用、fallback無し)
-    expect(cells[3].textContent).toBe('2100') // 高さ: product_df ban_h1へfallback
-    expect(cells[4].textContent).toBe('1900') // 幅: product_dfへfallback
-    expect(cells[5].textContent).toBe('1200') // 奥行: product_dfへfallback
-    expect(cells[6].textContent).toBe('-') // 接続(estcode_df専用、fallback無し)
+    expect(cells[2].textContent).toBe('2100') // 高さ: product_df ban_h1へfallback
+    expect(cells[3].textContent).toBe('1900') // 幅: product_dfへfallback
+    expect(cells[4].textContent).toBe('1200') // 奥行: product_dfへfallback
+    expect(cells[5].textContent).toBe('-') // 接続(estcode_df専用、fallback無し)
     // 「該当する積算盤情報がありません」という単一メッセージへの統合はしない(指示書10章)。
     expect(screen.queryByText('該当する積算盤情報がありません')).not.toBeInTheDocument()
   })
@@ -358,7 +361,7 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
     const nameCell = screen.getByText(longName)
     expect(nameCell).toHaveAttribute('title', longName)
     const row = nameCell.closest('button') as HTMLElement
-    const connectCell = within(row).getAllByRole('cell')[6]
+    const connectCell = within(row).getAllByRole('cell')[5]
     expect(connectCell).toHaveAttribute('title', '箱・左右(L)')
   })
 
@@ -407,7 +410,7 @@ describe('PanelInfo: 高さ表示の5分岐 (Issue #38 Phase 2 指示3章)', () 
       />,
     )
     const row = getRow(panels[0].ban_meisyou)
-    return within(row).getAllByRole('cell')[3].textContent ?? ''
+    return within(row).getAllByRole('cell')[2].textContent ?? ''
   }
 
   it('shows a single value when 正面/背面 are equal', () => {
@@ -466,8 +469,8 @@ describe('PanelInfo: 幅/奥行のfallback (Issue #38 Phase 2 指示4章)', () =
     )
     const row = getRow('No.2-1低圧動力盤')
     const cells = within(row).getAllByRole('cell')
-    expect(cells[4].textContent).toBe('1700')
-    expect(cells[5].textContent).toBe('2200')
+    expect(cells[3].textContent).toBe('1700')
+    expect(cells[4].textContent).toBe('2200')
   })
 
   it('falls back to PanelPreview.ban_w/ban_d when EstimatePanelInfo values are missing', () => {
@@ -482,8 +485,8 @@ describe('PanelInfo: 幅/奥行のfallback (Issue #38 Phase 2 指示4章)', () =
     )
     const row = getRow('No.2-1低圧動力盤')
     const cells = within(row).getAllByRole('cell')
-    expect(cells[4].textContent).toBe('1900')
-    expect(cells[5].textContent).toBe('1200')
+    expect(cells[3].textContent).toBe('1900')
+    expect(cells[4].textContent).toBe('1200')
   })
 
   it('shows "-" when both sources are missing', () => {
@@ -498,13 +501,13 @@ describe('PanelInfo: 幅/奥行のfallback (Issue #38 Phase 2 指示4章)', () =
     )
     const row = getRow('No.2-1低圧動力盤')
     const cells = within(row).getAllByRole('cell')
+    expect(cells[3].textContent).toBe('-')
     expect(cells[4].textContent).toBe('-')
-    expect(cells[5].textContent).toBe('-')
   })
 })
 
 describe('PanelInfo: レイアウト構造 (Issue #38 Phase 2: CSS Gridベースのカラム型1行一覧)', () => {
-  it('makes each data row (button) a CSS Grid container carrying all 7 cells as direct children', () => {
+  it('makes each data row (button) a CSS Grid container carrying all 6 cells as direct children', () => {
     render(
       <PanelInfo
         panel={null}
@@ -517,7 +520,7 @@ describe('PanelInfo: レイアウト構造 (Issue #38 Phase 2: CSS Gridベース
     const row = getRow('No.2-1低圧動力盤')
     expect(row.className).toContain('panel-info__row')
     expect(row.className).toContain('panel-info__data-row')
-    expect(within(row).getAllByRole('cell')).toHaveLength(7)
+    expect(within(row).getAllByRole('cell')).toHaveLength(6)
   })
 
   it('keeps the heading (件数) fixed outside the scrollable row list area', () => {
@@ -536,7 +539,7 @@ describe('PanelInfo: レイアウト構造 (Issue #38 Phase 2: CSS Gridベース
     expect(scrollArea?.contains(heading)).toBe(false)
   })
 
-  it('makes the row list area the internally scrolling part (overflow-y: auto, overflow-x: hidden), while the section itself fills 100% of its externally-controlled height', () => {
+  it('makes the row list area the internally scrolling part (overflow: auto on both axes, so wide content can scroll horizontally instead of being clipped/wrapped — Issue #40 追加修正), while the section itself fills 100% of its externally-controlled height', () => {
     render(
       <PanelInfo
         panel={null}
@@ -550,7 +553,7 @@ describe('PanelInfo: レイアウト構造 (Issue #38 Phase 2: CSS Gridベース
     const scrollArea = document.querySelector('.panel-info__list-scroll') as HTMLElement
     expect(getComputedStyle(section).height).toBe('100%')
     expect(getComputedStyle(scrollArea).overflowY).toBe('auto')
-    expect(getComputedStyle(scrollArea).overflowX).toBe('hidden')
+    expect(getComputedStyle(scrollArea).overflowX).toBe('auto')
   })
 })
 
@@ -569,5 +572,311 @@ describe('PanelInfo: 見出し (Issue #19 追加修正で折りたたみ機能�
     expect(document.querySelector('.panel-info__heading')?.textContent).toContain('盤情報　1件')
     // 折りたたみ用のchevronトグルボタンは存在しない (見出しは<h2>のプレーンテキスト)。
     expect(screen.queryByRole('button', { name: /盤情報/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
+  function makeBoxTypeAnalysis(overrides: Partial<BoxTypeAnalysis> = {}): BoxTypeAnalysis {
+    return {
+      raw: 'IS2',
+      normalized: 'IS2',
+      status: 'parsed',
+      requires_review: false,
+      primary: { group: 'primary', code: 'IS2', meaning: '標準アングルレス型' },
+      aux_matches: [],
+      segments: [['primary', 'IS2']],
+      unparsed: [],
+      box_category: 'A製品用・屋内キュービクル',
+      product_category: 'A製品',
+      environment: '屋内',
+      usage: '標準',
+      structure: '標準アングルレス型',
+      material: null,
+      coating: null,
+      surface_treatment: null,
+      base_finish: null,
+      certification: null,
+      ip55: false,
+      processing_target: 'complete_box',
+      custom_estimate_conditions: [],
+      other_notes: [],
+      notes: [],
+      conflicts: [],
+      warnings: [],
+      alternatives: [],
+      candidate_index: 0,
+      ...overrides,
+    }
+  }
+
+  it('does not render the 型式 column header any more (moved into the 箱体型式 tab)', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel()]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    expect(screen.queryByRole('columnheader', { name: '型式' })).not.toBeInTheDocument()
+  })
+
+  it('renders the 箱体型式 tab collapsed by default, and no 鋼材 section when no steel prop is given', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel()]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    expect(screen.getByRole('button', { name: /箱体型式/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: /鋼材/ })).not.toBeInTheDocument()
+    expect(screen.queryByText('仕様検討中')).not.toBeInTheDocument()
+  })
+
+  it('[2026-10 追加修正: 回帰確認] renders a bare "IS2" (no aux symbols) as parsed, never showing the "解析できませんでした" failure message', () => {
+    // makeBoxTypeAnalysis()の既定値そのもの(補助記号無しのIS2単独、
+    // status="parsed")を使う。画面で「この型式は解析できませんでした」と
+    // 誤表示される不具合の再発防止。
+    const analysis = makeBoxTypeAnalysis()
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel({ model: 'IS2', box_type_analysis: analysis })]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
+    expect(screen.queryByText('この型式は解析できませんでした')).not.toBeInTheDocument()
+    expect(screen.getByText('解析済み')).toBeInTheDocument()
+    expect(screen.getAllByText('IS2').length).toBeGreaterThan(0)
+    expect(screen.getByText('A製品用・屋内キュービクル')).toBeInTheDocument()
+  })
+
+  it('[2026-10 追加修正: 回帰確認] renders correctly from a payload shaped exactly like the real Backend API response for "IS2"', () => {
+    // `GET /api/products/{product}/estimate-panels`の実レスポンス(curlで取得した
+    // 実データそのもの)をそのまま貼り付けたfixture。型・キー名の不一致による
+    // 表示崩れを、作り込んだテスト用オブジェクトではなく実レスポンス形状で検出する。
+    const realApiAnalysis: BoxTypeAnalysis = {
+      raw: 'IS2',
+      normalized: 'IS2',
+      status: 'parsed',
+      requires_review: false,
+      primary: { group: 'primary', code: 'IS2', meaning: '標準アングルレス型' },
+      aux_matches: [],
+      segments: [['primary', 'IS2']],
+      unparsed: [],
+      box_category: 'A製品用・屋内キュービクル',
+      product_category: 'A製品',
+      environment: '屋内',
+      usage: '標準',
+      structure: '標準アングルレス型',
+      material: null,
+      coating: null,
+      surface_treatment: null,
+      base_finish: null,
+      certification: null,
+      ip55: false,
+      processing_target: 'complete_box',
+      custom_estimate_conditions: [],
+      other_notes: [],
+      notes: [],
+      conflicts: [],
+      warnings: [],
+      alternatives: [],
+      candidate_index: 0,
+    }
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel({ model: 'IS2', box_type_analysis: realApiAnalysis })]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
+    expect(screen.queryByText('この型式は解析できませんでした')).not.toBeInTheDocument()
+    expect(screen.getByText('解析済み')).toBeInTheDocument()
+  })
+
+  it('shows the box type symbol, its meaning per line, and the 積算情報表 when the 箱体型式 tab is expanded', () => {
+    const analysis = makeBoxTypeAnalysis({
+      aux_matches: [{ group: 'aux1', code: 'GT', meaning: '厚膜塗装（3コート・外面100μm以上）' }],
+      coating: '厚膜塗装(3コート・外面100μm以上)',
+    })
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel({ model: 'IS2GT', box_type_analysis: analysis })]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
+    expect(screen.getByText('箱体型式：')).toBeInTheDocument()
+    expect(screen.getByText('IS2GT')).toBeInTheDocument()
+    // 「標準アングルレス型」は記号の意味欄・積算情報表(箱体構造)の両方に
+    // 表示されるため、件数ではなく存在のみを確認する。
+    expect(screen.getAllByText('標準アングルレス型').length).toBeGreaterThan(0)
+    expect(screen.getByText('厚膜塗装（3コート・外面100μm以上）')).toBeInTheDocument()
+    expect(screen.getByText('積算に使用できる情報')).toBeInTheDocument()
+    expect(screen.getByText('箱体構造')).toBeInTheDocument()
+    expect(screen.getByText('設置環境')).toBeInTheDocument()
+  })
+
+  it('marks conflicting fields as 要確認 instead of silently picking one symbol over another', () => {
+    const analysis = makeBoxTypeAnalysis({
+      status: 'conflict',
+      requires_review: true,
+      aux_matches: [
+        { group: 'aux1', code: 'SU', meaning: 'SUS304の上に塗装仕上' },
+        { group: 'aux1', code: 'HL', meaning: 'SUS304・ヘアライン仕上' },
+      ],
+      material: 'SUS304',
+      conflicts: [{ field: 'finish', values: [['SU', '仕上条件が競合'], ['HL', '仕上条件が競合']] }],
+      warnings: ['SUとHLは仕上条件(塗装仕上／ヘアライン仕上)が競合しています。要確認。'],
+    })
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel({ model: 'IS2SUHL', box_type_analysis: analysis })]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
+    expect(screen.getAllByText('要確認(競合)').length).toBeGreaterThan(0)
+    expect(screen.getByText(/SUとHLは仕上条件/)).toBeInTheDocument()
+  })
+
+  it('shows unparsed characters as a warning, never silently dropping them', () => {
+    const analysis = makeBoxTypeAnalysis({
+      status: 'partial',
+      requires_review: true,
+      unparsed: ['Q'],
+      warnings: ['未解析の文字があります: Q'],
+    })
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel({ model: 'IS2Q', box_type_analysis: analysis })]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
+    expect(screen.getByText(/未解析の文字列: Q/)).toBeInTheDocument()
+  })
+
+  it('shows a placeholder message when there is no model to analyze', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel({ model: null, box_type_analysis: null })]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
+    expect(screen.getByText('このページには箱体型式の情報がありません')).toBeInTheDocument()
+  })
+
+  it('renders exactly one 鋼材 section (the real SteelSection, never a placeholder) and toggles it independently of the 箱体型式 tab', () => {
+    const steel: SteelOutline = {
+      status: 'ok',
+      source_page: '5',
+      source_drawing_name: '外形図(2)',
+      items: [
+        { symbol_name: 'BSP-STEELA-H', cabtype: 'IS2', component_name: '基礎ベース', material_spec: 'TEST-MAT-A 10x20' },
+      ],
+    }
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel({ model: 'IS2', box_type_analysis: makeBoxTypeAnalysis() })]}
+        steel={steel}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    // 鋼材のトグルは1つだけ(二重に描画されない)。
+    expect(screen.getAllByRole('button', { name: /鋼材/ })).toHaveLength(1)
+    expect(screen.getAllByLabelText('鋼材')).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
+    fireEvent.click(screen.getByRole('button', { name: /鋼材/ }))
+    // 鋼材を開いても箱体型式は閉じない。実データの内容が表示される(仮文言ではない)。
+    expect(screen.getByRole('button', { name: /箱体型式/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: /鋼材/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('基礎ベース')).toBeInTheDocument()
+    expect(screen.queryByText('仕様検討中')).not.toBeInTheDocument()
+
+    // 鋼材を閉じても箱体型式は開いたまま。
+    fireEvent.click(screen.getByRole('button', { name: /鋼材/ }))
+    expect(screen.getByRole('button', { name: /鋼材/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: /箱体型式/ })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('uses the Viewer-selected panel (not just the first row) for the 箱体型式 tab', () => {
+    const panels = [
+      makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: '高圧受電盤' }),
+      makeProductPanel({ ban_menno: 2, ban_no: 1, ban_meisyou: '低圧動力盤' }),
+    ]
+    const estimatePanels = [
+      makeEstimatePanel({ ban_menno: 1, ban_no: 1, ban_meisyou: '高圧受電盤', model: 'OS2' }),
+      makeEstimatePanel({ ban_menno: 2, ban_no: 1, ban_meisyou: '低圧動力盤', model: 'IS2' }),
+    ]
+    const selectedPanel = { key: panelKey(panels[1], 1), panel: panels[1] }
+    render(
+      <PanelInfo
+        panel={null}
+        panels={panels}
+        estimatePanels={estimatePanels}
+        selectedPanel={selectedPanel}
+        onSelectPanel={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
+    expect(screen.getByText('IS2')).toBeInTheDocument()
+    expect(screen.queryByText('OS2')).not.toBeInTheDocument()
+  })
+
+  it('[2026-10 追加修正: 強制的な高さ引き伸ばしの撤回] never adds the old stretch-to-fill modifier classes, so タブ/一覧 stay content-sized before and after expanding a tab (no forced blank space from flex-grow/align-self:stretch)', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel({ model: 'IS2', box_type_analysis: makeBoxTypeAnalysis() })]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    const tabs = document.querySelector('.panel-info__tabs') as HTMLElement
+    const listScroll = document.querySelector('.panel-info__list-scroll') as HTMLElement
+    const boxTypeTabWrapper = screen.getByRole('button', { name: /箱体型式/ }).closest('.panel-info__tab')
+
+    expect(tabs.className).not.toContain('panel-info__tabs--expanded')
+    expect(listScroll.className).not.toContain('panel-info__list-scroll--compact')
+    expect(boxTypeTabWrapper?.className).not.toContain('panel-info__tab--expanded')
+
+    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
+
+    // 展開後も、残り高さを強制的に割り当てるmodifier classは付与しない
+    // (常に内容量どおりの高さのまま。指示: 「内容が少ないときに残りの高さを
+    // 埋めて引き伸ばさないでください」)。
+    expect(tabs.className).not.toContain('panel-info__tabs--expanded')
+    expect(listScroll.className).not.toContain('panel-info__list-scroll--compact')
+    expect(boxTypeTabWrapper?.className).not.toContain('panel-info__tab--expanded')
   })
 })
