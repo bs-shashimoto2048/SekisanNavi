@@ -98,6 +98,68 @@ describe('TargetSelector', () => {
     expect(getComputedStyle(select).maxWidth).toBe('var(--target-selector-width)')
   })
 
+  it('labels the product target option as 製番仕様 (旧「製品全体」)、and shows it right after 総合計', () => {
+    render(<TargetSelector targets={[makeTarget(), makePanelTarget()]} selectedTargetId={null} onSelectTarget={() => {}} />)
+    const options = within(screen.getByRole('combobox')).getAllByRole('option') as HTMLOptionElement[]
+    expect(options.map((o) => o.textContent)).toEqual(['総合計', '製番仕様', '面番号 1 / 盤番号 1 : 高圧受電盤'])
+    expect(options[1].value).toBe('product')
+    expect(screen.queryByText('製品全体')).not.toBeInTheDocument()
+  })
+
+  it('still allows selecting a target regardless of the focused highlight (視認性の変更は選択操作に影響しない)', () => {
+    const onSelectTarget = vi.fn()
+    render(
+      <TargetSelector
+        targets={[makeTarget(), makePanelTarget()]}
+        selectedTargetId="panel:1:1"
+        onSelectTarget={onSelectTarget}
+      />,
+    )
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'product' } })
+    expect(onSelectTarget).toHaveBeenCalledWith('product')
+  })
+
+  // 旧`EstimateAggregation.test.tsx`の「積算対象Selectの視認性 (Issue #6)」のCSS検証を
+  // 共通TargetSelectorのCSS(`TargetSelector.css`、vitestのcssで有効)へ合わせて再作成。
+  describe('視認性のCSS (旧 Issue #6 / Issue #36 のCSS検証を共通TargetSelector向けに再作成)', () => {
+    it('has a visibly thicker (2px) border and a 1行表示向けの省略表示(overflow hidden / ellipsis / nowrap) in the normal (総合計) state', () => {
+      render(<TargetSelector targets={[makeTarget()]} selectedTargetId={null} onSelectTarget={() => {}} />)
+      const style = getComputedStyle(screen.getByRole('combobox'))
+      expect(style.borderTopWidth).toBe('2px')
+      expect(style.overflow).toBe('hidden')
+      expect(style.textOverflow).toBe('ellipsis')
+      expect(style.whiteSpace).toBe('nowrap')
+    })
+
+    it('has no outer ring (box-shadow) in the normal state, and the --focused modifier declares a different border colour plus an outer ring (階層を維持する)', () => {
+      const targets = [makeTarget(), makePanelTarget()]
+      const { rerender } = render(<TargetSelector targets={targets} selectedTargetId={null} onSelectTarget={() => {}} />)
+      const base = getComputedStyle(screen.getByRole('combobox'))
+      const baseShadow = base.boxShadow
+      const baseBorderColor = base.borderTopColor
+      expect(baseShadow === '' || baseShadow === 'none').toBe(true)
+
+      rerender(<TargetSelector targets={targets} selectedTargetId="panel:1:1" onSelectTarget={() => {}} />)
+      const focused = getComputedStyle(screen.getByRole('combobox'))
+      expect(focused.boxShadow).not.toBe('')
+      expect(focused.boxShadow).not.toBe('none')
+      expect(focused.boxShadow).not.toBe(baseShadow)
+      expect(focused.borderTopColor).not.toBe(baseBorderColor)
+      // 太さは変えない(強調は色とリングで行い、レイアウトを動かさない)。
+      expect(focused.borderTopWidth).toBe('2px')
+    })
+
+    it('lays the 対象 label and the select out horizontally (flex row), without shrinking in the toolbar', () => {
+      const { container } = render(
+        <TargetSelector targets={[makeTarget()]} selectedTargetId={null} onSelectTarget={() => {}} />,
+      )
+      const label = getComputedStyle(container.querySelector('.target-selector__label') as HTMLElement)
+      expect(label.display).toBe('flex')
+      expect(label.flexDirection).toBe('row')
+      expect(label.whiteSpace).toBe('nowrap')
+    })
+  })
+
   it('has a label of "対象"', () => {
     render(<TargetSelector targets={[makeTarget()]} selectedTargetId={null} onSelectTarget={() => {}} />)
     expect(screen.getByText('対象')).toBeInTheDocument()

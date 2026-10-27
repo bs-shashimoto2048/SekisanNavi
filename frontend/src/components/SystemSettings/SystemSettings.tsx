@@ -118,7 +118,7 @@ export function SystemSettings({
                 panel共通」という総称へ変更した(実装(CSS変数)自体は元から
                 `.floating-panel`基底クラス全体に効く汎用の仕組みで、今回の
                 文言修正のみでロジック変更は無い)。 */}
-            盤情報・積算集約・積算明細・部品台帳・操作ガイドのfloating panel共通の
+            図面情報・図面情報追加・積算集約・積算明細・部品台帳・操作ガイドのfloating panel共通の
             背景透過度です。値を下げるほど図面が透けて見えます(枠線・文字・表の
             配色は変わりません)。既定値は
             {Math.round(FLOATING_PANEL_BG_ALPHA_DEFAULT * 100)}%です。
