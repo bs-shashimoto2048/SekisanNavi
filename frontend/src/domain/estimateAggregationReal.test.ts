@@ -145,7 +145,7 @@ describe('buildRealEstimateAggregation (積算集約・積算明細UI再構成: 
     })
     expect(result.lineItems[0].targetId).toBe(PRODUCT_TARGET_ID)
     expect(result.detailItems[0].targetId).toBe(PRODUCT_TARGET_ID)
-    expect(result.targets.some((t) => t.id === PRODUCT_TARGET_ID && t.name === '製品全体')).toBe(true)
+    expect(result.targets.some((t) => t.id === PRODUCT_TARGET_ID && t.name === '製番仕様')).toBe(true)
   })
 
   it('assigns a detection overlapping a panel to that panel target, carrying banMenno/banNo on the target (対象セレクトの実識別子)', () => {
@@ -480,7 +480,7 @@ describe('buildRealEstimateAggregation: totalLineItems (Sekisan Navi 追加修�
     expect(result.totalLineItems[0].amount).toBe(-19400)
   })
 
-  it('aggregates correctly within 製品全体 alone (no panel overlap at all)', () => {
+  it('aggregates correctly within 製番仕様 alone (no panel overlap at all)', () => {
     const panel = makePanel({ normalized_rect: { x: 0.8, y: 0.8, w: 0.1, h: 0.1 } }) // どのdetectionとも交差しない
     const d1 = makeDetection({ id: 1, bbox_x: 0.05, bbox_y: 0.05, bbox_w: 0.02, bbox_h: 0.02 })
     const d2 = makeDetection({ id: 2, bbox_x: 0.15, bbox_y: 0.05, bbox_w: 0.02, bbox_h: 0.02 })

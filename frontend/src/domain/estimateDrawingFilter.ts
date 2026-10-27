@@ -18,7 +18,7 @@ import type { EstimateDetailItem, EstimateTarget } from '../types/estimateAggreg
  *   ページ全て (`panelsByPageNo`から導出)。同一の物理盤が複数の図面ページに
  *   またがって存在する現在の実データ構造をそのまま反映するため、「盤1つ=図面1枚」
  *   とは限らない (指示4章/6章)。
- * - `target.type === 'product' | 'tie'` (製品全体・要確認): どの盤BBoxとも交差
+ * - `target.type === 'product' | 'tie'` (製番仕様・要確認): どの盤BBoxとも交差
  *   しなかった(または複数盤に同点で交差した)Detectionの実際の所属ページ
  *   (`EstimateDetailItem.pageNo`、`drawingPageId`から解決済みの実識別子)を基準にする
  *   (指示5章)。該当する明細が1件も無い場合は空集合を返す (呼び出し側で

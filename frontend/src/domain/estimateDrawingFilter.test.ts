@@ -39,7 +39,7 @@ function makeDetailItem(overrides: Partial<EstimateDetailItem> = {}): EstimateDe
   }
 }
 
-const productTarget: EstimateTarget = { id: 'product', type: 'product', name: '製品全体', banMenno: null, banNo: null }
+const productTarget: EstimateTarget = { id: 'product', type: 'product', name: '製番仕様', banMenno: null, banNo: null }
 const panelTarget: EstimateTarget = {
   id: 'panel:5:5',
   type: 'panel',
@@ -79,7 +79,7 @@ describe('visiblePageNosForTarget (積算対象連動の金額表示・図面一
     expect(result).toEqual(new Set([16]))
   })
 
-  it('for 製品全体/要確認, uses the pageNo of the detail items belonging to that target (Detectionの実所属ページ、指示5章)', () => {
+  it('for 製番仕様/要確認, uses the pageNo of the detail items belonging to that target (Detectionの実所属ページ、指示5章)', () => {
     const detailItems = [
       makeDetailItem({ id: 'a', targetId: 'product', pageNo: 16 }),
       makeDetailItem({ id: 'b', targetId: 'product', pageNo: 29 }),
@@ -89,7 +89,7 @@ describe('visiblePageNosForTarget (積算対象連動の金額表示・図面一
     expect(result).toEqual(new Set([16, 29]))
   })
 
-  it('returns an empty set (not null) when 製品全体 has zero matching detail items (指示5章: 空表示は許容するが絞り込みなしとは区別する)', () => {
+  it('returns an empty set (not null) when 製番仕様 has zero matching detail items (指示5章: 空表示は許容するが絞り込みなしとは区別する)', () => {
     const result = visiblePageNosForTarget(productTarget, [], new Map())
     expect(result).toEqual(new Set())
     expect(result).not.toBeNull()

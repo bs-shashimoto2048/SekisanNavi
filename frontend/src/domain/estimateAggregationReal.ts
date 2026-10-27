@@ -63,7 +63,7 @@ export type PanelAssignment =
  *
  * 判定順:
  *   1. 各盤BBoxとの交差面積(`intersectionArea`、中心点判定は使わない)を求める。
- *   2. 交差する盤が0件 → 製品全体。
+ *   2. 交差する盤が0件 → 製番仕様。
  *   3. 交差する盤が1件 → その盤。
  *   4. 交差する盤が2件以上 → 交差面積が最大の盤。
  *   5. 最大交差面積が複数の"異なる盤"で完全同値 → tie (要確認として報告)。
@@ -143,7 +143,7 @@ interface BuildParams {
  *     分からなくなるため、実データに基づく区別としてキーに残す。
  *
  * Sekisan Navi 追加修正指示(積算集約の数量集約) 4章〜7章: 上記は「対象を選んだ
- * 後にその対象内で集約する」ための行(`lineItems`)であり、個別盤/製品全体/要確認を
+ * 後にその対象内で集約する」ための行(`lineItems`)であり、個別盤/製番仕様/要確認を
  * 選択している間はこれを対象idで絞り込むだけで正しく数量集約された結果になる。
  * しかし「総合計」(対象フィルタなし)は対象を横断して全明細を単純結合するだけの
  * ビューのため、同じmasterItemIdが複数の盤にまたがって存在すると
@@ -289,7 +289,7 @@ export function buildRealEstimateAggregation({
   }
 
   const targets: EstimateTarget[] = [
-    { id: PRODUCT_TARGET_ID, type: 'product', name: '製品全体', banMenno: null, banNo: null },
+    { id: PRODUCT_TARGET_ID, type: 'product', name: '製番仕様', banMenno: null, banNo: null },
     ...Array.from(panelTargetsByKey.values()).sort((a, b) => (a.banMenno ?? 0) - (b.banMenno ?? 0)),
   ]
   if (tieDetectionIds.length > 0) {

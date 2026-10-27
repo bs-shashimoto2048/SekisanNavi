@@ -12,9 +12,9 @@ describe('formatTargetLabel (積算明細強化・Undo/Redo・要確認警告・
     expect(formatTargetLabel(target)).toBe('面1 / 盤1')
   })
 
-  it('formats the product target as "製品全体"', () => {
-    const target: EstimateTarget = { id: 'product', type: 'product', name: '製品全体', banMenno: null, banNo: null }
-    expect(formatTargetLabel(target)).toBe('製品全体')
+  it('formats the product target as "製番仕様"', () => {
+    const target: EstimateTarget = { id: 'product', type: 'product', name: '製番仕様', banMenno: null, banNo: null }
+    expect(formatTargetLabel(target)).toBe('製番仕様')
   })
 
   it('formats the tie target as "要確認"', () => {

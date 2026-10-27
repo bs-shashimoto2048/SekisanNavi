@@ -273,7 +273,7 @@ function App() {
   // 同じ行の再クリックで解除、別の行クリックで切り替える。
   const [detailSelectedResultId, setDetailSelectedResultId] = useState<number | null>(null)
   // 積算明細(③)のタブ (Issue #40 Phase 5: 全て/設計データ/図面判定/要確認/
-  // 修正あり。判定方法+手修正状態の軸であり、対象(盤/製品全体)の切替とは
+  // 修正あり。判定方法+手修正状態の軸であり、対象(盤/製番仕様)の切替とは
   // 独立)。EstimateDetail内部stateではなくApp.tsx側で持つ (Phase 4以前からの
   // controlled化を維持)。
   const [estimateDetailTabFilter, setEstimateDetailTabFilter] = useState<DetailTabFilter>('all')
@@ -838,7 +838,7 @@ function App() {
   )
 
   // [Issue #40 Phase 5] 積算集約(②)をEstimateResult基準へ切り替える。対象
-  // (盤/製品全体)一覧そのものは、既存の`estimateAggregationData.targets`
+  // (盤/製番仕様)一覧そのものは、既存の`estimateAggregationData.targets`
   // (product_df由来の盤一覧、Detectionの有無に関わらず確定している)を
   // そのまま再利用し、金額・数量の集約だけをEstimateResultから算出し直す
   // (`estimateResultAggregation.ts`のモジュールコメント参照)。
@@ -909,7 +909,7 @@ function App() {
   )
 
   // 個別盤が選択されている場合のみ、Viewerの盤BBoxをその盤だけへ絞り込む
-  // (盤フォーカス・積算明細再設計 指示1章)。製品全体・要確認・総合計選択時は
+  // (盤フォーカス・積算明細再設計 指示1章)。製番仕様・要確認・総合計選択時は
   // 盤BBox自体は絞り込まない(指示1章: 「盤BBox自体をどう表示するかは、判別の
   // 妨げにならない範囲で既存表示を維持して構わない」)。
   const viewerFocusPanel = useMemo(() => {
@@ -981,7 +981,7 @@ function App() {
   }, [estimateResults, detailSelectedResultId])
 
   // [Issue #40 Phase 6-A指示A-1] 確定ボタンの「要確認タブで確認する」リンクから
-  // 呼ぶ。要確認行は対象(盤/製品全体)を問わず存在しうるため、積算集約の対象は
+  // 呼ぶ。要確認行は対象(盤/製番仕様)を問わず存在しうるため、積算集約の対象は
   // 「総合計」(フィルタなし)へ戻した上で、積算明細のタブを「要確認」へ切り替える
   // (`needs_confirmation`タブはjudgment_method===needs_confirmationに加え
   // status===needs_reviewの行も対象に含む、EstimateDetail.tsx参照)。
@@ -997,7 +997,7 @@ function App() {
     setEstimateDetailTabFilter('overridden')
   }
 
-  // [Issue #40 Phase 4/5] 積算明細向けに、選択中の対象(盤/製品全体/総合計/
+  // [Issue #40 Phase 4/5] 積算明細向けに、選択中の対象(盤/製番仕様/総合計/
   // 要確認)へestimateResultsを絞り込む。積算集約(②、
   // `estimateResultAggregation.ts`)の対象分類と同じ規則にする(対象を
   // 切り替えたときに両パネルの内容が食い違わないようにするため)。
@@ -1010,7 +1010,7 @@ function App() {
   //     `status === 'needs_review'`の結果のみ。
   //   - 個別盤(focusedEstimateTarget.type === 'panel'): 要確認を除いた上で、
   //     その盤のbanMenno/banNoと一致する結果のみ。
-  //   - 製品全体(focusedEstimateTarget.type === 'product'): 要確認を除いた
+  //   - 製番仕様(focusedEstimateTarget.type === 'product'): 要確認を除いた
   //     上で、どの盤にも紐づかない結果(design_data判定等)のみ。
   const estimateResultsForSelectedTarget = useMemo(() => {
     if (selectedEstimateTargetId == null) return estimateResults
@@ -1894,6 +1894,9 @@ function App() {
           onToggleMaster={() => setEstimateMasterFloatingVisible((v) => !v)}
           drawingEvidenceVisible={drawingEvidenceFloatingVisible}
           onToggleDrawingEvidence={() => setDrawingEvidenceFloatingVisible((v) => !v)}
+          targets={estimateResultAggregationData.targets}
+          selectedTargetId={selectedEstimateTargetId}
+          onSelectTarget={setSelectedEstimateTargetId}
         />
       </div>
       {/* Issue #40 Phase 3・8章: ルール再評価による積算結果増減の控えめな通知。
@@ -2049,7 +2052,6 @@ function App() {
                   lineItems={estimateResultAggregationData.lineItems}
                   totalLineItems={estimateResultAggregationData.totalLineItems}
                   selectedTargetId={selectedEstimateTargetId}
-                  onSelectTarget={setSelectedEstimateTargetId}
                   productNo={activeProductNo}
                   needsReviewCount={estimateResultNeedsReviewCount}
                   onNavigateToNeedsReview={handleNavigateToNeedsReview}

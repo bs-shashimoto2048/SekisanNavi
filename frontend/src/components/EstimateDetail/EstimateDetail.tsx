@@ -103,7 +103,7 @@ function evidenceSummaryText(result: EstimateResult, detectionById: Map<number, 
 }
 
 interface Props {
-  /** 選択中の対象(盤/製品全体/総合計)へ、呼び出し側(App.tsx)が既に
+  /** 選択中の対象(盤/製番仕様/総合計)へ、呼び出し側(App.tsx)が既に
    * 絞り込み済みのEstimateResult一覧。積算結果の正本(Phase 5指示1章)。 */
   results: EstimateResult[]
   /** コード→品名解決用 (積算コードMaster、App.tsxの`masterItemById`をそのまま
@@ -113,7 +113,7 @@ interface Props {
    * 「根拠情報の表示」)。App.tsxの`allDetections`から作ったMapをそのまま渡す。 */
   detectionById?: Map<number, Detection>
   /** タブの選択状態。積算集約側の対象切替とは独立(タブ=判定方法の軸、
-   * 対象切替=盤/製品全体の軸のため)。 */
+   * 対象切替=盤/製番仕様の軸のため)。 */
   tabFilter: DetailTabFilter
   onTabFilterChange: (filter: DetailTabFilter) => void
   /** 係数の手修正 (Issue #40 7-3章)。API呼び出し・状態更新はApp.tsx側の責務。 */
@@ -192,6 +192,15 @@ export function EstimateDetail({
             (表示/非表示はPanelVisibilityTogglesのみで行う)。この見出し領域は
             FloatingPanel側のドラッグハンドル判定(`h2`要素であること)を兼ねる。 */}
         <h2 className="estimate-detail__heading">積算明細</h2>
+
+        {/* [追加修正] 表示対象(盤/製番仕様/要確認/総合計)の選択リストは、
+            積算集約(②)側にあった同じ選択リストと重複していたため、両者を
+            統合した共通の`TargetSelector`(`PanelVisibilityToggles`内、
+            ボタン群の右端)へ一本化した(指示: 重複をなくし1つに
+            まとめる)。このcomponentは選択状態そのものを持たず、`results`
+            プロップが既にApp.tsx側で選択中対象へ絞り込み済み
+            (`estimateResultsForSelectedTarget`)のものをそのまま表示するだけ
+            (絞り込みロジック自体は変更していない)。 */}
 
         <div className="estimate-detail__source-tabs" role="tablist" aria-label="判定">
           {DETAIL_TABS.map((tab) => (

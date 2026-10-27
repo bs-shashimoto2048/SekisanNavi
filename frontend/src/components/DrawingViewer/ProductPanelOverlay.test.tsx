@@ -519,7 +519,7 @@ describe('ProductPanelOverlay (Phase 1.9〜実画面未達修正: 盤ラベル�
       expect(screen.queryByText('2/1')).not.toBeInTheDocument()
     })
 
-    it('renders all panels when focusPanel is null (総合計・製品全体)', () => {
+    it('renders all panels when focusPanel is null (総合計・製番仕様)', () => {
       const panels = [
         makePanel({ ban_menno: 1, ban_no: 1 }),
         makePanel({ ban_menno: 2, ban_no: 1 }),

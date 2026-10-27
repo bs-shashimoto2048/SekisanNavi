@@ -478,3 +478,22 @@ describe('EstimateDetail: 行クリックによる持続選択 (Issue #40 Phase 
     expect(row.className).toContain('estimate-detail__row--bbox-related')
   })
 })
+
+describe('EstimateDetail: 対象による絞り込み (指示: 積算集約と重複していた対象選択リストはTargetSelectorへ統合、このcomponent自体は絞り込みロジックを持たない)', () => {
+  it('does not filter `results` itself: the list shown is exactly whatever `results` already contains (App.tsx is the single source of truth for the filter)', () => {
+    // results自体は呼び出し側(App.tsx)が既に対象へ絞り込み済みという前提
+    // (このcomponentは絞り込みロジックを持たない。対象選択UI自体は
+    // `TargetSelector`へ統合済みのため、このcomponentはもはや`targets`/
+    // `selectedTargetId`propを受け取らない)。
+    const results = [makeResult({ id: 1, code: 'A' }), makeResult({ id: 2, code: 'B' })]
+    renderDetail({ results })
+    expect(screen.getByText('A')).toBeInTheDocument()
+    expect(screen.getByText('B')).toBeInTheDocument()
+  })
+
+  it('no longer renders its own target select (指示: 積算明細パネルの対象選択リストは削除する)', () => {
+    renderDetail({ results: [makeResult()] })
+    expect(screen.queryByRole('combobox', { name: '表示対象' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: '対象' })).not.toBeInTheDocument()
+  })
+})

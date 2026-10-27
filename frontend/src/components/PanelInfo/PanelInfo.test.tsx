@@ -62,7 +62,7 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
         onSelectPanel={() => {}}
       />,
     )
-    expect(screen.getByText('このページには盤情報がありません')).toBeInTheDocument()
+    expect(screen.getByText('このページには図面情報がありません')).toBeInTheDocument()
   })
 
   it('renders a header row with the 6 columns in order, kept visually fixed via position:sticky inside the scrollable list (Issue #40 追加修正: ヘッダを外に出す旧方式から、他の表と同じ sticky 方式へ変更。横スクロール時もヘッダと列が揃うようにするため)', () => {
@@ -138,7 +138,7 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
     expect(cells[4].textContent).toBe('2200')
     expect(cells[5].textContent).toBe('箱・左右(L)')
     // 見出しに件数が出る (指示書4章の表示例「盤情報 5件」に相当)。
-    expect(document.querySelector('.panel-info__heading')?.textContent).toContain('盤情報　1件')
+    expect(document.querySelector('.panel-info__heading')?.textContent).toContain('図面情報　1件')
   })
 
   it('lists every distinct panel present on the current page, all at once (指示書3章: 複数盤をすべて確認できる)', () => {
@@ -161,7 +161,7 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
         onSelectPanel={() => {}}
       />,
     )
-    expect(document.querySelector('.panel-info__heading')?.textContent).toContain('盤情報　3件')
+    expect(document.querySelector('.panel-info__heading')?.textContent).toContain('図面情報　3件')
     expect(screen.getByText('高圧受電盤')).toBeInTheDocument()
     expect(screen.getByText('低圧動力盤')).toBeInTheDocument()
     expect(screen.getByText('制御盤')).toBeInTheDocument()
@@ -181,7 +181,7 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
         onSelectPanel={() => {}}
       />,
     )
-    expect(document.querySelector('.panel-info__heading')?.textContent).toContain('盤情報　1件')
+    expect(document.querySelector('.panel-info__heading')?.textContent).toContain('図面情報　1件')
     expect(screen.getAllByText('高圧受電盤')).toHaveLength(1)
   })
 
@@ -533,7 +533,7 @@ describe('PanelInfo: レイアウト構造 (Issue #38 Phase 2: CSS Gridベース
         onSelectPanel={() => {}}
       />,
     )
-    const heading = screen.getByText(/盤情報.*1件/)
+    const heading = screen.getByText(/図面情報.*1件/)
     const scrollArea = document.querySelector('.panel-info__list-scroll')
     expect(scrollArea).not.toBeNull()
     expect(scrollArea?.contains(heading)).toBe(false)
@@ -569,9 +569,9 @@ describe('PanelInfo: 見出し (Issue #19 追加修正で折りたたみ機能�
       />,
     )
     expect(screen.getByText('No.2-1低圧動力盤')).toBeInTheDocument()
-    expect(document.querySelector('.panel-info__heading')?.textContent).toContain('盤情報　1件')
+    expect(document.querySelector('.panel-info__heading')?.textContent).toContain('図面情報　1件')
     // 折りたたみ用のchevronトグルボタンは存在しない (見出しは<h2>のプレーンテキスト)。
-    expect(screen.queryByRole('button', { name: /盤情報/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /図面情報/ })).not.toBeInTheDocument()
   })
 })
 

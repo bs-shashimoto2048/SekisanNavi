@@ -64,7 +64,7 @@ const masterItemById = new Map<number, EstimateMasterItem>([
 ])
 
 const baseTargets: EstimateTarget[] = [
-  { id: PRODUCT_TARGET_ID, type: 'product', name: '製品全体', banMenno: null, banNo: null },
+  { id: PRODUCT_TARGET_ID, type: 'product', name: '製番仕様', banMenno: null, banNo: null },
   { id: 'panel:1:1', type: 'panel', name: '高圧受電盤', banMenno: 1, banNo: 1 },
   { id: 'panel:2:2', type: 'panel', name: '低圧電灯盤', banMenno: 2, banNo: 2 },
 ]

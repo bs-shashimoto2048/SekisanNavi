@@ -90,6 +90,11 @@
      エラー表示全般の色にも波及するため、意図的に別トークンとして分離する)。 */
   --reference-pdf-accent: #f5222d;
   --reference-pdf-accent-hover: #cf1322;
+
+  /* 共通「対象」プルダウン(`Layout/TargetSelector`、ヘッダーボタン群の右端)の
+     横幅上限。旧積算明細の「表示対象」プルダウンが持っていた`max-width: 220px`を
+     共通tokenとして切り出したもの(画面幅が変わっても幅を一元管理する)。 */
+  --target-selector-width: 220px;
 }
 
 /* 表・データグリッド形式の一覧の共通カラム幅調整(Issue #40 追加修正:

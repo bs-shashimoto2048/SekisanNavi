@@ -5,10 +5,22 @@
    操作履歴)との間に区切り線+gapを設けて視覚的に区別する。 */
 .panel-visibility-toggles {
   display: flex;
+  align-items: center;
   gap: 0.4rem;
   margin-left: auto;
   padding-left: 0.6rem;
   border-left: 1px solid #d1d5db;
+  /* [追加修正: ヘッダーボタン群の並び替え] 指示: 「狭い画面幅でも並び順が
+     保たれ、レイアウトが崩れないことを確認する」。並び替え前は右端が
+     「操作ガイド」だったが、現在は「対象」プルダウンが右端にある。flex
+     アイテムは既定で`min-width: auto`(=内容の自然な最小幅より縮まない)の
+     ため、`min-width: 0`で明示的に縮小を許可したうえで`overflow-x: auto`に
+     し、画面幅が足りない場合はボタン文字の折り返しや要素の消失ではなく、
+     この領域内だけ横スクロールしてすべてのボタン・対象プルダウンへ到達
+     できるようにする(並び順・選択肢・集計ロジックは変更しない)。 */
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 /* 追加UI修正指示: 表示ON/OFFボタンはUndo/Redo等の通常操作ボタン
@@ -30,6 +42,10 @@
   border: 1.5px solid transparent;
   border-radius: 4px;
   cursor: pointer;
+  /* 横スクロール領域内で文字が折り返んで高さが変わらないようにする
+     (上記`.panel-visibility-toggles`のoverflow-x: auto参照)。 */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .panel-visibility-toggles__button:focus-visible {
@@ -41,6 +57,7 @@
    積算集約/積算明細)のトグルと視覚的に1段区切るための縦線。 */
 .panel-visibility-toggles__divider {
   width: 1px;
+  flex-shrink: 0;
   align-self: stretch;
   background: #d1d5db;
   margin: 0 0.1rem;
