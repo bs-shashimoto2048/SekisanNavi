@@ -102,6 +102,12 @@ export function EstimateMasterPicker({ selectedItemId, onSelectItem, height }: P
   return (
     <section className="master-picker" style={height != null ? { height } : undefined}>
       <h2 className="master-picker__heading">{heading}</h2>
+      {/* [Issue #40 Phase 6-H 追加修正] 主回路銅帯コード選択欄を盤情報
+          (`PanelInfo`、面ごと)へ移設したことに伴い、この一覧の用途が
+          「BBox追加対象の選択」であることを常時見える形で明示する
+          (従来は行の`title`属性によるhover時のみの説明だった)。行clickの
+          既存動作(`onSelectItem`)自体は変更していない。 */}
+      <p className="master-picker__purpose">行をクリックするとBBox追加対象として選択されます</p>
 
       {/* [追加修正: 検索欄を廃止し品名選択リストへ変更、追加修正でさらに
           コンパクト化] 横一列のタブ表示は横幅を浪費し、floating panel化

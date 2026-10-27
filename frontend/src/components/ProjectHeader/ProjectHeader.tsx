@@ -14,10 +14,10 @@ interface Props {
   loading: boolean
   onOpenProductViewer: () => void
   onOpenSystemSettings: () => void
-  /** Issue #19 Phase 3: 積算資料PDF Helpを開く。既存の製番操作・システム設定と
-   * 同じHeader右側の操作群へ置くことで、Viewer周辺(floating panelトグル等)とは
-   * 競合しない位置にする。 */
-  onOpenHelp: () => void
+  /** 「資料」ポップアップ(複数PDF参照、`data/help/reference-pdfs/`)を開く。
+   * 旧「積算資料」ボタン(単一固定PDF、Issue #19 Phase 3)はこのボタンへ統合した
+   * ため廃止した(資料機能の一本化)。 */
+  onOpenReferencePdfs: () => void
 }
 
 export function ProjectHeader({
@@ -25,7 +25,7 @@ export function ProjectHeader({
   loading,
   onOpenProductViewer,
   onOpenSystemSettings,
-  onOpenHelp,
+  onOpenReferencePdfs,
 }: Props) {
   return (
     <header className="project-header">
@@ -53,11 +53,16 @@ export function ProjectHeader({
         <button type="button" onClick={onOpenProductViewer}>
           製番を開く
         </button>
-        {/* Issue #19 Phase 3: 積算資料PDFをHelpとして参照するボタン。積算コード
-            Masterを置き換えるものではなく、あくまで参考資料の位置付けのため、
-            「システム設定」の隣ではなく、それより手前(通常操作寄り)に置く。 */}
-        <button type="button" onClick={onOpenHelp} title="積算資料PDFを参照する">
-          積算資料
+        {/* 資料機能の一本化: PDF資料を開くボタンはこれ1つだけにする
+            (`data/help/reference-pdfs/`配下の複数PDFを一覧・閲覧する)。
+            指示: 鮮やかな赤で視認しやすくする(他のボタンの配色は変えない)。 */}
+        <button
+          type="button"
+          className="project-header__reference-pdf-button"
+          onClick={onOpenReferencePdfs}
+          title="資料フォルダのPDFを参照する"
+        >
+          資料
         </button>
         <button type="button" onClick={onOpenSystemSettings} title="管理者向け設定">
           システム設定

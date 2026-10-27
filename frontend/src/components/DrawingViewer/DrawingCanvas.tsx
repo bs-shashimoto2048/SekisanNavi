@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import type { PDFPageProxy } from 'pdfjs-dist'
-import { pdfjsLib } from '../../pdf/pdfjs'
+import { PDF_DOCUMENT_RESOURCE_OPTIONS, pdfjsLib } from '../../pdf/pdfjs'
 import './DrawingCanvas.css'
 
 const MIN_ZOOM = 0.1
@@ -167,7 +167,7 @@ export function DrawingCanvas({
     setPdfPage(null)
 
     pdfjsLib
-      .getDocument({ url: fileUrl })
+      .getDocument({ url: fileUrl, ...PDF_DOCUMENT_RESOURCE_OPTIONS })
       .promise.then((doc) => doc.getPage(1))
       .then((page) => {
         if (cancelled) return

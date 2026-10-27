@@ -22,7 +22,6 @@ import type {
   EstimateResult,
   EstimateResultEvaluateResponse,
   EvidenceDetectionCreateInput,
-  HelpPdfStatus,
   ManualDetectionCreateInput,
   Panel,
   PanelArea,
@@ -30,6 +29,7 @@ import type {
   ProductInfo,
   ProductSearchResult,
   ProjectInfo,
+  ReferencePdfList,
 } from '../types/domain'
 
 // 既定では相対パス ('') を使い、開発時はVite devサーバーの `/api` プロキシ
@@ -138,6 +138,14 @@ export function fetchMasterItems(params: { q?: string; category?: string }): Pro
   if (params.category) search.set('category', params.category)
   const qs = search.toString()
   return getJson(`/api/master-items${qs ? `?${qs}` : ''}`)
+}
+
+// 主回路銅帯コード選択UI (Issue #40 Phase 6-H) 向け候補一覧。
+// 仕様区分(品名)→型式→定格の絞り込みはこの関数が返す一覧をFrontend側
+// (CopperBusCodeSelector)で行う。BBox追加対象の選択(fetchMasterItems経由)
+// とは完全に独立しており、呼び出してもBBox追加対象は変化しない。
+export function fetchCopperBusCodeOptions(): Promise<EstimateMasterItem[]> {
+  return getJson('/api/master-items/copper-bus-code-options')
 }
 
 // Manual BBox登録 (Phase 1.6)。
@@ -258,6 +266,16 @@ export function designDocumentImageUrl(productNo: string, key: string): string {
   return `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/design-documents/${encodeURIComponent(key)}/image`
 }
 
+/** [追加修正: Excel出力] 「図面情報」パネル(旧「盤情報」)に現在表示する盤情報と、
+ * アプリが保持している他の積算仕様情報を、製番単位でExcel(.xlsx)へ出力する
+ * エンドポイントのURL。Backend側が`Content-Disposition: attachment`を返すため、
+ * `fetch`でBlob化せずこのURLへそのまま遷移/リンクするだけでブラウザの
+ * ダウンロードが始まる(`designDocumentFileUrl`等、他の直リンク系ヘルパーと
+ * 同じ方針)。 */
+export function productExportUrl(productNo: string): string {
+  return `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/export`
+}
+
 // --- Phase 1.8: 製番検索・左ペインPNGサムネイル ---
 
 // ルート直下の製番を無条件全件取得しない (要件2/3)。前方一致候補のみ返す。
@@ -312,18 +330,22 @@ export function listDecisionEvents(productNo: string): Promise<DecisionEvent[]> 
   return getJson(`/api/products/${encodeURIComponent(productNo)}/decision-events`)
 }
 
-// --- Issue #19 Phase 3: 積算資料PDF Help ---
+// --- 「資料」ウィンドウ(複数PDF参照) ---
+// 旧「積算資料PDF Help」(単一固定ファイル、Issue #19 Phase 3)はこちらへ
+// 統合し廃止した(資料機能の一本化)。
 
-/** 積算資料PDFが配置されているかどうかだけを軽量に取得する(ファイル自体は
- * 取得しない)。Help modalを開いた時点でのみ呼ぶ(常時ポーリングはしない)。 */
-export function fetchHelpPdfStatus(): Promise<HelpPdfStatus> {
-  return getJson('/api/help/estimate-pdf/status')
+/** 資料フォルダ(`data/help/reference-pdfs/`)直下のPDF一覧。ウィンドウを
+ * 開いた時点でのみ呼ぶ。 */
+export function fetchReferencePdfs(): Promise<ReferencePdfList> {
+  return getJson('/api/help/reference-pdfs')
 }
 
-/** 積算資料PDF実ファイルのURL。`<iframe src>`へ直接渡す用途のみで、
- * fetchでは使わない(ブラウザ標準のPDF表示に委譲するため)。 */
-export function helpPdfFileUrl(): string {
-  return `${BASE_URL}/api/help/estimate-pdf/file`
+/** 資料フォルダ内の1PDFのURL。`<iframe src>`へ直接渡す用途のみ(ブラウザ
+ * 標準のPDF表示に委譲するため、fetchでは使わない)。`filename`は一覧APIが
+ * 返したものをそのまま使う想定(Backend側で改めてフォルダ外アクセスを
+ * 検証するため、ここでの検証は不要)。 */
+export function referencePdfFileUrl(filename: string): string {
+  return `${BASE_URL}/api/help/reference-pdfs/${encodeURIComponent(filename)}`
 }
 
 // --- Issue #40 Phase 2: 積算コード選定〜数量・係数・金額/工数算出の一貫ルール化 ---

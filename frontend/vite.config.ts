@@ -1,6 +1,35 @@
 /// <reference types="vitest/config" />
+import fs from 'node:fs'
+import path from 'node:path'
 import react from '@vitejs/plugin-react'
+import type { Plugin } from 'vite'
 import { defineConfig, loadEnv } from 'vite'
+
+// [日本語PDF文字化け修正] pdfjs-distが同梱するCMap・標準フォント
+// データ(`node_modules/pdfjs-dist/cmaps`, `.../standard_fonts`)を、外部CDNに
+// 頼らず`public/pdfjs/`へコピーしてアプリと同一オリジンで配信する
+// (`src/pdf/pdfjs.ts`のcMapUrl/standardFontDataUrlが参照する)。
+// `public/pdfjs/`自体はnode_modules由来の生成物のため.gitignore対象とし、
+// `vite`(dev/build共通で通るbuildStart)実行のたびに最新のインストール済み
+// バージョンから作り直す(手動コピーして固定化しない)。
+function copyPdfjsAssetsPlugin(): Plugin {
+  return {
+    name: 'copy-pdfjs-assets',
+    buildStart() {
+      const pairs: Array<[string, string]> = [
+        ['node_modules/pdfjs-dist/cmaps', 'public/pdfjs/cmaps'],
+        ['node_modules/pdfjs-dist/standard_fonts', 'public/pdfjs/standard_fonts'],
+      ]
+      for (const [src, dest] of pairs) {
+        const srcPath = path.resolve(process.cwd(), src)
+        const destPath = path.resolve(process.cwd(), dest)
+        if (!fs.existsSync(srcPath)) continue
+        fs.mkdirSync(destPath, { recursive: true })
+        fs.cpSync(srcPath, destPath, { recursive: true })
+      }
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -12,7 +41,7 @@ export default defineConfig(({ mode }) => {
   const backendUrl = env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'
 
   return {
-    plugins: [react()],
+    plugins: [react(), copyPdfjsAssetsPlugin()],
     server: {
       // 社内LAN上の他端末からUI確認できるようにするための設定 (レビュー用途限定)。
       // 既定の`localhost`のみlisten (127.0.0.1/::1) だと開発PC自身からしか

@@ -25,12 +25,12 @@ from app.api.routers import (
     drawings,
     estimate_results,
     estimates,
-    help_pdf,
     master,
     panel_areas,
     panels,
     products,
     project,
+    reference_pdfs,
     settings,
 )
 from app.config import ALLOWED_ORIGINS, DB_PATH, should_auto_migrate_on_startup
@@ -105,7 +105,7 @@ app.include_router(estimates.router)
 app.include_router(master.router)
 app.include_router(settings.router)
 app.include_router(products.router)
-app.include_router(help_pdf.router)
+app.include_router(reference_pdfs.router)
 app.include_router(estimate_results.router)
 app.include_router(estimate_results.evidence_types_router)
 

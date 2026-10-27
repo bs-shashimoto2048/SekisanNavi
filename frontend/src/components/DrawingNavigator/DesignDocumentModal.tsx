@@ -1,6 +1,6 @@
 import { designDocumentFileUrl } from '../../api/client'
 import type { DesignDocument } from '../../types/domain'
-import '../HelpPdf/HelpPdfModal.css'
+import './DesignDocumentModal.css'
 
 interface Props {
   productNo: string
@@ -10,7 +10,7 @@ interface Props {
 
 /**
  * 図面一覧の最上段の書類(共通製作仕様書・設計作図完了シート)のPDFを表示するmodal。
- * PDF表示はブラウザ標準のPDF viewer(`<iframe>`)に委譲する(HelpPdfModalと同じ。独自のPDF viewerは導入しない)。
+ * PDF表示はブラウザ標準のPDF viewer(`<iframe>`)に委譲する(旧HelpPdfModalと同じ方式。独自のPDF viewerは導入しない)。
  * 図面ページの選択・盤・積算対象などのstateには一切触れない(開閉だけ)。PDFのURLは書類専用の経路
  * (`/design-documents/{key}/file`。図面ページ番号の経路は使わない)。
  */
