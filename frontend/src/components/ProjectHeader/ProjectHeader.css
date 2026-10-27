@@ -213,3 +213,23 @@
   background: #ffffff;
   border-color: #2455e2;
 }
+
+/* 「資料」ボタンだけを鮮やかな赤に変更する(指示: 視認しやすくする。他のタブ・
+   画面全体の配色は変更しない)。`.project-header__actions button`の共通規則を
+   このclassで上書きする形にし、「製番を開く」「システム設定」の配色は
+   一切変更しない。背景を赤・文字を白にすることで、Header地のコバルトブルー
+   とも他の白系ボタンとも明確に区別できるコントラストを確保する。
+   指示: `.project-header__actions button`(class 1つ+要素1つ)と同等以上の
+   詳細度が必要なため、`.project-header__actions button.project-header__
+   reference-pdf-button`の形で上書きする(単に`.project-header__reference-pdf-
+   button`だけでは詳細度が足りず、共通規則に負けて赤色が反映されない)。 */
+.project-header__actions button.project-header__reference-pdf-button {
+  background: var(--reference-pdf-accent);
+  color: #ffffff;
+  border-color: var(--reference-pdf-accent);
+}
+
+.project-header__actions button.project-header__reference-pdf-button:hover {
+  background: var(--reference-pdf-accent-hover);
+  border-color: var(--reference-pdf-accent-hover);
+}

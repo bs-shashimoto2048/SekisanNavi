@@ -397,6 +397,18 @@ function buildLiveEstimateResults(): EstimateResult[] {
   return results
 }
 
+// [技術的ブロッカー解消] ReferencePdfModal→ReferencePdfViewerが実際に
+// `pdf/pdfjs.ts`(pdfjs-dist本体)をimportするようになったため、DrawingCanvas
+// (上記で丸ごとmock済み)を経由しない限り、App.test.tsx全体がjsdomに無い
+// `DOMMatrix`等に依存するpdfjs-dist本体の読み込みで失敗してしまう。
+// DrawingCanvas.test.tsxと同じ方針(実描画には依存しないフェイクへ差し替え)を
+// このファイル全体にも適用する。
+vi.mock('./pdf/pdfjs', () => ({
+  pdfjsLib: {
+    getDocument: () => ({ promise: new Promise(() => {}), destroy: vi.fn() }),
+  },
+}))
+
 vi.mock('./api/client', () => ({
   fetchProjectInfo: vi.fn(async () => project),
   fetchDrawingPages: vi.fn(async () => [pageFoundation, pageOutline]),
@@ -470,11 +482,11 @@ vi.mock('./api/client', () => ({
   deleteDetection: vi.fn(async (id: number) => {
     liveDetectionsById.delete(id)
   }),
-  // Issue #19 Phase 3: 積算資料PDF Help。既定では「未配置」を返す(Help modalを
-  // 開くテスト以外に影響しないようにするため)。available=trueにするテストは
-  // 個別にmockResolvedValueOnce等で上書きする。
-  fetchHelpPdfStatus: vi.fn(async () => ({ available: false })),
-  helpPdfFileUrl: vi.fn(() => 'http://localhost:8000/api/help/estimate-pdf/file'),
+  // 「資料」ポップアップ(複数PDF参照)。既定ではフォルダ無し扱いに
+  // しておく(資料ポップアップを開くテスト以外に影響しないようにするため)。
+  // 中身を検証する詳細なテストはReferencePdfModal.test.tsx側が担う。
+  fetchReferencePdfs: vi.fn(async () => ({ folder_exists: false, items: [] })),
+  referencePdfFileUrl: vi.fn((filename: string) => `http://localhost:8000/api/help/reference-pdfs/${filename}`),
   // Issue #4 Phase B-3/B-4: 積算確定・確定履歴。App.test.tsx側では確定操作
   // そのものを検証するテストは無い(専用のEstimateConfirmationAction.test.tsx/
   // EstimateConfirmationHistory.test.tsxが担う)ため、既定では空の履歴を返す
@@ -2990,83 +3002,64 @@ describe('App: Escキーによる編集モード解除 (Phase 1.11 UI改修指�
     expect(row11001.className).toContain('master-picker__row--selected')
   })
 
-  it('HelpPdfModalが開いている間はEscで編集モードを解除しない (Issue #19 Phase 3、SystemSettingsと同じ方針)', async () => {
-    render(<App />)
-    // [Issue #40 Phase 6-C指示1章] 部品台帳は既定非表示へ変更したため、まず表示する。
-    fireEvent.click(screen.getByRole('button', { name: '部品台帳' }))
-    const row11001 = (await screen.findByText('11001')).closest('tr') as HTMLElement
-    fireEvent.click(row11001)
-    await waitFor(() => expect(row11001.className).toContain('master-picker__row--selected'))
-
-    fireEvent.click(screen.getByRole('button', { name: '積算資料' }))
-    await screen.findByRole('heading', { name: '積算資料' })
-    fireEvent.keyDown(document, { key: 'Escape' })
-
-    // Master選択状態は維持されたまま(HelpPdfModal自身もEscでは閉じない、
-    // 指示: 既存modal/BBox選択等のEscape優先順位を壊さない)。
-    expect(row11001.className).toContain('master-picker__row--selected')
-    expect(screen.getByRole('heading', { name: '積算資料' })).toBeInTheDocument()
-  })
 })
 
-describe('App: 積算資料PDF Help (Issue #19 Phase 3)', () => {
+describe('App: 「資料」ウィンドウ (資料機能の一本化。旧「積算資料」ボタン・HelpPdfModalはこれへ統合し廃止した)', () => {
   afterEach(async () => {
     vi.clearAllMocks()
-    const { fetchHelpPdfStatus } = await import('./api/client')
-    vi.mocked(fetchHelpPdfStatus).mockImplementation(async () => ({ available: false }))
+    const { fetchReferencePdfs } = await import('./api/client')
+    vi.mocked(fetchReferencePdfs).mockImplementation(async () => ({ folder_exists: false, items: [] }))
   })
 
-  it('opens the Help modal from the header button', async () => {
+  it('opens the ReferencePdfModal from the header "資料" button, independently of "積算資料"', async () => {
     render(<App />)
     await screen.findAllByText('基礎図(P18)')
 
-    fireEvent.click(screen.getByRole('button', { name: '積算資料' }))
+    fireEvent.click(screen.getByRole('button', { name: '資料' }))
 
-    expect(await screen.findByRole('heading', { name: '積算資料' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '資料' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '積算資料' })).not.toBeInTheDocument()
   })
 
-  it('shows a clear "not configured" message when the PDF is unavailable (指示: 空白viewerではなく明確な案内)', async () => {
+  it('shows exactly one PDF-opening button in the header ("資料"), with the old "積算資料" button removed (指示: 資料機能の一本化)', async () => {
     render(<App />)
     await screen.findAllByText('基礎図(P18)')
 
-    fireEvent.click(screen.getByRole('button', { name: '積算資料' }))
-
-    expect(await screen.findByText(/積算資料が配置されていません/)).toBeInTheDocument()
-    expect(screen.queryByTitle('積算資料PDF')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '資料' })).toBeInTheDocument()
+    expect(screen.queryByText('積算資料')).not.toBeInTheDocument()
   })
 
-  it('renders the PDF <iframe> when the PDF is available', async () => {
-    const { fetchHelpPdfStatus } = await import('./api/client')
-    vi.mocked(fetchHelpPdfStatus).mockResolvedValueOnce({ available: true })
+  it('does not call fetchReferencePdfs until the "資料" button is clicked (lazy loading)', async () => {
+    const { fetchReferencePdfs } = await import('./api/client')
     render(<App />)
     await screen.findAllByText('基礎図(P18)')
 
-    fireEvent.click(screen.getByRole('button', { name: '積算資料' }))
+    expect(fetchReferencePdfs).not.toHaveBeenCalled()
 
-    const frame = await screen.findByTitle('積算資料PDF')
-    expect(frame.tagName).toBe('IFRAME')
+    fireEvent.click(screen.getByRole('button', { name: '資料' }))
+    await screen.findByRole('heading', { name: '資料' })
+
+    expect(fetchReferencePdfs).toHaveBeenCalledTimes(1)
   })
 
-  it('closes the modal via the × button, and does not affect the current product/page/target/BBox selection state', async () => {
+  it('closes via the × button, and does not affect the current product/page/target/BBox selection state (指示: 開閉で既存の作業状態を変更しない)', async () => {
     render(<App />)
     const thumbnail = await screen.findByRole('img', { name: 'P16' })
     fireEvent.click(thumbnail)
     await screen.findByTitle(/roof_fan/)
 
-    // 積算対象を個別盤へ切り替え、BBoxも選択しておく (作業状態の一例)。
     const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
     fireEvent.change(select, { target: { value: 'panel:1:1' } })
     await waitFor(() => expect(select.value).toBe('panel:1:1'))
     fireEvent.click(screen.getByTitle(/roof_fan/))
     await screen.findAllByRole('button', { name: /BBoxサイズ変更/ })
 
-    fireEvent.click(screen.getByRole('button', { name: '積算資料' }))
-    await screen.findByRole('heading', { name: '積算資料' })
+    fireEvent.click(screen.getByRole('button', { name: '資料' }))
+    await screen.findByRole('heading', { name: '資料' })
 
     fireEvent.click(screen.getByRole('button', { name: '閉じる' }))
 
-    expect(screen.queryByRole('heading', { name: '積算資料' })).not.toBeInTheDocument()
-    // 製番・図面ページ・積算対象・BBox選択のいずれも維持されている。
+    expect(screen.queryByRole('heading', { name: '資料' })).not.toBeInTheDocument()
     expect(screen.getByTitle(/roof_fan/)).toBeInTheDocument()
     expect(
       (document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement).value,
@@ -3074,17 +3067,42 @@ describe('App: 積算資料PDF Help (Issue #19 Phase 3)', () => {
     expect(screen.getAllByRole('button', { name: /BBoxサイズ変更/ }).length).toBeGreaterThan(0)
   })
 
-  it('does not call fetchHelpPdfStatus until the Help button is clicked (lazy loading)', async () => {
-    const { fetchHelpPdfStatus } = await import('./api/client')
+  it('does NOT suppress the app-wide Undo(Ctrl+Z) shortcut while the window is open (技術的ブロッカー解消: 背景を操作不能にする真のmodalではなくなったため一律に無効化しない)', async () => {
     render(<App />)
-    await screen.findAllByText('基礎図(P18)')
+    const thumbnail = await screen.findByRole('img', { name: 'P16' })
+    fireEvent.click(thumbnail)
+    await screen.findByTitle(/roof_fan/)
 
-    expect(fetchHelpPdfStatus).not.toHaveBeenCalled()
+    // masterLinkedDetectionOnOutline(18999)を選択し、面1/盤1の内側へドラッグで
+    // 移動する(Undo履歴を1件作るための最小限の編集操作)。
+    fireEvent.click(screen.getByRole('button', { name: '18999 テスト品目' }))
+    const bbox = await findOverlayBBoxByTitle(/18999/)
+    const overlay = document.querySelector('.detection-overlay') as HTMLElement
+    Object.defineProperty(overlay, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, right: 1000, bottom: 1000, width: 1000, height: 1000 }),
+      configurable: true,
+    })
+    fireEvent.mouseDown(bbox, { clientX: 500, clientY: 500 })
+    fireEvent.mouseMove(window, { clientX: 110, clientY: 140 })
+    fireEvent.mouseUp(window, { clientX: 110, clientY: 140 })
+    await waitFor(() => {
+      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      expect(select.value).toBe('panel:1:1')
+    })
 
-    fireEvent.click(screen.getByRole('button', { name: '積算資料' }))
-    await screen.findByText(/積算資料が配置されていません/)
+    fireEvent.click(screen.getByRole('button', { name: '資料' }))
+    await screen.findByRole('heading', { name: '資料' })
 
-    expect(fetchHelpPdfStatus).toHaveBeenCalledTimes(1)
+    // 資料ウィンドウを開いたままCtrl+Zを送ると、通常どおりUndoが適用される
+    // (以前はisReferencePdfOpenを他modalと同じガードに含めて一律に無効化していたが、
+    // 資料ウィンドウは背景操作を妨げないため、その必要がなくなった)。
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true })
+    await waitFor(() => {
+      const select = document.querySelector('.estimate-aggregation__target-select') as HTMLSelectElement
+      expect(select.value).toBe('product')
+    })
+    // ウィンドウ自体はUndo操作と無関係に開いたまま維持される。
+    expect(screen.getByRole('heading', { name: '資料' })).toBeInTheDocument()
   })
 })
 

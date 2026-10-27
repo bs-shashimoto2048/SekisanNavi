@@ -1066,6 +1066,15 @@ Phase 4で廃止済み。20章/22章参照)。**さらに追加修正で、こ�
 - **未確認事項**: 大容量PDF配信のRange Request対応等、高度な配信最適化は
   今回実装していない(`docs/known-limitations.md`参照)。
 
+**[資料機能の一本化で仕様変更]** 上記の単一固定ファイルPDF Help機能
+(`app/api/routers/help_pdf.py`、`app/schemas/help.py`、
+`components/HelpPdf/HelpPdfModal.tsx`、ヘッダーの「積算資料」ボタン)は、
+複数PDFを一覧・閲覧できる「資料」ウィンドウ(`app/api/routers/
+reference_pdfs.py`、`components/ReferencePdfModal/`)へ統合し廃止した。
+ヘッダーのPDF資料を開くボタンは「資料」1つのみになっている。現行mainには
+この21章の実装はもはや当てはまらない。`data/help/estimate-help.pdf`自体の
+ファイルは削除していない(配信するAPI・ボタンが無くなっただけ)。
+
 ## 22. 盤情報のfloating panel化・右ペイン廃止・表示トグルの移動・glassmorphism (Issue #19 Phase 4)
 
 作業者レビュー方針を踏まえた追加UI修正。盤情報(`PanelInfo`)もfloating panel化し、

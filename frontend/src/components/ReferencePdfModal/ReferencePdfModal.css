@@ -1,0 +1,426 @@
+/* 「資料」フローティングウィンドウ(複数PDF参照)。[技術的ブロッカー解消]
+   旧実装はbackdrop付きmodalだったが、背景(図面・他floating panel)を操作可能な
+   ままにするため、backdropを持たないposition: fixedのwindowへ変更した。
+   ウィンドウの矩形領域の外側は何も描画していないため、クリックは自然に
+   背後の要素へ届く。 */
+.reference-pdf-window {
+  position: fixed;
+  /* FloatingPanel(盤情報・積算集約等、.floating-panel)のz-index(100、前面化時も
+     zCounterの単調増加値。現実的な操作回数では到達しない上限として、既存の
+     HelpPdfModal同様1000程度を安全マージンに取る考え方を踏襲)より確実に
+     前面へ出す。SystemSettings/ProductSelector等の真のブロッキングmodalより
+     優先度は下げる(それらのbackdropは別途1000超、または単独で全面を覆うため、
+     同時に開いた場合はブロッキングmodal側が正しく手前に見える)。 */
+  z-index: 900;
+  background: #fff;
+  /* 指示: 「PDFウィンドウの赤枠も(資料タブと)同じ色に統一する」。「資料」
+     ボタン(`ProjectHeader.css`)と同じ専用アクセント`--reference-pdf-accent`
+     (index.css)を使う。以前使っていた`--status-error`(業務上の「不備・
+     エラー」の意味色)は、他のエラー表示と意味が混ざってしまうため使わない。 */
+  border: 3px solid var(--reference-pdf-accent);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.reference-pdf-window:focus {
+  /* キーボード操作の起点であることが分かるよう、既定のoutlineは消さずそのまま使う。 */
+  outline-offset: 2px;
+}
+
+.reference-pdf-window--interacting {
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.32);
+}
+
+/* 指示: 「資料、ページ番号、倍率、一覧切替、×を上部の1行にまとめる。独立した
+   2行目のステータスバーを残さない。ウィンドウ幅が狭くなっても2行に折り返さ
+   ない」。`flex-wrap: nowrap`はflexの既定値そのものだが、「折り返さない」
+   という要件を満たすための意図的な指定であることを明示するため明記する。 */
+.reference-pdf-window__titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #f1f5f9;
+  border-bottom: 1px solid #d1d5db;
+  cursor: grab;
+  user-select: none;
+}
+
+.reference-pdf-window--interacting .reference-pdf-window__titlebar {
+  cursor: grabbing;
+}
+
+/* 「資料」見出しと、ページ番号/倍率の差し込み先(`.viewer-status-slot`)を
+   ひとまとめにした左側グループ。タイトルバー自体は従来どおり「左グループ/
+   右(操作ボタン)グループ」の2要素のみをspace-betweenで配置するため、
+   要素数が増えても中央に余計な大きい空白ができない。ウィンドウが極端に
+   狭い場合でも右側の操作ボタン(一覧切替・×)は常に全体が見えている必要が
+   あるため、縮むのはこの左グループ側(`min-width: 0`)に限定する。 */
+.reference-pdf-window__titlebar-main {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+}
+
+.reference-pdf-window__titlebar h2 {
+  font-size: 1rem;
+  margin: 0;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* ページ番号/倍率表示(`ReferencePdfViewer`からportalされる
+   `.reference-pdf-viewer__status-bar`)の差し込み先。要素自身はboxを生成
+   せず(`display: contents`)、portalされた内容がこのグループの直接の
+   flex itemとして振る舞うようにする。 */
+.reference-pdf-window__viewer-status-slot {
+  display: contents;
+}
+
+.reference-pdf-window__titlebar button {
+  border: none;
+  background: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.reference-pdf-window__titlebar-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0.5rem;
+}
+
+/* 指示: 「×は、クリック可能な範囲が分かる背景・境界・ホバー表示を付け、
+   明確なボタンとして見せる」。常時見える枠線付きの箱にし、ホバー/押下時に
+   色を変えて反応が分かるようにする(新しい配色を増やさず、既存の
+   `.reference-pdf-window__invalid-cell`と同じ赤系トーンを再利用する)。
+   セレクタは`.reference-pdf-window__titlebar-actions .reference-pdf-window__
+   close-button`(class2つ)にし、上の`.reference-pdf-window__titlebar button`
+   (class1つ+要素1つ)より確実に優先させる(同じ詳細度の罠を`__list-toggle`
+   側で踏んだのと同じ理由。クラス1つだけでは要素セレクタ込みの詳細度に
+   負けてborder/backgroundが無効化されてしまう)。 */
+.reference-pdf-window__titlebar-actions .reference-pdf-window__close-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.reference-pdf-window__titlebar-actions .reference-pdf-window__close-button:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.reference-pdf-window__titlebar-actions .reference-pdf-window__close-button:active {
+  background: #fecaca;
+}
+
+/* 指示: 「一覧表示中『一覧を隠す』、非表示中『一覧を表示』」。文言自体は
+   前回実装のまま。 */
+.reference-pdf-window__titlebar-actions .reference-pdf-window__list-toggle {
+  font-size: 0.78rem;
+  color: #475569;
+  white-space: nowrap;
+}
+
+/* 指示: 「PDFプレビューをウィンドウ全体に表示し、その上に一覧を重ねる
+   レイアウトへ修正する」「PDF表示領域を左右に分割しない」。旧実装は
+   list-pane(flex: 0 0 280px)とviewer-pane(flex: 1)を横並びにしていたが、
+   一覧の表示/非表示でviewer-paneの実measuredサイズが変わり、
+   ReferencePdfViewer内のResizeObserverが反応して再fitしてしまっていた
+   (指示: 「一覧表示の有無で幅・倍率・位置を変えない」「Viewerの再マウントや
+   一覧幅に応じた再Fitは行わない」に反する)。ここではviewer-paneを常に
+   bodyいっぱいの絶対配置にして一覧の有無に関わらずサイズを固定し、list-pane
+   はその上に重ねるoverlay(position: absolute)に変更する。この構造により、
+   一覧の表示/非表示はReferencePdfViewer側から見れば完全に無関係な出来事になり、
+   「再Fitを行わない」ことをReferencePdfViewer側に特別なガードを追加せずに
+   実現できる(=stageの実測サイズが本当に変化しないため)。 */
+.reference-pdf-window__body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.reference-pdf-window__viewer-pane {
+  position: absolute;
+  /* `inset: 0`と等価だが、longhandで明記する(jsdom/cssstyleの`inset`
+     shorthand展開の制約を避けるため。単体テストのgetComputedStyleで
+     top/right/bottom/leftを個別に検証できるようにする)。 */
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+}
+
+/* 指示: 「資料プレビュー内の一覧は右側に出るようにする。見やすいように一覧にも
+   枠線を付ける」。リストは不透明な背景にして、文字を読み取れるようにする。
+   `position: absolute`でbody右上を基準に浮かせ、`background`を不透明な白に
+   することで背後のPDFが透けない。JSX上はviewer-paneより後ろに置いており、
+   同じスタッキング文脈では後勝ちで上に重なるが、`z-index`も明示して
+   確実に最前面にする。枠線は、PDF(濃いグレー背景)の上に重なっても一覧の
+   輪郭がはっきり見えるよう、既存の薄いグレー(#d1d5db、表内の罫線等で使用)
+   より濃い色(#475569、`__list-toggle`の文字色と同じ既存色を再利用)を2pxで
+   使う(新しい色を増やさない方針に合わせる)。 */
+.reference-pdf-window__list-pane {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  /* 指示: 「一覧パネルの高さは、資料ウィンドウ内側の高さの約2/3に固定する。
+     ウィンドウをリサイズした場合も、常にこの比率を保つ」。`bottom`指定による
+     可変長(=親の残り高さいっぱい)ではなく、親(`.reference-pdf-window__body`、
+     position: relativeでこのabsolute要素の基準)に対する`height`の%指定にする。
+     %指定の高さはブラウザのレイアウト計算で親のサイズ変化に追従して
+     毎回再計算されるため、JS側でResizeObserver等を使わなくても、ウィンドウの
+     リサイズのたびに自動的に2/3の比率を保つ。一覧件数が多くても、高さは
+     この固定値のままで内容に引きずられて伸びない(`overflow-y: auto`で
+     縦スクロールする、下記参照)。 */
+  height: calc(100% * 2 / 3);
+  width: 280px;
+  max-width: calc(100% - 1rem);
+  z-index: 5;
+  /* 指示: 「一覧のカラム内は折り返さないように」。折り返さない分、内容が
+     パネル幅(280px)を超える場合があるため、縦だけでなく横もスクロールできる
+     ようにする(切り詰め・省略はせず、スクロールで全文を読めるようにする)。
+     `overflow: auto`のshorthandではなくlonghandで書く(jsdom/cssstyleが
+     `overflow`shorthandを`overflow-x`/`overflow-y`へ展開しないため、
+     単体テストのgetComputedStyleで個別に検証できるようにする)。 */
+  overflow-x: auto;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 2px solid #475569;
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.35);
+}
+
+/* 指示: 「一覧にキーボードフォーカスがある状態で↑/↓キーを押すと選択行を
+   移動する」。一覧パネル自体(`tabIndex={0}`)がフォーカスを持っていることが
+   分かるよう、資料ウィンドウ自体(`.reference-pdf-window:focus`)と同じく
+   既定のoutlineは消さずそのまま使う(独自の強調色を新設しない)。 */
+.reference-pdf-window__list-pane:focus {
+  outline-offset: -2px;
+}
+
+/* 指示: 「一覧非表示中は、重ねたリストだけを隠し、PDFプレビューをそのまま
+   全面表示する」。position: absoluteの要素をdisplay: noneにしても、
+   他要素(viewer-pane)のレイアウト・サイズには一切影響しない。 */
+.reference-pdf-window__list-pane--collapsed {
+  display: none;
+}
+
+.reference-pdf-window__message {
+  margin: auto;
+  color: #6b7280;
+  font-size: 0.95rem;
+  padding: 0.5rem;
+  text-align: center;
+}
+
+/* 指示: 「一覧のカラム内は折り返さないように」。white-spaceはinherited
+   プロパティだが、th/td自身にも明示的に指定しておく(将来的な規則追加で
+   継承が切れても壊れない防御的な書き方。`width: 100%`は外したため
+   (nowrap化で内容が280pxを超えうる)、tableは内容幅ぶんだけ広がり、
+   親(`.reference-pdf-window__list-pane`)のoverflow: autoで横スクロールできる。 */
+.reference-pdf-window__table {
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+
+.reference-pdf-window__table th {
+  position: sticky;
+  top: 0;
+  text-align: left;
+  color: #6b7280;
+  font-weight: 600;
+  padding: 0.3rem 0.5rem;
+  background: #f1f5f9;
+  border-bottom: 1px solid #cbd5e1;
+  white-space: nowrap;
+}
+
+.reference-pdf-window__row {
+  cursor: pointer;
+}
+
+.reference-pdf-window__row td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid #edf1f5;
+  white-space: nowrap;
+}
+
+/* コード列は`width: 1%`で内容幅ぶんだけに縮め、残りの幅を積算対象列へ渡す
+   (classic CSS tableパターン)。`white-space: nowrap`自体は上の`.reference-
+   pdf-window__table`で全列へ指定済みのため、ここでは幅の指定だけで足りる。 */
+.reference-pdf-window__table th.reference-pdf-window__code-col,
+.reference-pdf-window__row td.reference-pdf-window__code-col {
+  width: 1%;
+}
+
+.reference-pdf-window__row:hover {
+  background: #f8fafc;
+}
+
+/* 選択中の行(指示: 現在選択中の行が視認できるようにする)。他panelの選択行
+   アクセント(左3pxコバルト+淡い背景)と同じ既存の配色規則を使う。 */
+.reference-pdf-window__row--selected {
+  background: rgba(37, 99, 235, 0.1);
+  box-shadow: inset 3px 0 0 0 #2563eb;
+  font-weight: 600;
+}
+
+.reference-pdf-window__row--selected:hover {
+  background: rgba(37, 99, 235, 0.16);
+}
+
+.reference-pdf-window__invalid-cell {
+  color: #b91c1c;
+}
+
+/* リサイズハンドル (指示: 右下角のみ、画面外へ完全に移動できないようにする
+   clamp自体はcomponent側のJS、ここでは見た目のみ)。既存floating panelの
+   ハンドル(FloatingPanel.css)と同じ縞模様で視覚言語を揃える。 */
+.reference-pdf-window__resize-handle {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(71, 85, 105, 0.55) 0,
+    rgba(71, 85, 105, 0.55) 1.5px,
+    transparent 1.5px,
+    transparent 4px
+  );
+}
+
+/* --- PDF.js表示領域 (ReferencePdfViewer) --- */
+/* ブラウザ標準のiframe PDF表示(ダウンロード・印刷ボタン付きツールバーを
+   消せない)をやめ、pdfjs-distで直接canvasへ描画する。ここはその表示領域の
+   レイアウトのみを持ち、ツールバー相当のUIは一切描画しない。 */
+.reference-pdf-viewer__container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 指示: 「ページ送りボタンと拡大縮小ボタンは削除し、操作用スペースを減らす」
+   「現在ページ/総ページ数の表示は残す」。ボタンは置かず、ページ番号と
+   倍率だけを表示する薄いステータスバー1本にする(以前の2段のツールバーを
+   統合)。操作自体は←/→キー(ページ送り)とホイール(ズーム)で行う。
+   指示: 「ページ番号(例: 1 / 2)と倍率(例: 96%)を同じ行に表示し、ウィンドウ幅が
+   狭い場合も折り返さない」。`white-space: nowrap`はinheritedプロパティのため
+   この要素に付けるだけで子要素のテキストにも及ぶ(`{pageNumber} / {doc.
+   numPages}`のように複数のテキストノードへ分かれていても、スペースを含む
+   箇所で折り返されなくなる)。`flex-shrink: 0`の子要素と組み合わせ、
+   ウィンドウがどれだけ狭くなってもこのバー自体は2行へ分かれない。 */
+.reference-pdf-viewer__status-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.3rem;
+  background: #e2e8f0;
+  border-bottom: 1px solid #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* 指示: 「資料、ページ番号、倍率、一覧切替、×を上部の1行にまとめる。独立した
+   2行目のステータスバーを残さない」。`ReferencePdfModal`のタイトルバーへ
+   `createPortal`された場合は、独立した帯(背景・下線・中央寄せ・幅いっぱい)を
+   やめ、タイトルバーの1行に馴染むインライン表示にする。セレクタは
+   `.reference-pdf-window__titlebar-main .reference-pdf-viewer__status-bar`
+   (class2つ)で、上の素の`.reference-pdf-viewer__status-bar`(class1つ)より
+   詳細度が高いため、このブロックで指定したプロパティだけが上書きされ、
+   指定していないプロパティ(display/align-items/white-space/overflow等)は
+   そのまま引き継がれる。 */
+.reference-pdf-window__titlebar-main .reference-pdf-viewer__status-bar {
+  gap: 0.5rem;
+  padding: 0;
+  background: none;
+  border-bottom: none;
+  justify-content: flex-start;
+}
+
+.reference-pdf-viewer__page-nav-count {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.reference-pdf-viewer__zoom-percent {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+  min-width: 3.5em;
+  text-align: center;
+}
+
+/* 指示: 「ページを切り取らず、縦スクロールも発生させない」「表示領域に縦横
+   スクロールバーを出さない」。ページはFit中は常に`scale = min(幅比, 高さ比)`
+   (component側のJS)でこの領域いっぱいに収まるよう描画し、拡大中にはみ出す
+   分はスクロールではなく`overflow: hidden`でクリップしたうえで、canvas自体を
+   `transform: translate()`で動かす(ドラッグパン、指示: 「表示領域内で
+   ドラッグして表示位置を動かせるようにする」)ことで見せる範囲を変える。 */
+.reference-pdf-viewer__stage {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: #525659;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.reference-pdf-viewer__stage--panning {
+  cursor: grabbing;
+}
+
+.reference-pdf-viewer__canvas {
+  display: block;
+  flex-shrink: 0;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  /* パン中のドラッグでテキスト等を誤選択しないようにする。 */
+  user-select: none;
+}
+
+.reference-pdf-viewer__message {
+  margin: auto;
+  color: #6b7280;
+  font-size: 0.95rem;
+  padding: 0.5rem;
+  text-align: center;
+}

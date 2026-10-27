@@ -22,7 +22,6 @@ import type {
   EstimateResult,
   EstimateResultEvaluateResponse,
   EvidenceDetectionCreateInput,
-  HelpPdfStatus,
   ManualDetectionCreateInput,
   Panel,
   PanelArea,
@@ -30,6 +29,7 @@ import type {
   ProductInfo,
   ProductSearchResult,
   ProjectInfo,
+  ReferencePdfList,
 } from '../types/domain'
 
 // 既定では相対パス ('') を使い、開発時はVite devサーバーの `/api` プロキシ
@@ -330,18 +330,22 @@ export function listDecisionEvents(productNo: string): Promise<DecisionEvent[]> 
   return getJson(`/api/products/${encodeURIComponent(productNo)}/decision-events`)
 }
 
-// --- Issue #19 Phase 3: 積算資料PDF Help ---
+// --- 「資料」ウィンドウ(複数PDF参照) ---
+// 旧「積算資料PDF Help」(単一固定ファイル、Issue #19 Phase 3)はこちらへ
+// 統合し廃止した(資料機能の一本化)。
 
-/** 積算資料PDFが配置されているかどうかだけを軽量に取得する(ファイル自体は
- * 取得しない)。Help modalを開いた時点でのみ呼ぶ(常時ポーリングはしない)。 */
-export function fetchHelpPdfStatus(): Promise<HelpPdfStatus> {
-  return getJson('/api/help/estimate-pdf/status')
+/** 資料フォルダ(`data/help/reference-pdfs/`)直下のPDF一覧。ウィンドウを
+ * 開いた時点でのみ呼ぶ。 */
+export function fetchReferencePdfs(): Promise<ReferencePdfList> {
+  return getJson('/api/help/reference-pdfs')
 }
 
-/** 積算資料PDF実ファイルのURL。`<iframe src>`へ直接渡す用途のみで、
- * fetchでは使わない(ブラウザ標準のPDF表示に委譲するため)。 */
-export function helpPdfFileUrl(): string {
-  return `${BASE_URL}/api/help/estimate-pdf/file`
+/** 資料フォルダ内の1PDFのURL。`<iframe src>`へ直接渡す用途のみ(ブラウザ
+ * 標準のPDF表示に委譲するため、fetchでは使わない)。`filename`は一覧APIが
+ * 返したものをそのまま使う想定(Backend側で改めてフォルダ外アクセスを
+ * 検証するため、ここでの検証は不要)。 */
+export function referencePdfFileUrl(filename: string): string {
+  return `${BASE_URL}/api/help/reference-pdfs/${encodeURIComponent(filename)}`
 }
 
 // --- Issue #40 Phase 2: 積算コード選定〜数量・係数・金額/工数算出の一貫ルール化 ---

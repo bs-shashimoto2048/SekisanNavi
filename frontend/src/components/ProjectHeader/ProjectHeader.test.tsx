@@ -21,7 +21,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
-        onOpenHelp={noop}
+        onOpenReferencePdfs={noop}
       />,
     )
     expect(screen.getByText('Sekisan Navi')).toBeInTheDocument()
@@ -36,7 +36,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
-        onOpenHelp={noop}
+        onOpenReferencePdfs={noop}
       />,
     )
     const brand = screen.getByText('Sekisan Navi')
@@ -52,7 +52,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
-        onOpenHelp={noop}
+        onOpenReferencePdfs={noop}
       />,
     )
     const brand = screen.getByText('Sekisan Navi')
@@ -66,7 +66,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
-        onOpenHelp={noop}
+        onOpenReferencePdfs={noop}
       />,
     )
     const brand = screen.getByText('Sekisan Navi')
@@ -90,7 +90,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
-        onOpenHelp={noop}
+        onOpenReferencePdfs={noop}
       />,
     )
     // jsdomはlayoutを持たないため、実際に描画されたHeaderの高さ(px)は
@@ -110,7 +110,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
-        onOpenHelp={noop}
+        onOpenReferencePdfs={noop}
       />,
     )
     const brand = screen.getByText('Sekisan Navi')
@@ -129,7 +129,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
-        onOpenHelp={noop}
+        onOpenReferencePdfs={noop}
       />,
     )
     const header = container.querySelector('.project-header') as HTMLElement
@@ -152,7 +152,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
-        onOpenHelp={noop}
+        onOpenReferencePdfs={noop}
       />,
     )
     const openProductButton = screen.getByRole('button', { name: '製番を開く' })
@@ -171,7 +171,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
-        onOpenHelp={noop}
+        onOpenReferencePdfs={noop}
       />,
     )
 
@@ -186,7 +186,7 @@ describe('ProjectHeader', () => {
         loading
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
-        onOpenHelp={noop}
+        onOpenReferencePdfs={noop}
       />,
     )
     expect(screen.getByText('読込中...')).toBeInTheDocument()
@@ -206,7 +206,7 @@ describe('ProjectHeader', () => {
           loading={false}
           onOpenProductViewer={noop}
           onOpenSystemSettings={noop}
-          onOpenHelp={noop}
+          onOpenReferencePdfs={noop}
         />,
       )
       const badge = container.querySelector('.project-header__status') as HTMLElement
@@ -222,7 +222,7 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
-        onOpenHelp={noop}
+        onOpenReferencePdfs={noop}
       />,
     )
     const button = screen.getByText('解析実行') as HTMLButtonElement
@@ -237,25 +237,65 @@ describe('ProjectHeader', () => {
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={onOpenSystemSettings}
-        onOpenHelp={noop}
+        onOpenReferencePdfs={noop}
       />,
     )
     fireEvent.click(screen.getByText('システム設定'))
     expect(onOpenSystemSettings).toHaveBeenCalled()
   })
 
-  it('calls onOpenHelp when the "積算資料" button is clicked (Issue #19 Phase 3)', () => {
-    const onOpenHelp = vi.fn()
+  it('calls onOpenReferencePdfs when the "資料" button is clicked', () => {
+    const onOpenReferencePdfs = vi.fn()
     render(
       <ProjectHeader
         project={project}
         loading={false}
         onOpenProductViewer={noop}
         onOpenSystemSettings={noop}
-        onOpenHelp={onOpenHelp}
+        onOpenReferencePdfs={onOpenReferencePdfs}
       />,
     )
-    fireEvent.click(screen.getByText('積算資料'))
-    expect(onOpenHelp).toHaveBeenCalled()
+    fireEvent.click(screen.getByText('資料'))
+    expect(onOpenReferencePdfs).toHaveBeenCalled()
+  })
+
+  it('shows exactly one PDF-opening button ("資料"), with the old "積算資料" button removed (指示: 資料機能の一本化)', () => {
+    render(
+      <ProjectHeader
+        project={project}
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+        onOpenReferencePdfs={noop}
+      />,
+    )
+    expect(screen.getByRole('button', { name: '資料' })).toBeInTheDocument()
+    expect(screen.queryByText('積算資料')).not.toBeInTheDocument()
+  })
+
+  it('gives only the "資料" button the dedicated red-accent class, leaving the other header buttons untouched (指示: 資料タブを鮮やかな赤色にする。他のタブや画面全体の配色は変更しない)', () => {
+    render(
+      <ProjectHeader
+        project={project}
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+        onOpenReferencePdfs={noop}
+      />,
+    )
+    // 実際に解決される色(鮮やかな赤#f5222d)自体は、jsdomがCSS変数(var())を
+    // shorthandプロパティ内で正しく解決できないという既知の制約により、
+    // ここでは検証できない(docs/coding-conventions.md「テスト」節参照)。
+    // 実ブラウザでの表示色はPlaywrightで別途確認する。ここでは、専用classが
+    // 「資料」ボタンだけに付き、他のボタンには付かないことだけを確認する。
+    expect(screen.getByRole('button', { name: '資料' }).className).toContain(
+      'project-header__reference-pdf-button',
+    )
+    expect(screen.getByRole('button', { name: '製番を開く' }).className).not.toContain(
+      'project-header__reference-pdf-button',
+    )
+    expect(screen.getByRole('button', { name: 'システム設定' }).className).not.toContain(
+      'project-header__reference-pdf-button',
+    )
   })
 })
