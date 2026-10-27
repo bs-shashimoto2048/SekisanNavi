@@ -126,6 +126,10 @@ def list_page_numbers(ccv_dir: Path) -> list[int]:
     """CCV参照先直下にある `{page}.pdf` ファイルのページ番号一覧を返す (数値昇順)。
 
     ディレクトリ全件を無条件で返すのではなく、あくまでページ番号(int)のみを返す。
+
+    ページ番号 0(`0.pdf`・`00.pdf` など)は一覧に含めない。`resolve_page_file` がページ番号 0 以下を
+    拒否する(ページ PDF・サムネイルを開けない)のと揃える。SekisanNaviData は共通製作仕様書を
+    `0.pdf` に出力するため(ページ名「0」の図面が無い製番のとき)、一覧に出すと、開けない「ページ 0」になる。
     """
     try:
         names = os.listdir(ccv_dir)
@@ -135,7 +139,7 @@ def list_page_numbers(ccv_dir: Path) -> list[int]:
     pages: list[int] = []
     for name in names:
         m = _PAGE_FILE_RE.match(name)
-        if m:
+        if m and int(m.group(1)) > 0:
             pages.append(int(m.group(1)))
     return sorted(pages)
 

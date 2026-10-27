@@ -40,7 +40,10 @@ output\A1GV2421\
   material.csv               (材料一覧。設計データの*.boxspec由来。無い製番もある。下記「material.csv」参照)
   product_df.csv             (ページ・盤ごとの図面座標・縮尺情報)
   WIRING.SCR                 (未調査。AutoCADスクリプトと推測されるが未確認)
-  共通製作仕様書.pdf
+  0.pdf                      (共通製作仕様書。以前は 共通製作仕様書.pdf。SekisanNaviData が出力する。
+                              ページ名「0」の図面が印刷対象の製番では作られず、ページ「0」の図面の 0.pdf になる。
+                              ページ番号 0 は開けない(resolve_page_file が 0 以下を拒否する)ため、図面一覧
+                              (list_page_numbers)には出さない)
   dwg\
     16.dwg / 18.dwg / 21.dwg ... (元CAD図面。参考資料PDFによれば「DWGは扱わず
     DXFへ変換して図枠寸法取得にのみ利用する」とのこと)

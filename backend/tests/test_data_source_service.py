@@ -72,6 +72,24 @@ def test_list_page_numbers_only_returns_numeric_pdf_files(fake_root):
     assert pages == [16, 18]
 
 
+def test_list_page_numbers_excludes_page_zero(fake_root):
+    """`0.pdf`(SekisanNaviData の共通製作仕様書。ページ名「0」の図面でもある)は、開けない「ページ 0」になるので一覧に出さない。"""
+    product = fake_root / "A1TEST01"
+    for name in ("0.pdf", "00.pdf", "000000.pdf"):
+        (product / name).write_bytes(b"%PDF-1.4 dummy")
+    resolution = resolve_product_dir(str(fake_root), "A1TEST01")
+    assert list_page_numbers(resolution.ccv_dir) == [16, 18]
+
+
+def test_resolve_page_file_rejects_page_zero(fake_root):
+    """ページ番号 0 は開けない(従来どおり)。0.pdf が仕様書でもページ「0」の図面でも、読み出しの対象にならない。"""
+    (fake_root / "A1TEST01" / "0.pdf").write_bytes(b"%PDF-1.4 dummy")
+    resolution = resolve_product_dir(str(fake_root), "A1TEST01")
+    with pytest.raises(InvalidProductNo):
+        resolve_page_file(resolution.ccv_dir, 0)
+    assert (fake_root / "A1TEST01" / "0.pdf").read_bytes() == b"%PDF-1.4 dummy"
+
+
 def test_resolve_page_file_success(fake_root):
     resolution = resolve_product_dir(str(fake_root), "A1TEST01")
     path = resolve_page_file(resolution.ccv_dir, 16)

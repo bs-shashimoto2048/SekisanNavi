@@ -55,6 +55,22 @@ def test_list_product_drawings(client, monkeypatch, tmp_path):
     assert pages == [16, 18]
 
 
+def test_list_product_drawings_excludes_page_zero(client, monkeypatch, tmp_path):
+    """`0.pdf`(共通製作仕様書、またはページ名「0」の図面)は、開けない「ページ 0」になるので、図面一覧に出さない。他のページは従来どおり。"""
+    product = tmp_path / "A1TEST01"
+    product.mkdir()
+    for name in ("0.pdf", "16.pdf", "18.pdf"):
+        (product / name).write_bytes(b"%PDF-1.4 dummy")
+    _configure_root(client, monkeypatch, tmp_path)
+
+    res = client.get("/api/products/A1TEST01/drawings")
+    assert res.status_code == 200
+    assert [p["page_no"] for p in res.json()] == [16, 18]
+    res = client.get("/api/products/A1TEST01/drawings/0/file")        # ページ 0 の PDF は、従来どおり開けない
+    assert res.status_code != 200
+    assert (product / "0.pdf").read_bytes() == b"%PDF-1.4 dummy"
+
+
 def test_download_product_drawing_file(client, monkeypatch, tmp_path):
     product = tmp_path / "A1TEST01"
     product.mkdir()
