@@ -282,12 +282,21 @@ export interface DesignPage {
   ban_labels: string[]
 }
 
+/** 図面一覧の最上段に固定表示する書類。`key`は`0_S0`(共通製作仕様書)・`0_A1`(設計作図完了シート)のどちらかだけ。
+ * 図面ページ番号ではない(数値にしない・通常の`0.pdf`とも別のファイル)。ファイルが実在するものだけが返る。 */
+export interface DesignDocument {
+  key: string
+  kind: 'spec_sheet' | 'check_sheet'
+  label: string
+}
+
 /** design.csvを基準にした図面一覧。ファイルが無い・空・不正でもエラーにならず`status`で返る
- * (例外文言・実パスは含まれない)。 */
+ * (例外文言・実パスは含まれない)。`documents`は最上段の書類(共通製作仕様書 → 設計作図完了シートの順。無いものは含まれない)。 */
 export interface DesignPages {
   status: 'ok' | 'empty' | 'missing' | 'invalid'
   items: DesignPage[]
   skipped_rows: number
+  documents?: DesignDocument[]
 }
 
 /** detected_df.csv (YOLO検出結果) 由来の検出BBoxプレビュー (Phase 1.12)。

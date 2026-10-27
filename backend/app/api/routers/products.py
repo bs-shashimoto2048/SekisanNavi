@@ -41,6 +41,7 @@ from app.schemas.estimate_confirmations import (
 )
 from app.schemas.settings import (
     DetectedPreviewItemOut,
+    DesignDocumentOut,
     DesignPageOut,
     DesignPagesOut,
     EstimatePanelInfoOut,
@@ -65,7 +66,7 @@ from app.services.data_source import (
     resolve_product_dir,
     search_product_dirs,
 )
-from app.services.design_pages import load_design_pages
+from app.services.design_pages import design_document_path, list_design_documents, load_design_pages
 from app.services.detected_df import load_detected_df
 from app.services.estcode_df import load_estcode_df
 from app.services.material_csv import load_material_csv
@@ -273,7 +274,27 @@ def read_design_pages(
             for p in result.pages
         ],
         skipped_rows=result.skipped_rows,
+        documents=[
+            DesignDocumentOut(key=d.key, kind=d.kind, label=d.label) for d in list_design_documents(resolution.ccv_dir)
+        ],
     )
+
+
+@router.get("/{product_no}/design-documents/{key}/file")
+def read_design_document_file(
+    product_no: str, key: str, conn: sqlite3.Connection = Depends(get_db)
+):
+    """図面一覧の最上段の書類(`0_S0`=共通製作仕様書、`0_A1`=設計作図完了シート)のPDF。`key`は固定の2つだけを受け付け、
+    任意のファイル名は受け取らない。ファイルが無い・対象外のキーは、固定文言の404(ページ番号の経路`/drawings/{page_no}/file`は使わない)。"""
+    root = get_data_source_root(conn)
+    try:
+        resolution = resolve_product_dir(root, product_no)
+    except DataSourceError as e:
+        raise _error_to_http(e) from e
+    path = design_document_path(resolution.ccv_dir, key)
+    if path is None:
+        raise HTTPException(status_code=404, detail="書類が見つかりません。")
+    return FileResponse(str(path), media_type="application/pdf")
 
 
 @router.get("/{product_no}/design-pages/{key}/image")

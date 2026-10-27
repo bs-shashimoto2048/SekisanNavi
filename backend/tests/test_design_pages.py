@@ -173,7 +173,7 @@ def test_api_errors_use_fixed_text_and_hide_paths(client, monkeypatch, tmp_path)
     prod.joinpath("design.csv").write_bytes(b"\xff\xfe\x00broken")
     _configure_root(client, monkeypatch, root)
     res = client.get("/api/products/A1TEST01/design-pages")
-    assert res.status_code == 200 and res.json() == {"status": "invalid", "items": [], "skipped_rows": 0}
+    assert res.status_code == 200 and res.json() == {"status": "invalid", "items": [], "skipped_rows": 0, "documents": []}
     assert str(tmp_path) not in res.text and "codec" not in res.text and "Traceback" not in res.text
     miss = client.get("/api/products/A1TEST01/design-pages/1/image")
     assert miss.status_code == 404 and str(tmp_path) not in miss.text

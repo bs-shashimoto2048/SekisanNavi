@@ -9,6 +9,9 @@
   - `inference`: 推論用PNG(`{数値}.png`)がある。従来どおり元PNG・推論結果・オーバーレイを使う(`inference_page_no`)。
   - `preview`: 推論用PNGは無いが、隔離領域の表示用プレビューPNGがある(オーバーレイは出さない)。
   - `unavailable`: どちらも無い(表示用の画像が未作成)。
+- **書類(`0_S0.pdf`=共通製作仕様書、`0_A1.pdf`=設計作図完了シート。SekisanNaviDataが出力)**は、design.csvの行ではなく、
+  固定の2つのファイル名だけを`documents`として、図面一覧の最上段(この順)に出す。ページ番号(数値)ではなく、通常の`0.pdf`とも
+  別のファイル。ファイルが無い書類は項目を出さない(別のファイルで代用しない)。リンク・空のファイル・別名(大文字小文字違い)は対象外。
 - ファイルが無い・CP932でない・見出しが想定と違う・データ行が無い場合は、例外にせず`status`で返す
   (`missing`/`invalid`/`empty`)。例外文言・実パスは結果にもログにも含めない(製番とエラーの型だけを記録する)。
 """
@@ -17,6 +20,7 @@ from __future__ import annotations
 import csv
 import io
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,6 +33,13 @@ _FILENAME = "design.csv"
 _MAX_BYTES = 5 * 1024 * 1024
 _PAGE_COLUMN = "ページ番号"
 _NAME_COLUMN = "図名"
+
+# 図面一覧の最上段に固定表示する書類(順序もこのとおり)。(ファイル名の語幹, 種類, 表示名)。ユーザー入力から名前を作らない。
+DESIGN_DOCUMENTS: tuple[tuple[str, str, str], ...] = (
+    ("0_S0", "spec_sheet", "共通製作仕様書"),
+    ("0_A1", "check_sheet", "設計作図完了シート"),
+)
+_DOCUMENT_STEMS_LOWER = {stem.lower() for stem, _kind, _label in DESIGN_DOCUMENTS}
 
 DesignStatus = Literal["ok", "empty", "missing", "invalid"]
 DesignMode = Literal["inference", "preview", "unavailable"]
@@ -65,6 +76,43 @@ class DesignPage:
     # 元データ(product_df.csvのBAN_MENNO/BAN_NO)の「面番号/盤番号」。`1/1`の形で、重複を除き出現順。
     # 再採番・先頭ゼロの付与/除去はしない。product_dfにそのページが無い(書類ページ等)ときは空。
     ban_labels: list[str] = field(default_factory=list)
+
+
+@dataclass
+class DesignDocument:
+    key: str
+    kind: str
+    label: str
+
+
+def design_document_path(ccv_dir: Path, key: str) -> Path | None:
+    """書類のPDF(`{key}.pdf`)。`key`は固定の2つのどちらかだけ。製番ディレクトリ直下の、綴りが完全に一致する
+    通常ファイル(リンク・空のファイルは対象外)のときだけ返す。無ければNone(例外にしない)。"""
+    if key not in {stem for stem, _kind, _label in DESIGN_DOCUMENTS}:
+        return None
+    try:
+        filename = f"{key}.pdf"
+        if filename not in set(os.listdir(ccv_dir)):          # 大文字小文字違い(別のファイル)を拾わない
+            return None
+        raw = ccv_dir / filename
+        if raw.is_symlink():
+            return None
+        root = ccv_dir.resolve(strict=False)
+        path = raw.resolve(strict=False)
+        if path.parent != root or not path.is_file() or path.stat().st_size <= 0:
+            return None
+    except (OSError, ValueError):
+        return None
+    return path
+
+
+def list_design_documents(ccv_dir: Path) -> list[DesignDocument]:
+    """図面一覧の最上段に出す書類(実在するものだけ、固定の順序)。"""
+    return [
+        DesignDocument(key=stem, kind=kind, label=label)
+        for stem, kind, label in DESIGN_DOCUMENTS
+        if design_document_path(ccv_dir, stem) is not None
+    ]
 
 
 @dataclass
@@ -142,7 +190,7 @@ def load_design_pages(
         label = r[page_idx].strip() if len(r) > page_idx else ""
         low = label.lower()
         key = pdf_by_lower.get(low)
-        if not label or key is None or low in seen:
+        if not label or key is None or low in seen or low in _DOCUMENT_STEMS_LOWER:    # 書類の名前は、図面ページの行にしない
             result.skipped_rows += 1
             continue
         seen.add(low)

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { DesignPage, DesignPages } from '../../types/domain'
+import type { DesignDocument, DesignPage, DesignPages } from '../../types/domain'
 import './DrawingNavigator.css'
 import './DesignPageList.css'
 
@@ -21,6 +21,8 @@ interface Props {
   totalCount?: number
   /** 製番を選んだ直後で、まだ表示する図面を選んでいない間はtrue。図面は出さず、選択を促す。 */
   awaitingSelection?: boolean
+  /** 最上段の書類を開く(PDFを表示する)。指定しなければ、書類の欄は出さない。書類は図面の選択(表示 N / M 件)の対象外。 */
+  onOpenDocument?: (document: DesignDocument) => void
 }
 
 const MODE_BADGE: Record<DesignPage['mode'], { text: string; title: string }> = {
@@ -78,6 +80,7 @@ export function DesignPageList({
   onOpenPicker,
   totalCount,
   awaitingSelection = false,
+  onOpenDocument,
 }: Props) {
   const listRef = useRef<HTMLUListElement>(null)
   // 選択が変わったとき(別の経路での選択を含む)に、選択中のカードが一覧の表示範囲に入るようスクロールする。
@@ -103,9 +106,30 @@ export function DesignPageList({
       ? designPages.items
       : designPages.items.filter((i) => i.inference_page_no != null && visiblePageNos.has(i.inference_page_no))
 
+  // 最上段の書類(共通製作仕様書 → 設計作図完了シート。サーバーが返す順のまま)。無い書類は項目を出さない
+  const documents = onOpenDocument ? (designPages.documents ?? []) : []
+
   return (
     <nav className="drawing-navigator design-page-list" aria-label="design.csv の図面一覧">
       <h2 className="drawing-navigator__heading">図面一覧</h2>
+      {documents.length > 0 && (
+        <ul className="design-page-list__documents" aria-label="書類">
+          {documents.map((doc) => (
+            <li key={doc.key}>
+              <button
+                type="button"
+                className="design-page-list__document"
+                data-design-document={doc.key}
+                onClick={() => onOpenDocument?.(doc)}
+                title={`${doc.label}(PDF)を開く`}
+              >
+                <span className="design-page-list__document-name">{doc.label}</span>
+                <span className="design-page-list__badge design-page-list__badge--document">PDF</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {awaitingSelection && (
         <div className="design-page-list__awaiting">
           <p className="drawing-navigator__status">表示する図面を選択してください</p>

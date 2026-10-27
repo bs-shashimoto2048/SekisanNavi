@@ -1,4 +1,45 @@
 /* design.csv基準の図面一覧。1枚ずつ枠で囲んだカード(上部=面/盤と図名、中央=サムネイル、下部=種類とページ番号)。 */
+/* 最上段の書類(共通製作仕様書 → 設計作図完了シート)。図面カードより小さい1行のボタン。 */
+.design-page-list__documents {
+  list-style: none;
+  margin: 0 0 0.7rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.design-page-list__document {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-weight: 700;
+  color: #1f2937;
+  background: #f1f5f9;
+  border: 2px solid #94a3b8;
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+}
+
+.design-page-list__document:hover {
+  border-color: #3b82f6;
+}
+
+.design-page-list__document:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 1px;
+}
+
+.design-page-list__badge--document {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
 .design-page-list__items {
   list-style: none;
   margin: 0;

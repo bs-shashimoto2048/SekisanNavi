@@ -50,6 +50,7 @@ import type {
   Detection,
   DrawingPage,
   EstimateMasterItem,
+  DesignDocument,
   DesignPage,
   DesignPages,
   EstimatePanelInfo,
@@ -74,6 +75,7 @@ import { ProjectHeader } from './components/ProjectHeader/ProjectHeader'
 import { DrawingNavigator } from './components/DrawingNavigator/DrawingNavigator'
 import { DesignPageList } from './components/DrawingNavigator/DesignPageList'
 import { DesignPagePicker } from './components/DrawingNavigator/DesignPagePicker'
+import { DesignDocumentModal } from './components/DrawingNavigator/DesignDocumentModal'
 import { designPagesFallbackNote } from './utils/designPagesNote'
 import { loadExcludedKeys, saveExcludedKeys, selectedItems } from './utils/designSelection'
 import { DrawingViewer } from './components/DrawingViewer/DrawingViewer'
@@ -208,6 +210,8 @@ function App() {
   //   ダイアログを出す」ための印(一覧の取得後に1回だけ使う)
   const [designExcluded, setDesignExcluded] = useState<Set<string>>(() => new Set())
   const [designConfirmed, setDesignConfirmed] = useState(false)
+  // 図面一覧の最上段の書類(共通製作仕様書・設計作図完了シート)のPDFを開いている間の書類(閉じるとnull)。製番が変わったら閉じる
+  const [openDocument, setOpenDocument] = useState<DesignDocument | null>(null)
   const [isDesignPickerOpen, setDesignPickerOpen] = useState(false)
   const pickerOnNextLoadRef = useRef(false)
   // URLから復元した製番が実在しなかった場合の既定製番への自動fallbackは、
@@ -497,6 +501,7 @@ function App() {
   // (例外文言・実パスを画面へ出さない)。
   useEffect(() => {
     setDesignPages(null)
+    setOpenDocument(null) // 製番が変わったら、開いていた書類のPDFは閉じる
     if (activeProductNo == null) return
     let cancelled = false
     fetchDesignPages(activeProductNo)
@@ -1935,6 +1940,7 @@ function App() {
                   onOpenPicker={() => setDesignPickerOpen(true)}
                   totalCount={designItems.length}
                   awaitingSelection={!designConfirmed}
+                  onOpenDocument={setOpenDocument}
                 />
               ) : (
                 <>
@@ -2134,6 +2140,9 @@ function App() {
         />
       )}
       {isHelpOpen && <HelpPdfModal onClose={() => setHelpOpen(false)} />}
+      {openDocument && activeProductNo && (
+        <DesignDocumentModal productNo={activeProductNo} document={openDocument} onClose={() => setOpenDocument(null)} />
+      )}
       {isDesignPickerOpen && useDesignList && (
         <DesignPagePicker
           key={activeProductNo}
