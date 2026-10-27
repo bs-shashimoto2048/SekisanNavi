@@ -176,3 +176,20 @@ def test_documents_do_not_leak_into_the_page_number_routes(client, monkeypatch, 
     assert pages == [1, 2]                                         # 0_S0/0_A1/0.pdf は、ページ番号の一覧に出ない
     assert client.get("/api/products/A1TEST01/drawings/0/file").status_code != 200        # ページ 0 は従来どおり開けない(書類は別の経路)
     assert client.get("/api/products/A1TEST01/drawings/1/file").content == b"%PDF-1.4\n"   # 通常ページの PDF 配信は従来どおり
+
+
+def test_inference_zero_copy_and_check_sheet_are_separate_files_with_separate_routes(client, monkeypatch, tmp_path):
+    """SekisanNaviData は、ページ「0」が推論対象のとき、推論用の 0.pdf を 0_A1.pdf のコピーとして用意する(内容は同じ図面)。
+    書類(0_S0・0_A1)は書類の経路で、通常の 0.pdf は design.csv の行(「0」)として扱い、混同しない。"""
+    root, prod = _setup(tmp_path, monkeypatch, [("0", "設計作図完了チェックシート"), ("1", "単線結線図")], ["0", "1"])
+    _put(prod, "0_S0.pdf", SPEC)
+    _put(prod, "0_A1.pdf", CHECK)
+    _put(prod, "0.pdf", CHECK)                                     # 推論用のコピー(0_A1.pdf と同じ内容)
+    _configure_root(client, monkeypatch, root)
+    body = client.get("/api/products/A1TEST01/design-pages").json()
+    assert [d["key"] for d in body["documents"]] == ["0_S0", "0_A1"]                       # 書類の順序は固定
+    assert [i["key"] for i in body["items"]] == ["0", "1"]                                 # 通常の 0 は図面の行のまま(書類は混ざらない)
+    assert client.get("/api/products/A1TEST01/design-documents/0_S0/file").content == SPEC
+    assert client.get("/api/products/A1TEST01/design-documents/0_A1/file").content == CHECK
+    assert client.get("/api/products/A1TEST01/design-documents/0/file").status_code == 404   # 通常の 0.pdf は書類の経路では配信しない
+    assert [p["page_no"] for p in client.get("/api/products/A1TEST01/drawings").json()] == [1]   # ページ番号の一覧に 0.pdf・書類は出ない
