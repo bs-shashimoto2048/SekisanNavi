@@ -1,8 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchDrawingEvidenceTypes } from '../../api/client'
-import type { DrawingEvidenceType, EstimateResult } from '../../types/domain'
+import { fetchDrawingEvidenceTypeCandidates, fetchDrawingEvidenceTypes } from '../../api/client'
+import type { DrawingEvidenceType, DrawingEvidenceTypeCandidate, EstimateResult } from '../../types/domain'
 import { judgmentScopeLabel, usageLabel } from '../../domain/drawingEvidencePresentation'
 import './DrawingEvidencePanel.css'
+
+/** 候補マニフェストの`status`→表示ラベル (Issue #40 追加修正)。この文言は
+ * UI上の分類名であり、各候補の「確認待ち理由」そのもの(`blocker`、
+ * マニフェストの値をそのまま表示する)とは別物。ここで業務的な確認理由を
+ * 新たに作文しない。 */
+const CANDIDATE_STATUS_LABEL: Record<DrawingEvidenceTypeCandidate['status'], string> = {
+  ready: '投入準備完了(候補)',
+  needs_business_confirmation: '業務確認待ち',
+  blocked: '対応不可(ブロック)',
+}
 
 /** 最近使用した図面情報キーをlocalStorageへ保持する際のkey (Issue #40 Phase 3)。
  * 製番をまたいで共有してよい「作業者の直近の使い方の癖」程度の情報であり、
@@ -86,6 +96,11 @@ export function DrawingEvidencePanel({
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [recentKeys, setRecentKeys] = useState<string[]>(() => loadRecentKeys())
+  // [追加修正] 登録済み図面情報マスタが0件のときに表示する、候補マニフェスト
+  // (本番seedではない)の読み取り専用一覧。`allTypes`とは完全に独立した
+  // 取得(別API、別state)にすることで、登録済みマスタと候補を混同しない。
+  const [candidates, setCandidates] = useState<DrawingEvidenceTypeCandidate[]>([])
+  const [candidatesLoading, setCandidatesLoading] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -102,6 +117,18 @@ export function DrawingEvidencePanel({
         // 新しいエラー表示・挙動の変更は一切加えていない。
       })
       .finally(() => setLoading(false))
+  }, [])
+
+  // [追加修正] 候補マニフェストの取得は登録済み一覧の取得と独立して行う
+  // (登録済みが0件かどうかが確定する前から並行して取得しておき、
+  // 表示判断[`allTypes.length === 0`]の時点で既に手元にある状態にする)。
+  // 取得失敗時も登録済み一覧の表示自体は壊さない(読み取り専用の付加情報)。
+  useEffect(() => {
+    setCandidatesLoading(true)
+    fetchDrawingEvidenceTypeCandidates()
+      .then(setCandidates)
+      .catch(() => {})
+      .finally(() => setCandidatesLoading(false))
   }, [])
 
   // 品名(category)一覧。`null`(未分類)は「すべて」タブとして扱う
@@ -127,6 +154,20 @@ export function DrawingEvidencePanel({
 
   const byKey = useMemo(() => new Map(allTypes.map((t) => [t.key, t])), [allTypes])
   const selectedType = selectedKey != null ? (byKey.get(selectedKey) ?? null) : null
+
+  // [追加修正 指示3] 候補一覧を表示するかどうかは、選択可能な(enabledな)
+  // 登録済みマスタが1件も無いかどうかで決める(fetchが返した生の件数
+  // `allTypes.length`ではなく、無効化されたmasterしか無い場合も「実質0件」
+  // として候補を見せる)。
+  const hasAnyEnabledType = useMemo(() => allTypes.some((t) => t.enabled), [allTypes])
+
+  // [追加修正 指示5] 登録済みマスタ(allTypes、無効化されたものも含む)と
+  // 候補を混同しない。登録済みのkeyと重複する候補は候補一覧側へ重ねて
+  // 出さない(無効化されたmasterのkeyと候補のkeyが一致する場合も対象)。
+  const visibleCandidates = useMemo(
+    () => candidates.filter((c) => !byKey.has(c.key)),
+    [candidates, byKey],
+  )
   const recentTypes = recentKeys.map((k) => byKey.get(k)).filter((t): t is DrawingEvidenceType => t != null)
 
   function handleSelect(key: string) {
@@ -229,9 +270,58 @@ export function DrawingEvidencePanel({
               </button>
             </li>
           ))}
-          {visibleTypes.length === 0 && !loading && (
+          {/* [追加修正 指示3/4/6] 登録済み図面情報マスタが0件(`allTypes`、
+              カテゴリ絞り込みの結果ではなく全体として0件)のときだけ、
+              候補マニフェストを読み取り専用で表示する。候補は選択不可
+              (onClick・BBox登録APIへの送信を一切持たない)。表示する
+              status/確認待ち理由(`blocker`)はマニフェストの値そのままで、
+              ここで新しい日本語理由を作文しない(指示6)。 */}
+          {visibleTypes.length === 0 && !loading && hasAnyEnabledType && (
             <li>
               <p className="drawing-evidence-panel__empty">該当する図面情報がありません</p>
+            </li>
+          )}
+          {!hasAnyEnabledType && !loading && (
+            <li>
+              {candidatesLoading ? (
+                <p className="drawing-evidence-panel__loading">候補を読み込み中...</p>
+              ) : visibleCandidates.length > 0 ? (
+                <div className="drawing-evidence-panel__candidates">
+                  <p className="drawing-evidence-panel__candidates-intro">
+                    登録済みの図面情報マスタはまだありません。以下は本番投入前の
+                    <strong>候補／確認待ち</strong>です(選択・BBox登録はできません)。
+                  </p>
+                  <ul className="drawing-evidence-panel__candidates-list">
+                    {visibleCandidates.map((c) => (
+                      <li key={c.key} className="drawing-evidence-panel__candidate-row">
+                        <div className="drawing-evidence-panel__candidate-header">
+                          <span className="drawing-evidence-panel__candidate-name">{c.display_name}</span>
+                          <span
+                            className={
+                              'drawing-evidence-panel__candidate-status' +
+                              ` drawing-evidence-panel__candidate-status--${c.status}`
+                            }
+                          >
+                            候補・{CANDIDATE_STATUS_LABEL[c.status]}
+                          </span>
+                        </div>
+                        {c.category != null && (
+                          <div className="drawing-evidence-panel__candidate-category">
+                            カテゴリ: {c.category}
+                          </div>
+                        )}
+                        {c.blocker != null && (
+                          <div className="drawing-evidence-panel__candidate-blocker">{c.blocker}</div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="drawing-evidence-panel__empty">
+                  登録済みの図面情報も、確認中の候補もありません。
+                </p>
+              )}
             </li>
           )}
         </ul>

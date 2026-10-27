@@ -29,6 +29,23 @@ class DrawingEvidenceTypeOut(BaseModel):
     enabled: bool
 
 
+class DrawingEvidenceTypeCandidateOut(BaseModel):
+    """Issue #40 追加修正: 図面情報パネルの「候補/確認待ち」表示向け。
+
+    `backend/data_candidates/phase6f_drawing_evidence_types.json`(本番seed
+    ではない候補マニフェスト)を読み取り専用で表示するための最小スキーマ。
+    `status`/`blocker`はマニフェストの値をそのまま返す(ここでready相当への
+    格上げや理由の言い換えは行わない)。DB由来の`DrawingEvidenceTypeOut`とは
+    別の型にすることで、登録済みマスタと候補を型レベルでも混同しない。
+    """
+
+    key: str
+    display_name: str
+    category: str | None
+    status: str
+    blocker: str | None
+
+
 class EstimateResultEvidenceOut(BaseModel):
     id: int
     evidence_kind: EvidenceKind

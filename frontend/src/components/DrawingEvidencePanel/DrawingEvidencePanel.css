@@ -218,6 +218,82 @@
   margin: 0;
 }
 
+/* [追加修正] 登録済み図面情報が0件のときに表示する、候補マニフェストの
+   読み取り専用一覧。選択可能な`.drawing-evidence-panel__row`(button、
+   緑系hover/選択色)とは明確に区別するため、クリック不可であることが
+   一目でわかる中立的なグレー系の配色にする(業務色・状態色は増やさない)。 */
+.drawing-evidence-panel__candidates-intro {
+  font-size: 0.8rem;
+  color: #6b7280;
+  padding: 0.4rem 0.5rem;
+  margin: 0;
+  background: #f9fafb;
+  border-bottom: 1px solid var(--border-cell, #edf1f5);
+}
+
+.drawing-evidence-panel__candidates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.drawing-evidence-panel__candidate-row {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border-cell, #edf1f5);
+  /* 選択可能な行(cursor:pointer)ではないことを明示する。 */
+  cursor: default;
+}
+
+.drawing-evidence-panel__candidate-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.drawing-evidence-panel__candidate-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.drawing-evidence-panel__candidate-status {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: #f3f4f6;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+
+/* statusごとに色相を変えず(色数を増やさない指示24章の方針を踏襲)、
+   彩度/濃淡のみで区別する。blockedの方がneeds_business_confirmationより
+   一段階濃いグレーにする(「より対応困難」であることの弱いヒント)。 */
+.drawing-evidence-panel__candidate-status--blocked {
+  background: #e5e7eb;
+  color: #4b5563;
+  border-color: #9ca3af;
+}
+
+.drawing-evidence-panel__candidate-category {
+  font-size: 0.76rem;
+  color: #9ca3af;
+  margin-top: 0.1rem;
+}
+
+.drawing-evidence-panel__candidate-blocker {
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin-top: 0.2rem;
+  overflow-wrap: break-word;
+}
+
 .drawing-evidence-panel__selected {
   flex-shrink: 0;
   margin-top: 0.3rem;

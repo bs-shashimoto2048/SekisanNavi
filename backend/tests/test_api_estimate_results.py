@@ -193,6 +193,31 @@ def test_drawing_evidence_types_endpoint_returns_empty_when_none_seeded(client):
     assert res.json() == []
 
 
+def test_drawing_evidence_type_candidates_endpoint_reads_the_real_manifest(client):
+    """Issue #40 追加修正: 図面情報パネルの「候補/確認待ち」表示向け
+    読み取り専用API。DBには一切接続せず、候補マニフェストファイルをそのまま
+    返す(`drawing_evidence_types`が0件でも、このAPIはDB状態と無関係に
+    実ファイルの内容を返す)。マニフェストの件数・中身は更新されうるため
+    固定せず、マニフェスト自身の内容と一致すること(構造・不変条件)を検証する。"""
+    import json
+
+    from app.services.drawing_evidence_candidates import CANDIDATES_PATH
+
+    raw = json.loads(CANDIDATES_PATH.read_text(encoding="utf-8"))["candidates"]
+    res = client.get("/api/drawing-evidence-types/candidates")
+    assert res.status_code == 200
+    body = res.json()
+    assert len(body) > 0
+    assert len(body) == len(raw)
+    assert [item["key"] for item in body] == [r["key"] for r in raw]
+    for item, r in zip(body, raw):
+        assert set(item) == {"key", "display_name", "category", "status", "blocker"}
+        # status/blockerはマニフェストの値がそのまま(格上げ・言い換えなし)返る。
+        assert item["status"] == r["status"]
+        assert item["blocker"] == (r.get("blocker") or None)
+    assert all(item["status"] in ("ready", "needs_business_confirmation", "blocked") for item in body)
+
+
 # --- PR #41レビュー指摘対応: 係数override APIのallowed_factors制約 ---
 
 

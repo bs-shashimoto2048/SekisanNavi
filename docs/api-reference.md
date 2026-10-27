@@ -364,6 +364,22 @@ REFERENCE_PDF_DIR`配下のPDFのみで、リクエストから任意のパス�
 | GET | `/api/help/reference-pdfs` | 資料フォルダ直下のPDF一覧(フォルダが無い場合も`folder_exists=false`を返し、エラーにはしない) | `ReferencePdfListOut` |
 | GET | `/api/help/reference-pdfs/{filename}` | 資料フォルダ配下の1PDFを返す(ファイル名はフォルダ外参照を防ぐため検証する。無ければ404) | `application/pdf` |
 
+## drawing-evidence-types/candidates — `/api/drawing-evidence-types/candidates`
+
+図面情報追加パネルの「候補／確認待ち」表示向けの読み取り専用API
+(Issue #40 追加修正)。`drawing_evidence_types`(`GET /api/drawing-evidence-types`)
+が0件のときに、画面を空白にせず「何が検討中か」を示すために使う。
+
+| Method | Path | 説明 | レスポンス |
+|---|---|---|---|
+| GET | `/api/drawing-evidence-types/candidates` | 候補マニフェスト(`backend/data_candidates/phase6f_drawing_evidence_types.json`、本番seedではない)をファイルから読み取って返す。DBへは一切接続しない。ファイルが無い/壊れている場合は空配列 | `list[DrawingEvidenceTypeCandidateOut]` |
+
+`DrawingEvidenceTypeCandidateOut`: `key` / `display_name` / `category`(null可) /
+`status`(`ready` / `needs_business_confirmation` / `blocked`) / `blocker`(null可)。
+`status`・`blocker`はマニフェストの値をそのまま返し、ready相当への格上げや理由の
+言い換えは行わない。Frontendは候補を選択不可の一覧として表示し、BBox登録の
+対象にはしない。
+
 ## health
 
 | Method | Path | 説明 | レスポンス |

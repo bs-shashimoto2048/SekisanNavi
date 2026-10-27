@@ -9,6 +9,7 @@ import type {
   Detection,
   DetectedPreviewItem,
   DrawingEvidenceType,
+  DrawingEvidenceTypeCandidate,
   DrawingPage,
   EstimateConfirmation,
   EstimateConfirmationDetail,
@@ -357,6 +358,13 @@ export function referencePdfFileUrl(filename: string): string {
 /** 図面情報マスタ一覧 (Issue #40 10-1章)。 */
 export function fetchDrawingEvidenceTypes(): Promise<DrawingEvidenceType[]> {
   return getJson('/api/drawing-evidence-types')
+}
+
+/** 候補マニフェスト(本番seedではない)の読み取り専用一覧 (Issue #40 追加修正)。
+ * `drawing_evidence_types`が0件のときに、図面情報追加パネルで「候補／
+ * 確認待ち」を表示するためだけに使う。DBへは一切接続しない。 */
+export function fetchDrawingEvidenceTypeCandidates(): Promise<DrawingEvidenceTypeCandidate[]> {
+  return getJson('/api/drawing-evidence-types/candidates')
 }
 
 /** 製番`productNo`の現在の積算結果一覧を取得する(読み取り専用。評価器は
