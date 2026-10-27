@@ -140,6 +140,14 @@ export function fetchMasterItems(params: { q?: string; category?: string }): Pro
   return getJson(`/api/master-items${qs ? `?${qs}` : ''}`)
 }
 
+// 主回路銅帯コード選択UI (Issue #40 Phase 6-H) 向け候補一覧。
+// 仕様区分(品名)→型式→定格の絞り込みはこの関数が返す一覧をFrontend側
+// (CopperBusCodeSelector)で行う。BBox追加対象の選択(fetchMasterItems経由)
+// とは完全に独立しており、呼び出してもBBox追加対象は変化しない。
+export function fetchCopperBusCodeOptions(): Promise<EstimateMasterItem[]> {
+  return getJson('/api/master-items/copper-bus-code-options')
+}
+
 // Manual BBox登録 (Phase 1.6)。
 export function createManualDetection(input: ManualDetectionCreateInput): Promise<Detection> {
   return sendJson('/api/detections', 'POST', input)
@@ -256,6 +264,16 @@ export function designDocumentFileUrl(productNo: string, key: string): string {
 /** 図面一覧の最上段の固定書類(0_S0/0_A1)の表示用サムネイルPNG。 */
 export function designDocumentImageUrl(productNo: string, key: string): string {
   return `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/design-documents/${encodeURIComponent(key)}/image`
+}
+
+/** [追加修正: Excel出力] 「図面情報」パネル(旧「盤情報」)に現在表示する盤情報と、
+ * アプリが保持している他の積算仕様情報を、製番単位でExcel(.xlsx)へ出力する
+ * エンドポイントのURL。Backend側が`Content-Disposition: attachment`を返すため、
+ * `fetch`でBlob化せずこのURLへそのまま遷移/リンクするだけでブラウザの
+ * ダウンロードが始まる(`designDocumentFileUrl`等、他の直リンク系ヘルパーと
+ * 同じ方針)。 */
+export function productExportUrl(productNo: string): string {
+  return `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/export`
 }
 
 // --- Phase 1.8: 製番検索・左ペインPNGサムネイル ---
