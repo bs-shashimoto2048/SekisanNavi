@@ -1,6 +1,6 @@
 import sqlite3
 
-from app.domain.master_categories import ALLOWED_CATEGORIES
+from app.domain.master_categories import ALLOWED_CATEGORIES, COPPER_BUS_CODE_CATEGORIES
 from app.domain.models import EstimateMasterItem
 
 _COLUMNS = """
@@ -57,6 +57,28 @@ def list_master_items(
     # ORDER BY句のCASE式に渡すプレースホルダは、WHERE句のパラメータの後に
     # SQL文中に出現するため、paramsリストの末尾へ同じ順序で追加する。
     order_params = [*params, *ALLOWED_CATEGORIES]
+    rows = conn.execute(sql, order_params).fetchall()
+    return [_row_to_master_item(r) for r in rows]
+
+
+def list_copper_bus_code_options(conn: sqlite3.Connection) -> list[EstimateMasterItem]:
+    """主回路銅帯コード選択UI (部品台帳、Issue #40 Phase 6-H) 向けの候補一覧。
+
+    品名(category)が`COPPER_BUS_CODE_CATEGORIES`(入力（主回路銅帯）/銅帯)の
+    master itemのみを返す。仕様区分(品名)→型式→定格→コードの順で絞り込む
+    UIを想定しているが、絞り込み自体はFrontend側(`CopperBusCodeSelector`)が
+    行う。ここでは対象品名でのフィルタと一覧表示用のORDER BYのみ行う
+    (BBox追加対象の選択(`list_master_items`)とは完全に独立した読み取り専用
+    関数であり、Detection/estimate_results等は一切変更しない)。
+    """
+    placeholders = ",".join("?" for _ in COPPER_BUS_CODE_CATEGORIES)
+    sql = f"""
+        SELECT {_COLUMNS}
+        FROM estimate_master_items
+        WHERE category IN ({placeholders})
+        ORDER BY {_CATEGORY_ORDER_SQL}, model, rating
+    """
+    order_params = [*COPPER_BUS_CODE_CATEGORIES, *ALLOWED_CATEGORIES]
     rows = conn.execute(sql, order_params).fetchall()
     return [_row_to_master_item(r) for r in rows]
 

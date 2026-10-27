@@ -94,6 +94,7 @@ Frontend側`estimateAggregationReal.ts`が`detections`×`estimate_master_items`�
 | Method | Path | 説明 | レスポンス |
 |---|---|---|---|
 | GET | `/api/master-items` | 積算コードMaster一覧。`q`(code/model/ratingの部分一致)・`category`でフィルタ可 | `list[EstimateMasterItemOut]` |
+| GET | `/api/master-items/copper-bus-code-options` | 主回路銅帯コード選択UI(Issue #40 Phase 6-H)向け候補一覧(品名が「入力（主回路銅帯）」/「銅帯」のmaster item、実データ85件)。品名→型式→定格→コードの絞り込みはFrontend(`CopperBusCodeSelector`)で行う。読み取り専用で、BBox追加対象の選択・積算確定には連動しない | `list[EstimateMasterItemOut]` |
 
 `EstimateMasterItemOut`: `id`, `code`, `category`, `model`, `rating`, `note`,
 `total_price_a`, `box_parts_price`, `painting_price`, `setup_a`,
@@ -127,6 +128,7 @@ Frontend側`estimateAggregationReal.ts`が`detections`×`estimate_master_items`�
 | GET | `/api/products/{product_no}/drawings/{page_no}/thumbnail` | PNGサムネイル配信 | `image/png` |
 | GET | `/api/products/{product_no}/drawings/{page_no}/detected-preview` | YOLO検出結果プレビュー(該当データが無ければ空配列) | `list[DetectedPreviewItemOut]` |
 | GET | `/api/products/{product_no}/estimate-panels` | 盤情報一覧(`estcode_df.csv`由来、製番単位) | `list[EstimatePanelInfoOut]` |
+| GET | `/api/products/{product_no}/export` | 製番単位のExcel(.xlsx)出力。「盤情報」シートと「積算仕様」シート(`estimate_results`)を返す。読み取り専用(DB・ファイルへの書き込みなし)、未取得の項目は「未確認」と表示。`Content-Disposition`のファイル名はRFC 5987(`filename*=UTF-8''...`)。現状フロントエンドにはリンクを設けていない(`productExportUrl`のみ用意) | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
 | POST | `/api/products/{product_no}/estimate-confirmations` | **積算確定snapshotを新規作成**(Issue #4 Phase B-2) | `EstimateConfirmationOut`(201) |
 | GET | `/api/products/{product_no}/estimate-confirmations` | 過去確定snapshot一覧(新しい順、明細は含まない)(Issue #4 Phase B-4) | `list[EstimateConfirmationSummaryOut]` |
 | GET | `/api/products/{product_no}/estimate-confirmations/{confirmation_id}` | 確定snapshot1件の詳細(明細一式を含む)(Issue #4 Phase B-4) | `EstimateConfirmationDetailOut` |

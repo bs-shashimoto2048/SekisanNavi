@@ -20,6 +20,16 @@
   min-height: 0;
 }
 
+/* [Issue #40 Phase 6-H 追加修正] 主回路銅帯コード選択欄を盤情報(面ごと)へ
+   移設したことに伴い、この一覧が「BBox追加対象の選択」専用であることを
+   常時表示する説明文。行の`title`属性(hover時のみ)を補う形で追加した。 */
+.master-picker__purpose {
+  flex-shrink: 0;
+  margin: 0 0 0.3rem;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
 /* [追加修正: 他floating panelとのフォーマット統一] 盤情報・積算集約・
    積算明細の見出し(`panel-info__heading`等)と全く同じ構造
    (font-size/weight・淡色背景+左accent bar+下線box-shadow・
