@@ -114,11 +114,13 @@ def _confirmation_item_out(item) -> EstimateConfirmationItemOut:
 
 @router.get("/search", response_model=ProductSearchOut)
 def search_products(
-    q: str = Query(min_length=1, max_length=20, description="製番の前方一致検索文字列"),
-    limit: int = Query(default=DEFAULT_PRODUCT_SEARCH_LIMIT, ge=1, le=50),
+    q: str = Query(default="", max_length=20, description="製番の部分一致検索文字列(空文字列なら全件)"),
+    limit: int = Query(default=DEFAULT_PRODUCT_SEARCH_LIMIT, ge=1, le=1000),
     conn: sqlite3.Connection = Depends(get_db),
 ) -> ProductSearchOut:
-    """製番の前方一致候補検索 (要件2/3)。ルート直下を全件返すことはしない。"""
+    """製番の部分一致候補検索 (要件2/3)。[追加修正: 製番選択の一覧表示] `q`が空文字列の
+    場合は、入力欄の下に一覧表示するための「絞り込みなし全件(`_`始まりを除く)」を返す。
+    """
     root = get_data_source_root(conn)
     try:
         matches, truncated = search_product_dirs(root, q, limit)
