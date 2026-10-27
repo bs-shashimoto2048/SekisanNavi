@@ -43,7 +43,8 @@ output\A1GV2421\
   0_S0.pdf                   (共通製作仕様書。以前は 共通製作仕様書.pdf。SekisanNaviData が出力する。無い製番もある)
   0_A1.pdf                   (設計作図完了シート。以前は通常のページ「0」として 0.pdf。無い製番もある)
                               0_S0 / 0_A1 は数値の図面ページ番号ではなく、通常の 0.pdf とも別のファイル。図面一覧の最上段に
-                              (共通製作仕様書 → 設計作図完了シートの順で)固定表示する。PDF は専用の経路
+                              (共通製作仕様書 → 設計作図完了シートの順で)固定表示する。対応PNG
+                              (0_S0__preview.png / 0_A1__preview.png)は一覧のサムネイル、PDFは専用の経路
                               /api/products/{製番}/design-documents/{0_S0|0_A1}/file で配信する(ファイルが無ければ項目を出さない)。
                               ページ番号の一覧(list_page_numbers)には含めない。通常の 0.pdf(従来の出力)は、ページ番号 0 を
                               開けない(resolve_page_file が 0 以下を拒否する)ため、この一覧には出さず、design.csv の「0」の行として従来どおり扱う
@@ -97,15 +98,16 @@ SekisanNaviData が設計データのページ情報 `.db` から作る製番直
 - 面番号/盤番号は `product_df.csv` の `BAN_MENNO`/`BAN_NO`(`1/1` の形、複数は `、` 区切り・重複を除き出現順)。
   `design.csv` には面番号/盤番号の列が無く、`product_df.csv` に行が無いページ(書類ページ等)には番号を出さない(推測しない)。
 - 表示の種類: 推論用 PNG(`{数値}.png`)があるページは従来どおり元 PNG・推論結果・盤領域/検出枠、無いページは「表示用プレビュー PNG」
-  (`{PREVIEW_ROOT}/{製番}/{PDF名}__preview.png`。`app/config.py` の `PREVIEW_ROOT`、環境変数 `SEKISAN_NAVI_PREVIEW_ROOT`)を表示し、枠は出さない。
-  プレビュー PNG が無い図面は「画像なし」。バックエンドは読み取りのみ。
+  (`{PDF名}__preview.png`)を表示し、枠は出さない。新しいデータ作成ではPNGを製番フォルダ直下に出力する。旧隔離データとの互換用に、製番フォルダ内に無い場合は
+  `{PREVIEW_ROOT}/{製番}/`(環境変数 `SEKISAN_NAVI_PREVIEW_ROOT`)も参照する。プレビューPNGが無い図面は「画像なし」。バックエンドは読み取りのみ。
 - 図面の選択: 製番を選んだあと、図面一覧を開く前に「表示する図面を選択」の画面を出す(design.csv のページ番号の元表記・図名・表示の種類を並べ、既定はすべて選択済み)。
   「開く」で確定すると、選んだ図面だけが左ペインのサムネイル一覧に載る(並び順・表示の種類は変えない)。確定するまで中央にも図面は出ない。
   選択は **ブラウザーの localStorage**(キー `sekisan-navi:design-selection:v1:{製番}`、値は「外した図面のキー」のみ)に保存し、サーバー・DB・共有先へは書かない
   (別の PC・別のブラウザーとは共有されない)。保存済みなら、再読み込みでは画面を出さずに復元し、製番を選び直したときは選択画面を出す。一覧の「図面の選択」でいつでも選び直せる。
 - `design.csv` が無い・読めない・見出しが違う・表示できる行が無いときは、固定文言で知らせて従来の図面一覧(数値名の PDF)に戻る。
   例外の詳細・実パスは画面にも API 応答にも出さない。
-- API: `GET /api/products/{製番}/design-pages`(一覧)、`GET /api/products/{製番}/design-pages/{キー}/image`(画像。一覧にあるキーだけ受け付ける)。
+- API: `GET /api/products/{製番}/design-pages`(一覧)、`GET /api/products/{製番}/design-pages/{キー}/image`(図面画像。一覧にあるキーだけ受け付ける)、
+  `GET /api/products/{製番}/design-documents/{0_S0|0_A1}/image`(書類サムネイル)、`GET /api/products/{製番}/design-documents/{0_S0|0_A1}/file`(PDF)。
 
 ## 3. 「CCV」について (★重要・未確認)
 

@@ -156,6 +156,37 @@ def test_document_file_is_delivered_as_pdf_only_for_the_fixed_keys(client, monke
     assert (prod / "0.pdf").read_bytes() == ZERO and (prod / "0_S0.pdf").read_bytes() == SPEC      # 読み取りのみ(ファイルを変えない)
 
 
+def test_document_preview_images_are_delivered_only_for_fixed_documents(client, monkeypatch, tmp_path):
+    prod = _api_setup(tmp_path, monkeypatch, client, {
+        "0_S0.pdf": SPEC, "0_A1.pdf": CHECK,
+        "0_S0__preview.png": b"png-spec", "0_A1__preview.png": b"png-check",
+    })
+    spec = client.get("/api/products/A1TEST01/design-documents/0_S0/image")
+    check = client.get("/api/products/A1TEST01/design-documents/0_A1/image")
+    assert spec.status_code == check.status_code == 200
+    assert spec.headers["content-type"] == check.headers["content-type"] == "image/png"
+    assert spec.content == b"png-spec" and check.content == b"png-check"
+    for key in ("0", "1", "other", "../0_S0"):
+        assert client.get(f"/api/products/A1TEST01/design-documents/{key}/image").status_code == 404
+    (prod / "0_S0__preview.png").unlink()
+    missing = client.get("/api/products/A1TEST01/design-documents/0_S0/image")
+    assert missing.status_code == 404
+    assert missing.json()["detail"] == "この書類の表示用画像は作成されていません。"
+
+
+def test_document_preview_symlink_is_not_delivered(client, monkeypatch, tmp_path):
+    prod = _api_setup(tmp_path, monkeypatch, client, {"0_S0.pdf": SPEC})
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(b"secret")
+    try:
+        os.symlink(outside, prod / "0_S0__preview.png")
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink を作れない環境")
+    response = client.get("/api/products/A1TEST01/design-documents/0_S0/image")
+    assert response.status_code == 404
+    assert response.content != b"secret"
+
+
 def test_missing_document_file_is_a_fixed_404_not_an_error(client, monkeypatch, tmp_path):
     _api_setup(tmp_path, monkeypatch, client, {"0_A1.pdf": CHECK})
     r = client.get("/api/products/A1TEST01/design-documents/0_S0/file")

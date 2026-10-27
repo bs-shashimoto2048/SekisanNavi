@@ -137,6 +137,16 @@ def test_api_image_serves_inference_png_or_preview_by_key_and_never_mixes_them(c
     assert client.get("/api/products/A1TEST01/design-pages/..%2F1/image").status_code == 404
 
 
+def test_api_image_reads_pipeline_preview_from_product_output_directory(client, monkeypatch, tmp_path):
+    root, prod = _setup(tmp_path, monkeypatch, [("01", "PDF only")], ["01"])
+    (prod / "01__preview.png").write_bytes(PNG_PREVIEW)
+    _configure_root(client, monkeypatch, root)
+    response = client.get("/api/products/A1TEST01/design-pages/01/image")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content == PNG_PREVIEW
+
+
 def _symlink_or_skip(link: Path, target: Path):
     import os
     import pytest

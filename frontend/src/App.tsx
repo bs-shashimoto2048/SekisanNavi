@@ -6,6 +6,7 @@ import {
   createManualDetection,
   deleteDetection,
   evaluateEstimateResults,
+  designDocumentImageUrl,
   designPageImageUrl,
   fetchDesignPages,
   fetchDetectedPreview,
@@ -1941,6 +1942,7 @@ function App() {
                   totalCount={designItems.length}
                   awaitingSelection={!designConfirmed}
                   onOpenDocument={setOpenDocument}
+                  documentThumbnailUrl={(key) => designDocumentImageUrl(activeProductNo, key)}
                 />
               ) : (
                 <>
