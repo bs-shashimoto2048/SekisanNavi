@@ -1,8 +1,14 @@
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterEach, beforeEach } from 'vitest'
 import '@testing-library/jest-dom/vitest'
 import { installMockResizeObserver } from './testUtils/mockResizeObserver'
 import { installMockIntersectionObserver } from './testUtils/mockIntersectionObserver'
+
+// 全体テスト(約50ファイルを並列実行)では、CPU・メモリが逼迫するとReactのeffectコミットや
+// 非同期の状態遷移が既定の待機時間(findBy*/waitForの1秒)を超えて遅れ、単独実行では通る
+// テストが散発的に落ちる(ReferencePdfViewer・App.testのUndo/Redoなどで確認)。待機の
+// 上限だけを広げる(条件が成立すれば即座に返るため、成功時のテスト時間は変わらない)。
+configure({ asyncUtilTimeout: 5000 })
 
 afterEach(() => {
   cleanup()

@@ -69,6 +69,8 @@ export default defineConfig(({ mode }) => {
       // 引き続き0のままで既存のモック手法に影響しないが、CSSの値自体は
       // getComputedStyleで検証できるようになる)。
       css: true,
+      // 全体実行時の負荷でテストが5秒(既定)を超える散発的な失敗を避けるため、余裕を持たせる。
+      testTimeout: 15000,
     },
   }
 })

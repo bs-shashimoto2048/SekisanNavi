@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
@@ -290,12 +290,15 @@ const SinglePageView = forwardRef<SinglePageViewHandle, SinglePageViewProps>(fun
   // ホイールハンドラ(マウント後に一度だけ登録する native listener)が常に
   // 最新のisFit/fitScaleを読めるようにするためのrefミラー(App.tsxの
   // handleUndoRef/handleRedoRefと同じ「refへ毎回同期する」パターン)。
+  // 同期は`useLayoutEffect`で行う(DOMへ反映されるコミットと同じ同期処理の中で
+  // refも更新される)。通常の`useEffect`だと、高負荷時にコミット直後〜refの更新
+  // 前の短い間にホイール操作が入ると、古いFit倍率(未算出の1)を基準に拡大してしまう。
   const isFitRef = useRef(isFit)
-  useEffect(() => {
+  useLayoutEffect(() => {
     isFitRef.current = isFit
   }, [isFit])
   const fitScaleRef = useRef(fitScale)
-  useEffect(() => {
+  useLayoutEffect(() => {
     fitScaleRef.current = fitScale
   }, [fitScale])
 
