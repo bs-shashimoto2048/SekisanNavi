@@ -2132,9 +2132,9 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     // ドラッグした位置ではなく、右端寄せの新しい位置になっている。
     expect(reshown.style.left).not.toBe(movedLeft)
     expect(reshown.style.top).not.toBe(movedTop)
-    // 幅500px([Issue #36] kind別初期幅、480→500へ調整済み)・コンテナ1200pxに
-    // 対し、右端から20pxのマージンで右寄せされている(1200 - 20 - 500 = 680)。
-    expect(reshown.style.left).toBe('680px')
+    // 幅580px(kind別初期幅。文字拡大後にcompact rowを1行へ収めるため500→580)・コンテナ1200pxに
+    // 対し、右端から20pxのマージンで右寄せされている(1200 - 20 - 580 = 600)。
+    expect(reshown.style.left).toBe('600px')
     // 積み重ねの段数は「表示中panelの固定宣言順(Issue #40 Phase 6-Cで
     // 図面情報→盤情報→積算集約→積算明細→部品台帳へ変更)における自分の順位」
     // で決まる。図面情報・盤情報は既定表示ONのため、積算集約は3段目=段数2。
@@ -2142,7 +2142,7 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     expect(reshown.style.top).toBe('128px')
   })
 
-  it('[Issue #36] gives 積算集約 an initial width of 500px (up from 480px, to fit the 1行compact row at the panel既定幅)', async () => {
+  it('[Issue #36] gives 積算集約 an initial width of 580px (文字拡大後も、1行compact rowが折り返さない既定幅。実ブラウザ実測で約545px必要)', async () => {
     await renderApp()
     setViewerWrapRect(1200, 700)
     // 積算集約は既定表示中(justShownはinitial mount時に既に発火済み、
@@ -2153,7 +2153,7 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
     fireEvent.click(screen.getByRole('button', { name: '積算集約' }))
     const panel = document.querySelector('.floating-panel--aggregation') as HTMLElement
-    expect(panel.style.width).toBe('500px')
+    expect(panel.style.width).toBe('580px')
   })
 
   it('[2026-10 追加修正: レイアウト] gives 図面情報 an initial width of 590px, wide enough for the 盤情報一覧(最下部テーブル)の全6列を実データの最長値でも折り返さず・横スクロール無しで表示できる幅(FloatingPanel.tsx::MIN_WIDTH_BY_KIND.panelInfo、実データ測定に基づく値)', async () => {
