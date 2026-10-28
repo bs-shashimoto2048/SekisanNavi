@@ -8,6 +8,7 @@
 - 各行の表示方法(`mode`):
   - `inference`: 推論用PNG(`{数値}.png`)がある。正のページ番号は従来どおり元PNG・推論結果・オーバーレイを使う。ページ0は専用キー画像経路で表示する。
   - `preview`: 推論用PNGは無いが、隔離領域の表示用プレビューPNGがある(オーバーレイは出さない)。
+    ページ「0」(キーがちょうど`0`)だけは、`0.png`・`0__preview.png`が無いとき`0_A1__preview.png`(0.pdfは0_A1.pdfの複製)を使う。
   - `unavailable`: どちらも無い(表示用の画像が未作成)。
 - **書類(`0_S0.pdf`=共通製作仕様書、`0_A1.pdf`=設計作図完了シート。SekisanNaviDataが出力)**は、design.csvの行ではなく、
   固定の2つのファイル名だけを`documents`として、図面一覧の最上段(この順)に出す。ページ番号(数値)ではなく、通常の`0.pdf`とも
@@ -46,6 +47,17 @@ DesignMode = Literal["inference", "preview", "unavailable"]
 
 # 「外    形    図」のように字間に空白が入った図名を読みやすくする(表示専用。ページ番号の値は加工しない)
 _CJK_GAP_RE = re.compile(r"(?<=[^\x00-\x7f])\s+(?=[^\x00-\x7f])")
+
+
+# ページ「0」の行(キーがちょうど`0`。`00`・`01`等は対象外)に、推論用PNGが無いときに代わりに使う書類(設計作図完了シート)の
+# 表示用プレビュー。0.pdfは0_A1.pdfの複製なので内容は同じ。書類の行・書類用の経路は変えない。
+_PAGE_ZERO_KEY = "0"
+_PAGE_ZERO_FALLBACK_PREVIEW_KEY = "0_A1"
+
+
+def preview_source_keys(key: str) -> tuple[str, ...]:
+    """行のキーに対して、表示用プレビューPNG(`{キー}__preview.png`)を探すキー(優先順)。"""
+    return (key, _PAGE_ZERO_FALLBACK_PREVIEW_KEY) if key == _PAGE_ZERO_KEY else (key,)
 
 
 def tidy_drawing_name(name: str) -> str:
@@ -203,7 +215,7 @@ def load_design_pages(
         inference: int | None = None
         if page_no is not None and png_stem == key:
             mode, inference = "inference", page_no
-        elif preview_exists(key):
+        elif any(preview_exists(k) for k in preview_source_keys(key)):
             mode = "preview"
         else:
             mode = "unavailable"

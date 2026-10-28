@@ -70,7 +70,12 @@ from app.services.data_source import (
     resolve_product_dir,
     search_product_dirs,
 )
-from app.services.design_pages import design_document_path, list_design_documents, load_design_pages
+from app.services.design_pages import (
+    design_document_path,
+    list_design_documents,
+    load_design_pages,
+    preview_source_keys,
+)
 from app.services.detected_df import load_detected_df
 from app.services.estcode_df import load_estcode_df
 from app.services.material_csv import load_material_csv
@@ -372,9 +377,10 @@ def read_design_page_image(
             return FileResponse(str(inference), media_type="image/png")
         raise HTTPException(status_code=404, detail="この図面の表示用画像は作成されていません。")
     if page.mode == "preview":
-        preview = _preview_png_for_key(resolution.ccv_dir, resolution.product_no, page.key)
-        if preview is not None:
-            return FileResponse(str(preview), media_type="image/png")
+        for source_key in preview_source_keys(page.key):
+            preview = _preview_png_for_key(resolution.ccv_dir, resolution.product_no, source_key)
+            if preview is not None:
+                return FileResponse(str(preview), media_type="image/png")
     raise HTTPException(status_code=404, detail="この図面の表示用画像は作成されていません。")
 
 
