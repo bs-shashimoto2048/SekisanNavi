@@ -913,6 +913,9 @@ describe('App: BBox編集による積算対象追従・Undo/Redo (積算明細�
       const select = document.querySelector('.target-selector__select') as HTMLSelectElement
       expect(select.value).toBe('product')
     })
+    // Undoの適用が完全に終わる(=実行中フラグが戻り、Redoボタンが有効になる)まで待つ。選択値が戻った
+    // 時点では、まだUndo実行中のまま(finallyの前)で、その間のRedo要求は仕様どおり無視されるため。
+    await waitFor(() => expect(screen.getByRole('button', { name: /やり直す/ })).not.toBeDisabled())
 
     fireEvent.keyDown(document, { key: 'Z', ctrlKey: true, shiftKey: true }) // Redo
     await waitFor(() => {

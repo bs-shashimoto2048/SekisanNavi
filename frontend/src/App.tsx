@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import {
   ApiError,
@@ -1838,9 +1838,12 @@ function App() {
   // 差し替えるrefパターン(DetectionOverlay.tsxのpreviewBBoxRef等と同じ考え方)を使い、
   // editHistory等の変化のたびにeffect自体を再購読する必要をなくす。ref自体への
   // 書き込みはrender中ではなく専用のeffect(依存配列なし=毎回のcommit後に実行)で行う。
+  // `useLayoutEffect`にしてあるのは、DOMへ反映されたコミットと同じ同期処理の中でrefも更新するため
+  // (通常のeffectだと、高負荷時にコミット直後〜ref更新前の短い間に入ったCtrl+Zが古いクロージャ
+  // (履歴が空)を呼んで無反応になり得る)。
   const handleUndoRef = useRef(handleUndo)
   const handleRedoRef = useRef(handleRedo)
-  useEffect(() => {
+  useLayoutEffect(() => {
     handleUndoRef.current = handleUndo
     handleRedoRef.current = handleRedo
   })
