@@ -348,6 +348,14 @@ export interface DesignDocument {
 
 /** design.csvを基準にした図面一覧。ファイルが無い・空・不正でもエラーにならず`status`で返る
  * (例外文言・実パスは含まれない)。`documents`は最上段の書類(共通製作仕様書 → 設計作図完了シートの順。無いものは含まれない)。 */
+/** ヘッダー用の製番別データ(GET /api/products/{product_no}/header)。データの無い項目はnull。 */
+export interface ProductHeader {
+  product_no: string
+  seiri_no: string | null
+  panel_name: string | null
+  status: 'ok' | 'empty' | 'missing' | 'invalid'
+}
+
 export interface DesignPages {
   status: 'ok' | 'empty' | 'missing' | 'invalid'
   items: DesignPage[]

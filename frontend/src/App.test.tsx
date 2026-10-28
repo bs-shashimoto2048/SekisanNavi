@@ -431,6 +431,13 @@ vi.mock('./api/client', () => ({
   // material.csv由来の材料一覧。既存テストへの影響を避けるため既定では空配列(材料情報なし)。
   fetchMaterials: vi.fn(async () => []),
   fetchSteelOutline: vi.fn(async () => ({ status: 'missing', source_page: null, source_drawing_name: null, items: [] })),
+  // ヘッダー(整理番号・盤名称)の製番別データ。既定ではデータ無し(missing → ヘッダーは「—」)。
+  fetchProductHeader: vi.fn(async (productNo: string) => ({
+    product_no: productNo,
+    seiri_no: null,
+    panel_name: null,
+    status: 'missing',
+  })),
   // design.csv基準の図面一覧。既存テストの対象外のため、既定ではデータ無し(missing = 従来の図面一覧を使う)を返す。
   fetchDesignPages: vi.fn(async () => ({ status: 'missing', items: [], skipped_rows: 0 })),
   designPageImageUrl: vi.fn(
@@ -3309,6 +3316,70 @@ describe('App: 鋼材欄 (外形図1ページぶん。折りたたみ・ペー�
     expect(await screen.findByText('鋼材データを取得できませんでした')).toBeInTheDocument()
     expect(document.querySelector('.app-layout__error')).not.toBeInTheDocument()
     expect(document.body.textContent).not.toContain('secret')
+  })
+})
+
+describe('App: ヘッダーは選択中の製番に追従する(project_infoのデモ値を出さない)', () => {
+  function deferred<T>() {
+    let resolve!: (v: T) => void
+    const promise = new Promise<T>((r) => {
+      resolve = r
+    })
+    return { promise, resolve }
+  }
+  const headerOf = (productNo: string, seiri: string | null) =>
+    ({ product_no: productNo, seiri_no: seiri, panel_name: null, status: seiri ? 'ok' : 'missing' }) as never
+
+  async function openProduct(productNo: string) {
+    fireEvent.click(screen.getByRole('button', { name: '製番を開く' }))
+    fireEvent.change(await screen.findByPlaceholderText('例: A1GV24'), { target: { value: productNo } })
+    fireEvent.click(screen.getByRole('button', { name: '開く' }))
+  }
+
+  it('shows the header of the opened product and switches it when another product is opened', async () => {
+    const { fetchProductHeader } = await import('./api/client')
+    vi.mocked(fetchProductHeader).mockImplementation(async (p: string) =>
+      headerOf(p, p === 'A1LW0626' ? 'LW0089' : 'GV0001'),
+    )
+    render(<App />)
+    expect(await screen.findByText('整理番号: GV0001')).toBeInTheDocument()
+    expect(screen.getByText('製番: A1GV2421')).toBeInTheDocument()
+    expect(screen.queryByText(`整理番号: ${project.seiri_no}`)).not.toBeInTheDocument()
+    await openProduct('A1LW0626')
+    expect(await screen.findByText('整理番号: LW0089')).toBeInTheDocument()
+    expect(screen.getByText('製番: A1LW0626')).toBeInTheDocument()
+    expect(screen.queryByText('整理番号: GV0001')).not.toBeInTheDocument()
+    expect(screen.getByText('盤名称: —')).toBeInTheDocument()
+  })
+
+  it('shows dashes (not the demo project_info) when the product has no header data or the fetch fails', async () => {
+    const { fetchProductHeader } = await import('./api/client')
+    vi.mocked(fetchProductHeader).mockImplementation(async () => {
+      throw new Error('C:\\secret\\path')
+    })
+    render(<App />)
+    expect(await screen.findByText('製番: A1GV2421')).toBeInTheDocument()
+    await waitFor(() => expect(fetchProductHeader).toHaveBeenCalledWith('A1GV2421'))
+    expect(screen.getByText('整理番号: —')).toBeInTheDocument()
+    expect(screen.getByText('盤名称: —')).toBeInTheDocument()
+    expect(screen.queryByText(`盤名称: ${project.panel_name}`)).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('secret')
+  })
+
+  it('ignores a stale header response that arrives after another product was opened', async () => {
+    const { fetchProductHeader } = await import('./api/client')
+    const slow = deferred<never>()
+    vi.mocked(fetchProductHeader).mockImplementation((p: string) =>
+      p === 'A1GV2421' ? slow.promise : Promise.resolve(headerOf(p, 'LW0089')),
+    )
+    render(<App />)
+    await waitFor(() => expect(fetchProductHeader).toHaveBeenCalledWith('A1GV2421'))
+    await openProduct('A1LW0626')
+    expect(await screen.findByText('整理番号: LW0089')).toBeInTheDocument()
+    slow.resolve(headerOf('A1GV2421', 'GV0001'))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(screen.getByText('整理番号: LW0089')).toBeInTheDocument()
+    expect(screen.queryByText('整理番号: GV0001')).not.toBeInTheDocument()
   })
 })
 

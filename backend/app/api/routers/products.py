@@ -53,6 +53,7 @@ from app.schemas.settings import (
     NormalizedRectOut,
     PanelPreviewOut,
     ProductDrawingOut,
+    ProductHeaderOut,
     ProductInfoOut,
     ProductSearchOut,
     SteelItemOut,
@@ -72,6 +73,7 @@ from app.services.data_source import (
 )
 from app.services.design_pages import design_document_path, list_design_documents, load_design_pages
 from app.services.detected_df import load_detected_df
+from app.services.product_header import load_product_header
 from app.services.estcode_df import load_estcode_df
 from app.services.material_csv import load_material_csv
 from app.services.steel_outline import select_outline_steel
@@ -148,6 +150,27 @@ def read_product(
         product_no=resolution.product_no,
         exists=True,
         ccv_resolved=resolution.ccv_resolved,
+    )
+
+
+@router.get("/{product_no}/header", response_model=ProductHeaderOut)
+def read_product_header(
+    product_no: str, conn: sqlite3.Connection = Depends(get_db)
+) -> ProductHeaderOut:
+    """ヘッダー(整理番号・盤名称)の製番別データ。`design.csv`だけから作る読み取り専用API。
+    `project_info`(デモ用の固定1行)は参照しない。データが無い項目は`null`、ファイルの状態は`status`で返す
+    (例外文言・実パスは含めない)。存在しない製番は他のエンドポイントと同じく404。"""
+    root = get_data_source_root(conn)
+    try:
+        resolution = resolve_product_dir(root, product_no)
+    except DataSourceError as e:
+        raise _error_to_http(e) from e
+    header = load_product_header(resolution.ccv_dir, resolution.product_no)
+    return ProductHeaderOut(
+        product_no=resolution.product_no,
+        seiri_no=header.seiri_no,
+        panel_name=header.panel_name,
+        status=header.status,
     )
 
 

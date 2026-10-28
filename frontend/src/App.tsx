@@ -16,6 +16,7 @@ import {
   fetchEstimatePanels,
   fetchMaterials,
   fetchSteelOutline,
+  fetchProductHeader,
   fetchEstimateResults,
   fetchMasterItems,
   fetchPanel,
@@ -57,6 +58,7 @@ import type {
   EstimatePanelInfo,
   MaterialRow,
   SteelOutline,
+  ProductHeader,
   EstimateResult,
   Panel,
   PanelPreview,
@@ -241,6 +243,12 @@ function App() {
   const [steelState, setSteelState] = useState<{ productNo: string; steel: SteelOutline } | null>(null)
   const steel: SteelOutline | null =
     steelState != null && steelState.productNo === activeProductNo ? steelState.steel : null
+  // ヘッダー(整理番号・盤名称)の製番別データ。project_info(デモ用の固定1行)ではなく、開いている製番の
+  // design.csvから作る。製番と一緒に持ち、表示時に現在の製番と照合する(製番を切り替えた直後に前の製番の値を出さない)。
+  // 取得に失敗した場合はnullのまま(ヘッダーは「—」)。
+  const [productHeaderState, setProductHeaderState] = useState<{ productNo: string; header: ProductHeader } | null>(null)
+  const productHeader: ProductHeader | null =
+    productHeaderState != null && productHeaderState.productNo === activeProductNo ? productHeaderState.header : null
   // 積算コードMaster全件 (id引き)。中央プレビューの積算コードHover表示 (次work指示1章)
   // でmaster_item_idから定格(rating)を引くために使う。EstimateMasterPickerも
   // 独自に全件取得しているが、責務が異なるためここでは別途取得する
@@ -680,6 +688,22 @@ function App() {
       })
       .catch(() => {
         if (!cancelled) setMaterialsState({ productNo: activeProductNo, rows: [] })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeProductNo])
+
+  // ヘッダーの製番別データ。製番切替のたびに取得し、古い応答(cancelled)は捨てる。
+  useEffect(() => {
+    if (activeProductNo == null) return
+    let cancelled = false
+    fetchProductHeader(activeProductNo)
+      .then((fetched) => {
+        if (!cancelled) setProductHeaderState({ productNo: activeProductNo, header: fetched })
+      })
+      .catch(() => {
+        if (!cancelled) setProductHeaderState(null)
       })
     return () => {
       cancelled = true
@@ -1852,6 +1876,7 @@ function App() {
       <ProjectHeader
         project={project}
         currentProductNo={activeProductNo}
+        productHeader={productHeader}
         loading={loading}
         onOpenProductViewer={() => setProductSelectorOpen(true)}
         onOpenSystemSettings={() => setSettingsOpen(true)}
