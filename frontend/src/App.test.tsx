@@ -30,6 +30,7 @@ import { assignDetectionToPanel } from './domain/estimateAggregationReal'
 vi.mock('./components/DrawingViewer/DrawingCanvas', () => ({
   DrawingCanvas: ({
     title,
+    fileUrl,
     children,
     bboxAddMode,
     selectedDetectionLabel,
@@ -38,6 +39,7 @@ vi.mock('./components/DrawingViewer/DrawingCanvas', () => ({
     onCreateBBox,
   }: {
     title?: string
+    fileUrl?: string | null
     children?: ReactNode
     bboxAddMode?: boolean
     selectedDetectionLabel?: string | null
@@ -45,7 +47,7 @@ vi.mock('./components/DrawingViewer/DrawingCanvas', () => ({
     onBackgroundClick?: () => void
     onCreateBBox?: (rect: { x: number; y: number; w: number; h: number }) => void
   }) => (
-    <div data-testid="drawing-canvas-stub" data-bbox-add-mode={String(!!bboxAddMode)}>
+    <div data-testid="drawing-canvas-stub" data-bbox-add-mode={String(!!bboxAddMode)} data-file-url={fileUrl ?? ''}>
       {/* Viewer上部1行化 指示2章: 実DrawingCanvasでは図面名(title)がtoolbar内に
           描画されるようになったため、このstubでも同様に描画し、Appからの
           pageLabel伝播をこれまでどおりgetByText等で検証できるようにする。 */}
@@ -3408,6 +3410,25 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
     fireEvent.click(listItem('ms01'))
     await waitFor(() => expect(screen.getByText('この図面の表示用画像は作成されていません')).toBeInTheDocument())
     expect(screen.queryByTestId('drawing-canvas-stub')).not.toBeInTheDocument()
+  })
+
+  it('renders inference page 0 from the keyed design image route without borrowing positive-page overlays', async () => {
+    const { fetchDesignPages } = await import('./api/client')
+    vi.mocked(fetchDesignPages).mockResolvedValue({
+      status: 'ok',
+      items: [...designItems, { key: '0', page_label: '0', drawing_name: '設計作図完了シート', mode: 'inference', inference_page_no: 0, ban_labels: [] }] as never,
+      skipped_rows: 0,
+    })
+    render(<App />)
+    await confirmPicker()
+    await waitFor(() => expect(listItem('0')).toBeInTheDocument())
+    fireEvent.click(listItem('0'))
+    await waitFor(() => expect(screen.getByText('設計作図完了シート(ページ番号 0)')).toBeInTheDocument())
+    expect(screen.getByTestId('drawing-canvas-stub')).toHaveAttribute(
+      'data-file-url',
+      '/api/products/A1GV2421/design-pages/0/image',
+    )
+    expect(document.querySelectorAll('.product-panel-overlay__area')).toHaveLength(0)
   })
 
   it('restores a preview page from the URL (?design=) with the key kept as a string, and writes it back', async () => {

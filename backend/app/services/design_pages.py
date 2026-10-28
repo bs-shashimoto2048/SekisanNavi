@@ -6,7 +6,7 @@
 - PDFとの照合は大文字小文字を区別しない。キーは実在するPDFのファイル名(拡張子を除く)の綴り。
 - 対応するPDFがある行だけを返す(PDFの無い行・ページ番号が空・重複する行は数だけ`skipped_rows`に数える)。
 - 各行の表示方法(`mode`):
-  - `inference`: 推論用PNG(`{数値}.png`)がある。従来どおり元PNG・推論結果・オーバーレイを使う(`inference_page_no`)。
+  - `inference`: 推論用PNG(`{数値}.png`)がある。正のページ番号は従来どおり元PNG・推論結果・オーバーレイを使う。ページ0は専用キー画像経路で表示する。
   - `preview`: 推論用PNGは無いが、隔離領域の表示用プレビューPNGがある(オーバーレイは出さない)。
   - `unavailable`: どちらも無い(表示用の画像が未作成)。
 - **書類(`0_S0.pdf`=共通製作仕様書、`0_A1.pdf`=設計作図完了シート。SekisanNaviDataが出力)**は、design.csvの行ではなく、
@@ -123,7 +123,9 @@ class DesignPagesResult:
 
 
 def _canonical_page_no(stem: str) -> int | None:
-    """`{n}.png`(推論用)のnを、先頭ゼロの無い正の整数のときだけ返す(`01`などは別のページなので対象外)。"""
+    """`{n}.png`(推論用)のnを、先頭ゼロの無い非負整数のときだけ返す(`01`などは別ページ)。"""
+    if stem == "0":
+        return 0
     if stem.isascii() and stem.isdigit() and stem == str(int(stem)) and int(stem) > 0:
         return int(stem)
     return None

@@ -779,25 +779,38 @@ function App() {
   // 推論用PNGの座標系のオーバーレイ(盤枠・検出枠)は出さず、見出しに「表示用プレビュー」と明示する。
   const designPreviewItem =
     selectedDesignItem != null && selectedDesignItem.inference_page_no == null ? selectedDesignItem : null
+  // Legacy drawings API excludes page 0 because 0.pdf historically collided with a document.
+  // The design-pages keyed endpoint is safe for inference page 0 and can render it without overlays.
+  const zeroInferenceItem =
+    selectedDesignItem?.mode === 'inference' &&
+    selectedDesignItem.inference_page_no === 0 &&
+    activeProductPage == null
+      ? selectedDesignItem
+      : null
   const isDesignPreview = designPreviewItem != null
   const designPreviewImageUrl =
     designPreviewItem != null && designPreviewItem.mode === 'preview'
       ? designPageImageUrl(activeProductNo, designPreviewItem.key)
       : null
+  const zeroInferenceImageUrl = zeroInferenceItem ? designPageImageUrl(activeProductNo, zeroInferenceItem.key) : null
   const designPreviewLabel =
     designPreviewItem != null
       ? `${designPreviewItem.drawing_name}(ページ番号 ${designPreviewItem.page_label}${designPreviewImageUrl ? '・表示用プレビュー' : ''})`
       : ''
   // 行ごとに別のCanvasとして扱う(切替時にFit・表示状態を持ち越さない)ため、プレビュー行は一意な負の番号にする
   const viewerPageNo =
-    designPreviewItem != null
+    zeroInferenceItem != null
+      ? -(designItems.findIndex((i) => i.key === zeroInferenceItem.key) + 1)
+      : designPreviewItem != null
       ? designPreviewImageUrl
         ? -(designItems.findIndex((i) => i.key === designPreviewItem.key) + 1)
         : null
       : selectedProductPageNo
   // 図面の選択を確定するまでは、中央にも図面を出さない
   const awaitingDesignSelection = useDesignList && !designConfirmed
-  const pageLabel = activeProductPage
+  const pageLabel = zeroInferenceItem
+    ? `${zeroInferenceItem.drawing_name}(ページ番号 ${zeroInferenceItem.page_label})`
+    : activeProductPage
     ? (activeProductPage.drawing_name ?? `P${activeProductPage.page_no}`)
     : ''
 
@@ -1838,6 +1851,7 @@ function App() {
     >
       <ProjectHeader
         project={project}
+        currentProductNo={activeProductNo}
         loading={loading}
         onOpenProductViewer={() => setProductSelectorOpen(true)}
         onOpenSystemSettings={() => setSettingsOpen(true)}
@@ -1980,7 +1994,7 @@ function App() {
               <DrawingViewer
                 productNo={activeProductNo}
                 pageNo={awaitingDesignSelection ? null : viewerPageNo}
-                pageImageUrl={awaitingDesignSelection ? null : (designPreviewImageUrl ?? (isDesignPreview ? null : (activeProductPage?.thumbnail_url ?? null)))}
+                pageImageUrl={awaitingDesignSelection ? null : (designPreviewImageUrl ?? zeroInferenceImageUrl ?? (isDesignPreview ? null : (activeProductPage?.thumbnail_url ?? null)))}
                 pageLabel={isDesignPreview ? designPreviewLabel : pageLabel}
                 emptyMessage={
                   awaitingDesignSelection
@@ -1989,7 +2003,7 @@ function App() {
                       ? 'この図面の表示用画像は作成されていません'
                       : undefined
                 }
-                panels={isDesignPreview ? [] : (activeProductPage?.panels ?? [])}
+                panels={isDesignPreview || zeroInferenceItem != null ? [] : (activeProductPage?.panels ?? [])}
                 selectedPanelKey={selectedPanel?.key ?? null}
                 onSelectPanel={handleSelectPanel}
                 masterItemById={masterItemById}

@@ -77,13 +77,14 @@ def test_only_rows_with_a_pdf_are_listed_and_duplicates_and_blank_ids_are_skippe
 def test_mode_inference_preview_unavailable(tmp_path):
     prod = tmp_path / "p"
     prod.mkdir()
-    _design(prod, [("2", "a"), ("3", "b"), ("01", "c"), ("MK01", "d")])
-    _pdfs(prod, "2", "3", "01", "MK01")
+    _design(prod, [("0", "zero"), ("2", "a"), ("3", "b"), ("01", "c"), ("MK01", "d")])
+    _pdfs(prod, "0", "2", "3", "01", "MK01")
+    (prod / "0.png").write_bytes(PNG_INFER)
     (prod / "2.png").write_bytes(PNG_INFER)
     (prod / "2_detected.png").write_bytes(PNG_INFER)
     res = load_design_pages(prod, "A1TEST01", lambda k: k in ("3", "01"))
     assert {p.key: (p.mode, p.inference_page_no) for p in res.pages} == {
-        "2": ("inference", 2), "3": ("preview", None), "01": ("preview", None), "MK01": ("unavailable", None)}
+        "0": ("inference", 0), "2": ("inference", 2), "3": ("preview", None), "01": ("preview", None), "MK01": ("unavailable", None)}
 
 
 def test_png_with_leading_zero_is_not_treated_as_an_inference_page(tmp_path):
@@ -112,19 +113,21 @@ def test_missing_empty_and_invalid_design_csv_return_a_status(tmp_path):
 
 def test_api_lists_items_in_design_order(client, monkeypatch, tmp_path):
     root, _ = _setup(tmp_path, monkeypatch, [("0", "チェック"), ("1", "単 線"), ("01", "質量"), ("MK01", "金具")], ["0", "1", "01", "mk01"],
-                     png=["1"], previews=["0", "01"])
+                     png=["0", "1"], previews=["01"])
     _configure_root(client, monkeypatch, root)
     body = client.get("/api/products/A1TEST01/design-pages").json()
     assert body["status"] == "ok"
     assert [(i["page_label"], i["key"], i["mode"], i["inference_page_no"]) for i in body["items"]] == [
-        ("0", "0", "preview", None), ("01", "01", "preview", None), ("1", "1", "inference", 1), ("MK01", "mk01", "unavailable", None)]
+        ("0", "0", "inference", 0), ("01", "01", "preview", None), ("1", "1", "inference", 1), ("MK01", "mk01", "unavailable", None)]
     assert {i["key"]: i["drawing_name"] for i in body["items"]}["1"] == "単線"
 
 
 def test_api_image_serves_inference_png_or_preview_by_key_and_never_mixes_them(client, monkeypatch, tmp_path):
-    root, _ = _setup(tmp_path, monkeypatch, [("1", "a"), ("01", "b"), ("MK01", "c"), ("X9", "d")], ["1", "01", "mk01", "X9"],
-                     png=["1"], previews=["1", "01"])      # 1 には推論PNGもプレビューもある: 推論PNGが優先
+    root, _ = _setup(tmp_path, monkeypatch, [("0", "zero"), ("1", "a"), ("01", "b"), ("MK01", "c"), ("X9", "d")], ["0", "1", "01", "mk01", "X9"],
+                     png=["0", "1"], previews=["1", "01"])      # 1 には推論PNGもプレビューもある: 推論PNGが優先
     _configure_root(client, monkeypatch, root)
+    r0 = client.get("/api/products/A1TEST01/design-pages/0/image")
+    assert (r0.status_code, r0.content) == (200, PNG_INFER)
     r1 = client.get("/api/products/A1TEST01/design-pages/1/image")
     assert (r1.status_code, r1.content) == (200, PNG_INFER)
     r01 = client.get("/api/products/A1TEST01/design-pages/01/image")
