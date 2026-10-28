@@ -55,7 +55,8 @@ class PanelAreaFromDf:
 
     page_no: int
     ban_menno: int
-    ban_no: int
+    # product_df.BAN_NOは英字を含む場合がある。積算の数値盤キーとは分けて保持する。
+    ban_no: int | None
     # 盤領域Overlay内ラベル表示用 (盤領域内表示の追加指示)。
     ban_meisyou: str
     ban_type: str
@@ -73,6 +74,7 @@ class PanelAreaFromDf:
     scale_y: float
     detect_area_x: float
     detect_area_y: float
+    ban_no_label: str = ""
 
 
 @dataclass
@@ -135,6 +137,17 @@ def _parse_int_via_float(row: dict[str, str], key: str) -> int:
     return int(_parse_float(row, key))
 
 
+def _parse_ban_no(row: dict[str, str]) -> tuple[int | None, str]:
+    raw = (row.get("BAN_NO") or "").strip()
+    if not raw:
+        raise _SkipRow("BAN_NOが空です")
+    try:
+        number = int(float(raw))
+    except ValueError:
+        return None, raw
+    return number, str(number)
+
+
 def _strip_zumei_suffix(zumei: str) -> str:
     """"内部機器配置図(1-1)" のような連番接尾辞を除いたグループ名を返す。
 
@@ -148,7 +161,7 @@ def _strip_zumei_suffix(zumei: str) -> str:
 def _parse_panel_row(row: dict[str, str]) -> PanelAreaFromDf:
     page_no = _parse_int_via_float(row, "PAGE")
     ban_menno = _parse_int_via_float(row, "BAN_MENNO")
-    ban_no = _parse_int_via_float(row, "BAN_NO")
+    ban_no, ban_no_label = _parse_ban_no(row)
     # 盤領域Overlay内ラベル用 (盤領域内表示の追加指示)。座標計算には使わないため、
     # 欠損していても行全体はスキップしない (空文字列で保持する)。
     ban_meisyou = (row.get("BAN_MEISYOU") or "").strip()
@@ -199,6 +212,7 @@ def _parse_panel_row(row: dict[str, str]) -> PanelAreaFromDf:
         page_no=page_no,
         ban_menno=ban_menno,
         ban_no=ban_no,
+        ban_no_label=ban_no_label,
         ban_meisyou=ban_meisyou,
         ban_type=ban_type,
         ban_h1=ban_h1,

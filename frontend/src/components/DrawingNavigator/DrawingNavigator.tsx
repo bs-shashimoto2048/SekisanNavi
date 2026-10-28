@@ -44,7 +44,7 @@ function uniqueBanPairs(panels: PanelPreview[]): string[] {
   const seen = new Set<string>()
   const pairs: string[] = []
   for (const p of panels) {
-    const key = `${p.ban_menno}/${p.ban_no}`
+    const key = `${p.ban_menno}/${p.ban_no_label ?? p.ban_no}`
     if (!seen.has(key)) {
       seen.add(key)
       pairs.push(key)

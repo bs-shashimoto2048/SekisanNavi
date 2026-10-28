@@ -50,6 +50,18 @@ def test_load_product_df_single_row(product_dir):
     assert result.drawing_type_by_page[16] == "外形図"
 
 
+def test_load_product_df_preserves_alphanumeric_ban_no_without_skipping_row(product_dir):
+    _write_csv(product_dir / "product_df.csv", [
+        "1,L1,16,外形図,制御盤L1,正面図,2300,2300,900,2200,"
+        "4650,2250,900,2300,15990,11430,2077,1485,7.7,7.7",
+    ])
+    result = load_product_df(product_dir, "A1TEST01")
+    panel = result.panels_by_page[16][0]
+    assert panel.ban_menno == 1
+    assert panel.ban_no is None
+    assert panel.ban_no_label == "L1"
+
+
 def test_load_product_df_captures_ban_meisyou_and_ban_type_for_overlay_label(product_dir):
     """盤領域Overlay内ラベル用のBAN_MEISYOU/BAN_TYPEが個別に保持されること。"""
     _write_csv(product_dir / "product_df.csv", [

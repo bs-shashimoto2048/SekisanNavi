@@ -40,7 +40,7 @@ const TOOLTIP_OFFSET = 14
 /** Tooltip用の詳細行を組み立てる。値が無い項目は表示しない (要件4)。
  * 実画面未達 修正指示5章の表示例の項目順・全角コロン表記に合わせる。 */
 function buildTooltipLines(panel: PanelPreview): string[] {
-  const lines = [`面番号：${panel.ban_menno}`, `盤番号：${panel.ban_no}`]
+  const lines = [`面番号：${panel.ban_menno}`, `盤番号：${panel.ban_no_label ?? panel.ban_no ?? '-'}`]
   if (panel.ban_meisyou) lines.push(`盤名称：${panel.ban_meisyou}`)
   if (panel.ban_type) lines.push(`種別：${panel.ban_type}`)
   lines.push(`PAGE：${panel.page_no}`)
@@ -106,7 +106,7 @@ export function ProductPanelOverlay({
   // 連動ハイライトすると実質ページ全体が常に薄く塗りつぶされたのと同じになり
   // 意味を持たない。この場合は実際にhoverしている領域だけを塗りつぶす。
   const enableGroupedHover = useMemo(() => {
-    const uniqueBanPairs = new Set(panels.map((p) => `${p.ban_menno}:${p.ban_no}`))
+    const uniqueBanPairs = new Set(panels.map((p) => `${p.ban_menno}:${p.ban_no_label ?? p.ban_no}`))
     return uniqueBanPairs.size > 1
   }, [panels])
   const hoveredGroupKey = hover && enableGroupedHover ? banGroupKey(hover.panel) : null
@@ -171,7 +171,7 @@ export function ProductPanelOverlay({
                 (isSelected ? ' product-panel-overlay__label--selected' : '')
               }
             >
-              {isSelected ? `[${panel.ban_menno}/${panel.ban_no}]` : `${panel.ban_menno}/${panel.ban_no}`}
+              {isSelected ? `[${panel.ban_menno}/${panel.ban_no_label ?? panel.ban_no ?? '-'}]` : `${panel.ban_menno}/${panel.ban_no_label ?? panel.ban_no ?? '-'}`}
             </span>
           </button>
         )

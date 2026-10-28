@@ -103,7 +103,9 @@ def assign_detection_to_panel(
     max_area = max(h.area for h in hits)
     winners = [h for h in hits if h.area == max_area]
     winner_groups = {physical_panel_key(w.panel) for w in winners}
-    if len(winner_groups) > 1:
+    # 数値盤番号が無い盤への割当ては、既存の数値盤キーへ保存できない。
+    # 「製品全体」や別の数値盤へ誤って流さず、要確認として扱う。
+    if len(winner_groups) > 1 or any(w.panel.ban_no is None for w in winners):
         return TieAssignment(candidates=winners)
     return PanelAssignment(panel=winners[0].panel, area=winners[0].area)
 

@@ -55,7 +55,8 @@ class PanelPreviewOut(BaseModel):
     # 所属ページ番号。盤選択時の識別・右ペイン表示に使う (Phase 1.9, 要件19)。
     page_no: int
     ban_menno: int
-    ban_no: int
+    ban_no: int | None
+    ban_no_label: str
     # 盤領域Overlay内ラベル・Tooltip・右ペイン表示用 (盤領域内表示の追加指示、Phase 1.9)。
     ban_meisyou: str
     ban_type: str

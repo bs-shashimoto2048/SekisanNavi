@@ -72,6 +72,22 @@ function getRow(name: string): HTMLElement {
 }
 
 describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)', () => {
+  it('displays alphabetic panel numbers as identifiers without matching numeric estimate panels', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel({ ban_no: null, ban_no_label: 'L1' })]}
+        estimatePanels={[makeEstimatePanel({ ban_menno: 5, ban_no: 1, ban_meisyou: '誤った数値盤' })]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    const row = getRow('No.2-1低圧動力盤')
+    expect(within(row).getAllByRole('cell')[0].textContent).toBe('5/L1')
+    expect(within(row).getAllByRole('cell')[1].textContent).toBe('No.2-1低圧動力盤')
+    expect(screen.queryByText('誤った数値盤')).not.toBeInTheDocument()
+  })
+
   it('shows the empty message when the current page has no product_df panels and no legacy panel', () => {
     render(
       <PanelInfo
