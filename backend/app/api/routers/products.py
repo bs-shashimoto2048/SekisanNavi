@@ -305,7 +305,8 @@ def read_design_pages(
         for page_no, panels in product_df.panels_by_page.items():
             labels: list[str] = []
             for panel in panels:
-                label = f"{panel.ban_menno}/{panel.ban_no}"
+                # 英字盤番号(L1・HRなど)はban_no=Noneで、元の表記は ban_no_label に残っている。
+                label = f"{panel.ban_menno}/{panel.ban_no_label or panel.ban_no}"
                 if label not in labels:
                     labels.append(label)
             ban_labels_by_page[page_no] = labels

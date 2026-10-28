@@ -224,6 +224,17 @@ def test_ban_labels_come_from_product_df_as_is_without_renumbering_or_zero_chang
     assert items["01"]["ban_labels"] == [] and items["mk01"]["ban_labels"] == []   # 元データに無いページは空(推測しない)
 
 
+def test_ban_labels_keep_alphanumeric_panel_numbers_instead_of_none(client, monkeypatch, tmp_path):
+    """product_dfのBAN_NOが英字(L1・HRなど)の盤は、数値の盤番号を持たない(ban_no=None)が、
+    左ペインの面/盤ラベルでは元の表記をそのまま出す(「2/None」と出さない)。"""
+    root, prod = _setup(tmp_path, monkeypatch, [("18", "外形図")], ["18"], png=["18"])
+    _product_df(prod, [("18", "1", "1.0", "外形図"), ("18", "2", "L1", "外形図"), ("18", "2", "L1", "外形図"), ("18", "3", "L2", "外形図")])
+    _configure_root(client, monkeypatch, root)
+    items = {i["key"]: i for i in client.get("/api/products/A1TEST01/design-pages").json()["items"]}
+    assert items["18"]["ban_labels"] == ["1/1", "2/L1", "3/L2"]
+    assert not any("None" in label for label in items["18"]["ban_labels"])
+
+
 def test_ban_labels_are_empty_when_product_df_is_missing_or_broken(client, monkeypatch, tmp_path):
     root, prod = _setup(tmp_path, monkeypatch, [("1", "a")], ["1"], png=["1"])
     _configure_root(client, monkeypatch, root)

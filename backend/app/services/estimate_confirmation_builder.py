@@ -188,6 +188,8 @@ def build_confirmation_items(
     product_panels_by_key: dict[str, PanelAreaFromDf] = {}
     for panels in df_result.panels_by_page.values():
         for panel in panels:
+            if panel.ban_no is None:
+                continue  # 英字盤番号の盤は数値の盤キー(積算結果の対象)と対応しないため、ここには入れない
             key = f"{panel.ban_menno}:{panel.ban_no}"
             product_panels_by_key.setdefault(key, panel)
 
