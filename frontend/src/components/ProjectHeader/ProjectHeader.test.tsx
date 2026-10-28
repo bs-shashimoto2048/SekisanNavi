@@ -14,7 +14,7 @@ const project: ProjectInfo = {
 const noop = () => {}
 
 describe('ProjectHeader', () => {
-  it('shows the selected product number without stale metadata from another project', () => {
+  it('shows the selected product number without stale metadata from another project (dash for missing data)', () => {
     render(
       <ProjectHeader
         project={project}
@@ -26,9 +26,75 @@ describe('ProjectHeader', () => {
       />,
     )
     expect(screen.getByText('製番: A1LW0626')).toBeInTheDocument()
-    expect(screen.queryByText(/整理番号:/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/盤名称:/)).not.toBeInTheDocument()
+    // 別製番のproject_infoの値は出さず、データが無いので「—」
+    expect(screen.getByText('整理番号: —')).toBeInTheDocument()
+    expect(screen.getByText('盤名称: —')).toBeInTheDocument()
+    expect(screen.queryByText(new RegExp(project.seiri_no))).not.toBeInTheDocument()
+    expect(screen.queryByText(new RegExp(project.panel_name))).not.toBeInTheDocument()
     expect(screen.queryByText(/解析状態:/)).not.toBeInTheDocument()
+  })
+
+  it('shows the selected product header data (seiri_no) and a dash for the panel name that has no source', () => {
+    render(
+      <ProjectHeader
+        project={project}
+        currentProductNo="A1LW0626"
+        productHeader={{ product_no: 'A1LW0626', seiri_no: 'LW0089', panel_name: null, status: 'ok' }}
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+        onOpenReferencePdfs={noop}
+      />,
+    )
+    expect(screen.getByText('整理番号: LW0089')).toBeInTheDocument()
+    expect(screen.getByText('盤名称: —')).toBeInTheDocument()
+    expect(screen.getByText('製番: A1LW0626')).toBeInTheDocument()
+  })
+
+  it('prefers the product header over the project_info of the same product and falls back to project_info only for missing fields', () => {
+    render(
+      <ProjectHeader
+        project={project}
+        currentProductNo={project.seiban}
+        productHeader={{ product_no: project.seiban, seiri_no: 'LW0089', panel_name: null, status: 'ok' }}
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+        onOpenReferencePdfs={noop}
+      />,
+    )
+    expect(screen.getByText('整理番号: LW0089')).toBeInTheDocument()
+    expect(screen.getByText(`盤名称: ${project.panel_name}`)).toBeInTheDocument()
+  })
+
+  it('shows project_info as the default before any product is selected', () => {
+    render(
+      <ProjectHeader
+        project={project}
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+        onOpenReferencePdfs={noop}
+      />,
+    )
+    expect(screen.getByText(`整理番号: ${project.seiri_no}`)).toBeInTheDocument()
+    expect(screen.getByText(`盤名称: ${project.panel_name}`)).toBeInTheDocument()
+  })
+
+  it('shows dashes for seiri_no and panel name when neither project nor header data is available', () => {
+    render(
+      <ProjectHeader
+        project={null}
+        currentProductNo="A1LW0626"
+        productHeader={null}
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+        onOpenReferencePdfs={noop}
+      />,
+    )
+    expect(screen.getByText('整理番号: —')).toBeInTheDocument()
+    expect(screen.getByText('盤名称: —')).toBeInTheDocument()
   })
 
   it('shows the selected product number even when project information is unavailable', () => {

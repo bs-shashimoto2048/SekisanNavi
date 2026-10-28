@@ -275,6 +275,16 @@
 - 元図面・PDF・設計データは read-only 前提で、書き込み・削除・移動・リネームに
   相当するAPI/関数は実装していない(`docs/architecture.md` 6章)。
 
+## ヘッダー(整理番号・盤名称)の製番別表示
+
+- ヘッダーの整理番号は、製番フォルダの`design.csv`の「整理番号」列から取る(`GET /api/products/{product_no}/header`)。
+  `design.csv`が無い・読めない・該当行が無い製番では「—」になる(`project_info`のデモ値は出さない)。
+- **盤名称は現状常に「—」**: 出力データに製番単位の盤名称にあたる列が無く(`product_df.csv`/`estcode_df.csv`の
+  `BAN_MEISYOU`は盤ごとの名称で、1製番に複数ある)、製番を代表する1つを推測で決めていない。業務側が製番単位の盤名称の
+  定義(件名・代表盤名など)を確定し、データに含められたら対応する。
+- 解析状態バッジは`project_info`(製番に紐づかない1行)由来のため、製番別の値にはなっていない。
+  `project_info`の製番と開いている製番が一致するときだけ表示する。
+
 ## 「資料」ウィンドウ(複数PDF参照)の配信
 
 - `GET /api/help/reference-pdfs/{filename}`(`app/api/routers/reference_pdfs.py`)は

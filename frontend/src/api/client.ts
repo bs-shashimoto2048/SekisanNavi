@@ -19,6 +19,7 @@ import type {
   DesignPages,
   EstimatePanelInfo,
   SteelOutline,
+  ProductHeader,
   MaterialRow,
   EstimateResult,
   EstimateResultEvaluateResponse,
@@ -243,6 +244,12 @@ export function fetchMaterials(productNo: string): Promise<MaterialRow[]> {
  * ファイルが無い・不正などもエラーにはならず、`status`で返る(Backend側で保証済み)。 */
 export function fetchSteelOutline(productNo: string): Promise<SteelOutline> {
   return getJson(`/api/products/${encodeURIComponent(productNo)}/steel`)
+}
+
+/** ヘッダー(整理番号・盤名称)の製番別データ。製番フォルダのdesign.csvだけから作られ、project_info(デモ行)は使わない。
+ * データの無い項目はnull。 */
+export function fetchProductHeader(productNo: string): Promise<ProductHeader> {
+  return getJson(`/api/products/${encodeURIComponent(productNo)}/header`)
 }
 
 /** design.csv(ページ番号・図名)を基準にした図面一覧。対応するPDFがある行だけが返る。

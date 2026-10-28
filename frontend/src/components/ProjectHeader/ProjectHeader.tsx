@@ -1,4 +1,4 @@
-import type { AnalysisStatus, ProjectInfo } from '../../types/domain'
+import type { AnalysisStatus, ProductHeader, ProjectInfo } from '../../types/domain'
 import './ProjectHeader.css'
 
 // 解析状態のラベル・色は暫定 (要件9)。将来値そのものが変わる可能性がある。
@@ -13,6 +13,9 @@ interface Props {
   project: ProjectInfo | null
   /** 選択中の製番。project_info が別案件のデモ値なら、その業務情報を隠して製番だけ表示する。 */
   currentProductNo?: string | null
+  /** 選択中の製番の整理番号・盤名称(製番フォルダのdesign.csv由来)。取得前・失敗時はnull。
+   * 製番を選んでいる間は、整理番号・盤名称はこの値だけを使い、無い項目は「—」にする(project_infoの別製番の値は出さない)。 */
+  productHeader?: ProductHeader | null
   loading: boolean
   onOpenProductViewer: () => void
   onOpenSystemSettings: () => void
@@ -25,6 +28,7 @@ interface Props {
 export function ProjectHeader({
   project,
   currentProductNo,
+  productHeader,
   loading,
   onOpenProductViewer,
   onOpenSystemSettings,
@@ -32,6 +36,10 @@ export function ProjectHeader({
 }: Props) {
   const projectMatchesSelection = currentProductNo == null || project?.seiban === currentProductNo
   const selectedProductNo = currentProductNo ?? project?.seiban
+  // 製番を選んでいるときは、project_infoが同じ製番のものである場合に限って補完に使う(業務側が登録した値)。
+  const projectForSelection = projectMatchesSelection ? project : null
+  const seiriNo = currentProductNo == null ? project?.seiri_no : (productHeader?.seiri_no ?? projectForSelection?.seiri_no)
+  const panelName = currentProductNo == null ? project?.panel_name : (productHeader?.panel_name ?? projectForSelection?.panel_name)
   return (
     <header className="project-header">
       {/* UI視覚階層改善 指示6章: 表示名のみ「Sekisan Navi」へ変更する。
@@ -43,10 +51,10 @@ export function ProjectHeader({
       {loading && <div className="project-header__loading">読込中...</div>}
       {(project || selectedProductNo) && (
         <div className="project-header__info">
+          <span>整理番号: {seiriNo || '—'}</span>
+          <span>盤名称: {panelName || '—'}</span>
           {projectMatchesSelection && project && (
             <>
-              <span>整理番号: {project.seiri_no}</span>
-              <span>盤名称: {project.panel_name}</span>
               <span className={`project-header__status project-header__status--${project.analysis_status}`}>
                 解析状態: {STATUS_LABEL[project.analysis_status]}
               </span>
