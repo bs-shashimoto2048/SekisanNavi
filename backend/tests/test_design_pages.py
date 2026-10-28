@@ -278,3 +278,47 @@ def test_pages_are_sorted_regardless_of_design_csv_row_order(tmp_path):
     assert [p.page_label for p in load_design_pages(prod, "A1TEST01", lambda k: False).pages] == expected
     _design(prod, [(x, f"図{x}") for x in reversed(labels)])
     assert [p.page_label for p in load_design_pages(prod, "A1TEST01", lambda k: False).pages] == expected
+
+
+def _zero_row_state(client, monkeypatch, tmp_path, *, pdfs, png=(), previews=(), rows=None):
+    rows = rows or [("0", "設計作図完了チェックシート"), ("00", "ゼロゼロ")]
+    root, _ = _setup(tmp_path, monkeypatch, rows, pdfs, png=png, previews=previews)
+    _configure_root(client, monkeypatch, root)
+    items = {i["key"]: i for i in client.get("/api/products/A1TEST01/design-pages").json()["items"]}
+    return items
+
+
+def test_page_zero_without_0_png_falls_back_to_the_check_sheet_preview(client, monkeypatch, tmp_path):
+    items = _zero_row_state(client, monkeypatch, tmp_path, pdfs=["0", "0_A1", "0_S0", "00"], previews=["0_A1", "0_S0"])
+    assert (items["0"]["mode"], items["0"]["inference_page_no"]) == ("preview", None)
+    assert items["00"]["mode"] == "unavailable"           # 00 は別のキー。代用しない
+    r = client.get("/api/products/A1TEST01/design-pages/0/image")
+    assert (r.status_code, r.content) == (200, PNG_PREVIEW)
+    assert client.get("/api/products/A1TEST01/design-pages/00/image").status_code == 404
+    # 書類・ページ番号の経路は変えない
+    docs = client.get("/api/products/A1TEST01/design-pages").json()["documents"]
+    assert [d["key"] for d in docs] == ["0_S0", "0_A1"]
+    assert client.get("/api/products/A1TEST01/design-documents/0/file").status_code == 404
+    assert client.get("/api/products/A1TEST01/drawings/0/file").status_code in (400, 404, 422)
+
+
+def test_page_zero_with_inference_png_keeps_inference(client, monkeypatch, tmp_path):
+    items = _zero_row_state(client, monkeypatch, tmp_path, pdfs=["0", "0_A1"], png=["0"], previews=["0_A1"])
+    assert (items["0"]["mode"], items["0"]["inference_page_no"]) == ("inference", 0)
+    assert client.get("/api/products/A1TEST01/design-pages/0/image").content == PNG_INFER
+
+
+def test_page_zero_own_preview_wins_over_the_check_sheet_preview(client, monkeypatch, tmp_path):
+    items = _zero_row_state(client, monkeypatch, tmp_path, pdfs=["0", "0_A1"], previews=["0", "0_A1"])
+    assert items["0"]["mode"] == "preview"
+
+
+def test_page_zero_without_any_preview_stays_unavailable(client, monkeypatch, tmp_path):
+    items = _zero_row_state(client, monkeypatch, tmp_path, pdfs=["0", "0_A1"])
+    assert items["0"]["mode"] == "unavailable"
+    assert client.get("/api/products/A1TEST01/design-pages/0/image").status_code == 404
+
+
+def test_page_zero_legacy_without_0_pdf_has_no_row(client, monkeypatch, tmp_path):
+    items = _zero_row_state(client, monkeypatch, tmp_path, pdfs=["0_A1"], previews=["0_A1"])
+    assert "0" not in items
