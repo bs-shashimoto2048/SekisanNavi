@@ -253,8 +253,9 @@ Viewerの**右端に寄せて**配置する(`left = container.width - SIDE_MARGI
 「盤情報→積算集約→積算明細→部品台帳」の固定順で、新たに表示ONにしたpanelほど
 下段に積まれる(`components/Layout/FloatingPanel.tsx`の`computeInitialRect`、
 `stackIndex = visibleKinds.indexOf(kind)`)。既定幅はkindごとに異なる
-(`DEFAULT_WIDTH_BY_KIND`: 盤情報300px・積算集約500px([2026-09 Issue #36]
-1行compact rowを収めるため480pxから微調整)・積算明細770px・部品台帳320px。
+(`DEFAULT_WIDTH_BY_KIND`: 盤情報300px・積算集約580px([2026-09 Issue #36]
+1行compact rowを収めるため480→500pxへ調整、のち文字拡大(15→17.5px)で行の内容幅が約545pxになり
+500pxでは「履歴」が折り返したため2026-10に580pxへ)・積算明細770px・部品台帳320px。
 積算明細は列数が多い表のため他panelより広め)。ユーザーが
 移動/リサイズした後は、そのセッション中は変更後の位置・大きさを保持する
 (下記「ドラッグ移動・リサイズ」参照)。
@@ -1410,7 +1411,7 @@ select」を縦に4ブロック積んでいたため、これらの固定領域�
 (`summary-row`)という**2つの独立したflex-wrap行**を、タイトル直下から
 積算明細カラムヘッダーまでの領域をさらに圧縮するため、**1つの
 compact row(`estimate-aggregation__compact-row`)へ統合**した。panel既定幅
-(500px、後述)では以下がすべて1行に収まる。
+(580px、後述)では以下がすべて1行に収まる(実ブラウザ・実データで確認。文字拡大後の500pxでは折り返した)。
 
 ```
 製番 A1GV2421 | 合計 2,299,400円 | 17件 | 対象 [総合計▼] | [確定] [履歴]
