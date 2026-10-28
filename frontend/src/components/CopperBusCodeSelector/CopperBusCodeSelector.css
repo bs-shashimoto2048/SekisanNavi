@@ -2,6 +2,9 @@
    `PanelInfo`の各盤行(button)の直後に、折りたたみ式の独立ブロックとして
    1面につき1つ配置する(面ごとの選択欄であることを視覚的にも区切る)。 */
 .copper-bus-code-selector {
+  /* 盤行(最大幅の自然幅grid)の下に置いても、狭いパネルで横スクロールを
+     誘発しないよう、選択欄自体は固定の上限幅に収める。 */
+  max-width: 22rem;
   margin: 0.2rem 0 0.35rem;
   padding: 0.3rem 0 0;
   border-top: 1px dashed #cbd5e1;
@@ -34,6 +37,11 @@
 .copper-bus-code-selector__loading {
   font-size: 0.8rem;
   color: #9ca3af;
+}
+
+.copper-bus-code-selector__message {
+  font-size: 0.8rem;
+  color: #6b7280;
 }
 
 .copper-bus-code-selector__field {

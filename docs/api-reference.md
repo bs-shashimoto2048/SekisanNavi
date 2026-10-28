@@ -94,7 +94,7 @@ Frontend側`estimateAggregationReal.ts`が`detections`×`estimate_master_items`�
 | Method | Path | 説明 | レスポンス |
 |---|---|---|---|
 | GET | `/api/master-items` | 積算コードMaster一覧。`q`(code/model/ratingの部分一致)・`category`でフィルタ可 | `list[EstimateMasterItemOut]` |
-| GET | `/api/master-items/copper-bus-code-options` | 主回路銅帯コード選択UI(Issue #40 Phase 6-H)向け候補一覧(品名が「入力（主回路銅帯）」/「銅帯」のmaster item、実データ85件)。品名→型式→定格→コードの絞り込みはFrontend(`CopperBusCodeSelector`)で行う。読み取り専用で、BBox追加対象の選択・積算確定には連動しない | `list[EstimateMasterItemOut]` |
+| GET | `/api/master-items/copper-bus-code-options` | 主回路銅帯コード選択UI(Issue #40 Phase 6-H)向け候補一覧(品名が「入力（主回路銅帯）」/「銅帯」のmaster item、実データ85件)。品名→型式→定格→コードの絞り込みはFrontend(`CopperBusCodeSelector`)で行う。読み取り専用で、BBox追加対象の選択・積算確定には連動しない。図面情報パネルの各面(`ban_menno`)につき1つの選択欄が展開時に1回だけ呼ぶ(`PanelInfo`に接続済み)。失敗時のUIは固定文言のみ表示し、例外内容は画面に出さない | `list[EstimateMasterItemOut]` |
 
 `EstimateMasterItemOut`: `id`, `code`, `category`, `model`, `rating`, `note`,
 `total_price_a`, `box_parts_price`, `painting_price`, `setup_a`,
