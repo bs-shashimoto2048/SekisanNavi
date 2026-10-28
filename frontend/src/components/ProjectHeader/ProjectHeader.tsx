@@ -11,6 +11,8 @@ const STATUS_LABEL: Record<AnalysisStatus, string> = {
 
 interface Props {
   project: ProjectInfo | null
+  /** 選択中の製番。project_info が別案件のデモ値なら、その業務情報を隠して製番だけ表示する。 */
+  currentProductNo?: string | null
   loading: boolean
   onOpenProductViewer: () => void
   onOpenSystemSettings: () => void
@@ -22,11 +24,14 @@ interface Props {
 
 export function ProjectHeader({
   project,
+  currentProductNo,
   loading,
   onOpenProductViewer,
   onOpenSystemSettings,
   onOpenReferencePdfs,
 }: Props) {
+  const projectMatchesSelection = currentProductNo == null || project?.seiban === currentProductNo
+  const selectedProductNo = currentProductNo ?? project?.seiban
   return (
     <header className="project-header">
       {/* UI視覚階層改善 指示6章: 表示名のみ「Sekisan Navi」へ変更する。
@@ -36,17 +41,21 @@ export function ProjectHeader({
           だけでプロダクト名らしく見せる(画像/SVG/Canvasロゴは作らない)。 */}
       <span className="project-header__brand">Sekisan Navi</span>
       {loading && <div className="project-header__loading">読込中...</div>}
-      {project && (
+      {(project || selectedProductNo) && (
         <div className="project-header__info">
-          <span>整理番号: {project.seiri_no}</span>
-          <span>製番: {project.seiban}</span>
-          <span>盤名称: {project.panel_name}</span>
-          <span className={`project-header__status project-header__status--${project.analysis_status}`}>
-            解析状態: {STATUS_LABEL[project.analysis_status]}
-          </span>
-          <button type="button" disabled title="PoCでは未実装 (実解析は今後接続予定)">
-            解析実行
-          </button>
+          {projectMatchesSelection && project && (
+            <>
+              <span>整理番号: {project.seiri_no}</span>
+              <span>盤名称: {project.panel_name}</span>
+              <span className={`project-header__status project-header__status--${project.analysis_status}`}>
+                解析状態: {STATUS_LABEL[project.analysis_status]}
+              </span>
+              <button type="button" disabled title="PoCでは未実装 (実解析は今後接続予定)">
+                解析実行
+              </button>
+            </>
+          )}
+          {selectedProductNo && <span>製番: {selectedProductNo}</span>}
         </div>
       )}
       <div className="project-header__actions">

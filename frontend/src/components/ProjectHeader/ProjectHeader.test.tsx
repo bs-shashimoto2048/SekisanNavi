@@ -14,6 +14,53 @@ const project: ProjectInfo = {
 const noop = () => {}
 
 describe('ProjectHeader', () => {
+  it('shows the selected product number without stale metadata from another project', () => {
+    render(
+      <ProjectHeader
+        project={project}
+        currentProductNo="A1LW0626"
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+        onOpenReferencePdfs={noop}
+      />,
+    )
+    expect(screen.getByText('製番: A1LW0626')).toBeInTheDocument()
+    expect(screen.queryByText(/整理番号:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/盤名称:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/解析状態:/)).not.toBeInTheDocument()
+  })
+
+  it('shows the selected product number even when project information is unavailable', () => {
+    render(
+      <ProjectHeader
+        project={null}
+        currentProductNo="A1LW0626"
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+        onOpenReferencePdfs={noop}
+      />,
+    )
+    expect(screen.getByText('製番: A1LW0626')).toBeInTheDocument()
+  })
+
+  it('keeps project metadata when it belongs to the selected product', () => {
+    render(
+      <ProjectHeader
+        project={project}
+        currentProductNo={project.seiban}
+        loading={false}
+        onOpenProductViewer={noop}
+        onOpenSystemSettings={noop}
+        onOpenReferencePdfs={noop}
+      />,
+    )
+    expect(screen.getByText(`製番: ${project.seiban}`)).toBeInTheDocument()
+    expect(screen.getByText(`整理番号: ${project.seiri_no}`)).toBeInTheDocument()
+    expect(screen.getByText(`盤名称: ${project.panel_name}`)).toBeInTheDocument()
+  })
+
   it('renders the app title as "Sekisan Navi" only, without the old "/ 積算ナビ" suffix (UI視覚階層改善 指示6章)', () => {
     render(
       <ProjectHeader
