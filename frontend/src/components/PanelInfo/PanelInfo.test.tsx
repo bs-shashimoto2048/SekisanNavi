@@ -885,12 +885,18 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
         panel={null}
         panels={[makeProductPanel()]}
         estimatePanels={[makeEstimatePanel({ model: 'IS2', box_type_analysis: makeBoxTypeAnalysis() })]}
-        steel={{ status: 'no_outline', source_page: null, source_drawing_name: null, items: [] }}
+        steel={{
+          status: 'ok',
+          source_page: '5',
+          source_drawing_name: '外形図(2)',
+          items: [{ symbol_name: 'BSP-STEELA-H', cabtype: 'IS2', component_name: '基礎ベース', material_spec: 'TEST-MAT-A 10x20' }],
+        }}
         selectedPanel={null}
         onSelectPanel={() => {}}
       />,
     )
     const summaryGrid = document.querySelector('.panel-info__summary-grid') as HTMLElement
+    expect(summaryGrid).not.toHaveClass('panel-info__summary-grid--single') // 鋼材データがあるときだけ2列
     const listScroll = document.querySelector('.panel-info__list-scroll') as HTMLElement
     expect(summaryGrid.children[0]).toHaveClass('panel-info__summary-card')
     expect(summaryGrid.children[1]).toHaveClass('steel-section')
@@ -898,6 +904,44 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
     expect(screen.getByRole('button', { name: /箱体型式/ })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('button', { name: /鋼材/ })).toHaveAttribute('aria-expanded', 'true')
     expect(listScroll.className).not.toContain('panel-info__list-scroll--compact')
+  })
+
+  it.each([
+    ['外形図なし', { status: 'no_outline', source_page: null, source_drawing_name: null, items: [] } as SteelOutline],
+    ['読み込み失敗', { status: 'invalid', source_page: null, source_drawing_name: null, items: [] } as SteelOutline],
+    ['取得できない', { status: 'unavailable', source_page: null, source_drawing_name: null, items: [] } as SteelOutline],
+  ])('stacks the two cards in one full-width column instead of leaving a half-width column holding one line when 鋼材 has no data (%s)', (_label, steel) => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel({ model: 'IS2', box_type_analysis: makeBoxTypeAnalysis() })]}
+        steel={steel}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    expect(document.querySelector('.panel-info__summary-grid')).toHaveClass('panel-info__summary-grid--single')
+    expect(screen.getByLabelText('鋼材')).toBeInTheDocument() // 欄(固定の理由文)は残す
+  })
+
+  it('keeps 材料情報 collapsed after the panel list and opens it on demand', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel({ model: 'IS2', box_type_analysis: makeBoxTypeAnalysis() })]}
+        materials={[]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    const toggle = screen.getByRole('button', { name: /材料情報/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    const listScroll = document.querySelector('.panel-info__list-scroll') as HTMLElement
+    expect(listScroll.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
   })
 })
 

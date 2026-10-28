@@ -361,7 +361,13 @@ export function PanelInfo({
       <h2 className="panel-info__heading">{heading}</h2>
 
       {/* 参照画面の配置: 箱体型式と鋼材を上段に横並び、その下に盤一覧。 */}
-      <div className={`panel-info__summary-grid${steel === undefined ? ' panel-info__summary-grid--single' : ''}`}>
+      {/* 鋼材データが無い(欄を出さない・外形図なし・読み込み失敗)ときは、半幅の列に1行の文言だけが
+          残らないよう、全幅の縦並びにする。 */}
+      <div
+        className={`panel-info__summary-grid${
+          steel === undefined || (steel !== null && steel.status !== 'ok') ? ' panel-info__summary-grid--single' : ''
+        }`}
+      >
         <section className="panel-info__summary-card" aria-label="箱体型式">
           <h3 className="panel-info__summary-heading">
             <button
