@@ -3,6 +3,7 @@ import pytest
 
 from app.services.design_data_context import build_design_data_context
 from app.services.estcode_df import ADDITIONAL_PANEL_FIELDS, EstimatePanelInfo
+from app.services.panel_assignment import TieAssignment, assign_detection_to_panel
 from app.services.product_df import NormalizedRect, PanelAreaFromDf
 
 
@@ -57,6 +58,18 @@ def test_build_context_prefers_estcode_name_and_width_depth():
     assert ctx.ban_w == 1700.0  # estcode_df優先(Issue #40 Phase 2指示4)
     assert ctx.ban_d == 2200.0
     assert ctx.ban_connect == "箱･左右(R)"
+
+
+def test_build_context_does_not_treat_alphanumeric_panel_as_numeric_estimate_target():
+    contexts = build_design_data_context([_panel(ban_no=None, ban_no_label="L1")], [_estimate_panel()])
+    assert contexts == {}
+
+
+def test_detection_over_alphanumeric_panel_requires_review_instead_of_numeric_assignment():
+    panel = _panel(ban_no=None, ban_no_label="L1")
+    assignment = assign_detection_to_panel((0.1, 0.1, 0.05, 0.05), [panel])
+    assert isinstance(assignment, TieAssignment)
+    assert assignment.candidates[0].panel.ban_no_label == "L1"
 
 
 def test_build_context_falls_back_to_product_df_when_estcode_missing():

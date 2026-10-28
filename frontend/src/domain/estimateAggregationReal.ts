@@ -29,7 +29,7 @@ import type {
 
 export const PRODUCT_TARGET_ID = 'product'
 export const TIE_TARGET_ID = '__tie__'
-export const TIE_TARGET_NAME = '要確認（複数盤の交差面積が同値）'
+export const TIE_TARGET_NAME = '要確認（盤への対応付けが未確定）'
 
 function bboxOf(detection: Detection): NormalizedRect {
   return { x: detection.bbox_x, y: detection.bbox_y, w: detection.bbox_w, h: detection.bbox_h }
@@ -38,7 +38,7 @@ function bboxOf(detection: Detection): NormalizedRect {
 /** 物理盤の識別キー (面番号:盤番号のみ。ページ番号を含まない)。同一盤が複数の
  * 図面にまたがって存在しても、この関数は常に同じキーを返す。 */
 function physicalPanelKey(panel: PanelPreview): string {
-  return `${panel.ban_menno}:${panel.ban_no}`
+  return `${panel.ban_menno}:${panel.ban_no_label ?? panel.ban_no}`
 }
 
 export function panelTargetId(panel: PanelPreview): string {
@@ -82,7 +82,7 @@ export function assignDetectionToPanel(bbox: NormalizedRect, panels: PanelPrevie
   const maxArea = Math.max(...hits.map((h) => h.area))
   const winners = hits.filter((h) => h.area === maxArea)
   const winnerGroups = new Set(winners.map((w) => physicalPanelKey(w.panel)))
-  if (winnerGroups.size > 1) {
+  if (winnerGroups.size > 1 || winners.some((w) => w.panel.ban_no == null)) {
     return { kind: 'tie', candidates: winners }
   }
   return { kind: 'panel', panel: winners[0].panel, area: winners[0].area }
@@ -101,11 +101,11 @@ export function resolveAssignmentTargetId(assignment: PanelAssignment): string {
 /** 盤名称の解決 (`PanelInfo.tsx`と同じ優先順位: estcode_df.csvの値を優先し、
  * 無ければproduct_df自身の値、それも空ならBAN_MENNO/BAN_NOを使う)。 */
 function resolvePanelName(panel: PanelPreview, estimatePanels: EstimatePanelInfo[]): string {
-  const matched = estimatePanels.find(
+  const matched = panel.ban_no == null ? undefined : estimatePanels.find(
     (e) => e.ban_menno === panel.ban_menno && e.ban_no === panel.ban_no,
   )
   const name = matched?.ban_meisyou ?? panel.ban_meisyou
-  return name && name.trim() !== '' ? name : `${panel.ban_menno}/${panel.ban_no}`
+  return name && name.trim() !== '' ? name : `${panel.ban_menno}/${panel.ban_no_label ?? panel.ban_no ?? '-'}`
 }
 
 /** 型式/定格から明細行の識別情報テキストを組み立てる。
@@ -171,6 +171,7 @@ export function buildRealEstimateAggregation({
   const panelTargetsByKey = new Map<string, EstimateTarget>()
   for (const pagePanels of panelsByPageNo.values()) {
     for (const panel of pagePanels) {
+      if (panel.ban_no == null) continue
       const key = physicalPanelKey(panel)
       if (!panelTargetsByKey.has(key)) {
         panelTargetsByKey.set(key, {

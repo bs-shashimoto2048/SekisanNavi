@@ -128,7 +128,12 @@ def build_legacy_candidates(conn, data_source_root: Path, product_no: str) -> li
                 ban_no = None
                 judgment_scope = JudgmentScope.PRODUCT
                 status = EstimateResultStatus.NEEDS_REVIEW
-                reason = "旧方式(Manual/AI BBox直接付与): 複数盤の交差面積が同値のため盤を一意に決定できません"
+                has_alphanumeric_panel = any(hit.panel.ban_no is None for hit in assignment.candidates)
+                reason = (
+                    "旧方式(Manual/AI BBox直接付与): 英字盤番号を含む盤のため数値盤へ自動対応付けできません"
+                    if has_alphanumeric_panel
+                    else "旧方式(Manual/AI BBox直接付与): 複数盤の交差面積が同値のため盤を一意に決定できません"
+                )
             elif assignment.kind == "panel":
                 ban_menno = assignment.panel.ban_menno
                 ban_no = assignment.panel.ban_no

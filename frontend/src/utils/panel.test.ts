@@ -40,6 +40,11 @@ describe('panelKey', () => {
 })
 
 describe('banGroupKey (Phase 1.11 UI改修指示17章/18章: 同一盤の別矢視グループ化)', () => {
+  it('keeps alphabetic panel identifiers distinct', () => {
+    expect(banGroupKey(makePanel({ ban_no: null, ban_no_label: 'L1' }))).not.toBe(
+      banGroupKey(makePanel({ ban_no: null, ban_no_label: 'C1' })),
+    )
+  })
   it('is the same for the same PAGE/BAN_MENNO/BAN_NO regardless of BAN_TYPE (別矢視)', () => {
     const front = makePanel({ ban_type: '正面図' })
     const back = makePanel({ ban_type: '背面図' })

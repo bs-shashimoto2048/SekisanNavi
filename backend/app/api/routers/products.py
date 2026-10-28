@@ -208,6 +208,7 @@ def read_product_drawings(
                     page_no=panel.page_no,
                     ban_menno=panel.ban_menno,
                     ban_no=panel.ban_no,
+                    ban_no_label=panel.ban_no_label,
                     ban_meisyou=panel.ban_meisyou,
                     ban_type=panel.ban_type,
                     ban_h1=panel.ban_h1,

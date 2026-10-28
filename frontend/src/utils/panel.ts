@@ -10,7 +10,7 @@ import type { PanelPreview } from '../types/domain'
  * tie-breakerとして付与する。
  */
 export function panelKey(panel: PanelPreview, index: number): string {
-  return `${panel.page_no}:${panel.ban_menno}:${panel.ban_no}:${panel.ban_type}:${index}`
+  return `${panel.page_no}:${panel.ban_menno}:${panel.ban_no_label ?? panel.ban_no}:${panel.ban_type}:${index}`
 }
 
 /**
@@ -26,5 +26,5 @@ export function panelKey(panel: PanelPreview, index: number): string {
  * であり、混同しないこと。
  */
 export function banGroupKey(panel: PanelPreview): string {
-  return `${panel.page_no}:${panel.ban_menno}:${panel.ban_no}`
+  return `${panel.page_no}:${panel.ban_menno}:${panel.ban_no_label ?? panel.ban_no}`
 }

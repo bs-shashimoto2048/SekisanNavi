@@ -97,6 +97,10 @@ def build_design_data_context(
 
     contexts: dict[str, DesignDataContext] = {}
     for panel in panels:
+        # 英字盤番号は表示用には保持するが、数値盤番号を前提とする既存の
+        # 設計データ・積算ルールへ誤って結び付けない。
+        if panel.ban_no is None:
+            continue
         key = physical_panel_key(panel)
         if key in contexts:
             continue

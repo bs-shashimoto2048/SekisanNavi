@@ -21,7 +21,7 @@ describe('formatTargetLabel (積算明細強化・Undo/Redo・要確認警告・
     const target: EstimateTarget = {
       id: '__tie__',
       type: 'tie',
-      name: '要確認（複数盤の交差面積が同値）',
+      name: '要確認（盤への対応付けが未確定）',
       banMenno: null,
       banNo: null,
     }

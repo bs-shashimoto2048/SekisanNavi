@@ -87,6 +87,16 @@ describe('assignDetectionToPanel (BBox交差による所属判定。ロジック
     if (result.kind === 'panel') expect(result.panel).toBe(panel)
   })
 
+  it('requires review when the winning panel has a non-numeric identifier', () => {
+    const panel = makePanel({ ban_no: null, ban_no_label: 'L1' })
+    const result = assignDetectionToPanel(
+      { x: 0.15, y: 0.15, w: 0.05, h: 0.05 },
+      [panel],
+    )
+    expect(result.kind).toBe('tie')
+    expect(resolveAssignmentTargetId(result)).toBe(TIE_TARGET_ID)
+  })
+
   it('does not treat a mere edge-touch as an intersection', () => {
     const panel = makePanel({ normalized_rect: { x: 0.2, y: 0, w: 0.2, h: 0.2 } })
     const bbox = { x: 0, y: 0, w: 0.2, h: 0.2 }

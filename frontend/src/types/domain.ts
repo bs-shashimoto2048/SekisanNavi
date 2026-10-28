@@ -193,7 +193,9 @@ export interface PanelPreview {
   // 所属ページ番号。盤選択の識別・右ペイン表示に使う (Phase 1.9)。
   page_no: number
   ban_menno: number
-  ban_no: number
+  ban_no: number | null
+  /** 表示用の元盤番号。英字番号を含む場合はban_noがnullになる。 */
+  ban_no_label?: string
   // 盤領域Overlay内ラベル・Tooltip・右ペイン表示用 (盤領域内表示の追加指示、Phase 1.9)。
   ban_meisyou: string
   ban_type: string

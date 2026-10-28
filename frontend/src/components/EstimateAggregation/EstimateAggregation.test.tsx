@@ -257,7 +257,7 @@ describe('EstimateAggregation (積算集約・積算明細UI再構成: セレク
   })
 
   it('shows a warning banner and excludes the tie target items from being silently assigned when the tie target is selected', () => {
-    const tieTarget: EstimateTarget = { id: '__tie__', type: 'tie', name: '要確認（複数盤の交差面積が同値）', banMenno: null, banNo: null }
+    const tieTarget: EstimateTarget = { id: '__tie__', type: 'tie', name: '要確認（盤への対応付けが未確定）', banMenno: null, banNo: null }
     const targets = [makeTarget(), tieTarget]
     const item = makeLineItem({ targetId: '__tie__' })
     render(

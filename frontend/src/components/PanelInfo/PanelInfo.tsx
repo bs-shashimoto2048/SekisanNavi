@@ -133,7 +133,7 @@ interface PanelRowCells {
 function buildRowCells(card: PanelCard): PanelRowCells {
   const { panel, estimatePanel } = card
   return {
-    menban: `${formatValue(panel.ban_menno)}/${formatValue(panel.ban_no)}`,
+    menban: `${formatValue(panel.ban_menno)}/${formatValue(panel.ban_no_label ?? panel.ban_no)}`,
     name: formatValue(estimatePanel?.ban_meisyou ?? panel.ban_meisyou),
     height: formatHeight(panel.ban_h1, panel.ban_h2, estimatePanel?.ban_h ?? null),
     width: formatWithFallback(estimatePanel?.ban_w ?? null, panel.ban_w),
@@ -189,7 +189,7 @@ function buildPanelCards(
     const groupKey = banGroupKey(p)
     if (seen.has(groupKey)) return
     seen.add(groupKey)
-    const estimatePanel =
+    const estimatePanel = p.ban_no == null ? null :
       estimatePanels.find((e) => e.ban_menno === p.ban_menno && e.ban_no === p.ban_no) ?? null
     cards.push({
       key: panelKey(p, index),
