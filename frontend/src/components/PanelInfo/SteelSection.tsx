@@ -9,6 +9,8 @@ interface Props {
   steel: SteelOutline | null | undefined
   /** 製番全体の箱体型式(estimatePanels[].model)。選択中のページ・盤には連動しない。 */
   panelModels: Array<string | null | undefined>
+  /** PanelInfoの上段カードとして表示するときの初期展開状態。 */
+  defaultExpanded?: boolean
 }
 
 function MatchNote({ match }: { match: CabtypeMatch }) {
@@ -51,11 +53,16 @@ const STATUS_MESSAGE: Record<string, string> = {
  * 選択中の図面ページには連動しない。表示文言はすべて固定文(例外文言・パス・製番は受け取らない)。
  * 材料仕様の `未記載`(記載なし)と `無し`(明示値)は、元の文字列のまま区別して表示する。
  */
-export function SteelSection({ steel, panelModels }: Props) {
-  const [expanded, setExpanded] = useState(false)
+export function SteelSection({ steel, panelModels, defaultExpanded = false }: Props) {
+  const [expanded, setExpanded] = useState(defaultExpanded)
   const sectionRef = useRef<HTMLElement>(null)
+  const mountedRef = useRef(false)
   // 盤情報パネルは小さく内部スクロールのため、展開したとき欄全体が見える位置までスクロールする
   useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true
+      return
+    }
     if (expanded) sectionRef.current?.scrollIntoView?.({ block: 'nearest' })
   }, [expanded])
   if (steel === undefined) return null
@@ -113,7 +120,7 @@ export function SteelSection({ steel, panelModels }: Props) {
   }
 
   return (
-    <section className="steel-section" aria-label="鋼材" ref={sectionRef}>
+    <section className="steel-section panel-info__summary-card" aria-label="鋼材" ref={sectionRef}>
       <h3 className="steel-section__heading">
         <button
           type="button"

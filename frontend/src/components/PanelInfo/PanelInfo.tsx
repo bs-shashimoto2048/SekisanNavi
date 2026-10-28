@@ -262,10 +262,9 @@ export function PanelInfo({
   const boxTypeModel = boxTypeCard?.estimatePanel?.model ?? null
   const boxTypeAnalysis = boxTypeCard?.estimatePanel?.box_type_analysis ?? null
 
-  // 「箱体型式」タブの開閉state。既定は折りたたみ状態とし、盤情報テーブルの
-  // 表示領域を圧迫しない。「鋼材」欄・「材料情報」欄は従来どおり`SteelSection`/
-  // `MaterialInfo`(下部)が自身の開閉stateを持つため、ここでは扱わない。
-  const [isBoxTypeExpanded, setIsBoxTypeExpanded] = useState(false)
+  // 添付の盤情報画面に合わせ、上段の箱体型式・鋼材は初期表示で展開する。
+  const [isBoxTypeExpanded, setIsBoxTypeExpanded] = useState(true)
+  const [isMaterialsExpanded, setIsMaterialsExpanded] = useState(false)
 
   // [Issue #40 追加修正: 表カラム幅の共通自動調整] 各行(button)が独立した
   // grid containerのため、`grid-template-columns`に固定pxを個別チューニング
@@ -361,23 +360,29 @@ export function PanelInfo({
           FloatingPanel側のドラッグハンドル判定(`h2`要素であること)を兼ねる。 */}
       <h2 className="panel-info__heading">{heading}</h2>
 
-      {/* 盤情報テーブルより上に置く「箱体型式」の折り畳みタブ。「型式」列を削除
-          した代わりに、このタブで同じ値をより詳しく(記号の意味・積算に使える
-          情報)表示する。「鋼材」欄は盤情報テーブルの下の`SteelSection`
-          (material.csv由来の実データ)が担うため、ここにはタブを置かない。 */}
-      <div className="panel-info__tabs">
-        <div className="panel-info__tab">
-          <button
-            type="button"
-            className="panel-info__tab-toggle"
-            aria-expanded={isBoxTypeExpanded}
-            onClick={() => setIsBoxTypeExpanded((prev) => !prev)}
-          >
-            <span className="panel-info__tab-caret">{isBoxTypeExpanded ? '▾' : '▸'}</span>
-            箱体型式
-          </button>
+      {/* 参照画面の配置: 箱体型式と鋼材を上段に横並び、その下に盤一覧。 */}
+      {/* 鋼材データが無い(欄を出さない・外形図なし・読み込み失敗)ときは、半幅の列に1行の文言だけが
+          残らないよう、全幅の縦並びにする。 */}
+      <div
+        className={`panel-info__summary-grid${
+          steel === undefined || (steel !== null && steel.status !== 'ok') ? ' panel-info__summary-grid--single' : ''
+        }`}
+      >
+        <section className="panel-info__summary-card" aria-label="箱体型式">
+          <h3 className="panel-info__summary-heading">
+            <button
+              type="button"
+              className="panel-info__tab-toggle"
+              aria-expanded={isBoxTypeExpanded}
+              onClick={() => setIsBoxTypeExpanded((prev) => !prev)}
+            >
+              <span className="panel-info__tab-caret">{isBoxTypeExpanded ? '▾' : '▸'}</span>
+              箱体型式
+            </button>
+          </h3>
           {isBoxTypeExpanded && <BoxTypeDetail model={boxTypeModel} analysis={boxTypeAnalysis} />}
-        </div>
+        </section>
+        <SteelSection steel={steel} panelModels={estimatePanels.map((e) => e.model)} defaultExpanded />
       </div>
 
       {cards.length === 0 && !panel && (
@@ -491,8 +496,20 @@ export function PanelInfo({
         </>
       )}
 
-      {materials !== undefined && <MaterialInfo materials={materials} />}
-      <SteelSection steel={steel} panelModels={estimatePanels.map((e) => e.model)} />
+      {materials !== undefined && (
+        <section className="panel-info__materials-disclosure" aria-label="材料情報">
+          <button
+            type="button"
+            className="panel-info__materials-toggle"
+            aria-expanded={isMaterialsExpanded}
+            onClick={() => setIsMaterialsExpanded((expanded) => !expanded)}
+          >
+            <span>{isMaterialsExpanded ? '▾' : '▸'}</span>
+            材料情報
+          </button>
+          {isMaterialsExpanded && <MaterialInfo materials={materials} showHeading={false} />}
+        </section>
+      )}
     </section>
   )
 }

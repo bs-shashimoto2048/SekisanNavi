@@ -3243,6 +3243,7 @@ describe('App: 材料情報 (material.csv。設計データの*.boxspec由来)',
   it('shows "材料情報なし" in the panel info when the product has no material.csv rows (旧データ互換)', async () => {
     render(<App />)
     await screen.findByRole('img', { name: 'P16' })
+    fireEvent.click(await screen.findByRole('button', { name: /材料情報/ }))
     expect(await screen.findByText('材料情報なし')).toBeInTheDocument()
   })
 
@@ -3255,6 +3256,7 @@ describe('App: 材料情報 (material.csv。設計データの*.boxspec由来)',
     render(<App />)
 
     await waitFor(() => expect(fetchMaterials).toHaveBeenCalledWith('A1GV2421'))
+    fireEvent.click(await screen.findByRole('button', { name: /材料情報/ }))
     expect(await screen.findByText('ページ 301')).toBeInTheDocument()
     expect(screen.getByText('型式 TYPE-X')).toBeInTheDocument()
     expect(screen.getByText('無し')).toHaveAttribute('data-spec-kind', 'nothing')
@@ -3270,6 +3272,7 @@ describe('App: 材料情報 (material.csv。設計データの*.boxspec由来)',
     render(<App />)
 
     expect(await screen.findByRole('img', { name: 'P16' })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: /材料情報/ }))
     expect(await screen.findByText('材料情報なし')).toBeInTheDocument()
     expect(document.querySelector('.app-layout__error')).not.toBeInTheDocument()
   })
@@ -3291,15 +3294,14 @@ describe('App: 鋼材欄 (外形図1ページぶん。折りたたみ・ペー�
     )
   })
 
-  it('fetches once per product (not per page) and shows the outline steel in a collapsed section', async () => {
+  it('fetches once per product (not per page) and shows the outline steel expanded in the summary row', async () => {
     const { fetchSteelOutline } = await import('./api/client')
     vi.mocked(fetchSteelOutline).mockImplementation(async () => steelOk as never)
     render(<App />)
     const thumbnail = await screen.findByRole('img', { name: 'P16' })
     await waitFor(() => expect(fetchSteelOutline).toHaveBeenCalledWith('A1GV2421'))
     const toggle = await screen.findByRole('button', { name: /鋼材/ })
-    expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(await screen.findByText('表示元: 外形図(2) P5')).toBeInTheDocument()
     // ページを切り替えても再取得せず、表示も変わらない
     fireEvent.click(thumbnail)
@@ -3315,7 +3317,6 @@ describe('App: 鋼材欄 (外形図1ページぶん。折りたたみ・ペー�
     })
     render(<App />)
     expect(await screen.findByRole('img', { name: 'P16' })).toBeInTheDocument()
-    fireEvent.click(await screen.findByRole('button', { name: /鋼材/ }))
     expect(await screen.findByText('鋼材データを取得できませんでした')).toBeInTheDocument()
     expect(document.querySelector('.app-layout__error')).not.toBeInTheDocument()
     expect(document.body.textContent).not.toContain('secret')

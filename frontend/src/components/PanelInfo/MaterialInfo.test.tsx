@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { MaterialInfo } from './MaterialInfo'
 import { PanelInfo } from './PanelInfo'
@@ -108,6 +108,7 @@ describe('PanelInfo materials prop (backward compatibility)', () => {
 
   it('renders "材料情報なし" for an empty array and rows when present', () => {
     const { rerender } = render(<PanelInfo {...base} materials={[]} />)
+    fireEvent.click(screen.getByRole('button', { name: /材料情報/ }))
     expect(screen.getByText('材料情報なし')).toBeInTheDocument()
     rerender(<PanelInfo {...base} materials={SAMPLE} />)
     expect(screen.getAllByTestId('material-group')).toHaveLength(2)

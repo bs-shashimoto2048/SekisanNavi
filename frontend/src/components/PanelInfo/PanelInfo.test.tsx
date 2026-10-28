@@ -658,7 +658,7 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
     expect(screen.queryByRole('columnheader', { name: '型式' })).not.toBeInTheDocument()
   })
 
-  it('renders the 箱体型式 tab collapsed by default, and no 鋼材 section when no steel prop is given', () => {
+  it('renders 箱体型式 expanded by default, and no 鋼材 section when no steel prop is given', () => {
     render(
       <PanelInfo
         panel={null}
@@ -668,7 +668,7 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
         onSelectPanel={() => {}}
       />,
     )
-    expect(screen.getByRole('button', { name: /箱体型式/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: /箱体型式/ })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.queryByRole('button', { name: /鋼材/ })).not.toBeInTheDocument()
     expect(screen.queryByText('仕様検討中')).not.toBeInTheDocument()
   })
@@ -687,7 +687,6 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
         onSelectPanel={() => {}}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
     expect(screen.queryByText('この型式は解析できませんでした')).not.toBeInTheDocument()
     expect(screen.getByText('解析済み')).toBeInTheDocument()
     expect(screen.getAllByText('IS2').length).toBeGreaterThan(0)
@@ -736,7 +735,6 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
         onSelectPanel={() => {}}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
     expect(screen.queryByText('この型式は解析できませんでした')).not.toBeInTheDocument()
     expect(screen.getByText('解析済み')).toBeInTheDocument()
   })
@@ -755,7 +753,6 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
         onSelectPanel={() => {}}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
     expect(screen.getByText('箱体型式：')).toBeInTheDocument()
     expect(screen.getByText('IS2GT')).toBeInTheDocument()
     // 「標準アングルレス型」は記号の意味欄・積算情報表(箱体構造)の両方に
@@ -788,7 +785,6 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
         onSelectPanel={() => {}}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
     expect(screen.getAllByText('要確認(競合)').length).toBeGreaterThan(0)
     expect(screen.getByText(/SUとHLは仕上条件/)).toBeInTheDocument()
   })
@@ -809,7 +805,6 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
         onSelectPanel={() => {}}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
     expect(screen.getByText(/未解析の文字列: Q/)).toBeInTheDocument()
   })
 
@@ -823,7 +818,6 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
         onSelectPanel={() => {}}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
     expect(screen.getByText('このページには箱体型式の情報がありません')).toBeInTheDocument()
   })
 
@@ -850,9 +844,7 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
     expect(screen.getAllByRole('button', { name: /鋼材/ })).toHaveLength(1)
     expect(screen.getAllByLabelText('鋼材')).toHaveLength(1)
 
-    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
-    fireEvent.click(screen.getByRole('button', { name: /鋼材/ }))
-    // 鋼材を開いても箱体型式は閉じない。実データの内容が表示される(仮文言ではない)。
+    // 参照画面では箱体型式・鋼材を初期表示で展開する。
     expect(screen.getByRole('button', { name: /箱体型式/ })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('button', { name: /鋼材/ })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('基礎ベース')).toBeInTheDocument()
@@ -883,37 +875,73 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
         onSelectPanel={() => {}}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
     expect(screen.getByText('IS2')).toBeInTheDocument()
     expect(screen.queryByText('OS2')).not.toBeInTheDocument()
   })
 
-  it('[2026-10 追加修正: 強制的な高さ引き伸ばしの撤回] never adds the old stretch-to-fill modifier classes, so タブ/一覧 stay content-sized before and after expanding a tab (no forced blank space from flex-grow/align-self:stretch)', () => {
+  it('places 箱体型式 and 鋼材 side by side above the panel list', () => {
     render(
       <PanelInfo
         panel={null}
         panels={[makeProductPanel()]}
         estimatePanels={[makeEstimatePanel({ model: 'IS2', box_type_analysis: makeBoxTypeAnalysis() })]}
+        steel={{
+          status: 'ok',
+          source_page: '5',
+          source_drawing_name: '外形図(2)',
+          items: [{ symbol_name: 'BSP-STEELA-H', cabtype: 'IS2', component_name: '基礎ベース', material_spec: 'TEST-MAT-A 10x20' }],
+        }}
         selectedPanel={null}
         onSelectPanel={() => {}}
       />,
     )
-    const tabs = document.querySelector('.panel-info__tabs') as HTMLElement
+    const summaryGrid = document.querySelector('.panel-info__summary-grid') as HTMLElement
+    expect(summaryGrid).not.toHaveClass('panel-info__summary-grid--single') // 鋼材データがあるときだけ2列
     const listScroll = document.querySelector('.panel-info__list-scroll') as HTMLElement
-    const boxTypeTabWrapper = screen.getByRole('button', { name: /箱体型式/ }).closest('.panel-info__tab')
-
-    expect(tabs.className).not.toContain('panel-info__tabs--expanded')
+    expect(summaryGrid.children[0]).toHaveClass('panel-info__summary-card')
+    expect(summaryGrid.children[1]).toHaveClass('steel-section')
+    expect(summaryGrid.compareDocumentPosition(listScroll) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('button', { name: /箱体型式/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: /鋼材/ })).toHaveAttribute('aria-expanded', 'true')
     expect(listScroll.className).not.toContain('panel-info__list-scroll--compact')
-    expect(boxTypeTabWrapper?.className).not.toContain('panel-info__tab--expanded')
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: /箱体型式/ }))
+  it.each([
+    ['外形図なし', { status: 'no_outline', source_page: null, source_drawing_name: null, items: [] } as SteelOutline],
+    ['読み込み失敗', { status: 'invalid', source_page: null, source_drawing_name: null, items: [] } as SteelOutline],
+    ['取得できない', { status: 'unavailable', source_page: null, source_drawing_name: null, items: [] } as SteelOutline],
+  ])('stacks the two cards in one full-width column instead of leaving a half-width column holding one line when 鋼材 has no data (%s)', (_label, steel) => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel({ model: 'IS2', box_type_analysis: makeBoxTypeAnalysis() })]}
+        steel={steel}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    expect(document.querySelector('.panel-info__summary-grid')).toHaveClass('panel-info__summary-grid--single')
+    expect(screen.getByLabelText('鋼材')).toBeInTheDocument() // 欄(固定の理由文)は残す
+  })
 
-    // 展開後も、残り高さを強制的に割り当てるmodifier classは付与しない
-    // (常に内容量どおりの高さのまま。指示: 「内容が少ないときに残りの高さを
-    // 埋めて引き伸ばさないでください」)。
-    expect(tabs.className).not.toContain('panel-info__tabs--expanded')
-    expect(listScroll.className).not.toContain('panel-info__list-scroll--compact')
-    expect(boxTypeTabWrapper?.className).not.toContain('panel-info__tab--expanded')
+  it('keeps 材料情報 collapsed after the panel list and opens it on demand', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel({ model: 'IS2', box_type_analysis: makeBoxTypeAnalysis() })]}
+        materials={[]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    const toggle = screen.getByRole('button', { name: /材料情報/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    const listScroll = document.querySelector('.panel-info__list-scroll') as HTMLElement
+    expect(listScroll.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
   })
 })
 

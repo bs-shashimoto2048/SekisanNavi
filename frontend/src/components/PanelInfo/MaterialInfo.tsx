@@ -3,6 +3,7 @@ import { classifyMaterialSpec, groupMaterials } from '../../domain/materialGroup
 
 interface Props {
   materials: MaterialRow[]
+  showHeading?: boolean
 }
 
 /**
@@ -13,14 +14,16 @@ interface Props {
  * データが無い(material.csvが無い・データ行が無い)場合は「材料情報なし」を表示する。
  * 値は加工せずそのまま表示する(記号・寸法・材質表記を変えない)。
  */
-export function MaterialInfo({ materials }: Props) {
+export function MaterialInfo({ materials, showHeading = true }: Props) {
   const groups = groupMaterials(materials)
 
   return (
     <section className="material-info" aria-label="材料情報">
-      <h3 className="material-info__heading">
-        {groups.length > 0 ? `材料情報　${groups.length}件` : '材料情報'}
-      </h3>
+      {showHeading && (
+        <h3 className="material-info__heading">
+          {groups.length > 0 ? `材料情報　${groups.length}件` : '材料情報'}
+        </h3>
+      )}
       {groups.length === 0 ? (
         <p className="material-info__empty">材料情報なし</p>
       ) : (

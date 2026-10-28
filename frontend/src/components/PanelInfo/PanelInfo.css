@@ -39,17 +39,82 @@
   border-radius: 0 4px 4px 0;
 }
 
-/* [追加機能: 箱体型式解析] 盤情報テーブルより上に置く「箱体型式」の折り畳み
-   タブ。「鋼材」「材料情報」は盤情報テーブルの下の`SteelSection`/
-   `MaterialInfo`(実データ表示)が担うため、ここにはタブを置かない。
-   展開しても高さは常に中身どおり(残り高さを強制的に割り当てて空白を作らない)。
-   データ量が領域に収まらない場合のスクロールは`.box-type-detail`/
-   `.box-type-detail__table-scroll`側の`overflow-y: auto`が個別に担う。 */
-.panel-info__tabs {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 0.35rem;
+/* 参照画面に合わせた上段: 箱体型式と鋼材を左右に置き、盤一覧を下へ続ける。 */
+.panel-info__summary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0.45rem;
+  /* 縮めない: 縮めるとカードの中身がグリッドからはみ出し、下の盤一覧に重なる(実ブラウザで確認)。
+     長い内容は各カードの高さ上限+カード内スクロールで見る。 */
+  flex: 0 0 auto;
+  margin-bottom: 0.4rem;
+}
+
+.panel-info__summary-grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.panel-info__summary-card {
+  min-width: 0;
+  /* カードの高さ上限。超える内容(箱体型式の表・鋼材の構成部一覧)はカード内でスクロールする。 */
+  max-height: min(20rem, 40vh);
+  overflow-y: auto;
+  border: 1px solid #d7e0ea;
+  border-radius: 6px;
+  background: #fff;
+  padding: 0.35rem;
+}
+
+.panel-info__summary-heading {
+  margin: 0 0 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.panel-info__summary-grid .steel-section {
+  margin: 0;
+  padding: 0.35rem;
+  border: 1px solid #d7e0ea;
+  border-radius: 6px;
+}
+
+.panel-info__summary-grid .box-type-detail {
+  /* スクロールはカード側が担う(入れ子のスクロールにしない)。 */
+  max-height: none;
+  padding: 0.35rem;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  border: 0;
+  overflow: visible;
+}
+
+.panel-info__summary-grid .box-type-detail__symbol {
+  font-size: 0.9rem;
+}
+
+.panel-info__summary-grid .box-type-detail__table-scroll {
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+}
+
+.panel-info__summary-grid .steel-section__body {
+  max-height: none;
+  overflow: visible;
+}
+
+/* 狭い画面では、2カードを縦に並べる(各カードの内容が窮屈にならないように)。 */
+@media (max-width: 960px) {
+  .panel-info__summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 縦に2枚並ぶぶん、1枚あたりの高さ上限を下げ、盤一覧が画面外へ押し出されないようにする。 */
+  .panel-info__summary-card {
+    max-height: min(12rem, 26vh);
+  }
 }
 
 .panel-info__tab {
@@ -71,15 +136,15 @@
   font-size: 0.85rem;
   font-weight: 600;
   color: #334155;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  padding: 0.25rem 0.5rem;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  padding: 0.1rem 0.15rem;
   cursor: pointer;
 }
 
 .panel-info__tab-toggle:hover {
-  background: #e2e8f0;
+  background: #f1f5f9;
 }
 
 .panel-info__tab-caret {
@@ -118,6 +183,23 @@
   min-height: 7.5rem;
   overflow-y: auto;
   overflow-x: auto;
+}
+
+.panel-info__materials-disclosure {
+  flex-shrink: 0;
+  margin-top: 0.35rem;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 0.25rem;
+}
+
+.panel-info__materials-toggle {
+  border: 0;
+  background: transparent;
+  color: #334155;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.2rem 0;
 }
 
 /* 盤一覧 (Issue #38 Phase 2でカラム型1行一覧へ再設計)。ul自体の既定装飾
