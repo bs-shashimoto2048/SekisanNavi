@@ -1160,6 +1160,30 @@ Issue #38時点の現行仕様。
   (`PanelInfo.css`の`.panel-info__row`)。内容の合計がパネル幅を超える場合は
   折り返し・切り捨てではなく`.panel-info__list-scroll`の横スクロールで見る。
 
+- **[Issue #40 Phase 6-H] 主回路銅帯コード選択(`CopperBusCodeSelector`)の接続**:
+  盤情報テーブル内、各面(`ban_menno`)につき**1つだけ**、その面の代表行(`buildCopperSelectorAnchorKeys`、
+  同じ面番号の盤(`ban_no`違い)が複数ある場合は最初に現れた盤)の`<button>`の直下(sibling)に
+  マウントする。トグル文言は「面N 主回路銅帯コード選択」で、既定は折りたたみ。展開時にのみ
+  `GET /api/master-items/copper-bus-code-options`(`fetchCopperBusCodeOptions`)で候補を
+  1回取得し、品名→型式→定格の順に絞り込んで対応する積算コードを表示するだけの読み取り専用UI。
+  - 状態は面ごとのcomponent-local stateのため、ある面の選択が他の面を変えない。盤行のクリック
+    (盤選択)・BBox追加対象(`EstimateMasterPicker`)・積算確定のいずれにも連動しない(逆も同様)。
+  - 盤行の`<button>`の外に置くため、盤選択のクリック領域・セル数(6列)・列幅の自動計測
+    (`data-auto-col`)には影響しない。選択欄は最大幅22remで、`.panel-info__list-scroll`
+    (下限`min-height: 7.5rem`、超過分は`.floating-panel__body`の縦スクロール)の中に収まり、
+    箱体型式・鋼材・材料情報を同時に展開してもパネルが潰れない。展開/折りたたみ
+    (`aria-expanded`)は`PanelInfo`の自動サイズ計測(`MutationObserver`)の再計測対象。
+  - 表示するデータは積算マスタの銅帯候補(品名「入力（主回路銅帯）」/「銅帯」)のみで、
+    材料情報(`MaterialInfo`、material.csv)・鋼材(`SteelSection`、外形図)とは別のデータ源のため
+    重複表示はない。
+  - **状態表示**: 取得中は「読み込み中...」、取得失敗時は固定文言「銅帯コード候補を取得できませんでした。
+    閉じてもう一度開いてください。」(`role="alert"`、例外メッセージ・URL等は表示しない。閉じて
+    開き直すと再取得)、候補が0件のときは「銅帯コード候補がありません。」を表示する。
+    いずれの場合も盤選択等パネルの他の操作は使える。
+  - **経緯**: 当初は旧指示(「銅帯コード選択を一旦非表示にする」)により`PanelInfo.tsx`の
+    `SHOW_COPPER_BUS_CODE_SELECTOR=false`で未接続だったが、機能を未接続のまま残さないため
+    フラグを撤去し常時接続した(Backend/API・面ごとの代表行ロジックは従来のまま)。
+
 - **[Issue #40 追加機能] 箱体型式タブ・鋼材欄・材料情報欄の構成**:
   パネルのタイトル(`<h2>`、`FloatingPanel`のドラッグハンドル兼用)は従来どおり
   「盤情報　N件」のまま(「図面情報」への改名は、ヘッダーのトグルボタンの
@@ -1167,7 +1191,9 @@ Issue #38時点の現行仕様。
   1. 見出し(`.panel-info__heading`)
   2. **箱体型式タブ**(折り畳み、既定は折りたたみ。`PanelInfo.tsx`の
      `isBoxTypeExpanded`)。盤情報テーブルの上に置く。
-  3. 盤情報テーブル(6列、下記)
+  3. 盤情報テーブル(6列、下記)。各**面**(`ban_menno`)の代表行の直下に
+     **主回路銅帯コード選択**(`CopperBusCodeSelector`、折り畳み、既定は折りたたみ。
+     次項参照)を置く
   4. **材料情報**(`MaterialInfo`、常時表示。material.csv 全体の一覧)
   5. **鋼材**(`SteelSection`、折り畳み、既定は折りたたみ。`/steel` API由来の
      外形図1ページぶんの実データ。箱体型式との一致/不一致も表示する)

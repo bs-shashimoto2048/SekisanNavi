@@ -1,8 +1,28 @@
-import { render, screen, fireEvent, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PanelInfo } from './PanelInfo'
+import { fetchCopperBusCodeOptions } from '../../api/client'
 import { panelKey } from '../../utils/panel'
-import type { BoxTypeAnalysis, EstimatePanelInfo, Panel, PanelPreview, SteelOutline } from '../../types/domain'
+import type {
+  BoxTypeAnalysis,
+  EstimateMasterItem,
+  EstimatePanelInfo,
+  Panel,
+  PanelPreview,
+  SteelOutline,
+} from '../../types/domain'
+
+// 主回路銅帯コード選択欄(`CopperBusCodeSelector`)は展開時に
+// `fetchCopperBusCodeOptions`を呼ぶ。実fetchが走らないようにスタブ化する
+// (既定は空配列。選択の中身を確認するテストだけ個別にモックを差し替える)。
+vi.mock('../../api/client', () => ({
+  fetchCopperBusCodeOptions: vi.fn(() => Promise.resolve([])),
+}))
+
+beforeEach(() => {
+  vi.mocked(fetchCopperBusCodeOptions).mockReset()
+  vi.mocked(fetchCopperBusCodeOptions).mockResolvedValue([])
+})
 
 function makeProductPanel(overrides: Partial<PanelPreview> = {}): PanelPreview {
   return {
@@ -878,5 +898,171 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
     expect(tabs.className).not.toContain('panel-info__tabs--expanded')
     expect(listScroll.className).not.toContain('panel-info__list-scroll--compact')
     expect(boxTypeTabWrapper?.className).not.toContain('panel-info__tab--expanded')
+  })
+})
+
+// 主回路銅帯コード選択(Issue #40 Phase 6-H)。かつては「一旦非表示にする」旧指示で
+// `SHOW_COPPER_BUS_CODE_SELECTOR=false`のまま未接続だったが、フラグを撤去し、
+// 1面(ban_menno)につき1つ、その面の代表行に常時マウントする。
+describe('PanelInfo: 主回路銅帯コード選択欄は1面(ban_menno)につき1つ', () => {
+  function makeCopperItem(overrides: Partial<EstimateMasterItem>): EstimateMasterItem {
+    return {
+      id: 1,
+      code: '44241',
+      category: '入力（主回路銅帯）',
+      model: '3×30   L=2.6m×3本',
+      rating: '1Φ 10kVA　公共建築 (225A)',
+      note: null,
+      total_price_a: null,
+      box_parts_price: null,
+      painting_price: null,
+      setup_a: null,
+      sheet_metal_price: null,
+      assembly_price: null,
+      inspection_price: null,
+      ...overrides,
+    }
+  }
+
+  const COPPER_ITEMS: EstimateMasterItem[] = [
+    makeCopperItem({ id: 1, code: '44241' }),
+    makeCopperItem({ id: 2, code: '44242', rating: '1Φ 20kVA　公共建築 (225A)' }),
+  ]
+
+  function renderThreePanels(onSelectPanel: () => void = () => {}) {
+    return render(
+      <PanelInfo
+        panel={null}
+        panels={[
+          makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: 'パネルA', ban_type: '正面図' }),
+          makeProductPanel({ ban_menno: 1, ban_no: 2, ban_meisyou: 'パネルB', ban_type: '正面図' }),
+          makeProductPanel({ ban_menno: 2, ban_no: 3, ban_meisyou: 'パネルC', ban_type: '正面図' }),
+        ]}
+        estimatePanels={[]}
+        selectedPanel={null}
+        onSelectPanel={onSelectPanel}
+      />,
+    )
+  }
+
+  it('shows exactly one selector per distinct ban_menno even when several panels (ban_no) share the same face', () => {
+    renderThreePanels()
+    // 3盤(行)は従来どおり3行とも表示される(集約されるのは銅帯コード選択欄のみ)。
+    expect(screen.getByText('パネルA')).toBeInTheDocument()
+    expect(screen.getByText('パネルB')).toBeInTheDocument()
+    expect(screen.getByText('パネルC')).toBeInTheDocument()
+
+    const toggles = screen.getAllByRole('button', { name: /主回路銅帯コード選択/ })
+    expect(toggles).toHaveLength(2)
+    expect(toggles.map((t) => t.textContent)).toEqual([
+      expect.stringContaining('面1'),
+      expect.stringContaining('面2'),
+    ])
+  })
+
+  it('attaches the shared face-1 selector to the representative (first) row only, not duplicated on the 2nd panel of the same face', () => {
+    renderThreePanels()
+    const rowA = screen.getByText('パネルA').closest('li') as HTMLElement
+    const rowB = screen.getByText('パネルB').closest('li') as HTMLElement
+    const rowC = screen.getByText('パネルC').closest('li') as HTMLElement
+    expect(rowA.querySelector('.copper-bus-code-selector__toggle')).not.toBeNull()
+    expect(rowB.querySelector('.copper-bus-code-selector__toggle')).toBeNull()
+    expect(rowC.querySelector('.copper-bus-code-selector__toggle')).not.toBeNull()
+  })
+
+  it('keeps the cell structure (6 cells per row) and does not fetch until a selector is expanded', () => {
+    renderThreePanels()
+    for (const name of ['パネルA', 'パネルB', 'パネルC']) {
+      expect(within(getRow(name)).getAllByRole('cell')).toHaveLength(6)
+    }
+    expect(fetchCopperBusCodeOptions).not.toHaveBeenCalled()
+  })
+
+  it('does not select the panel (onSelectPanel) when the selector is operated, since it sits outside the row button', async () => {
+    vi.mocked(fetchCopperBusCodeOptions).mockResolvedValue(COPPER_ITEMS)
+    const onSelectPanel = vi.fn()
+    renderThreePanels(onSelectPanel)
+    fireEvent.click(screen.getAllByRole('button', { name: /主回路銅帯コード選択/ })[0])
+    fireEvent.change(await screen.findByRole('combobox', { name: '型式' }), {
+      target: { value: '3×30   L=2.6m×3本' },
+    })
+    expect(onSelectPanel).not.toHaveBeenCalled()
+  })
+
+  it('selecting a code on face 1 does not change face 2, and picking a row (panel selection) does not reset the selection', async () => {
+    vi.mocked(fetchCopperBusCodeOptions).mockResolvedValue(COPPER_ITEMS)
+    const onSelectPanel = vi.fn()
+    renderThreePanels(onSelectPanel)
+    const toggles = screen.getAllByRole('button', { name: /主回路銅帯コード選択/ })
+
+    // 面1・面2とも展開し、面1だけ選択する。
+    fireEvent.click(toggles[0])
+    await screen.findAllByRole('combobox', { name: '型式' })
+    fireEvent.click(toggles[1])
+    await waitFor(() => expect(screen.getAllByRole('combobox', { name: '型式' })).toHaveLength(2))
+    const modelSelects = screen.getAllByRole('combobox', { name: '型式' })
+    fireEvent.change(modelSelects[0], { target: { value: '3×30   L=2.6m×3本' } })
+    fireEvent.change(screen.getAllByRole('combobox', { name: '定格' })[0], {
+      target: { value: '1Φ 20kVA　公共建築 (225A)' },
+    })
+
+    const codes = () => document.querySelectorAll('.copper-bus-code-selector__code')
+    expect(codes()[0].textContent).toBe('44242')
+    expect(codes()[1].textContent).toBe('-')
+
+    // 盤行のクリック(盤選択)は面1の選択結果を変えない。
+    fireEvent.click(getRow('パネルB'))
+    expect(onSelectPanel).toHaveBeenCalledTimes(1)
+    expect(codes()[0].textContent).toBe('44242')
+    expect(codes()[1].textContent).toBe('-')
+  })
+
+  it('shows a fixed Japanese message (no exception text) when the options request fails, keeps the rest of the panel usable and allows retry', async () => {
+    vi.mocked(fetchCopperBusCodeOptions).mockRejectedValueOnce(new Error('secret internal detail: http://10.0.0.1/db'))
+    const onSelectPanel = vi.fn()
+    renderThreePanels(onSelectPanel)
+    const toggle = screen.getAllByRole('button', { name: /主回路銅帯コード選択/ })[0]
+    fireEvent.click(toggle)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('銅帯コード候補を取得できませんでした。閉じてもう一度開いてください。')
+    expect(document.body.textContent).not.toContain('secret internal detail')
+
+    // 盤選択等、パネルの他の操作は引き続き使える。
+    fireEvent.click(getRow('パネルC'))
+    expect(onSelectPanel).toHaveBeenCalledTimes(1)
+
+    // 閉じて開き直すと再取得でき、成功すれば候補が出る。
+    vi.mocked(fetchCopperBusCodeOptions).mockResolvedValue(COPPER_ITEMS)
+    fireEvent.click(toggle)
+    fireEvent.click(toggle)
+    expect(await screen.findByRole('combobox', { name: '品名' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('does not duplicate 材料情報 / 鋼材 content: the selector only owns the copper-bus code UI', () => {
+    const steel: SteelOutline = {
+      status: 'ok',
+      source_page: '5',
+      source_drawing_name: '外形図(2)',
+      items: [{ symbol_name: 'S', cabtype: 'IS2', component_name: '基礎ベース', material_spec: 'TEST-MAT-A 10x20' }],
+    }
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel({ ban_menno: 1, ban_no: 1 })]}
+        estimatePanels={[makeEstimatePanel()]}
+        materials={[]}
+        steel={steel}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    expect(screen.getAllByRole('button', { name: /主回路銅帯コード選択/ })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /鋼材/ })).toHaveLength(1)
+    // 銅帯コード選択のトグルは鋼材/材料情報セクションの内側には存在しない。
+    const toggle = document.querySelector('.copper-bus-code-selector__toggle') as HTMLElement
+    expect(toggle.closest('.panel-info__list-scroll')).not.toBeNull()
+    expect(toggle.closest('[aria-label="鋼材"]')).toBeNull()
   })
 })

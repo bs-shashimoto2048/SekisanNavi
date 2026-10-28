@@ -170,3 +170,53 @@ describe('CopperBusCodeSelector (盤情報、Issue #40 Phase 6-H / 追加修正:
     expect(screen.queryByText('44244')).not.toBeInTheDocument()
   })
 })
+
+describe('CopperBusCodeSelector: 読み込み中・取得失敗・候補なしの表示', () => {
+  it('shows a loading message while the options request is pending, then the selects', async () => {
+    let resolve: (items: EstimateMasterItem[]) => void = () => {}
+    vi.mocked(fetchCopperBusCodeOptions).mockReturnValue(
+      new Promise<EstimateMasterItem[]>((r) => {
+        resolve = r
+      }),
+    )
+    render(<CopperBusCodeSelector panelLabel="1" />)
+    fireEvent.click(screen.getByRole('button', { name: /主回路銅帯コード選択/ }))
+    expect(screen.getByText('読み込み中...')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: '品名' })).not.toBeInTheDocument()
+
+    resolve(ITEMS)
+    expect(await screen.findByRole('combobox', { name: '品名' })).toBeInTheDocument()
+    expect(screen.queryByText('読み込み中...')).not.toBeInTheDocument()
+  })
+
+  it('shows a fixed Japanese error message (never the exception text) when the request fails, and the toggle still works', async () => {
+    vi.mocked(fetchCopperBusCodeOptions).mockRejectedValueOnce(new Error('boom: http://internal/host?token=abc'))
+    render(<CopperBusCodeSelector panelLabel="1" />)
+    const toggle = screen.getByRole('button', { name: /主回路銅帯コード選択/ })
+    fireEvent.click(toggle)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('銅帯コード候補を取得できませんでした。閉じてもう一度開いてください。')
+    expect(document.body.textContent).not.toContain('boom')
+    expect(document.body.textContent).not.toContain('token')
+    expect(screen.queryByRole('combobox', { name: '品名' })).not.toBeInTheDocument()
+
+    // 閉じると本文が消え、再展開で再取得して回復できる(UIはロックされない)。
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+    expect(await screen.findByRole('combobox', { name: '品名' })).toBeInTheDocument()
+    expect(fetchCopperBusCodeOptions).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('shows an empty-state message (no selects, code not shown) when the API returns no options', async () => {
+    vi.mocked(fetchCopperBusCodeOptions).mockResolvedValue([])
+    render(<CopperBusCodeSelector panelLabel="1" />)
+    fireEvent.click(screen.getByRole('button', { name: /主回路銅帯コード選択/ }))
+
+    expect(await screen.findByText('銅帯コード候補がありません。')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: '品名' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})

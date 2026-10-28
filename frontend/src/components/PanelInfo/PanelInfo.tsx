@@ -11,6 +11,7 @@ import { MaterialInfo } from './MaterialInfo'
 import { SteelSection } from './SteelSection'
 import { banGroupKey, panelKey } from '../../utils/panel'
 import { useAutoFitGridColumns } from '../../hooks/useAutoFitGridColumns'
+import { CopperBusCodeSelector } from '../CopperBusCodeSelector/CopperBusCodeSelector'
 import { BoxTypeDetail } from './BoxTypeDetail'
 import './PanelInfo.css'
 
@@ -142,6 +143,26 @@ function buildRowCells(card: PanelCard): PanelRowCells {
 }
 
 /**
+ * 各`ban_menno`(面番号)につき、主回路銅帯コード選択欄を表示する代表行(カード)の
+ * `key`を1つだけ決める。銅帯コードは「1面につき1つ」であり、同じ面番号に複数の
+ * 盤(`ban_no`違い)が存在しても選択欄は1つだけにする。
+ *
+ * 最初に現れたカードをその面の代表とする(`buildPanelCards`は`panels`配列の
+ * 出現順を使うため安定している)。面番号が離れた位置に再度出現しても代表は
+ * 変わらないため、`cards.map`中で「現在行がその面の代表行か」を判定できる。
+ */
+function buildCopperSelectorAnchorKeys(cards: PanelCard[]): Map<number, string> {
+  const anchorKeyByMenno = new Map<number, string>()
+  for (const card of cards) {
+    const menno = card.panel.ban_menno
+    if (!anchorKeyByMenno.has(menno)) {
+      anchorKeyByMenno.set(menno, card.key)
+    }
+  }
+  return anchorKeyByMenno
+}
+
+/**
  * 現在ページのproduct_df盤一覧から、盤単位(ban_menno+ban_no)でカードを組み立てる
  * (次work指示3章)。
  *
@@ -230,6 +251,7 @@ export function PanelInfo({
 }: Props) {
   const cards = buildPanelCards(panels, estimatePanels, selectedPanel)
   const heading = cards.length > 0 ? `図面情報　${cards.length}件` : '図面情報'
+  const copperSelectorAnchorKeyByMenno = buildCopperSelectorAnchorKeys(cards)
 
   // [追加機能: 箱体型式解析] 「箱体型式」タブに表示する型式は、中央Viewerで
   // 選択中の盤(`isSelected`、既存のハイライト対象と同じ)を優先し、未選択
@@ -425,6 +447,18 @@ export function PanelInfo({
                         {cells.connect}
                       </span>
                     </button>
+                    {/* 主回路銅帯コード選択(Issue #40 Phase 6-H)。銅帯コードは1面
+                        (ban_menno)につき1つ選択する運用のため、盤(ban_no)ごとには
+                        複製せず、その面の代表行(最初に現れた盤、
+                        `copperSelectorAnchorKeyByMenno`)でのみ1つ描画する。
+                        `<button>`の外(sibling)に置くため、盤選択のクリック領域・
+                        cell数(6列)・列幅計測(`data-auto-col`)には影響しない。
+                        材料情報(`MaterialInfo`)・鋼材(`SteelSection`)とは別データ
+                        (積算マスタの銅帯候補)であり、読み取り専用で積算確定・
+                        BBox追加対象とも連動しない。 */}
+                    {copperSelectorAnchorKeyByMenno.get(card.panel.ban_menno) === card.key && (
+                      <CopperBusCodeSelector panelLabel={String(card.panel.ban_menno)} />
+                    )}
                   </li>
                 )
               })}

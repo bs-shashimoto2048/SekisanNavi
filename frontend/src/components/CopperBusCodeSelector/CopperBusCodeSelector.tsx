@@ -50,6 +50,9 @@ interface Props {
 export function CopperBusCodeSelector({ panelLabel }: Props) {
   const [items, setItems] = useState<EstimateMasterItem[]>([])
   const [loading, setLoading] = useState(false)
+  // 取得失敗時は固定の日本語文言のみを表示する(例外メッセージ・URL・内部情報は
+  // 画面に出さない)。折りたたみ→再展開で再取得できる。
+  const [loadFailed, setLoadFailed] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [category, setCategory] = useState<string | null>(null)
   const [model, setModel] = useState<string | null>(null)
@@ -59,14 +62,25 @@ export function CopperBusCodeSelector({ panelLabel }: Props) {
   // 邪魔にならないようにする)。
   useEffect(() => {
     if (!expanded || items.length > 0) return
+    let cancelled = false
     setLoading(true)
+    setLoadFailed(false)
     fetchCopperBusCodeOptions()
       .then((options) => {
+        if (cancelled) return
         setItems(options)
         const categories = uniqueInOrder(options.map((o) => o.category))
         setCategory((current) => current ?? categories[0] ?? null)
       })
-      .finally(() => setLoading(false))
+      .catch(() => {
+        if (!cancelled) setLoadFailed(true)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [expanded, items.length])
 
   const categories = useMemo(() => uniqueInOrder(items.map((i) => i.category)), [items])
@@ -119,7 +133,17 @@ export function CopperBusCodeSelector({ panelLabel }: Props) {
         <div className="copper-bus-code-selector__body">
           {loading && <span className="copper-bus-code-selector__loading">読み込み中...</span>}
 
-          {!loading && (
+          {!loading && loadFailed && (
+            <span className="copper-bus-code-selector__message" role="alert">
+              銅帯コード候補を取得できませんでした。閉じてもう一度開いてください。
+            </span>
+          )}
+
+          {!loading && !loadFailed && items.length === 0 && (
+            <span className="copper-bus-code-selector__message">銅帯コード候補がありません。</span>
+          )}
+
+          {!loading && !loadFailed && items.length > 0 && (
             <>
               <label className="copper-bus-code-selector__field">
                 品名
