@@ -14,7 +14,7 @@
 
 | Method | Path | 説明 | レスポンス |
 |---|---|---|---|
-| GET | `/api/project` | ダミー案件情報を1件返す(PoCでは常に単一レコード) | `ProjectInfoOut` |
+| GET | `/api/project` | ダミー案件情報を1件返す(PoCでは常に単一レコード)。**ヘッダーの整理番号・盤名称の表示には、製番を選んでいる間は使わない**(`GET /api/products/{product_no}/header`を使う)。製番を開く前の既定表示と、解析状態バッジ(同じ製番のときだけ表示)にだけ使う | `ProjectInfoOut` |
 
 `ProjectInfoOut`: `id`, `seiri_no`, `seiban`, `panel_name`, `analysis_status`
 (`not_analyzed / analyzing / needs_review / confirmed`)。
@@ -123,6 +123,7 @@ Frontend側`estimateAggregationReal.ts`が`detections`×`estimate_master_items`�
 |---|---|---|---|
 | GET | `/api/products/search` | 製番の前方一致検索(`q`必須、`limit`任意) | `ProductSearchOut` |
 | GET | `/api/products/{product_no}` | 製番の存在確認 | `ProductInfoOut` |
+| GET | `/api/products/{product_no}/header` | ヘッダー(整理番号・盤名称)の製番別データ。製番フォルダの`design.csv`だけから作る読み取り専用API。`project_info`は参照しない。データの無い項目は`null`(画面は「—」)。`status`: `ok`(該当行あり) / `empty`(該当行なし) / `missing`(ファイルなし) / `invalid`(CP932でない・必要な列なし等)。存在しない製番は404、例外文言・実パスは応答に含めない | `ProductHeaderOut` |
 | GET | `/api/products/{product_no}/drawings` | ページ一覧(サムネイルURL・盤領域`panels[]`込み) | `list[ProductDrawingOut]` |
 | GET | `/api/products/{product_no}/drawings/{page_no}/file` | PDF実ファイル配信 | `application/pdf` |
 | GET | `/api/products/{product_no}/drawings/{page_no}/thumbnail` | PNGサムネイル配信 | `image/png` |
@@ -139,6 +140,8 @@ Frontend側`estimateAggregationReal.ts`が`detections`×`estimate_master_items`�
 
 `ProductSearchOut`: `matches: string[]`, `truncated: bool`。
 `ProductInfoOut`: `product_no`, `exists`, `ccv_resolved`。
+`ProductHeaderOut`: `product_no`, `seiri_no`(`design.csv`の「整理番号」列。「製番」列が開いている製番と一致する行のうち最頻値、英字は大文字化。無ければ`null`),
+`panel_name`(製番単位の盤名称にあたる列が出力データに無いため、現状は常に`null`), `status`。
 `ProductDrawingOut`: `page_no`, `thumbnail_url`, `drawing_type`, `drawing_name`,
 `panels: PanelPreviewOut[]`(`page_no`/`ban_menno`/`ban_no`/`ban_meisyou`/`ban_type`/
 `ban_h1/h2/w/d`/`normalized_rect`)。

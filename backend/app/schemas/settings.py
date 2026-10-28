@@ -31,6 +31,17 @@ class ProductInfoOut(BaseModel):
     ccv_resolved: bool
 
 
+class ProductHeaderOut(BaseModel):
+    """ヘッダー(整理番号・製番・盤名称)の製番別データ。製番フォルダの`design.csv`だけから作る(読み取り専用)。
+    `seiri_no`/`panel_name`はデータが無ければ`null`(画面は「—」)。`status`: ok / empty / missing / invalid。
+    例外文言・実パスは含めない。"""
+
+    product_no: str
+    seiri_no: str | None = None
+    panel_name: str | None = None
+    status: str
+
+
 class NormalizedRectOut(BaseModel):
     x: float
     y: float
