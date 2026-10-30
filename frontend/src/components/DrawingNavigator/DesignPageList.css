@@ -63,29 +63,6 @@
   background: #dbeafe;
 }
 
-/* 書類カードの下の「PDFを開く」(元PDFの閲覧。カードの選択=中央のプレビュー表示とは別操作)。 */
-.design-page-list__document-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.design-page-list__document-pdf {
-  align-self: flex-end;
-  font: inherit;
-  font-size: 0.78rem;
-  color: #3730a3;
-  background: #e0e7ff;
-  border: 1px solid #a5b4fc;
-  border-radius: 4px;
-  padding: 0.1rem 0.5rem;
-  cursor: pointer;
-}
-
-.design-page-list__document-pdf:hover {
-  background: #c7d2fe;
-}
-
 .design-page-list__document:hover {
   border-color: #3b82f6;
 }
