@@ -46,7 +46,8 @@
   align-items: stretch;
   gap: 0.45rem;
   /* 縮めない: 縮めるとカードの中身がグリッドからはみ出し、下の盤一覧に重なる(実ブラウザで確認)。
-     長い内容は各カードの高さ上限+カード内スクロールで見る。 */
+     各カードは内容の全行が見える高さまで広がる(内部スクロール・高さ上限なし)。パネル全体が画面高を
+     超える場合は、パネル外側(`.floating-panel__body`)の縦スクロールで見る。 */
   flex: 0 0 auto;
   margin-bottom: 0.4rem;
 }
@@ -57,9 +58,7 @@
 
 .panel-info__summary-card {
   min-width: 0;
-  /* カードの高さ上限。超える内容(箱体型式の表・鋼材の構成部一覧)はカード内でスクロールする。 */
-  max-height: min(20rem, 40vh);
-  overflow-y: auto;
+  /* 高さは内容どおり(上限・内部スクロールなし)。2 カードは grid の stretch で高さが揃う。 */
   border: 1px solid #d7e0ea;
   border-radius: 6px;
   background: #fff;
@@ -88,6 +87,7 @@
   font-size: 0.78rem;
   border: 0;
   overflow: visible;
+  overflow-y: visible;
 }
 
 .panel-info__summary-grid .box-type-detail__symbol {
@@ -98,22 +98,19 @@
   min-height: 0;
   max-height: none;
   overflow: visible;
+  overflow-y: visible;
 }
 
 .panel-info__summary-grid .steel-section__body {
   max-height: none;
   overflow: visible;
+  overflow-y: visible;
 }
 
 /* 狭い画面では、2カードを縦に並べる(各カードの内容が窮屈にならないように)。 */
 @media (max-width: 960px) {
   .panel-info__summary-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  /* 縦に2枚並ぶぶん、1枚あたりの高さ上限を下げ、盤一覧が画面外へ押し出されないようにする。 */
-  .panel-info__summary-card {
-    max-height: min(12rem, 26vh);
   }
 }
 
@@ -307,6 +304,7 @@
   color: inherit;
   font: inherit;
   overflow: visible;
+  overflow-y: visible;
   white-space: nowrap;
 }
 

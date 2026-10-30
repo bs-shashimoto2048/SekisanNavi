@@ -892,6 +892,42 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
     expect(listScroll.className).not.toContain('panel-info__list-scroll--compact')
   })
 
+  it('lets 箱体型式 and 鋼材 grow to their full content height: no max-height and no internal scrollbar on either card (the outer panel body scrolls instead)', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel({ model: 'IS2', box_type_analysis: makeBoxTypeAnalysis() })]}
+        steel={{
+          status: 'ok',
+          source_page: '5',
+          source_drawing_name: '外形図(2)',
+          items: Array.from({ length: 40 }, (_, i) => ({
+            symbol_name: 'S',
+            cabtype: 'IS2',
+            component_name: `部品${i}`,
+            material_spec: 'TEST-MAT',
+          })),
+        }}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    const cards = document.querySelectorAll<HTMLElement>('.panel-info__summary-card')
+    expect(cards).toHaveLength(2)
+    for (const card of cards) {
+      const style = getComputedStyle(card)
+      expect(style.maxHeight).toBe('none')
+      expect(['visible', '']).toContain(style.overflowY)
+    }
+    for (const sel of ['.steel-section__body', '.box-type-detail', '.box-type-detail__table-scroll']) {
+      const el = document.querySelector<HTMLElement>(sel)
+      if (el) expect(getComputedStyle(el).overflowY).toBe('visible')
+    }
+    expect(screen.getAllByTestId('steel-group').length).toBeGreaterThan(0)
+    expect(screen.getByText('部品39')).toBeInTheDocument() // 全行が DOM にあり、隠されない
+  })
+
   it.each([
     ['外形図なし', { status: 'no_outline', source_page: null, source_drawing_name: null, items: [] } as SteelOutline],
     ['読み込み失敗', { status: 'invalid', source_page: null, source_drawing_name: null, items: [] } as SteelOutline],
