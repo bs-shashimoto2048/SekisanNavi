@@ -134,12 +134,12 @@ describe('busbarCodes: 一致なし・複数一致・未完了', () => {
   it('provides the display details (品名/型式/定格/コード) for a unique record', () => {
     const r = BUSBAR_DATA.find((x) => x.code === '44241')!
     expect(detailsOf(r)).toEqual([
-      ['品名', '入力（主回路銅帯）'],
-      ['型式', '3×30  L=2.6m×3本'],
-      ['定格', '1Φ 10kVA　公共建築 (225A)'],
       ['コード', '44241'],
+      ['品名', '入力（主回路銅帯）'],
+      ['型式', '3×30 L=2.6m×3本'],
+      ['定格', '1Φ 10kVA 公共建築 (225A)'],
     ])
     const r3 = BUSBAR_DATA.find((x) => x.code === '44815')!
-    expect(detailsOf(r3)[2]).toEqual(['定格', '3Φ 100kVA 200V級　標準仕様 (307A)'])
+    expect(detailsOf(r3)[3]).toEqual(['定格', '3Φ 100kVA 200V級 標準仕様 (307A)'])
   })
 })

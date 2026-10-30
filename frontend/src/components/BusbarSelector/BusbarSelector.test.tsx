@@ -11,6 +11,7 @@ function Harness({ face = '1', initial }: { face?: string; initial?: BusbarRow[]
 
 const select = (name: string) => screen.getByRole('combobox', { name }) as HTMLSelectElement
 const pick = (name: string, value: string) => fireEvent.change(select(name), { target: { value } })
+const summaryText = () => (document.querySelector('.busbar-selector__summary')?.textContent ?? '').replace(/\s+/g, ' ').replace(/(コード|品名|型式|定格)/g, '')
 const optionTexts = (name: string) => [...select(name).options].map((o) => o.textContent)
 
 describe('BusbarSelector', () => {
@@ -28,15 +29,27 @@ describe('BusbarSelector', () => {
   it('narrows the candidates step by step and shows 区分なし（1Φ） for 1Φ', () => {
     render(<Harness />)
     pick('面1 銅帯1 仕様', '公共建築')
-    expect(optionTexts('面1 銅帯1 相数')).toEqual(['選択してください', '1Φ', '3Φ'])
+    expect(optionTexts('面1 銅帯1 相数')).toEqual(['選択', '1Φ', '3Φ'])
     pick('面1 銅帯1 相数', '1Φ')
-    expect(optionTexts('面1 銅帯1 電圧区分')).toEqual(['選択してください', '区分なし（1Φ）'])
+    expect(optionTexts('面1 銅帯1 電圧区分')).toEqual(['選択', '区分なし（1Φ）'])
     pick('面1 銅帯1 電圧区分', '—')
     expect(optionTexts('面1 銅帯1 容量（kVA）')).toContain('10')
     pick('面1 銅帯1 容量（kVA）', '10')
     expect(document.querySelector('.busbar-selector__code')?.textContent).toBe('44241')
-    expect(document.querySelector('.busbar-selector__spec')?.textContent).toBe('公共建築')
-    expect(screen.getByText('3×30 L=2.6m×3本')).toBeInTheDocument()
+    // 選定結果は「コード｜品名｜型式｜定格」の 1 行。
+    expect(summaryText()).toBe('44241｜入力（主回路銅帯）｜3×30 L=2.6m×3本｜1Φ 10kVA 公共建築 (225A)')
+  })
+
+  it('shows the result as a single line 「コード｜品名｜型式｜定格」 and lays the four selects out in one nowrap-label row', () => {
+    render(<Harness />)
+    pick('面1 銅帯1 仕様', '標準仕様')
+    pick('面1 銅帯1 相数', '3Φ')
+    pick('面1 銅帯1 電圧区分', '200V級')
+    pick('面1 銅帯1 容量（kVA）', '100')
+    expect(summaryText()).toBe('44815｜入力（主回路銅帯）｜3×30 L=3.9m×3本｜3Φ 100kVA 200V級 標準仕様 (307A)')
+    expect(document.querySelector('.busbar-selector__summary')?.children).toHaveLength(4)
+    expect(document.querySelector('.busbar-selector__code')?.textContent).toBe('44815')
+    expect(document.querySelectorAll('.busbar-selector__fields > .busbar-selector__field')).toHaveLength(4)
   })
 
   it('resets later stages when an earlier stage changes, hiding the code', () => {

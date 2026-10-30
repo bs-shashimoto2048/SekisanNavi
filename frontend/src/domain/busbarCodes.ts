@@ -158,12 +158,13 @@ export function statusOf(selection: BusbarSelection): BusbarStatus {
   return { kind: 'unique', record: matched[0] }
 }
 
-/** 一意に決まったレコードの表示項目(DataviewJS の表と同じ内容)。 */
+/** 一意に決まったレコードの表示項目(選定結果の 1 行表示の順: コード｜品名｜型式｜定格)。 */
 export function detailsOf(r: BusbarRecord): Array<[string, string]> {
+  const voltage = r.voltage === VOLTAGE_NONE ? '' : ` ${r.voltage}`
   return [
-    ['品名', '入力（主回路銅帯）'],
-    ['型式', `${r.size}  L=${r.length}m×3本`],
-    ['定格', `${r.phase} ${r.kva}kVA${r.voltage === VOLTAGE_NONE ? '' : ' ' + r.voltage}　${r.spec} (${r.amp}A)`],
     ['コード', r.code],
+    ['品名', '入力（主回路銅帯）'],
+    ['型式', `${r.size} L=${r.length}m×3本`],
+    ['定格', `${r.phase} ${r.kva}kVA${voltage} ${r.spec} (${r.amp}A)`],
   ]
 }

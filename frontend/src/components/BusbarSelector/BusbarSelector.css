@@ -51,7 +51,7 @@
   box-sizing: border-box;
   max-width: 100%;
   margin-bottom: 0.4rem;
-  padding: 0.4rem 0.5rem;
+  padding: 0.3rem 0.35rem;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
@@ -73,33 +73,36 @@
 .busbar-selector__fields {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem 0.5rem;
+  align-items: flex-end;
+  gap: 0.3rem 0.6rem;
 }
 
+/* 4 つの選択欄は均等幅にせず、選択肢に必要な幅(width: auto)で 1 行に並べる。
+   ラベルは折り返さず(nowrap)、親の幅に収まらないときだけ欄ごと次の行へ折り返す。 */
 .busbar-selector__field {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  flex: 1 1 7.5rem;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
 }
 
 .busbar-selector__label {
   font-size: 0.72rem;
   font-weight: 600;
   color: #475569;
+  white-space: nowrap;
 }
 
 .busbar-selector__field select {
   box-sizing: border-box;
-  width: 100%;
+  width: auto;
   max-width: 100%;
   min-width: 0;
   min-height: 1.9rem;
   padding: 0.2rem 0.35rem;
   font-size: 0.8rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -110,7 +113,7 @@
 .busbar-selector__result {
   margin-top: 0.35rem;
   min-width: 0;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   overflow-wrap: anywhere;
 }
 
@@ -124,49 +127,49 @@
   font-weight: 600;
 }
 
-.busbar-selector__code-line {
+/* 選定結果は「コード｜品名｜型式｜定格」を 1 行にまとめる。各項目は折り返さず、パネルが狭いときだけ
+   項目の区切りで次の行へ折り返す(値は省略しない)。項目名は読み上げ用で、画面上は表示しない。 */
+.busbar-selector__summary {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.2rem 0.6rem;
+  gap: 0;
+  margin: 0;
 }
 
-.busbar-selector__code-label {
-  color: #64748b;
-  font-size: 0.72rem;
+.busbar-selector__item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere; /* 1 項目だけで幅を超えるときだけ折り返す */
+}
+
+.busbar-selector__item-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.busbar-selector__item dd {
+  margin: 0;
+}
+
+/* 区切り「｜」は全角幅(1em)のため、前後の余白を持たせず詰める。 */
+.busbar-selector__sep {
+  letter-spacing: -0.1em;
+  color: #94a3b8;
 }
 
 .busbar-selector__code {
-  font-size: 1.15rem;
+  font-size: 0.92rem;
   font-weight: 700;
   color: #1d4ed8;
 }
 
-.busbar-selector__spec {
-  padding: 0 0.4rem;
-  font-size: 0.74rem;
-  color: #1e3a8a;
-  background: #dbeafe;
-  border-radius: 999px;
-}
-
-.busbar-selector__details {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 0.1rem 0.6rem;
-  margin: 0.25rem 0 0;
-}
-
-.busbar-selector__detail {
-  display: contents;
-}
-
-.busbar-selector__details dt {
-  color: #64748b;
-}
-
-.busbar-selector__details dd {
-  margin: 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
+.busbar-selector__value {
+  color: #1f2937;
 }

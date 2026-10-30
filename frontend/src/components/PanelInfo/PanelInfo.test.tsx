@@ -1005,7 +1005,7 @@ describe('PanelInfo: 主回路銅帯の選択欄は1面(ban_menno)につき1つ�
     selectFace1('1')
     const codes = () => [...document.querySelectorAll('.busbar-selector__code')].map((e) => e.textContent)
     expect(codes()).toEqual(['44815'])
-    expect(screen.getByText('標準仕様', { selector: '.busbar-selector__spec' })).toBeInTheDocument()
+    expect(document.querySelector('.busbar-selector__summary')?.textContent).toContain('標準仕様 (307A)')
     // 面2は未選択のまま。
     expect((screen.getByRole('combobox', { name: '面2 銅帯1 仕様' }) as HTMLSelectElement).value).toBe('')
     fireEvent.click(getRow('パネルB'))

@@ -85,7 +85,7 @@ export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
                       aria-label={`${rowLabel} ${label}`}
                       onChange={(e) => onChange(updateRow(rows, row.id, selectStep(row.selection, i, e.target.value)))}
                     >
-                      <option value="">選択してください</option>
+                      <option value="">選択</option>
                       {options.map((o) => (
                         <option key={o} value={o}>
                           {displayValue(key, o)}
@@ -98,23 +98,21 @@ export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
             </div>
             <div className="busbar-selector__result" aria-live="polite" data-status={status.kind}>
               {status.kind === 'unique' ? (
-                <>
-                  <div className="busbar-selector__code-line">
-                    <span className="busbar-selector__code-label">コード</span>
-                    <span className="busbar-selector__code">{status.record.code}</span>
-                    <span className="busbar-selector__spec">{status.record.spec}</span>
-                  </div>
-                  <dl className="busbar-selector__details">
-                    {detailsOf(status.record)
-                      .filter(([name]) => name !== 'コード')
-                      .map(([name, text]) => (
-                        <div className="busbar-selector__detail" key={name}>
-                          <dt>{name}</dt>
-                          <dd>{text}</dd>
-                        </div>
-                      ))}
-                  </dl>
-                </>
+                <dl className="busbar-selector__summary" aria-label="選定結果">
+                  {detailsOf(status.record).map(([name, text], k) => (
+                    <div className="busbar-selector__item" key={name}>
+                      {k > 0 && (
+                        <span className="busbar-selector__sep" aria-hidden="true">
+                          ｜
+                        </span>
+                      )}
+                      <dt className="busbar-selector__item-name">{name}</dt>
+                      <dd className={k === 0 ? 'busbar-selector__code' : 'busbar-selector__value'} title={`${name}: ${text}`}>
+                        {text}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
               ) : (
                 <span className="busbar-selector__message">{message}</span>
               )}
