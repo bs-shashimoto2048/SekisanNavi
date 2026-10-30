@@ -928,6 +928,73 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
     expect(screen.getByText('部品39')).toBeInTheDocument() // 全行が DOM にあり、隠されない
   })
 
+  describe('箱体型式と鋼材の開閉は互いに独立', () => {
+    function renderBoth() {
+      return render(
+        <PanelInfo
+          panel={null}
+          panels={[makeProductPanel()]}
+          estimatePanels={[makeEstimatePanel({ model: 'IS2', box_type_analysis: makeBoxTypeAnalysis() })]}
+          steel={{
+            status: 'ok',
+            source_page: '5',
+            source_drawing_name: '外形図(2)',
+            items: Array.from({ length: 12 }, (_, i) => ({ symbol_name: 'S', cabtype: 'IS2', component_name: `部品${i}`, material_spec: 'TEST-MAT' })),
+          }}
+          selectedPanel={null}
+          onSelectPanel={() => {}}
+        />,
+      )
+    }
+    const box = () => screen.getByRole('button', { name: /箱体型式/ })
+    const steel = () => screen.getByRole('button', { name: /鋼材/ })
+    const state = () => [box().getAttribute('aria-expanded'), steel().getAttribute('aria-expanded')]
+
+    it('starts with both open (current behaviour) and shows all rows', () => {
+      renderBoth()
+      expect(state()).toEqual(['true', 'true'])
+      expect(screen.getByText('部品11')).toBeInTheDocument()
+      expect(document.querySelector('.box-type-detail__symbol')).not.toBeNull()
+    })
+
+    it('can fold both at the same time', () => {
+      renderBoth()
+      fireEvent.click(box())
+      fireEvent.click(steel())
+      expect(state()).toEqual(['false', 'false'])
+      expect(screen.queryByText('部品11')).not.toBeInTheDocument()
+      expect(document.querySelector('.box-type-detail__symbol')).toBeNull()
+    })
+
+    it('keeps only 箱体型式 open / only 鋼材 open, and toggling one never changes the other', () => {
+      renderBoth()
+      fireEvent.click(steel()) // 箱体型式だけ開
+      expect(state()).toEqual(['true', 'false'])
+      expect(document.querySelector('.box-type-detail__symbol')).not.toBeNull()
+      expect(screen.queryByText('部品0')).not.toBeInTheDocument()
+      fireEvent.click(box()) // 両方閉
+      expect(state()).toEqual(['false', 'false'])
+      fireEvent.click(steel()) // 鋼材だけ開
+      expect(state()).toEqual(['false', 'true'])
+      expect(screen.getByText('部品11')).toBeInTheDocument()
+      expect(document.querySelector('.box-type-detail__symbol')).toBeNull()
+      fireEvent.click(steel()) // 鋼材を閉じても箱体型式(閉)は変わらない
+      expect(state()).toEqual(['false', 'false'])
+      fireEvent.click(box())
+      expect(state()).toEqual(['true', 'false'])
+    })
+
+    it('keeps the cards without max-height / internal scroll when reopened, and the folded card is not stretched', () => {
+      renderBoth()
+      fireEvent.click(box())
+      fireEvent.click(box())
+      for (const card of document.querySelectorAll<HTMLElement>('.panel-info__summary-card')) {
+        expect(getComputedStyle(card).maxHeight).toBe('none')
+        expect(['visible', '']).toContain(getComputedStyle(card).overflowY)
+      }
+    })
+  })
+
   it.each([
     ['外形図なし', { status: 'no_outline', source_page: null, source_drawing_name: null, items: [] } as SteelOutline],
     ['読み込み失敗', { status: 'invalid', source_page: null, source_drawing_name: null, items: [] } as SteelOutline],

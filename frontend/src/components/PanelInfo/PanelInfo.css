@@ -65,6 +65,12 @@
   padding: 0.35rem;
 }
 
+/* 折り畳んだカードは見出しの高さだけにする(開いている側に高さを揃えて引き伸ばさない)。
+   2 カードの開閉は互いに独立で、両方折り畳むと見出しだけの 2 枚が横に並ぶ。 */
+.panel-info__summary-card:has(> h3 button[aria-expanded='false']) {
+  align-self: start;
+}
+
 .panel-info__summary-heading {
   margin: 0 0 0.25rem;
   font-size: 0.85rem;
