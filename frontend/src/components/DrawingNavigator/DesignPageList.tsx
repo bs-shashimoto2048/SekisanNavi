@@ -21,8 +21,14 @@ interface Props {
   totalCount?: number
   /** 製番を選んだ直後で、まだ表示する図面を選んでいない間はtrue。図面は出さず、選択を促す。 */
   awaitingSelection?: boolean
-  /** 最上段の書類を開く(PDFを表示する)。指定しなければ、書類の欄は出さない。書類は図面の選択(表示 N / M 件)の対象外。 */
+  /** 最上段の書類のPDFを開く。書類カードの「PDFを開く」ボタン(`onSelectDocument`があるとき)、または
+   * カード自体(`onSelectDocument`が無いとき)の操作で呼ばれる。`onSelectDocument`・`onOpenDocument`のどちらも
+   * 指定しなければ、書類の欄は出さない。書類は図面の選択(表示 N / M 件)の対象外。 */
   onOpenDocument?: (document: DesignDocument) => void
+  /** 書類カードの選択。指定すると、カードを選ぶと中央に表示用プレビュー画像を表示する(PDFは別操作の「PDFを開く」)。 */
+  onSelectDocument?: (document: DesignDocument) => void
+  /** 選択中の書類のキー(`0_S0` / `0_A1`)。 */
+  selectedDocumentKey?: string | null
   /** 書類PDFから作成した表示用PNG。無い場合は書類カード内に固定プレースホルダーを出す。 */
   documentThumbnailUrl?: (key: string) => string
 }
@@ -83,6 +89,8 @@ export function DesignPageList({
   totalCount,
   awaitingSelection = false,
   onOpenDocument,
+  onSelectDocument,
+  selectedDocumentKey = null,
   documentThumbnailUrl,
 }: Props) {
   const listRef = useRef<HTMLUListElement>(null)
@@ -110,7 +118,7 @@ export function DesignPageList({
       : designPages.items.filter((i) => i.inference_page_no != null && visiblePageNos.has(i.inference_page_no))
 
   // 最上段の書類(共通製作仕様書 → 設計作図完了シート。サーバーが返す順のまま)。無い書類は項目を出さない
-  const documents = onOpenDocument ? (designPages.documents ?? []) : []
+  const documents = onOpenDocument || onSelectDocument ? (designPages.documents ?? []) : []
 
   return (
     <nav className="drawing-navigator design-page-list" aria-label="design.csv の図面一覧">
@@ -118,20 +126,32 @@ export function DesignPageList({
       {documents.length > 0 && (
         <ul className="design-page-list__documents" aria-label="書類">
           {documents.map((doc) => (
-            <li key={doc.key}>
+            <li key={doc.key} className="design-page-list__document-item">
               <button
                 type="button"
-                className="design-page-list__document"
+                className={`design-page-list__document${selectedDocumentKey === doc.key ? ' design-page-list__document--selected' : ''}`}
                 data-design-document={doc.key}
-                onClick={() => onOpenDocument?.(doc)}
-                title={`${doc.label}(PDF)を開く`}
+                aria-pressed={onSelectDocument ? selectedDocumentKey === doc.key : undefined}
+                onClick={() => (onSelectDocument ?? onOpenDocument)?.(doc)}
+                title={onSelectDocument ? `${doc.label}の表示用プレビューを中央に表示` : `${doc.label}(PDF)を開く`}
               >
                 {documentThumbnailUrl && <DocumentThumb key={doc.key} label={doc.label} src={documentThumbnailUrl(doc.key)} />}
                 <span className="design-page-list__document-meta">
                   <span className="design-page-list__document-name">{doc.label}</span>
-                  <span className="design-page-list__badge design-page-list__badge--document">PDF</span>
+                  {!onSelectDocument && <span className="design-page-list__badge design-page-list__badge--document">PDF</span>}
                 </span>
               </button>
+              {onSelectDocument && onOpenDocument && (
+                <button
+                  type="button"
+                  className="design-page-list__document-pdf"
+                  data-design-document-pdf={doc.key}
+                  onClick={() => onOpenDocument(doc)}
+                  title={`${doc.label}の元PDFを開く`}
+                >
+                  PDFを開く
+                </button>
+              )}
             </li>
           ))}
         </ul>

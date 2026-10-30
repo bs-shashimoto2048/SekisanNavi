@@ -93,6 +93,35 @@ describe('design documents (共通製作仕様書 / 設計作図完了シート)
   })
 })
 
+describe('書類カードの選択(中央のプレビュー表示)と「PDFを開く」は別操作', () => {
+  it('selecting a card calls onSelectDocument only; the PDF opens only through 「PDFを開く」', () => {
+    const onSelectDocument = vi.fn()
+    const onOpenDocument = vi.fn()
+    renderList(pages([item()], [SPEC, CHECK]), { onSelectDocument, onOpenDocument })
+    fireEvent.click(document.querySelector('[data-design-document="0_S0"]') as HTMLElement)
+    expect(onSelectDocument).toHaveBeenCalledWith(SPEC)
+    expect(onOpenDocument).not.toHaveBeenCalled()
+    fireEvent.click(document.querySelector('[data-design-document-pdf="0_A1"]') as HTMLElement)
+    expect(onOpenDocument).toHaveBeenCalledWith(CHECK)
+    expect(onSelectDocument).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks the selected document and nothing else', () => {
+    renderList(pages([item()], [SPEC, CHECK]), { onSelectDocument: () => {}, selectedDocumentKey: '0_A1' })
+    expect(document.querySelector('[data-design-document="0_A1"]')).toHaveAttribute('aria-pressed', 'true')
+    expect(document.querySelector('[data-design-document="0_S0"]')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('shows 「画像なし」 for a document whose preview image fails to load, without breaking the list', () => {
+    renderList(pages([item()], [SPEC, CHECK]), { onSelectDocument: () => {} })
+    const img = document.querySelector('[data-design-document="0_S0"] img') as HTMLImageElement
+    fireEvent.error(img)
+    expect(within(document.querySelector('[data-design-document="0_S0"]') as HTMLElement).getByText('画像なし')).toBeInTheDocument()
+    expect(document.querySelector('[data-design-document="0_A1"] img')).not.toBeNull()       // 他の書類・図面は影響を受けない
+    expect(document.querySelector('[data-design-key="1"]')).not.toBeNull()
+  })
+})
+
 describe('DesignDocumentModal', () => {
   it('shows the PDF through the dedicated document route (never the page-number route)', () => {
     render(<DesignDocumentModal productNo="A1TEST01" document={SPEC} onClose={() => {}} />)

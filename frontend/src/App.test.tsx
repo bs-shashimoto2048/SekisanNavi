@@ -442,6 +442,12 @@ vi.mock('./api/client', () => ({
   designPageImageUrl: vi.fn(
     (productNo: string, key: string) => `/api/products/${productNo}/design-pages/${encodeURIComponent(key)}/image`,
   ),
+  designDocumentImageUrl: vi.fn(
+    (productNo: string, key: string) => `/api/products/${productNo}/design-documents/${encodeURIComponent(key)}/image`,
+  ),
+  designDocumentFileUrl: vi.fn(
+    (productNo: string, key: string) => `/api/products/${productNo}/design-documents/${encodeURIComponent(key)}/file`,
+  ),
   fetchMasterItems: vi.fn(async () => masterItems),
   // [Issue #40 Phase 5] 積算集約・積算明細の正本。`liveDetectionsById`の現在状態
   // (BBox作成/移動/削除・Undo/Redo反映後)から都度導出する。
@@ -3429,6 +3435,88 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
     await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
     expect(screen.queryByText(/表示用プレビュー/)).not.toBeInTheDocument()
     expect(screen.getByText('外形図(P16)')).toBeInTheDocument()
+  })
+
+  describe('書類(0_S0 / 0_A1)は、選ぶと中央に表示用プレビュー画像を出す(PDFは別操作)', () => {
+    const SPEC = { key: '0_S0', kind: 'spec_sheet', label: '共通製作仕様書' }
+    const CHECK = { key: '0_A1', kind: 'check_sheet', label: '設計作図完了シート' }
+
+    async function useDocuments() {
+      const { fetchDesignPages } = await import('./api/client')
+      vi.mocked(fetchDesignPages).mockResolvedValue({
+        status: 'ok',
+        items: designItems as never,
+        skipped_rows: 0,
+        documents: [SPEC, CHECK],
+      } as never)
+    }
+    const card = (key: string) => document.querySelector(`[data-design-document="${key}"]`) as HTMLElement
+
+    it('shows the 0_S0 / 0_A1 preview PNG in the centre (no PDF viewer), without overlays', async () => {
+      await useDocuments()
+      render(<App />)
+      await confirmPicker()
+      await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+      await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+
+      fireEvent.click(card('0_S0'))
+      await waitFor(() => expect(screen.getByText('共通製作仕様書(表示用プレビュー)')).toBeInTheDocument())
+      expect(screen.getByTestId('drawing-canvas-stub')).toHaveAttribute(
+        'data-file-url',
+        '/api/products/A1GV2421/design-documents/0_S0/image',
+      )
+      expect(document.querySelectorAll('.product-panel-overlay__area')).toHaveLength(0)
+      expect(card('0_S0')).toHaveAttribute('aria-pressed', 'true')
+      expect(card('0_A1')).toHaveAttribute('aria-pressed', 'false')
+      expect(listItem('16')).not.toHaveAttribute('aria-current')
+      expect(screen.queryByRole('dialog', { name: '共通製作仕様書' })).not.toBeInTheDocument() // PDFビューアは開かない
+
+      fireEvent.click(card('0_A1'))
+      await waitFor(() => expect(screen.getByText('設計作図完了シート(表示用プレビュー)')).toBeInTheDocument())
+      expect(screen.getByTestId('drawing-canvas-stub')).toHaveAttribute(
+        'data-file-url',
+        '/api/products/A1GV2421/design-documents/0_A1/image',
+      )
+    })
+
+    it('opens the original PDF only through the separate 「PDFを開く」 action and keeps the preview selected', async () => {
+      await useDocuments()
+      render(<App />)
+      await confirmPicker()
+      await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+      fireEvent.click(card('0_S0'))
+      await waitFor(() => expect(screen.getByText('共通製作仕様書(表示用プレビュー)')).toBeInTheDocument())
+
+      fireEvent.click(document.querySelector('[data-design-document-pdf="0_S0"]') as HTMLElement)
+      const dialog = await screen.findByRole('dialog', { name: '共通製作仕様書' })
+      expect(within(dialog).getByTitle('共通製作仕様書のPDF').getAttribute('src')).toBe(
+        '/api/products/A1GV2421/design-documents/0_S0/file',
+      )
+      fireEvent.click(within(dialog).getByRole('button', { name: '閉じる' }))
+      expect(screen.getByText('共通製作仕様書(表示用プレビュー)')).toBeInTheDocument()
+    })
+
+    it('returns to the normal behaviour when a drawing page is selected: an inference page keeps its overlays, a non-inference page shows its cropped preview', async () => {
+      await useDocuments()
+      render(<App />)
+      await confirmPicker()
+      await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+      fireEvent.click(card('0_S0'))
+      await waitFor(() => expect(screen.getByText('共通製作仕様書(表示用プレビュー)')).toBeInTheDocument())
+
+      fireEvent.click(listItem('01'))                                   // 推論対象外の図面 → 表示用プレビュー
+      await waitFor(() => expect(screen.getByText('質量計算書(ページ番号 01・表示用プレビュー)')).toBeInTheDocument())
+      expect(screen.getByTestId('drawing-canvas-stub')).toHaveAttribute('data-file-url', '/api/products/A1GV2421/design-pages/01/image')
+      expect(card('0_S0')).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.queryByText('共通製作仕様書(表示用プレビュー)')).not.toBeInTheDocument()
+
+      fireEvent.click(card('0_A1'))
+      await waitFor(() => expect(screen.getByText('設計作図完了シート(表示用プレビュー)')).toBeInTheDocument())
+      fireEvent.click(listItem('16'))                                   // 推論対象 → 従来どおり(盤領域Overlayあり)
+      await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+      expect(screen.getByText('外形図(P16)')).toBeInTheDocument()
+      expect(screen.queryByText(/設計作図完了シート\(表示用プレビュー\)/)).not.toBeInTheDocument()
+    })
   })
 
   it('shows a fixed message (no overlays, no canvas) for a page whose display image has not been created', async () => {
