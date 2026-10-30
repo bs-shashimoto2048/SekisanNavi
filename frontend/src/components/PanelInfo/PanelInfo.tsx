@@ -2,16 +2,22 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import type {
   AttributeSource,
   EstimatePanelInfo,
-  MaterialRow,
   Panel,
   PanelPreview,
   SteelOutline,
 } from '../../types/domain'
-import { MaterialInfo } from './MaterialInfo'
 import { SteelSection } from './SteelSection'
 import { banGroupKey, panelKey } from '../../utils/panel'
 import { useAutoFitGridColumns } from '../../hooks/useAutoFitGridColumns'
-import { CopperBusCodeSelector } from '../CopperBusCodeSelector/CopperBusCodeSelector'
+import { BusbarSelector } from '../BusbarSelector/BusbarSelector'
+import {
+  loadSelections,
+  rowsOf,
+  saveSelections,
+  setFaceRows,
+  type BusbarRow,
+  type BusbarRowsByFace,
+} from '../../domain/busbarSelections'
 import { BoxTypeDetail } from './BoxTypeDetail'
 import './PanelInfo.css'
 
@@ -47,9 +53,8 @@ interface Props {
   /** 製番全体のestcode_df.csv行 (ページに依存しない。Phase 1.14)。panelsの
    * 各行とban_menno/ban_noで突き合わせる。 */
   estimatePanels: EstimatePanelInfo[]
-  /** 製番全体の材料一覧 (material.csv。ページに依存しない)。省略時は材料情報の欄自体を出さない
-   * (既存の呼び出し・テストへの影響を避けるため)。空配列なら「材料情報なし」を表示する。 */
-  materials?: MaterialRow[]
+  /** 表示中の製番。主回路銅帯の選択を製番ごとに保存・再表示するために使う(省略時は保存しない)。 */
+  productNo?: string
   /** 外形図の鋼材データ (折りたたみの「鋼材」欄。選択ページに依存しない)。省略時は欄自体を出さない。null=取得中。 */
   steel?: SteelOutline | null
   /** 中央Viewerで現在選択中の盤 (Phase 1.9)。 */
@@ -243,7 +248,7 @@ export function PanelInfo({
   panel,
   panels,
   estimatePanels,
-  materials,
+  productNo,
   steel,
   selectedPanel,
   onSelectPanel,
@@ -264,7 +269,20 @@ export function PanelInfo({
 
   // 添付の盤情報画面に合わせ、上段の箱体型式・鋼材は初期表示で展開する。
   const [isBoxTypeExpanded, setIsBoxTypeExpanded] = useState(true)
-  const [isMaterialsExpanded, setIsMaterialsExpanded] = useState(false)
+
+  // 主回路銅帯の選択(面ごとの複数行)。製番ごとにブラウザーへ保存し、再表示で復元する。
+  // 製番が変わったときは、その製番の保存内容を読み直す(render中の state 調整)。
+  const [busbarRows, setBusbarRows] = useState<BusbarRowsByFace>(() => loadSelections(productNo))
+  const [busbarProductNo, setBusbarProductNo] = useState(productNo)
+  if (busbarProductNo !== productNo) {
+    setBusbarProductNo(productNo)
+    setBusbarRows(loadSelections(productNo))
+  }
+  function changeBusbarRows(face: string, rows: BusbarRow[]) {
+    const next = setFaceRows(busbarRows, face, rows)
+    setBusbarRows(next)
+    saveSelections(productNo, next)
+  }
 
   // [Issue #40 追加修正: 表カラム幅の共通自動調整] 各行(button)が独立した
   // grid containerのため、`grid-template-columns`に固定pxを個別チューニング
@@ -351,7 +369,7 @@ export function PanelInfo({
     // cardsはpanels/estimatePanels/selectedPanelから毎回新しい配列として
     // 作られるため、依存には実際に高さ/幅へ影響する値のみを列挙する。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panels, estimatePanels, materials, steel, isBoxTypeExpanded, boxTypeModel, boxTypeAnalysis, onNaturalSizeChange])
+  }, [panels, estimatePanels, busbarRows, steel, isBoxTypeExpanded, boxTypeModel, boxTypeAnalysis, onNaturalSizeChange])
 
   return (
     <section className="panel-info" ref={gridRef}>
@@ -452,17 +470,18 @@ export function PanelInfo({
                         {cells.connect}
                       </span>
                     </button>
-                    {/* 主回路銅帯コード選択(Issue #40 Phase 6-H)。銅帯コードは1面
-                        (ban_menno)につき1つ選択する運用のため、盤(ban_no)ごとには
-                        複製せず、その面の代表行(最初に現れた盤、
-                        `copperSelectorAnchorKeyByMenno`)でのみ1つ描画する。
-                        `<button>`の外(sibling)に置くため、盤選択のクリック領域・
-                        cell数(6列)・列幅計測(`data-auto-col`)には影響しない。
-                        材料情報(`MaterialInfo`)・鋼材(`SteelSection`)とは別データ
-                        (積算マスタの銅帯候補)であり、読み取り専用で積算確定・
-                        BBox追加対象とも連動しない。 */}
+                    {/* 主回路銅帯の選択(仕様→相数→電圧区分→容量の4段階)。銅帯は面
+                        (ban_menno)ごとに選ぶ運用のため、盤(ban_no)ごとには複製せず、
+                        その面の代表行(最初に現れた盤、`copperSelectorAnchorKeyByMenno`)
+                        でのみ描画する。面ごとに独立した複数行を持ち(＋で追加・個別削除)、
+                        `<button>`の外(sibling)に置くため、盤選択のクリック領域・cell数
+                        (6列)・列幅計測(`data-auto-col`)には影響しない。 */}
                     {copperSelectorAnchorKeyByMenno.get(card.panel.ban_menno) === card.key && (
-                      <CopperBusCodeSelector panelLabel={String(card.panel.ban_menno)} />
+                      <BusbarSelector
+                        faceLabel={String(card.panel.ban_menno)}
+                        rows={rowsOf(busbarRows, String(card.panel.ban_menno))}
+                        onChange={(rows) => changeBusbarRows(String(card.panel.ban_menno), rows)}
+                      />
                     )}
                   </li>
                 )
@@ -496,20 +515,6 @@ export function PanelInfo({
         </>
       )}
 
-      {materials !== undefined && (
-        <section className="panel-info__materials-disclosure" aria-label="材料情報">
-          <button
-            type="button"
-            className="panel-info__materials-toggle"
-            aria-expanded={isMaterialsExpanded}
-            onClick={() => setIsMaterialsExpanded((expanded) => !expanded)}
-          >
-            <span>{isMaterialsExpanded ? '▾' : '▸'}</span>
-            材料情報
-          </button>
-          {isMaterialsExpanded && <MaterialInfo materials={materials} showHeading={false} />}
-        </section>
-      )}
     </section>
   )
 }

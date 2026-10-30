@@ -1,0 +1,172 @@
+/* 主回路銅帯(入力)コード選定UI。盤一覧の下(以前の材料情報の場所)に、面ごとに 1 つ配置する。
+   狭いパネルでも横にはみ出さないよう、選択欄は折り返し(flex-wrap)・縮小可能(min-width: 0)にし、
+   長い選択肢は省略表示(text-overflow)にする。 */
+.busbar-selector {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0.35rem 0 0.4rem;
+  padding: 0.35rem 0 0;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.busbar-selector__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.busbar-selector__title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #334155;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.busbar-selector__add,
+.busbar-selector__remove {
+  flex: 0 0 auto;
+  min-width: 1.8rem;
+  height: 1.7rem;
+  padding: 0 0.45rem;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: #1e3a8a;
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.busbar-selector__remove {
+  color: #991b1b;
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.busbar-selector__row {
+  box-sizing: border-box;
+  max-width: 100%;
+  margin-bottom: 0.4rem;
+  padding: 0.4rem 0.5rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.busbar-selector__row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+.busbar-selector__row-title {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.busbar-selector__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.5rem;
+}
+
+.busbar-selector__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1 1 7.5rem;
+  min-width: 0;
+}
+
+.busbar-selector__label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.busbar-selector__field select {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 1.9rem;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.busbar-selector__field select:disabled {
+  opacity: 0.5;
+}
+
+.busbar-selector__result {
+  margin-top: 0.35rem;
+  min-width: 0;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.busbar-selector__message {
+  color: #64748b;
+}
+
+.busbar-selector__result[data-status='none'] .busbar-selector__message,
+.busbar-selector__result[data-status='multiple'] .busbar-selector__message {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.busbar-selector__code-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.6rem;
+}
+
+.busbar-selector__code-label {
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.busbar-selector__code {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.busbar-selector__spec {
+  padding: 0 0.4rem;
+  font-size: 0.74rem;
+  color: #1e3a8a;
+  background: #dbeafe;
+  border-radius: 999px;
+}
+
+.busbar-selector__details {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.1rem 0.6rem;
+  margin: 0.25rem 0 0;
+}
+
+.busbar-selector__detail {
+  display: contents;
+}
+
+.busbar-selector__details dt {
+  color: #64748b;
+}
+
+.busbar-selector__details dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
