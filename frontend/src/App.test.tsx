@@ -429,7 +429,6 @@ vi.mock('./api/client', () => ({
   // 固定fixtureを返す (右ペイン連動テストが意味のある値で検証できるようにする)。
   fetchEstimatePanels: vi.fn(async () => estimatePanelsFixture),
   // material.csv由来の材料一覧。既存テストへの影響を避けるため既定では空配列(材料情報なし)。
-  fetchMaterials: vi.fn(async () => []),
   fetchSteelOutline: vi.fn(async () => ({ status: 'missing', source_page: null, source_drawing_name: null, items: [] })),
   // ヘッダー(整理番号・盤名称)の製番別データ。既定ではデータ無し(missing → ヘッダーは「—」)。
   fetchProductHeader: vi.fn(async (productNo: string) => ({
@@ -3229,51 +3228,6 @@ describe('App: detected_df.csv由来の検出BBoxプレビュー (Phase 1.12)', 
     // 既定モック(fetchDetectedPreview)は空配列を返すため、検出BBoxは1件も出ない。
     expect(document.querySelector('.detected-preview-overlay__bbox')).not.toBeInTheDocument()
     // かつエラーバナーも出ない (指示書26章/27章)。
-    expect(document.querySelector('.app-layout__error')).not.toBeInTheDocument()
-  })
-})
-
-describe('App: 材料情報 (material.csv。設計データの*.boxspec由来)', () => {
-  afterEach(async () => {
-    vi.clearAllMocks()
-    const { fetchMaterials } = await import('./api/client')
-    vi.mocked(fetchMaterials).mockImplementation(async () => [])
-  })
-
-  it('shows "材料情報なし" in the panel info when the product has no material.csv rows (旧データ互換)', async () => {
-    render(<App />)
-    await screen.findByRole('img', { name: 'P16' })
-    fireEvent.click(await screen.findByRole('button', { name: /材料情報/ }))
-    expect(await screen.findByText('材料情報なし')).toBeInTheDocument()
-  })
-
-  it('shows the material rows grouped by page/symbol/cabtype, distinguishing 無し and 未記載', async () => {
-    const { fetchMaterials } = await import('./api/client')
-    vi.mocked(fetchMaterials).mockImplementation(async () => [
-      { page: '301', source_file: '301.boxspec', symbol_name: 'BSP-STEELA-H', cabtype: 'TYPE-X', component_code: 'STEEL-SIDE', component_name: '側板', material_spec: '無し' },
-      { page: '301', source_file: '301.boxspec', symbol_name: 'BSP-STEELA-H', cabtype: 'TYPE-X', component_code: 'STEEL-ROOF', component_name: '屋根・天井板', material_spec: '未記載' },
-    ])
-    render(<App />)
-
-    await waitFor(() => expect(fetchMaterials).toHaveBeenCalledWith('A1GV2421'))
-    fireEvent.click(await screen.findByRole('button', { name: /材料情報/ }))
-    expect(await screen.findByText('ページ 301')).toBeInTheDocument()
-    expect(screen.getByText('型式 TYPE-X')).toBeInTheDocument()
-    expect(screen.getByText('無し')).toHaveAttribute('data-spec-kind', 'nothing')
-    expect(screen.getByText('未記載')).toHaveAttribute('data-spec-kind', 'not_described')
-    expect(screen.queryByText('材料情報なし')).not.toBeInTheDocument()
-  })
-
-  it('does not break the screen or show an error banner when the material fetch fails', async () => {
-    const { fetchMaterials } = await import('./api/client')
-    vi.mocked(fetchMaterials).mockImplementation(async () => {
-      throw new Error('boom')
-    })
-    render(<App />)
-
-    expect(await screen.findByRole('img', { name: 'P16' })).toBeInTheDocument()
-    fireEvent.click(await screen.findByRole('button', { name: /材料情報/ }))
-    expect(await screen.findByText('材料情報なし')).toBeInTheDocument()
     expect(document.querySelector('.app-layout__error')).not.toBeInTheDocument()
   })
 })

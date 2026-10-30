@@ -46,7 +46,8 @@
   align-items: stretch;
   gap: 0.45rem;
   /* 縮めない: 縮めるとカードの中身がグリッドからはみ出し、下の盤一覧に重なる(実ブラウザで確認)。
-     長い内容は各カードの高さ上限+カード内スクロールで見る。 */
+     各カードは内容の全行が見える高さまで広がる(内部スクロール・高さ上限なし)。パネル全体が画面高を
+     超える場合は、パネル外側(`.floating-panel__body`)の縦スクロールで見る。 */
   flex: 0 0 auto;
   margin-bottom: 0.4rem;
 }
@@ -57,9 +58,7 @@
 
 .panel-info__summary-card {
   min-width: 0;
-  /* カードの高さ上限。超える内容(箱体型式の表・鋼材の構成部一覧)はカード内でスクロールする。 */
-  max-height: min(20rem, 40vh);
-  overflow-y: auto;
+  /* 高さは内容どおり(上限・内部スクロールなし)。2 カードは grid の stretch で高さが揃う。 */
   border: 1px solid #d7e0ea;
   border-radius: 6px;
   background: #fff;
@@ -88,6 +87,7 @@
   font-size: 0.78rem;
   border: 0;
   overflow: visible;
+  overflow-y: visible;
 }
 
 .panel-info__summary-grid .box-type-detail__symbol {
@@ -98,22 +98,19 @@
   min-height: 0;
   max-height: none;
   overflow: visible;
+  overflow-y: visible;
 }
 
 .panel-info__summary-grid .steel-section__body {
   max-height: none;
   overflow: visible;
+  overflow-y: visible;
 }
 
 /* 狭い画面では、2カードを縦に並べる(各カードの内容が窮屈にならないように)。 */
 @media (max-width: 960px) {
   .panel-info__summary-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  /* 縦に2枚並ぶぶん、1枚あたりの高さ上限を下げ、盤一覧が画面外へ押し出されないようにする。 */
-  .panel-info__summary-card {
-    max-height: min(12rem, 26vh);
   }
 }
 
@@ -183,23 +180,6 @@
   min-height: 7.5rem;
   overflow-y: auto;
   overflow-x: auto;
-}
-
-.panel-info__materials-disclosure {
-  flex-shrink: 0;
-  margin-top: 0.35rem;
-  border-top: 1px solid #e5e7eb;
-  padding-top: 0.25rem;
-}
-
-.panel-info__materials-toggle {
-  border: 0;
-  background: transparent;
-  color: #334155;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0.2rem 0;
 }
 
 /* 盤一覧 (Issue #38 Phase 2でカラム型1行一覧へ再設計)。ul自体の既定装飾
@@ -324,6 +304,7 @@
   color: inherit;
   font: inherit;
   overflow: visible;
+  overflow-y: visible;
   white-space: nowrap;
 }
 
@@ -359,67 +340,6 @@
   color: #9ca3af;
   text-align: right;
   white-space: nowrap;
-}
-
-/* 材料情報 (material.csv。盤情報floating panelの下段)。盤情報の一覧を押しのけないよう、
-   高さに上限を設けて内部でスクロールする。 */
-.material-info {
-  flex-shrink: 0;
-  margin-top: 0.4rem;
-  border-top: 1px solid #e5e7eb;
-  padding-top: 0.3rem;
-}
-
-.material-info__heading {
-  margin: 0 0 0.2rem;
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--panel-accent-fg);
-}
-
-.material-info__empty {
-  font-size: 0.92rem;
-  color: #9ca3af;
-  margin: 0;
-}
-
-.material-info__scroll {
-  max-height: 11rem;
-  overflow-y: auto;
-}
-
-.material-info__group + .material-info__group {
-  margin-top: 0.35rem;
-}
-
-.material-info__group-title {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem 0.8rem;
-  font-size: 0.86rem;
-  font-weight: 600;
-  color: #374151;
-  background: #f3f4f6;
-  padding: 0.1rem 0.4rem;
-}
-
-.material-info__table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.86rem;
-}
-
-.material-info__table th,
-.material-info__table td {
-  text-align: left;
-  padding: 0.05rem 0.4rem;
-  border-bottom: 1px solid #f3f4f6;
-}
-
-.material-info__table th {
-  font-weight: 500;
-  color: #4b5563;
-  width: 45%;
 }
 
 /* 未記載(.boxspecに記載なし)は薄い灰色+斜体、無し(明示値)は濃い色で太字にして区別する。 */

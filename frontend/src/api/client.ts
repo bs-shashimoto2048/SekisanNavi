@@ -142,14 +142,6 @@ export function fetchMasterItems(params: { q?: string; category?: string }): Pro
   return getJson(`/api/master-items${qs ? `?${qs}` : ''}`)
 }
 
-// 主回路銅帯コード選択UI (Issue #40 Phase 6-H) 向け候補一覧。
-// 仕様区分(品名)→型式→定格の絞り込みはこの関数が返す一覧をFrontend側
-// (CopperBusCodeSelector)で行う。BBox追加対象の選択(fetchMasterItems経由)
-// とは完全に独立しており、呼び出してもBBox追加対象は変化しない。
-export function fetchCopperBusCodeOptions(): Promise<EstimateMasterItem[]> {
-  return getJson('/api/master-items/copper-bus-code-options')
-}
-
 // Manual BBox登録 (Phase 1.6)。
 export function createManualDetection(input: ManualDetectionCreateInput): Promise<Detection> {
   return sendJson('/api/detections', 'POST', input)
