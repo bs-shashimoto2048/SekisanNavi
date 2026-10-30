@@ -76,7 +76,6 @@ import { ProjectHeader } from './components/ProjectHeader/ProjectHeader'
 import { DrawingNavigator } from './components/DrawingNavigator/DrawingNavigator'
 import { DesignPageList } from './components/DrawingNavigator/DesignPageList'
 import { DesignPagePicker } from './components/DrawingNavigator/DesignPagePicker'
-import { DesignDocumentModal } from './components/DrawingNavigator/DesignDocumentModal'
 import { designPagesFallbackNote } from './utils/designPagesNote'
 import { loadExcludedKeys, saveExcludedKeys, selectedItems } from './utils/designSelection'
 import { DrawingViewer } from './components/DrawingViewer/DrawingViewer'
@@ -211,8 +210,9 @@ function App() {
   //   ダイアログを出す」ための印(一覧の取得後に1回だけ使う)
   const [designExcluded, setDesignExcluded] = useState<Set<string>>(() => new Set())
   const [designConfirmed, setDesignConfirmed] = useState(false)
-  // 図面一覧の最上段の書類(共通製作仕様書・設計作図完了シート)のPDFを開いている間の書類(閉じるとnull)。製番が変わったら閉じる
-  const [openDocument, setOpenDocument] = useState<DesignDocument | null>(null)
+  // 一覧で選んでいる書類(`0_S0`/`0_A1`)のキー。選ぶと、中央に書類の表示用プレビュー画像(`__preview.png`)を出す
+  // 通常の図面のカードと同じ操作。図面ページを選んだ・製番が変わったらnull。
+  const [selectedDocumentKey, setSelectedDocumentKey] = useState<string | null>(null)
   const [isDesignPickerOpen, setDesignPickerOpen] = useState(false)
   const pickerOnNextLoadRef = useRef(false)
   // URLから復元した製番が実在しなかった場合の既定製番への自動fallbackは、
@@ -506,7 +506,7 @@ function App() {
   // (例外文言・実パスを画面へ出さない)。
   useEffect(() => {
     setDesignPages(null)
-    setOpenDocument(null) // 製番が変わったら、開いていた書類のPDFは閉じる
+    setSelectedDocumentKey(null)
     if (activeProductNo == null) return
     let cancelled = false
     fetchDesignPages(activeProductNo)
@@ -572,6 +572,17 @@ function App() {
     }
     return visibleDesignItems.find((i) => i.key === selectedDesignKey) ?? null
   }, [useDesignList, designConfirmed, visibleDesignItems, selectedProductPageNo, selectedDesignKey])
+
+  // 図面ページの選択が変わったら(一覧のクリック・積算明細からの根拠図面ジャンプ等、どの経路でも)、書類の選択は外す。
+  useEffect(() => {
+    setSelectedDocumentKey(null)
+  }, [selectedProductPageNo, selectedDesignKey])
+
+  // 選択中の書類(一覧の書類カード)。図面の選択を確定した後だけ有効。
+  const selectedDocument = useMemo<DesignDocument | null>(() => {
+    if (!useDesignList || !designConfirmed || selectedDocumentKey == null) return null
+    return (designPages?.documents ?? []).find((d) => d.key === selectedDocumentKey) ?? null
+  }, [useDesignList, designConfirmed, selectedDocumentKey, designPages])
 
   // 一覧とページ一覧の両方が揃ってから、選択を整える(一覧の取得前・ページ一覧の既定選択との競合を避ける)。
   // - 選択中のページが推論用PNGのある行ならそのまま
@@ -769,8 +780,8 @@ function App() {
   }, [selectedDetectionId, detections])
 
   const activeProductPage = useMemo(
-    () => productPages.find((p) => p.page_no === selectedProductPageNo) ?? null,
-    [productPages, selectedProductPageNo],
+    () => (selectedDocument != null ? null : productPages.find((p) => p.page_no === selectedProductPageNo) ?? null),
+    [productPages, selectedProductPageNo, selectedDocument],
   )
 
   // design.csv基準の一覧で、推論用PNGの無い行(表示用プレビュー・画像なし)を選んでいるとき。
@@ -780,24 +791,32 @@ function App() {
   // Legacy drawings API excludes page 0 because 0.pdf historically collided with a document.
   // The design-pages keyed endpoint is safe for inference page 0 and can render it without overlays.
   const zeroInferenceItem =
+    selectedDocument == null &&
     selectedDesignItem?.mode === 'inference' &&
     selectedDesignItem.inference_page_no === 0 &&
     activeProductPage == null
       ? selectedDesignItem
       : null
-  const isDesignPreview = designPreviewItem != null
+  // 書類(0_S0/0_A1)を選んでいるときも、推論用の座標系のオーバーレイは出さない表示用プレビューとして扱う
+  const isDesignPreview = designPreviewItem != null || selectedDocument != null
   const designPreviewImageUrl =
-    designPreviewItem != null && designPreviewItem.mode === 'preview'
+    selectedDocument != null
+      ? designDocumentImageUrl(activeProductNo, selectedDocument.key)
+      : designPreviewItem != null && designPreviewItem.mode === 'preview'
       ? designPageImageUrl(activeProductNo, designPreviewItem.key)
       : null
   const zeroInferenceImageUrl = zeroInferenceItem ? designPageImageUrl(activeProductNo, zeroInferenceItem.key) : null
   const designPreviewLabel =
-    designPreviewItem != null
+    selectedDocument != null
+      ? `${selectedDocument.label}(表示用プレビュー)`
+      : designPreviewItem != null
       ? `${designPreviewItem.drawing_name}(ページ番号 ${designPreviewItem.page_label}${designPreviewImageUrl ? '・表示用プレビュー' : ''})`
       : ''
   // 行ごとに別のCanvasとして扱う(切替時にFit・表示状態を持ち越さない)ため、プレビュー行は一意な負の番号にする
   const viewerPageNo =
-    zeroInferenceItem != null
+    selectedDocument != null
+      ? -(1000 + (designPages?.documents ?? []).findIndex((d) => d.key === selectedDocument.key) + 1)
+      : zeroInferenceItem != null
       ? -(designItems.findIndex((i) => i.key === zeroInferenceItem.key) + 1)
       : designPreviewItem != null
       ? designPreviewImageUrl
@@ -1956,14 +1975,15 @@ function App() {
               {useDesignList ? (
                 <DesignPageList
                   designPages={visibleDesignPages}
-                  selectedKey={selectedDesignItem?.key ?? null}
+                  selectedKey={selectedDocument != null ? null : (selectedDesignItem?.key ?? null)}
                   onSelect={handleSelectDesignPage}
                   thumbnailUrl={(key) => designPageImageUrl(activeProductNo, key)}
                   visiblePageNos={visiblePageNos}
                   onOpenPicker={() => setDesignPickerOpen(true)}
                   totalCount={designItems.length}
                   awaitingSelection={!designConfirmed}
-                  onOpenDocument={setOpenDocument}
+                  onSelectDocument={(doc) => setSelectedDocumentKey(doc.key)}
+                  selectedDocumentKey={selectedDocument?.key ?? null}
                   documentThumbnailUrl={(key) => designDocumentImageUrl(activeProductNo, key)}
                 />
               ) : (
@@ -2165,9 +2185,6 @@ function App() {
         />
       )}
       {isReferencePdfOpen && <ReferencePdfModal onClose={() => setReferencePdfOpen(false)} />}
-      {openDocument && activeProductNo && (
-        <DesignDocumentModal productNo={activeProductNo} document={openDocument} onClose={() => setOpenDocument(null)} />
-      )}
       {isDesignPickerOpen && useDesignList && (
         <DesignPagePicker
           key={activeProductNo}

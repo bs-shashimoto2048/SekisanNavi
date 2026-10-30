@@ -256,11 +256,6 @@ export function designPageImageUrl(productNo: string, key: string): string {
   return `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/design-pages/${encodeURIComponent(key)}/image`
 }
 
-/** 図面一覧の最上段の書類(`0_S0`=共通製作仕様書、`0_A1`=設計作図完了シート)のPDFのURL。図面ページ番号の経路は使わない。 */
-export function designDocumentFileUrl(productNo: string, key: string): string {
-  return `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/design-documents/${encodeURIComponent(key)}/file`
-}
-
 /** 図面一覧の最上段の固定書類(0_S0/0_A1)の表示用サムネイルPNG。 */
 export function designDocumentImageUrl(productNo: string, key: string): string {
   return `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/design-documents/${encodeURIComponent(key)}/image`
@@ -270,7 +265,7 @@ export function designDocumentImageUrl(productNo: string, key: string): string {
  * アプリが保持している他の積算仕様情報を、製番単位でExcel(.xlsx)へ出力する
  * エンドポイントのURL。Backend側が`Content-Disposition: attachment`を返すため、
  * `fetch`でBlob化せずこのURLへそのまま遷移/リンクするだけでブラウザの
- * ダウンロードが始まる(`designDocumentFileUrl`等、他の直リンク系ヘルパーと
+ * ダウンロードが始まる(`productDrawingFileUrl`等、他の直リンク系ヘルパーと
  * 同じ方針)。 */
 export function productExportUrl(productNo: string): string {
   return `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/export`
