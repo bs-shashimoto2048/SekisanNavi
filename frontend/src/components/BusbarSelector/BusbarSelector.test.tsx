@@ -15,7 +15,7 @@ const summaryText = () => (document.querySelector('.busbar-selector__summary')?.
 const optionTexts = (name: string) => [...select(name).options].map((o) => o.textContent)
 
 describe('BusbarSelector', () => {
-  it('starts with all four items unselected, later stages disabled, and no code', () => {
+  it('starts with all four items unselected, later stages disabled, and an empty selected-code cell', () => {
     render(<Harness />)
     for (const label of ['仕様', '相数', '電圧区分', '容量（kVA）']) expect(select(`面1 銅帯1 ${label}`).value).toBe('')
     expect(select('面1 銅帯1 仕様').disabled).toBe(false)
@@ -23,7 +23,8 @@ describe('BusbarSelector', () => {
     expect(select('面1 銅帯1 電圧区分').disabled).toBe(true)
     expect(select('面1 銅帯1 容量（kVA）').disabled).toBe(true)
     expect(document.querySelector('.busbar-selector__code')).toBeNull()
-    expect(screen.getByText('左から順に 4 項目を選択してください。')).toBeInTheDocument()
+    expect(screen.getByText('選定コード')).toBeInTheDocument()
+    expect(document.querySelector('.busbar-selector__code-placeholder')?.textContent).toBe('—')
   })
 
   it('narrows the candidates step by step and shows 区分なし（1Φ） for 1Φ', () => {
@@ -50,6 +51,9 @@ describe('BusbarSelector', () => {
     expect(document.querySelector('.busbar-selector__summary')?.children).toHaveLength(4)
     expect(document.querySelector('.busbar-selector__code')?.textContent).toBe('44815')
     expect(document.querySelectorAll('.busbar-selector__fields > .busbar-selector__field')).toHaveLength(4)
+    expect(document.querySelector('.busbar-selector__row-head')?.textContent).toContain('銅帯 1')
+    expect(document.querySelector('.busbar-selector__code-cell')?.textContent).toContain('44815')
+    expect(document.querySelector('.busbar-selector__result')).toBeInTheDocument()
   })
 
   it('resets later stages when an earlier stage changes, hiding the code', () => {
@@ -74,7 +78,8 @@ describe('BusbarSelector', () => {
     render(
       <Harness initial={[{ id: 'x', selection: { spec: '標準仕様', phase: '1Φ', voltage: '200V級', kva: '100' } }]} />,
     )
-    expect(screen.getByText(/一致するコードがありません/)).toBeInTheDocument()
+    expect(document.querySelector('.busbar-selector__code-placeholder')?.textContent).toBe('該当なし')
+    expect(document.querySelector('.busbar-selector__code-placeholder')?.getAttribute('title')).toContain('一致するコードがありません')
     expect(document.querySelector('.busbar-selector__code')).toBeNull()
   })
 
