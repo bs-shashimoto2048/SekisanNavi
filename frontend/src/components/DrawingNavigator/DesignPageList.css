@@ -58,6 +58,11 @@
   padding: 0.1rem 0.2rem;
 }
 
+.design-page-list__document--selected {
+  border-color: #2563eb;
+  background: #dbeafe;
+}
+
 .design-page-list__document:hover {
   border-color: #3b82f6;
 }

@@ -1,8 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { DesignPageList } from './DesignPageList'
-import { DesignDocumentModal } from './DesignDocumentModal'
-import { designDocumentFileUrl } from '../../api/client'
 import type { DesignDocument, DesignPage, DesignPages } from '../../types/domain'
 
 const SPEC: DesignDocument = { key: '0_S0', kind: 'spec_sheet', label: '共通製作仕様書' }
@@ -24,7 +22,7 @@ function renderList(designPages: DesignPages, over: Partial<Parameters<typeof De
       onSelect={() => {}}
       thumbnailUrl={(k) => `/img/${k}`}
       documentThumbnailUrl={(k) => `/documents/${k}.png`}
-      onOpenDocument={() => {}}
+      onSelectDocument={() => {}}
       {...over}
     />,
   )
@@ -59,23 +57,23 @@ describe('design documents (共通製作仕様書 / 設計作図完了シート)
     expect(document.querySelectorAll('[data-design-document]').length).toBe(0)
   })
 
-  it('does not treat the documents as page numbers: clicking opens the document, not a drawing page', () => {
-    const onOpenDocument = vi.fn()
+  it('does not treat the documents as page numbers: clicking selects the document (like any drawing card), not a drawing page', () => {
+    const onSelectDocument = vi.fn()
     const onSelect = vi.fn()
-    renderList(pages([item()], [SPEC, CHECK]), { onOpenDocument, onSelect })
+    renderList(pages([item()], [SPEC, CHECK]), { onSelectDocument, onSelect })
     fireEvent.click(document.querySelector('[data-design-document="0_A1"]') as HTMLElement)
-    expect(onOpenDocument).toHaveBeenCalledWith(CHECK)
+    expect(onSelectDocument).toHaveBeenCalledWith(CHECK)
     expect(onSelect).not.toHaveBeenCalled()
   })
 
-  it('shows separate lazy PNG thumbnails for each document while retaining the PDF click action', () => {
+  it('shows separate lazy PNG thumbnails for each document', () => {
     renderList(pages([item()], [SPEC, CHECK]))
     const spec = document.querySelector('[data-design-document="0_S0"]') as HTMLButtonElement
     const check = document.querySelector('[data-design-document="0_A1"]') as HTMLButtonElement
     expect(spec.querySelector('img')?.getAttribute('src')).toBe('/documents/0_S0.png')
     expect(check.querySelector('img')?.getAttribute('src')).toBe('/documents/0_A1.png')
     expect(spec.querySelector('img')?.getAttribute('loading')).toBe('lazy')
-    expect(spec).toHaveAttribute('title', '共通製作仕様書(PDF)を開く')
+    expect(spec).toHaveAttribute('title', '共通製作仕様書の表示用プレビューを中央に表示')
   })
 
   it('keeps a normal page 0 row (design.csv) separate from the documents', () => {
@@ -93,19 +91,27 @@ describe('design documents (共通製作仕様書 / 設計作図完了シート)
   })
 })
 
-describe('DesignDocumentModal', () => {
-  it('shows the PDF through the dedicated document route (never the page-number route)', () => {
-    render(<DesignDocumentModal productNo="A1TEST01" document={SPEC} onClose={() => {}} />)
-    const frame = screen.getByTitle('共通製作仕様書のPDF') as HTMLIFrameElement
-    expect(frame.getAttribute('src')).toBe(designDocumentFileUrl('A1TEST01', '0_S0'))
-    expect(frame.getAttribute('src')).toContain('/design-documents/0_S0/file')
-    expect(frame.getAttribute('src')).not.toContain('/drawings/')
+describe('書類カードの選択(通常の図面のカードと同じ操作)', () => {
+  it('has no PDF action: there is exactly one button per document and no 「PDFを開く」', () => {
+    renderList(pages([item()], [SPEC, CHECK]))
+    expect(screen.queryByText('PDFを開く')).toBeNull()
+    expect(document.querySelector('[data-design-document-pdf]')).toBeNull()
+    expect(document.querySelectorAll('[aria-label="書類"] button')).toHaveLength(2)
+    expect(document.querySelector('.design-page-list__badge--document')).toBeNull()
   })
 
-  it('closes with the button and the backdrop only', () => {
-    const onClose = vi.fn()
-    render(<DesignDocumentModal productNo="A1TEST01" document={CHECK} onClose={onClose} />)
-    fireEvent.click(screen.getByRole('button', { name: '閉じる' }))
-    expect(onClose).toHaveBeenCalledTimes(1)
+  it('marks the selected document with aria-current (as the normal drawing cards do) and nothing else', () => {
+    renderList(pages([item()], [SPEC, CHECK]), { selectedDocumentKey: '0_A1' })
+    expect(document.querySelector('[data-design-document="0_A1"]')).toHaveAttribute('aria-current', 'true')
+    expect(document.querySelector('[data-design-document="0_S0"]')).not.toHaveAttribute('aria-current')
+  })
+
+  it('shows 「画像なし」 for a document whose preview image fails to load, without breaking the list', () => {
+    renderList(pages([item()], [SPEC, CHECK]))
+    const img = document.querySelector('[data-design-document="0_S0"] img') as HTMLImageElement
+    fireEvent.error(img)
+    expect(within(document.querySelector('[data-design-document="0_S0"]') as HTMLElement).getByText('画像なし')).toBeInTheDocument()
+    expect(document.querySelector('[data-design-document="0_A1"] img')).not.toBeNull()       // 他の書類・図面は影響を受けない
+    expect(document.querySelector('[data-design-key="1"]')).not.toBeNull()
   })
 })
