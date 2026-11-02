@@ -260,8 +260,8 @@ export function PanelInfo({
 
   // 箱体型式は基本的に外形図から取得し、estimatePanels は製番全体の情報。
   // 選択中ページに型式情報がない場合も、製番内で取得済みの型式を表示し続ける。
-  // 選択中の盤に情報があればそれを優先し、なければ解析結果つきの情報、最後に
-  // 型式文字列だけでも取得できている情報を使う。
+  // 選択中の盤に型式情報があれば(解析結果の有無にかかわらず)それを最優先し、なければ製番内の解析結果つきの情報、
+  // 最後に型式文字列だけでも取得できている情報を使う。
   const selectedEstimatePanel =
     selectedPanel?.panel.ban_no == null
       ? null
@@ -269,11 +269,8 @@ export function PanelInfo({
           (item) => item.ban_menno === selectedPanel.panel.ban_menno && item.ban_no === selectedPanel.panel.ban_no,
         ) ?? null
   const boxTypeEstimatePanel =
-    (selectedEstimatePanel?.model?.trim() && selectedEstimatePanel.box_type_analysis != null
-      ? selectedEstimatePanel
-      : null) ??
-    estimatePanels.find((item) => item.model?.trim() && item.box_type_analysis != null) ??
     (selectedEstimatePanel?.model?.trim() ? selectedEstimatePanel : null) ??
+    estimatePanels.find((item) => item.model?.trim() && item.box_type_analysis != null) ??
     estimatePanels.find((item) => item.model?.trim()) ??
     null
   const boxTypeModel = boxTypeEstimatePanel?.model ?? null

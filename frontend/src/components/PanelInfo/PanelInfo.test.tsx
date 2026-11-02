@@ -887,6 +887,28 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
     expect(screen.getByText('解析済み')).toBeInTheDocument()
   })
 
+  it('prefers the selected panel\'s own model information (even without an analysis) over other panels\' information', () => {
+    const panels = [
+      makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: '他の盤' }),
+      makeProductPanel({ ban_menno: 2, ban_no: 1, ban_meisyou: '選択中の盤' }),
+    ]
+    const estimatePanels = [
+      makeEstimatePanel({ ban_menno: 1, ban_no: 1, ban_meisyou: '他の盤', model: 'OS2', box_type_analysis: makeBoxTypeAnalysis() }),
+      makeEstimatePanel({ ban_menno: 2, ban_no: 1, ban_meisyou: '選択中の盤', model: 'IS2K', box_type_analysis: null }),
+    ]
+    render(
+      <PanelInfo
+        panel={null}
+        panels={panels}
+        estimatePanels={estimatePanels}
+        selectedPanel={{ key: panelKey(panels[1], 1), panel: panels[1] }}
+        onSelectPanel={() => {}}
+      />,
+    )
+    expect(screen.getAllByText('IS2K').length).toBeGreaterThan(0)
+    expect(screen.queryByText('解析済み')).not.toBeInTheDocument()
+  })
+
   it('places 箱体型式 and 鋼材 side by side above the panel list', () => {
     render(
       <PanelInfo
