@@ -20,6 +20,8 @@ import './BusbarSelector.css'
 // 行のリストを props で受け取る制御コンポーネントで、状態の保持・保存は呼び出し側(PanelInfo)が面ごとに行う。
 
 interface Props {
+  /** 面ごとに盤情報の行末トグルから参照するID。 */
+  id?: string
   /** 面の表示ラベル(例: "1")。 */
   faceLabel: string
   rows: BusbarRow[]
@@ -34,9 +36,9 @@ function statusText(selection: BusbarSelection): string | null {
   return null
 }
 
-export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
+export function BusbarSelector({ id, faceLabel, rows, onChange }: Props) {
   return (
-    <section className="busbar-selector" aria-label={`面${faceLabel} 主回路銅帯`}>
+    <section id={id} className="busbar-selector" aria-label={`面${faceLabel} 主回路銅帯`}>
       <div className="busbar-selector__header">
         <span className="busbar-selector__title">面{faceLabel} 主回路銅帯(入力)コード選定</span>
         <button
@@ -54,6 +56,7 @@ export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
         const status = statusOf(row.selection)
         const message = statusText(row.selection)
         const rowLabel = `面${faceLabel} 銅帯${rowIndex + 1}`
+        const selectedCode = status.kind === 'unique' ? status.record.code : null
         return (
           <div className="busbar-selector__row" key={row.id} role="group" aria-label={rowLabel}>
             <div className="busbar-selector__row-head">
@@ -75,7 +78,7 @@ export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
                 const options = optionsFor(i, row.selection)
                 const value = row.selection[key]
                 return (
-                  <label className="busbar-selector__field" key={key}>
+                  <label className="busbar-selector__field" key={key} style={{ gridColumn: i + 2 }}>
                     <span className="busbar-selector__label">
                       {i + 1}. {label}
                     </span>
@@ -96,8 +99,18 @@ export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
                 )
               })}
             </div>
-            <div className="busbar-selector__result" aria-live="polite" data-status={status.kind}>
-              {status.kind === 'unique' ? (
+            <div className="busbar-selector__code-cell" aria-live="polite" data-status={status.kind}>
+              <span className="busbar-selector__label">選定コード</span>
+              {selectedCode ? (
+                <strong className="busbar-selector__code-value">{selectedCode}</strong>
+              ) : (
+                <span className="busbar-selector__code-placeholder" title={message ?? undefined}>
+                  {status.kind === 'none' ? '該当なし' : status.kind === 'multiple' ? '複数一致' : '—'}
+                </span>
+              )}
+            </div>
+            {status.kind === 'unique' && (
+              <div className="busbar-selector__result" data-status={status.kind}>
                 <dl className="busbar-selector__summary" aria-label="選定結果">
                   {detailsOf(status.record).map(([name, text], k) => (
                     <div className="busbar-selector__item" key={name}>
@@ -113,10 +126,8 @@ export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
                     </div>
                   ))}
                 </dl>
-              ) : (
-                <span className="busbar-selector__message">{message}</span>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )
       })}
