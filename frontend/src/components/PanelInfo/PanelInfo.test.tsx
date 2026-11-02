@@ -865,6 +865,28 @@ describe('PanelInfo: 箱体型式タブと鋼材欄 (追加機能)', () => {
     expect(screen.queryByText('OS2')).not.toBeInTheDocument()
   })
 
+  it('keeps displaying product-level box-type data when the selected drawing has no model information', () => {
+    const panels = [
+      makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: '外形図の盤' }),
+      makeProductPanel({ ban_menno: 2, ban_no: 1, ban_meisyou: '選択中の別図面' }),
+    ]
+    const estimatePanels = [
+      makeEstimatePanel({ ban_menno: 1, ban_no: 1, ban_meisyou: '外形図の盤', model: 'OS2', box_type_analysis: makeBoxTypeAnalysis() }),
+      makeEstimatePanel({ ban_menno: 2, ban_no: 1, ban_meisyou: '選択中の別図面', model: null, box_type_analysis: null }),
+    ]
+    render(
+      <PanelInfo
+        panel={null}
+        panels={panels}
+        estimatePanels={estimatePanels}
+        selectedPanel={{ key: panelKey(panels[1], 1), panel: panels[1] }}
+        onSelectPanel={() => {}}
+      />,
+    )
+    expect(screen.getByText('OS2')).toBeInTheDocument()
+    expect(screen.getByText('解析済み')).toBeInTheDocument()
+  })
+
   it('places 箱体型式 and 鋼材 side by side above the panel list', () => {
     render(
       <PanelInfo
@@ -1081,6 +1103,25 @@ describe('PanelInfo: 主回路銅帯の選択欄は1面(ban_menno)につき1つ�
     expect(rowA.querySelector('.busbar-selector')).not.toBeNull()
     expect(rowB.querySelector('.busbar-selector')).toBeNull()
     expect(rowC.querySelector('.busbar-selector')).not.toBeNull()
+  })
+
+  it('puts an independent open/close control at each face row end and preserves selections while folded', () => {
+    renderThreePanels()
+    const face1Toggle = screen.getByRole('button', { name: '面1の銅帯設定を閉じる' })
+    const face2Toggle = screen.getByRole('button', { name: '面2の銅帯設定を閉じる' })
+    expect(face1Toggle.closest('.panel-info__data-line')).not.toBeNull()
+    expect(face1Toggle.closest('.panel-info__data-row')).toBeNull()
+    expect(face1Toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(face2Toggle).toHaveAttribute('aria-expanded', 'true')
+
+    pick('面1 銅帯1 仕様', '標準仕様')
+    fireEvent.click(face1Toggle)
+    expect(screen.queryByRole('region', { name: '面1 主回路銅帯' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '面2 主回路銅帯' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '面1の銅帯設定を開く' })).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
+    expect((screen.getByRole('combobox', { name: '面1 銅帯1 仕様' }) as HTMLSelectElement).value).toBe('標準仕様')
   })
 
   it('starts with all four items unselected and no code shown', () => {
