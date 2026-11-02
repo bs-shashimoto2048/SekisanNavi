@@ -258,14 +258,23 @@ export function PanelInfo({
   const heading = cards.length > 0 ? `図面情報　${cards.length}件` : '図面情報'
   const copperSelectorAnchorKeyByMenno = buildCopperSelectorAnchorKeys(cards)
 
-  // [追加機能: 箱体型式解析] 「箱体型式」タブに表示する型式は、中央Viewerで
-  // 選択中の盤(`isSelected`、既存のハイライト対象と同じ)を優先し、未選択
-  // (ページ読み込み直後等)の場合は一覧の先頭行をフォールバックとして使う
-  // (盤情報テーブル自体が常に何らかの行を表示している以上、型式タブだけ
-  // 空のまま放置しない)。
-  const boxTypeCard = cards.find((c) => c.isSelected) ?? cards[0] ?? null
-  const boxTypeModel = boxTypeCard?.estimatePanel?.model ?? null
-  const boxTypeAnalysis = boxTypeCard?.estimatePanel?.box_type_analysis ?? null
+  // 箱体型式は基本的に外形図から取得し、estimatePanels は製番全体の情報。
+  // 選択中ページに型式情報がない場合も、製番内で取得済みの型式を表示し続ける。
+  // 選択中の盤に型式情報があれば(解析結果の有無にかかわらず)それを最優先し、なければ製番内の解析結果つきの情報、
+  // 最後に型式文字列だけでも取得できている情報を使う。
+  const selectedEstimatePanel =
+    selectedPanel?.panel.ban_no == null
+      ? null
+      : estimatePanels.find(
+          (item) => item.ban_menno === selectedPanel.panel.ban_menno && item.ban_no === selectedPanel.panel.ban_no,
+        ) ?? null
+  const boxTypeEstimatePanel =
+    (selectedEstimatePanel?.model?.trim() ? selectedEstimatePanel : null) ??
+    estimatePanels.find((item) => item.model?.trim() && item.box_type_analysis != null) ??
+    estimatePanels.find((item) => item.model?.trim()) ??
+    null
+  const boxTypeModel = boxTypeEstimatePanel?.model ?? null
+  const boxTypeAnalysis = boxTypeEstimatePanel?.box_type_analysis ?? null
 
   // 添付の盤情報画面に合わせ、上段の箱体型式・鋼材は初期表示で展開する。
   const [isBoxTypeExpanded, setIsBoxTypeExpanded] = useState(true)
@@ -274,14 +283,25 @@ export function PanelInfo({
   // 製番が変わったときは、その製番の保存内容を読み直す(render中の state 調整)。
   const [busbarRows, setBusbarRows] = useState<BusbarRowsByFace>(() => loadSelections(productNo))
   const [busbarProductNo, setBusbarProductNo] = useState(productNo)
+  const [collapsedBusbarFaces, setCollapsedBusbarFaces] = useState<Set<number>>(() => new Set())
   if (busbarProductNo !== productNo) {
     setBusbarProductNo(productNo)
     setBusbarRows(loadSelections(productNo))
+    setCollapsedBusbarFaces(new Set())
   }
   function changeBusbarRows(face: string, rows: BusbarRow[]) {
     const next = setFaceRows(busbarRows, face, rows)
     setBusbarRows(next)
     saveSelections(productNo, next)
+  }
+
+  function toggleBusbarFace(face: number) {
+    setCollapsedBusbarFaces((current) => {
+      const next = new Set(current)
+      if (next.has(face)) next.delete(face)
+      else next.add(face)
+      return next
+    })
   }
 
   // [Issue #40 追加修正: 表カラム幅の共通自動調整] 各行(button)が独立した
@@ -345,9 +365,10 @@ export function PanelInfo({
       if (naturalHeight === 0) return
 
       const headerRow = el.querySelector<HTMLElement>('.panel-info__row--header')
+      const dataLines = Array.from(el.querySelectorAll<HTMLElement>('.panel-info__data-line'))
       const style = window.getComputedStyle(el)
       const paddingX = parseFloat(style.paddingLeft || '0') + parseFloat(style.paddingRight || '0')
-      const naturalTableWidth = headerRow ? headerRow.scrollWidth + paddingX : 0
+      const naturalTableWidth = Math.max(headerRow?.scrollWidth ?? 0, ...dataLines.map((line) => line.scrollWidth)) + paddingX
       const naturalWidth = naturalTableWidth
 
       const last = lastReportedSizeRef.current
@@ -369,7 +390,7 @@ export function PanelInfo({
     // cardsはpanels/estimatePanels/selectedPanelから毎回新しい配列として
     // 作られるため、依存には実際に高さ/幅へ影響する値のみを列挙する。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panels, estimatePanels, busbarRows, steel, isBoxTypeExpanded, boxTypeModel, boxTypeAnalysis, onNaturalSizeChange])
+  }, [panels, estimatePanels, busbarRows, collapsedBusbarFaces, steel, isBoxTypeExpanded, boxTypeModel, boxTypeAnalysis, onNaturalSizeChange])
 
   return (
     <section className="panel-info" ref={gridRef}>
@@ -432,44 +453,59 @@ export function PanelInfo({
                 const cells = buildRowCells(card)
                 return (
                   <li key={card.key} role="row">
-                    <button
-                      type="button"
-                      className={
-                        'panel-info__row panel-info__data-row' +
-                        (card.isSelected ? ' panel-info__row--selected' : '')
-                      }
-                      onClick={() => onSelectPanel(card.key, card.panel)}
-                      aria-pressed={card.isSelected}
-                    >
-                      <span className="panel-info__cell panel-info__cell--menban" role="cell" data-auto-col={0}>
-                        {cells.menban}
-                      </span>
-                      <span
-                        className="panel-info__cell panel-info__cell--name"
-                        role="cell"
-                        title={cells.name}
-                        data-auto-col={1}
+                    <div className="panel-info__data-line">
+                      <button
+                        type="button"
+                        className={
+                          'panel-info__row panel-info__data-row' +
+                          (card.isSelected ? ' panel-info__row--selected' : '')
+                        }
+                        onClick={() => onSelectPanel(card.key, card.panel)}
+                        aria-pressed={card.isSelected}
                       >
-                        {cells.name}
-                      </span>
-                      <span className="panel-info__cell panel-info__cell--height" role="cell" data-auto-col={2}>
-                        {cells.height}
-                      </span>
-                      <span className="panel-info__cell panel-info__cell--width" role="cell" data-auto-col={3}>
-                        {cells.width}
-                      </span>
-                      <span className="panel-info__cell panel-info__cell--depth" role="cell" data-auto-col={4}>
-                        {cells.depth}
-                      </span>
-                      <span
-                        className="panel-info__cell panel-info__cell--connect"
-                        role="cell"
-                        title={cells.connect}
-                        data-auto-col={5}
-                      >
-                        {cells.connect}
-                      </span>
-                    </button>
+                        <span className="panel-info__cell panel-info__cell--menban" role="cell" data-auto-col={0}>
+                          {cells.menban}
+                        </span>
+                        <span
+                          className="panel-info__cell panel-info__cell--name"
+                          role="cell"
+                          title={cells.name}
+                          data-auto-col={1}
+                        >
+                          {cells.name}
+                        </span>
+                        <span className="panel-info__cell panel-info__cell--height" role="cell" data-auto-col={2}>
+                          {cells.height}
+                        </span>
+                        <span className="panel-info__cell panel-info__cell--width" role="cell" data-auto-col={3}>
+                          {cells.width}
+                        </span>
+                        <span className="panel-info__cell panel-info__cell--depth" role="cell" data-auto-col={4}>
+                          {cells.depth}
+                        </span>
+                        <span
+                          className="panel-info__cell panel-info__cell--connect"
+                          role="cell"
+                          title={cells.connect}
+                          data-auto-col={5}
+                        >
+                          {cells.connect}
+                        </span>
+                      </button>
+                      {copperSelectorAnchorKeyByMenno.get(card.panel.ban_menno) === card.key && (
+                        <button
+                          type="button"
+                          className="panel-info__busbar-toggle"
+                          aria-expanded={!collapsedBusbarFaces.has(card.panel.ban_menno)}
+                          aria-controls={`busbar-selector-face-${card.panel.ban_menno}`}
+                          aria-label={`面${card.panel.ban_menno}の銅帯設定を${collapsedBusbarFaces.has(card.panel.ban_menno) ? '開く' : '閉じる'}`}
+                          title={`面${card.panel.ban_menno}の銅帯設定を${collapsedBusbarFaces.has(card.panel.ban_menno) ? '開く' : '閉じる'}`}
+                          onClick={() => toggleBusbarFace(card.panel.ban_menno)}
+                        >
+                          {collapsedBusbarFaces.has(card.panel.ban_menno) ? '▸' : '▾'}
+                        </button>
+                      )}
+                    </div>
                     {/* 主回路銅帯の選択(仕様→相数→電圧区分→容量の4段階)。銅帯は面
                         (ban_menno)ごとに選ぶ運用のため、盤(ban_no)ごとには複製せず、
                         その面の代表行(最初に現れた盤、`copperSelectorAnchorKeyByMenno`)
@@ -477,11 +513,14 @@ export function PanelInfo({
                         `<button>`の外(sibling)に置くため、盤選択のクリック領域・cell数
                         (6列)・列幅計測(`data-auto-col`)には影響しない。 */}
                     {copperSelectorAnchorKeyByMenno.get(card.panel.ban_menno) === card.key && (
-                      <BusbarSelector
-                        faceLabel={String(card.panel.ban_menno)}
-                        rows={rowsOf(busbarRows, String(card.panel.ban_menno))}
-                        onChange={(rows) => changeBusbarRows(String(card.panel.ban_menno), rows)}
-                      />
+                      <div hidden={collapsedBusbarFaces.has(card.panel.ban_menno)}>
+                        <BusbarSelector
+                          id={`busbar-selector-face-${card.panel.ban_menno}`}
+                          faceLabel={String(card.panel.ban_menno)}
+                          rows={rowsOf(busbarRows, String(card.panel.ban_menno))}
+                          onChange={(rows) => changeBusbarRows(String(card.panel.ban_menno), rows)}
+                        />
+                      </div>
                     )}
                   </li>
                 )

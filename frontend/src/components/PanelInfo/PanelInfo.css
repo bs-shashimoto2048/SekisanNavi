@@ -249,6 +249,46 @@
   margin-bottom: 0.15rem;
 }
 
+/* 面ごとの銅帯設定トグルを盤情報の行末尾に配置する。盤選択ボタンとは兄弟要素にし、
+   選択ボタンのクリック領域や6列のセル構造を変えない。 */
+.panel-info__data-line {
+  display: flex;
+  align-items: stretch;
+  width: max-content;
+  min-width: 100%;
+  border-bottom: 1px solid var(--border-cell, #edf1f5);
+}
+
+.panel-info__data-line .panel-info__data-row {
+  flex: 0 0 auto;
+  min-width: 0;
+  border-bottom: 0;
+}
+
+.panel-info__busbar-toggle {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-left: auto;
+  min-width: 1.8rem;
+  height: 1.7rem;
+  padding: 0 0.35rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+}
+
+.panel-info__busbar-toggle:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.panel-info__busbar-toggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
 /* 盤ごとのデータ行 (指示2章: カード感を撤去し、表のrowとして見せる)。
    button要素のまま(クリック可能・キーボード操作性・aria-pressedを
    一切変更しない、Issue #38 Phase 1調査コメント参照)。 */
