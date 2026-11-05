@@ -502,7 +502,7 @@ export function PanelInfo({
                           title={`面${card.panel.ban_menno}の銅帯設定を${collapsedBusbarFaces.has(card.panel.ban_menno) ? '開く' : '閉じる'}`}
                           onClick={() => toggleBusbarFace(card.panel.ban_menno)}
                         >
-                          {collapsedBusbarFaces.has(card.panel.ban_menno) ? '▸' : '▾'}
+                          {collapsedBusbarFaces.has(card.panel.ban_menno) ? '◂' : '▾'}
                         </button>
                       )}
                     </div>
