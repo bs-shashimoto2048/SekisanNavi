@@ -193,6 +193,9 @@ function App() {
   // があれば復元する (Phase 1.11 指示書22章)。
   const [activeProductNo, setActiveProductNo] = useState(getInitialProductNo)
   const [productPages, setProductPages] = useState<ProductDrawing[]>([])
+  // productPagesの取得元の製番。製番切替の取得中・取得失敗時に前の製番の値が残っても、
+  // 現在の製番と一致するときだけ盤情報のフォールバックに使うための印。
+  const [productPagesProductNo, setProductPagesProductNo] = useState<string | null>(null)
   const [productPagesLoading, setProductPagesLoading] = useState(true)
   const [productPagesError, setProductPagesError] = useState<string | null>(null)
   const [selectedProductPageNo, setSelectedProductPageNo] = useState<number | null>(getInitialPageNo)
@@ -229,7 +232,13 @@ function App() {
   const [detectedPreview, setDetectedPreview] = useState<DetectedPreviewItem[]>([])
   // estcode_df.csv (盤ごとの積算コード基本情報) 由来の盤情報 (Phase 1.14)。PAGE列を
   // 持たない製番単位のデータのため、ページ切替では再取得せず、製番切替時のみ取得する。
-  const [estimatePanels, setEstimatePanels] = useState<EstimatePanelInfo[]>([])
+  const [estimatePanelsRaw, setEstimatePanels] = useState<EstimatePanelInfo[]>([])
+  // estimatePanelsRawの取得元の製番(上記productPagesProductNoと同じ目的)。
+  const [estimatePanelsProductNo, setEstimatePanelsProductNo] = useState<string | null>(null)
+  const estimatePanels = useMemo(
+    () => (estimatePanelsProductNo === activeProductNo ? estimatePanelsRaw : []),
+    [estimatePanelsRaw, estimatePanelsProductNo, activeProductNo],
+  )
   // 図面情報の「鋼材」欄(外形図1ページぶん)。製番単位で、ページ切替では再取得しない。取得に失敗しても
   // 他の画面は止めず、欄に固定文言(取得できませんでした)を出す。製番と一緒に持ち、表示時に現在の製番と照合する。
   const [steelState, setSteelState] = useState<{ productNo: string; steel: SteelOutline } | null>(null)
@@ -460,6 +469,7 @@ function App() {
     fetchProductDrawings(activeProductNo)
       .then((drawings) => {
         setProductPages(drawings)
+        setProductPagesProductNo(activeProductNo)
         setSelectedProductPageNo((current) =>
           current != null && drawings.some((d) => d.page_no === current)
             ? current
@@ -481,6 +491,7 @@ function App() {
           return
         }
         setProductPages([])
+        setProductPagesProductNo(null)
         setProductPagesError(describeFetchError(e, '製番の図面一覧を取得できませんでした'))
       })
       .finally(() => setProductPagesLoading(false))
@@ -669,11 +680,13 @@ function App() {
   useEffect(() => {
     if (activeProductNo == null) {
       setEstimatePanels([])
+      setEstimatePanelsProductNo(null)
       return
     }
     fetchEstimatePanels(activeProductNo)
       .then((fetched) => {
         setEstimatePanels(fetched)
+        setEstimatePanelsProductNo(activeProductNo)
         setError(null)
       })
       .catch((e: unknown) => setError(describeFetchError(e, '盤情報を取得できませんでした')))
@@ -854,6 +867,13 @@ function App() {
   const panelsByPageNo = useMemo(
     () => new Map(productPages.map((p) => [p.page_no, p.panels])),
     [productPages],
+  )
+
+  // 現在ページに盤が無いとき、盤情報を消さないための同じ製番内のフォールバック元。
+  // 取得元が現在の製番と一致するデータだけを使い、別の製番の盤は流用しない。
+  const panelInfoFallbackPanels = useMemo(
+    () => (productPagesProductNo === activeProductNo ? productPages.flatMap((p) => p.panels) : []),
+    [productPages, productPagesProductNo, activeProductNo],
   )
 
   const estimateAggregationData = useMemo(
@@ -2067,6 +2087,8 @@ function App() {
                 <PanelInfo
                   panel={panel}
                   panels={activeProductPage?.panels ?? []}
+                  fallbackPanels={panelInfoFallbackPanels}
+                  panelsLoading={productPagesLoading}
                   estimatePanels={estimatePanels}
                   productNo={activeProductNo ?? undefined}
                   steel={steel}

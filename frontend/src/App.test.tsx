@@ -2816,9 +2816,53 @@ describe('App: 盤選択 → 盤情報連動 (Phase 1.9、Issue #19 Phase 4で�
     const foundationThumbnail = await screen.findByRole('img', { name: 'P18' })
     fireEvent.click(foundationThumbnail)
 
-    // P18(基礎図)はfixture上product_df盤を持たないページのため、盤情報は空表示に戻る。
-    await waitFor(() => expect(screen.getByText('このページには図面情報がありません')).toBeInTheDocument())
-    expect(screen.queryByText('高圧受電盤')).not.toBeInTheDocument()
+    // P18(基礎図)はfixture上product_df盤を持たないページのため、選択は解除される。
+    // 盤情報自体は消えず、同じ製番の他の図面(P16)の盤を、選択とは連動しない表示のみの行として出す。
+    await waitFor(() => expect(screen.getByRole('note')).toHaveTextContent('同じ製番'))
+    expect(screen.queryByText('盤情報を取得できません')).not.toBeInTheDocument()
+    expect(getPanelInfoCard('高圧受電盤').className).not.toContain('--selected')
+  })
+
+  it('keeps showing the same-product panel info on a drawing without panels, and never reuses panels of another product', async () => {
+    const { fetchProductDrawings, fetchEstimatePanels } = await import('./api/client')
+    const wasDrawings = vi.mocked(fetchProductDrawings).getMockImplementation()
+    const wasEstimate = vi.mocked(fetchEstimatePanels).getMockImplementation()
+    vi.mocked(fetchProductDrawings).mockImplementation(async (p: string | null) =>
+      p === 'A1LW0626' ? [productPageFoundation] : [productPageFoundation, productPageOutline],
+    )
+    // 切替先の盤情報の取得は完了を遅らせ、取得中に前の製番の盤が残らないことも確認する。
+    let resolveSlow!: (v: EstimatePanelInfo[]) => void
+    const slowEstimate = {
+      promise: new Promise<EstimatePanelInfo[]>((r) => {
+        resolveSlow = r
+      }),
+      resolve: (v: EstimatePanelInfo[]) => resolveSlow(v),
+    }
+    vi.mocked(fetchEstimatePanels).mockImplementation((p: string) =>
+      p === 'A1LW0626' ? slowEstimate.promise : Promise.resolve(estimatePanelsFixture),
+    )
+    try {
+      render(<App />)
+      // 既定選択のP18(盤なし)でも、同じ製番(A1GV2421)の盤情報が表示される。
+      await waitFor(() => expect(screen.getByRole('note')).toHaveTextContent('同じ製番'))
+      expect(within(document.querySelector('.panel-info') as HTMLElement).getByText('高圧受電盤')).toBeInTheDocument()
+
+      // 別の製番へ切り替えると、取得が終わるまでも終わった後も、前の製番の盤は流用されない。
+      fireEvent.click(screen.getByRole('button', { name: '製番を開く' }))
+      fireEvent.change(await screen.findByPlaceholderText('例: A1GV24'), { target: { value: 'A1LW0626' } })
+      fireEvent.click(screen.getByRole('button', { name: '開く' }))
+      await waitFor(() => expect(screen.getByText('製番: A1LW0626')).toBeInTheDocument())
+      const panelInfo = () => document.querySelector('.panel-info') as HTMLElement
+      expect(within(panelInfo()).queryByText('高圧受電盤')).not.toBeInTheDocument()
+      slowEstimate.resolve([])
+      await waitFor(() => expect(within(panelInfo()).getByText('盤情報を取得できません')).toBeInTheDocument())
+      expect(within(panelInfo()).queryByText('高圧受電盤')).not.toBeInTheDocument()
+      // 盤情報が無くてもパネル自体は消えない。
+      expect(within(panelInfo()).getByRole('heading', { name: '図面情報' })).toBeInTheDocument()
+    } finally {
+      if (wasDrawings) vi.mocked(fetchProductDrawings).mockImplementation(wasDrawings)
+      if (wasEstimate) vi.mocked(fetchEstimatePanels).mockImplementation(wasEstimate)
+    }
   })
 
   it('clears the selected panel on a background click without affecting a real Pan drag (要件10)', async () => {
