@@ -3521,6 +3521,111 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
       )
     })
 
+    const panelInfoEl = () => document.querySelector('.panel-info') as HTMLElement
+    const infoRow = (name: string) => within(panelInfoEl()).getByText(name).closest('button') as HTMLElement
+    const rowTexts = () =>
+      Array.from(panelInfoEl().querySelectorAll<HTMLElement>('.panel-info__data-row')).map((r) =>
+        Array.from(r.querySelectorAll('[role="cell"]')).map((c) => c.textContent),
+      )
+
+    it('keeps showing the same-product panel info (from another drawing) in the panel info when 0_S0 is selected, without linking to the viewer selection', async () => {
+      // 製番共通データ(estcode)は空にして、他の図面(P16)の盤だけが表示元になる状態で確認する。
+      const { fetchEstimatePanels } = await import('./api/client')
+      const was = vi.mocked(fetchEstimatePanels).getMockImplementation()
+      vi.mocked(fetchEstimatePanels).mockImplementation(async () => [])
+      try {
+        await useDocuments()
+        render(<App />)
+        await confirmPicker()
+        await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+        await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+        // 盤のある外形図(P16)では、その図面自身の盤が表示され、フォールバックの注記は出ない。
+        fireEvent.click(listItem('16'))
+        await waitFor(() => expect(within(panelInfoEl()).getByText('高圧受電盤')).toBeInTheDocument())
+        expect(within(panelInfoEl()).queryByRole('note')).not.toBeInTheDocument()
+
+        // 0_S0は盤を持たない(activeProductPage=null)が、同じ製番の別図面(P16)の盤情報は消えない。
+        fireEvent.click(card('0_S0'))
+        await waitFor(() => expect(screen.getByText('共通製作仕様書(表示用プレビュー)')).toBeInTheDocument())
+        expect(document.querySelectorAll('.product-panel-overlay__area')).toHaveLength(0)
+        expect(within(panelInfoEl()).getByRole('note')).toHaveTextContent('同じ製番')
+        expect(within(panelInfoEl()).queryByText('盤情報を取得できません')).not.toBeInTheDocument()
+        expect(within(panelInfoEl()).getByRole('heading', { name: /図面情報/ })).toHaveTextContent('2件')
+        expect(rowTexts().map((cells) => cells.slice(0, 2))).toEqual([
+          ['1/1', '高圧受電盤'],
+          ['2/1', '低圧動力盤'],
+        ])
+        // 盤の値は製番内の実データのまま(推測値ではない)。
+        expect(rowTexts()[0].slice(2, 5)).toEqual(['2300', '900', '2200'])
+
+        // フォールバック行は表示のみ。クリックしても盤選択(ハイライト)にはならない。
+        fireEvent.click(infoRow('高圧受電盤'))
+        expect(infoRow('高圧受電盤').className).not.toContain('--selected')
+        expect(infoRow('高圧受電盤')).toHaveAttribute('aria-pressed', 'false')
+        // 書類のまま銅帯設定欄・面ごとの開閉も使える。
+        fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を閉じる' }))
+        expect(screen.getByRole('button', { name: '面1の銅帯設定を開く' })).toHaveTextContent('◂')
+        expect(infoRow('高圧受電盤')).toBeVisible()
+
+      } finally {
+        if (was) vi.mocked(fetchEstimatePanels).mockImplementation(was)
+      }
+    })
+
+    it('fills missing panels from the product-wide estimate data on 0_S0 while keeping the priority: drawing panels, then estimate-only rows, and the page own panels again on a drawing with panels', async () => {
+      const { fetchEstimatePanels } = await import('./api/client')
+      const was = vi.mocked(fetchEstimatePanels).getMockImplementation()
+      vi.mocked(fetchEstimatePanels).mockImplementation(async () => [
+        { ...estimatePanelsFixture[0], ban_w: 910 }, // 製番共通データを優先して表示する値
+        estimatePanelsFixture[1],
+        {
+          model: null,
+          ban_menno: 3,
+          ban_no: 1,
+          ban_meisyou: '共通データ盤',
+          ban_h: null,
+          ban_w: null,
+          ban_d: null,
+          ban_connect: '共通接続',
+          sort_order: 9,
+          box_type_analysis: null,
+        },
+      ])
+      try {
+        await useDocuments()
+        render(<App />)
+        await confirmPicker()
+        await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+        fireEvent.click(card('0_S0'))
+        await waitFor(() => expect(screen.getByText('共通製作仕様書(表示用プレビュー)')).toBeInTheDocument())
+        await waitFor(() => expect(within(panelInfoEl()).getByText('共通データ盤')).toBeInTheDocument())
+
+        const rows = rowTexts()
+        // 並び: 他図面の盤(出現順) → 製番共通データにだけある盤。重複して出ない。
+        expect(rows.map((c) => c.slice(0, 2))).toEqual([
+          ['1/1', '高圧受電盤'],
+          ['2/1', '低圧動力盤'],
+          ['3/1', '共通データ盤'],
+        ])
+        // 同じ盤は製番共通データの値が優先され、無い項目は推測せず"-"。
+        expect(rows[0].slice(2, 5)).toEqual(['2300', '910', '2200'])
+        expect(rows[2]).toEqual(['3/1', '共通データ盤', '-', '-', '-', '共通接続'])
+        expect(within(panelInfoEl()).getByRole('note')).toBeInTheDocument()
+
+        // 盤のある図面(P16)へ戻ると、その図面自身の盤だけが表示される(補完行・注記は出ない)。
+        // (書類の選択は図面キーが変わったときに外れるため、既存テストと同様に別の図面を経由する)
+        fireEvent.click(listItem('01'))
+        await waitFor(() => expect(screen.getByText('質量計算書(ページ番号 01・表示用プレビュー)')).toBeInTheDocument())
+        fireEvent.click(listItem('16'))
+        await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+        await waitFor(() => expect(within(panelInfoEl()).queryByRole('note')).not.toBeInTheDocument())
+        expect(within(panelInfoEl()).queryByText('共通データ盤')).not.toBeInTheDocument()
+        expect(rowTexts().map((c) => c[1])).toEqual(['高圧受電盤', '低圧動力盤'])
+      } finally {
+        if (was) vi.mocked(fetchEstimatePanels).mockImplementation(was)
+      }
+    })
+
     it('returns to the normal behaviour when a drawing page is selected: an inference page keeps its overlays, a non-inference page shows its cropped preview', async () => {
       await useDocuments()
       render(<App />)
