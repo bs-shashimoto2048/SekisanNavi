@@ -1146,6 +1146,38 @@ describe('PanelInfo: 主回路銅帯の選択欄は1面(ban_menno)につき1つ�
     expect((screen.getByRole('combobox', { name: '面1 銅帯1 仕様' }) as HTMLSelectElement).value).toBe('標準仕様')
   })
 
+  it('keeps every panel dimension row visible when a face is folded; only the folded face busbar section hides, and the caret turns left', () => {
+    renderThreePanels()
+    const face1Toggle = screen.getByRole('button', { name: '面1の銅帯設定を閉じる' })
+    const face2Toggle = screen.getByRole('button', { name: '面2の銅帯設定を閉じる' })
+    expect(face1Toggle).toHaveTextContent('▾')
+    expect(face2Toggle).toHaveTextContent('▾')
+
+    fireEvent.click(face1Toggle)
+
+    // 折りたたんだ面の記号だけ左向き(◂)になり、右向き(▸)は使われない。
+    const folded = screen.getByRole('button', { name: '面1の銅帯設定を開く' })
+    expect(folded).toHaveTextContent('◂')
+    expect(folded).not.toHaveTextContent('▸')
+    expect(screen.getByRole('button', { name: '面2の銅帯設定を閉じる' })).toHaveTextContent('▾')
+
+    // 盤寸法の行(面/盤・盤名称・高さ・幅・奥行・接続の6セル)は、折りたたんだ面の
+    // 代表行・同じ面の他の盤・他の面のいずれも表示されたまま。
+    for (const name of ['パネルA', 'パネルB', 'パネルC']) {
+      const row = getRow(name)
+      expect(row).toBeVisible()
+      expect(within(row).getAllByRole('cell')).toHaveLength(6)
+    }
+    // 隠れるのは面1の銅帯設定欄だけ。面2の設定欄・入力値は影響を受けない。
+    expect(screen.queryByRole('region', { name: '面1 主回路銅帯' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '面2 主回路銅帯' })).toBeVisible()
+
+    // 展開すると面1の設定欄が戻り、記号は▾に戻る。
+    fireEvent.click(folded)
+    expect(screen.getByRole('region', { name: '面1 主回路銅帯' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '面1の銅帯設定を閉じる' })).toHaveTextContent('▾')
+  })
+
   it('starts with all four items unselected and no code shown', () => {
     renderThreePanels()
     for (const label of ['仕様', '相数', '電圧区分', '容量（kVA）']) {
