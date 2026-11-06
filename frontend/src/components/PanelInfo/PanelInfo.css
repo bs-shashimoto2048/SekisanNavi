@@ -45,7 +45,6 @@
   /* 箱体型式と鋼材は内容の自然幅で並べ、余った幅を均等配分しない。 */
   grid-template-columns: max-content max-content;
   width: max-content;
-  max-width: 100%;
   align-items: stretch;
   gap: 0.45rem;
   /* 縮めない: 縮めるとカードの中身がグリッドからはみ出し、下の盤一覧に重なる(実ブラウザで確認)。
