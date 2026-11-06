@@ -128,6 +128,7 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
       <PanelInfo
         panel={null}
         panels={[makeProductPanel()]}
+        dimensionSourcePanels={[makeProductPanel()]}
         estimatePanels={[
           makeEstimatePanel({ model: null, ban_meisyou: null, ban_connect: null, ban_h: null, ban_w: null, ban_d: null }),
         ]}
@@ -154,6 +155,7 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
       <PanelInfo
         panel={null}
         panels={[makeProductPanel()]}
+        dimensionSourcePanels={[makeProductPanel()]}
         estimatePanels={[makeEstimatePanel()]}
         selectedPanel={null}
         onSelectPanel={() => {}}
@@ -267,6 +269,7 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
       <PanelInfo
         panel={null}
         panels={[makeProductPanel()]}
+        dimensionSourcePanels={[makeProductPanel()]}
         estimatePanels={[]}
         selectedPanel={null}
         onSelectPanel={() => {}}
@@ -437,6 +440,7 @@ describe('PanelInfo: 高さ表示の5分岐 (Issue #38 Phase 2 指示3章)', () 
       <PanelInfo
         panel={null}
         panels={panels}
+        dimensionSourcePanels={panels}
         estimatePanels={estimatePanels}
         selectedPanel={null}
         onSelectPanel={() => {}}
@@ -506,11 +510,12 @@ describe('PanelInfo: 幅/奥行のfallback (Issue #38 Phase 2 指示4章)', () =
     expect(cells[4].textContent).toBe('2200')
   })
 
-  it('falls back to PanelPreview.ban_w/ban_d when EstimatePanelInfo values are missing', () => {
+  it('falls back to the 外形図・正面図 row (product_df) ban_w/ban_d when EstimatePanelInfo values are missing', () => {
     render(
       <PanelInfo
         panel={null}
         panels={[makeProductPanel({ ban_w: 1900, ban_d: 1200 })]}
+        dimensionSourcePanels={[makeProductPanel({ ban_w: 1900, ban_d: 1200 })]}
         estimatePanels={[makeEstimatePanel({ ban_w: null, ban_d: null })]}
         selectedPanel={null}
         onSelectPanel={() => {}}

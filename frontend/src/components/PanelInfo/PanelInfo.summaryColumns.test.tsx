@@ -6,8 +6,8 @@ import type { PanelPreview } from '../../types/domain'
 
 // 箱体型式と鋼材の列幅は、jsdom ではレイアウトを計算できないため、
 //  (1) 長い材料仕様でも 2 列(箱体型式カード + 鋼材カード)の構造が崩れないこと、
-//  (2) 2 列を「均等幅のグリッド」で定義している CSS の契約、
-// をテストで固定する。実際の列幅(狭い幅・自然幅・最大幅で左右が等しい)は実ブラウザーで確認する。
+//  (2) 2 列を「自然幅(max-content)上限のグリッド」で定義している CSS の契約、
+// をテストで固定する。実際の列幅(自然幅・中間幅・最小幅)は実ブラウザーで測定する。
 
 function cssBlock(selector: string): string {
   const css = panelInfoCss.split(String.fromCharCode(13)).join('')
@@ -27,15 +27,19 @@ function makePanel(): PanelPreview {
   }
 }
 
-describe('PanelInfo: 箱体型式と鋼材は同じ幅の2列で並ぶ', () => {
-  it('keeps the two summary cards as equal-width grid columns, so a long steel spec cannot take width from the box-type card', () => {
+describe('PanelInfo: 箱体型式と鋼材は自然幅で並び、狭いときは両方が折り返す', () => {
+  it('sizes the two summary cards by their own natural width (max-content), not as forced equal-width columns', () => {
     const grid = cssBlock('.panel-info__summary-grid')
     expect(grid).toMatch(/display:\s*grid/)
-    expect(grid).toMatch(/grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/)
-    // 内容量に比例して幅を分ける指定(flex-basis: max-content 等)を使わない。
+    // 各列は 0〜max-content(auto)。短い側を引き伸ばさず、狭いときは空き幅を等分しながら増やして、
+    // 先に自然幅へ届いた側で止まる(長い側が短い側を潰さない)。常時 1fr/1fr の均等幅にはしない。
+    expect(grid).toMatch(/grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*auto\)\)/)
+    expect(grid).not.toMatch(/repeat\(2,\s*minmax\(0,\s*1fr\)\)/)
+    expect(grid).toMatch(/justify-content:\s*start/)
+    // 内容量に比例して幅を分ける指定(flex-basis: max-content 等)や固定幅は使わない。
     expect(cssBlock('.panel-info__summary-card')).not.toMatch(/flex\s*:/)
     expect(cssBlock('.panel-info__summary-card')).toMatch(/min-width:\s*0/)
-    // 鋼材データが無いときの全幅1列も、同じグリッドで表す。
+    // 鋼材データが無いときの全幅1列は、1列のグリッドで表す。
     expect(cssBlock('.panel-info__summary-grid--single')).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)/)
   })
 
