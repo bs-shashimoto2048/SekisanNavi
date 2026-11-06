@@ -63,6 +63,10 @@ describe('FloatingPanel: 図面情報の右下リサイズ', () => {
 
     render(<Harness />)
     const panel = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    const heading = panel.querySelector('h2') as HTMLElement
+    fireEvent.pointerDown(heading, { pointerId: 2, clientX: 300, clientY: 60, button: 0 })
+    fireEvent.pointerMove(heading, { pointerId: 2, clientX: 100, clientY: 60 })
+    fireEvent.pointerUp(heading, { pointerId: 2, clientX: 100, clientY: 60 })
     const handle = panel.querySelector('.floating-panel__resize-handle') as HTMLElement
     expect(handle).toBeInTheDocument()
     expect(panel.querySelector('.floating-panel__width-resize-handle')).toBeNull()
