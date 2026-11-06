@@ -79,6 +79,8 @@ import { DesignPagePicker } from './components/DrawingNavigator/DesignPagePicker
 import { designPagesFallbackNote } from './utils/designPagesNote'
 import { loadExcludedKeys, saveExcludedKeys, selectedItems } from './utils/designSelection'
 import { DrawingViewer } from './components/DrawingViewer/DrawingViewer'
+import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary'
+import './components/ErrorBoundary/ErrorBoundary.css'
 import { PanelInfo } from './components/PanelInfo/PanelInfo'
 import { EstimateAggregation } from './components/EstimateAggregation/EstimateAggregation'
 import { EstimateDetail, type DetailTabFilter } from './components/EstimateDetail/EstimateDetail'
@@ -128,6 +130,13 @@ function isEditableTarget(target: EventTarget | null): boolean {
 // Issue #19 Phase 4: 右ペインは廃止した(盤情報もfloating panel化したため、
 // 右ペイン自体が不要になった)。旧`RIGHT_PANE_*`定数・
 // `sekisan-navi:right-pane-width`のlocalStorageキーは削除済み(残さない)。
+// 子コンポーネントへ渡す「空の配列」は、描画のたびに新しい `[]` を作らず、この定数を共有する。
+// 新しい配列を渡すと、props の参照が毎回変わり、`[detections]` 等を依存にした effect や
+// PanelInfo の自然サイズ計測が App の再描画のたびに走る。表示用プレビュー(design=01 など)で、
+// 計測値が往復すると更新が連鎖して React が「Maximum update depth exceeded」を投げ、
+// アプリ全体が白くなった(2026-11 事案)。
+const EMPTY_LIST: never[] = []
+
 const LEFT_PANE_INITIAL = 260
 const LEFT_PANE_MIN = 140
 const LEFT_PANE_MAX_VW_RATIO = 0.3
@@ -1405,6 +1414,9 @@ function App() {
   // どちらもBBox選択・盤選択などを解除する(別図面へ移動するため)。
   function handleSelectDesignPage(item: DesignPage) {
     designKeyFromUrlRef.current = null
+    // 書類(0_S0/0_A1)の選択は、図面キー/ページが変わったときに外れる(上のeffect)が、書類を選ぶ前に
+    // 選んでいた図面を選び直す場合はキーが変わらずeffectが走らない。一覧の図面クリックでは常に外す。
+    setSelectedDocumentKey(null)
     setSelectedDesignKey(item.key)
     handleSelectPage(item.inference_page_no)
   }
@@ -2045,7 +2057,7 @@ function App() {
                       ? 'この図面の表示用画像は作成されていません'
                       : undefined
                 }
-                panels={isDesignPreview || zeroInferenceItem != null ? [] : (activeProductPage?.panels ?? [])}
+                panels={isDesignPreview || zeroInferenceItem != null ? EMPTY_LIST : (activeProductPage?.panels ?? EMPTY_LIST)}
                 selectedPanelKey={selectedPanel?.key ?? null}
                 onSelectPanel={handleSelectPanel}
                 masterItemById={masterItemById}
@@ -2053,8 +2065,8 @@ function App() {
                 // 見た目(カーソル等)にする(両モードとも排他選択のため、常に
                 // どちらか一方のみがtrueになる)。
                 masterItemSelected={selectedMasterItemId != null || selectedEvidenceTypeKey != null}
-                detectedPreview={isDesignPreview ? [] : detectedPreview}
-                detections={isDesignPreview ? [] : viewerDetections}
+                detectedPreview={isDesignPreview ? EMPTY_LIST : detectedPreview}
+                detections={isDesignPreview ? EMPTY_LIST : viewerDetections}
                 selectedDetectionId={selectedDetectionId}
                 highlightedDetectionId={highlightedDetectionId}
                 onSelectDetection={handleSelectDetection}
@@ -2084,9 +2096,24 @@ function App() {
                 onRectChange={setPanelInfoRect}
                 maxContentSize={panelInfoNaturalSize}
               >
+                <ErrorBoundary
+                  label="panel-info"
+                  resetKeys={[activeProductNo, selectedProductPageNo, selectedDesignKey, selectedDocumentKey]}
+                  fallback={(error, reset) => (
+                    <div className="error-fallback" role="alert">
+                      <p className="error-fallback__title">図面情報を表示できません。</p>
+                      <p className="error-fallback__hint">
+                        図面の表示は継続しています。図面を選び直すか再試行してください。保存済みの設定は消していません({error.message})。
+                      </p>
+                      <button type="button" onClick={reset}>
+                        再試行
+                      </button>
+                    </div>
+                  )}
+                >
                 <PanelInfo
                   panel={panel}
-                  panels={activeProductPage?.panels ?? []}
+                  panels={activeProductPage?.panels ?? EMPTY_LIST}
                   fallbackPanels={panelInfoFallbackPanels}
                   panelsLoading={productPagesLoading}
                   estimatePanels={estimatePanels}
@@ -2096,6 +2123,7 @@ function App() {
                   onSelectPanel={handleSelectPanel}
                   onNaturalSizeChange={setPanelInfoNaturalSize}
                 />
+                </ErrorBoundary>
               </FloatingPanel>
               <FloatingPanel
                 visible={estimateAggregationFloatingVisible}

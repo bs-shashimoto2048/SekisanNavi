@@ -3626,6 +3626,163 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
       }
     })
 
+    it.each([
+      ['0_S0', '共通製作仕様書'],
+      ['0_A1', '設計作図完了シート'],
+    ])(
+      'returns to the drawing when the previously selected drawing (P16) is clicked again after selecting the document %s (no need to go through another drawing)',
+      async (docKey, docLabel) => {
+        await useDocuments()
+        render(<App />)
+        await confirmPicker()
+        await waitFor(() => expect(card(docKey)).toBeInTheDocument())
+        // 1. 図面(P16)を選ぶ。
+        fireEvent.click(listItem('16'))
+        await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+        expect(listItem('16')).toHaveAttribute('aria-current', 'true')
+
+        // 2. 書類を選ぶ → 書類の表示用プレビュー(Overlayなし)になり、図面の選択状態は外れる。
+        fireEvent.click(card(docKey))
+        await waitFor(() => expect(screen.getByText(`${docLabel}(表示用プレビュー)`)).toBeInTheDocument())
+        expect(card(docKey)).toHaveAttribute('aria-current', 'true')
+        expect(listItem('16')).not.toHaveAttribute('aria-current')
+        expect(document.querySelectorAll('.product-panel-overlay__area')).toHaveLength(0)
+
+        // 3. 先ほどの図面(P16)を直接選び直す → 別の図面を経由せずに、その図面の表示へ戻る。
+        fireEvent.click(listItem('16'))
+        await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+        expect(screen.queryByText(`${docLabel}(表示用プレビュー)`)).not.toBeInTheDocument()
+        expect(screen.getByText('外形図(P16)')).toBeInTheDocument()
+        expect(screen.getByTestId('drawing-canvas-stub').getAttribute('data-file-url')).not.toContain('design-documents')
+        expect(listItem('16')).toHaveAttribute('aria-current', 'true')
+        expect(card(docKey)).not.toHaveAttribute('aria-current')
+        // 盤情報も選択した図面自身の盤(注記なし)に一致する。
+        const panelInfo = document.querySelector('.panel-info') as HTMLElement
+        expect(within(panelInfo).getByText('高圧受電盤')).toBeInTheDocument()
+        expect(within(panelInfo).queryByRole('note')).not.toBeInTheDocument()
+
+        // 書類 → 別の図面(01)も従来どおり切り替わる。
+        fireEvent.click(card(docKey))
+        await waitFor(() => expect(screen.getByText(`${docLabel}(表示用プレビュー)`)).toBeInTheDocument())
+        fireEvent.click(listItem('01'))
+        await waitFor(() => expect(screen.getByText('質量計算書(ページ番号 01・表示用プレビュー)')).toBeInTheDocument())
+        expect(card(docKey)).not.toHaveAttribute('aria-current')
+        expect(listItem('01')).toHaveAttribute('aria-current', 'true')
+      },
+    )
+
+    it('keeps the whole app rendered when a face busbar section is folded: dimension rows stay, only that face busbar section hides, other faces are untouched, also after returning from a document', async () => {
+      await useDocuments()
+      render(<App />)
+      await confirmPicker()
+      await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+      await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+      fireEvent.click(listItem('16'))
+      await waitFor(() => expect(within(panelInfoEl()).getByText('高圧受電盤')).toBeInTheDocument())
+
+      const expectAppAlive = () => {
+        // 折りたたみ後も画面全体(一覧・中央表示・盤情報)が描画されたまま(白画面にならない)。
+        expect(document.querySelector('#root, body')?.childElementCount).toBeGreaterThan(0)
+        expect(listItem('16')).toBeInTheDocument()
+        expect(document.querySelector('.floating-panel--panelInfo')).toBeInTheDocument()
+        expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0)
+        expect(within(panelInfoEl()).getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
+      }
+      const expectDimensionRows = () => {
+        expect(rowTexts().map((cells) => cells.slice(0, 5))).toEqual([
+          ['1/1', '高圧受電盤', '2300', '900', '2200'],
+          ['2/1', '低圧動力盤', expect.any(String), expect.any(String), expect.any(String)],
+        ])
+        expect(infoRow('高圧受電盤')).toBeVisible()
+        expect(infoRow('低圧動力盤')).toBeVisible()
+      }
+
+      expectDimensionRows()
+      fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を閉じる' }))
+      expectAppAlive()
+      expectDimensionRows()
+      // 隠れるのは面1の銅帯欄だけ。面2の銅帯欄・開閉状態は変わらない。
+      expect(screen.queryByRole('region', { name: '面1 主回路銅帯' })).not.toBeInTheDocument()
+      expect(screen.getByRole('region', { name: '面2 主回路銅帯' })).toBeVisible()
+      expect(screen.getByRole('button', { name: '面1の銅帯設定を開く' })).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.getByRole('button', { name: '面2の銅帯設定を閉じる' })).toHaveAttribute('aria-expanded', 'true')
+
+      // 折りたたんだまま盤を選択しても、書類へ切り替えて戻っても、画面は残り寸法行も表示されたまま。
+      fireEvent.click(infoRow('高圧受電盤'))
+      expectAppAlive()
+      fireEvent.click(card('0_S0'))
+      await waitFor(() => expect(screen.getByText('共通製作仕様書(表示用プレビュー)')).toBeInTheDocument())
+      expect(within(panelInfoEl()).getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
+      fireEvent.click(listItem('16'))
+      await waitFor(() => expect(screen.queryByText('共通製作仕様書(表示用プレビュー)')).not.toBeInTheDocument())
+      await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+      expectDimensionRows()
+
+      // 戻った後も、面2を折りたたんでも面1の状態は独立している。
+      fireEvent.click(screen.getByRole('button', { name: '面2の銅帯設定を閉じる' }))
+      expectAppAlive()
+      expectDimensionRows()
+      expect(screen.queryByRole('region', { name: '面2 主回路銅帯' })).not.toBeInTheDocument()
+      // 展開すると両面とも戻る。
+      fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
+      fireEvent.click(screen.getByRole('button', { name: '面2の銅帯設定を開く' }))
+      expect(screen.getByRole('region', { name: '面1 主回路銅帯' })).toBeVisible()
+      expect(screen.getByRole('region', { name: '面2 主回路銅帯' })).toBeVisible()
+    })
+
+    it('does not blank the whole app when a face busbar toggle is pressed on a display-preview page (0_S0) while the measured panel height oscillates (Maximum update depth)', async () => {
+      // 2026-11 白画面事案: 表示用プレビュー画面(design=01等)で行末の銅帯開閉ボタンを押すと、
+      // PanelInfo の自然サイズ計測が往復(縦スクロールバーの出入りで高さが変わる)し、
+      // 更新が連鎖して React が例外を投げ、アプリ全体が白くなった。jsdom はレイアウトを
+      // 計算しないため、.panel-info の scrollHeight を2値で交互に返して再現する。
+      const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight')
+      let measures = 0
+      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+        configurable: true,
+        get(this: HTMLElement) {
+          if (!this.classList.contains('panel-info')) return 0
+          measures += 1
+          return measures % 2 === 0 ? 1133 : 1152
+        },
+      })
+      const errors: string[] = []
+      const onError = (event: ErrorEvent) => errors.push(event.message)
+      window.addEventListener('error', onError)
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        await useDocuments()
+        render(<App />)
+        await confirmPicker()
+        await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+        fireEvent.click(card('0_S0'))
+        await waitFor(() => expect(screen.getByText('共通製作仕様書(表示用プレビュー)')).toBeInTheDocument())
+        const toggles = () => within(panelInfoEl()).getAllByRole('button', { name: /の銅帯設定を(閉じる|開く)/ })
+        expect(toggles().length).toBeGreaterThan(0)
+
+        // 行末の開閉ボタン(行末尾ボタン以外では代替しない)を押す。
+        fireEvent.click(toggles()[0])
+        // アプリ全体が維持される(ツリーが消えていない)。
+        expect(listItem('16')).toBeInTheDocument()
+        expect(within(panelInfoEl()).getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
+        expect(within(panelInfoEl()).queryByRole('alert')).not.toBeInTheDocument()
+        // 寸法行は残り、対象面の銅帯欄だけが閉じる(他面は維持)。
+        expect(rowTexts().length).toBeGreaterThan(0)
+        expect(within(panelInfoEl()).getAllByRole('button', { name: /の銅帯設定を開く/ })).toHaveLength(1)
+        expect(errors.filter((m) => /Maximum update depth/.test(m))).toEqual([])
+        expect(consoleError.mock.calls.flat().map(String).filter((m) => /Maximum update depth/.test(m))).toEqual([])
+        // 他の面の開閉も続けて操作できる。
+        if (toggles().length > 1) {
+          fireEvent.click(toggles()[1])
+          expect(within(panelInfoEl()).getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
+        }
+      } finally {
+        window.removeEventListener('error', onError)
+        consoleError.mockRestore()
+        if (original) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', original)
+        else delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollHeight
+      }
+    })
+
     it('returns to the normal behaviour when a drawing page is selected: an inference page keeps its overlays, a non-inference page shows its cropped preview', async () => {
       await useDocuments()
       render(<App />)

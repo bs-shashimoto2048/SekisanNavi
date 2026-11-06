@@ -87,6 +87,10 @@ Sekisan Navi (積算ナビ) のリポジトリでClaude Codeが作業する際�
 
 ## Build / Test 手順
 
+- 検証用に別ポート/一時worktreeでViteを起動するときは、必ず `VITE_CACHE_DIR=<専用dir>` を指定する
+  (稼働中5174の`node_modules/.vite`を共有すると既存タブが白画面になる。
+  [`docs/dev-verification.md`](docs/dev-verification.md))。
+
 詳細は [`README.md`](README.md) を正とする(重複を避けるためコマンドの
 転記はしない)。要点のみ:
 

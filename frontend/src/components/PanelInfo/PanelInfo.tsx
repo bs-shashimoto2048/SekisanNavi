@@ -10,6 +10,8 @@ import { SteelSection } from './SteelSection'
 import { banGroupKey, panelKey } from '../../utils/panel'
 import { useAutoFitGridColumns } from '../../hooks/useAutoFitGridColumns'
 import { BusbarSelector } from '../BusbarSelector/BusbarSelector'
+import { ErrorBoundary } from '../ErrorBoundary/ErrorBoundary'
+import '../ErrorBoundary/ErrorBoundary.css'
 import {
   loadSelections,
   rowsOf,
@@ -33,6 +35,15 @@ interface NaturalSize {
   width: number
   height: number
 }
+
+/**
+ * 自然サイズの往復(振動)を検出する条件。`NATURAL_SIZE_OSCILLATION_WINDOW_MS` 以内に
+ * `NATURAL_SIZE_OSCILLATION_MIN_REPORTS` 回以上報告されていて、さらに直前の値へ戻る変化が起きたら、
+ * 計測が収束しない暴走ループとみなす。人間の素早い連打(数回)では届かない回数に設定してあり、
+ * 暴走ループ(React の同期更新の上限は50回)は、この回数で十分に手前で止められる。
+ */
+const NATURAL_SIZE_OSCILLATION_WINDOW_MS = 200
+const NATURAL_SIZE_OSCILLATION_MIN_REPORTS = 8
 
 // 取得元の表示ラベル (要件12。旧PanelProperties.tsxから移設)。W/D/H等の項目名は
 // ここにハードコードしない。
@@ -402,6 +413,9 @@ export function PanelInfo({
   // その`scrollWidth`に`.panel-info`の左右paddingを足した値を自然な幅とする
   // (下限は`FloatingPanel`のkind別最小幅が担う)。
   const lastReportedSizeRef = useRef<NaturalSize | null>(null)
+  // 往復(A→B→A…)の検出用: 1つ前に報告した値と、直近の報告時刻の一覧。
+  const prevReportedSizeRef = useRef<NaturalSize | null>(null)
+  const recentReportTimesRef = useRef<number[]>([])
   useLayoutEffect(() => {
     if (!onNaturalSizeChange) return
     const el = gridRef.current
@@ -443,8 +457,34 @@ export function PanelInfo({
 
       const last = lastReportedSizeRef.current
       if (last && last.width === naturalWidth && last.height === naturalHeight) return
-      const next = { width: naturalWidth, height: naturalHeight }
+      let next = { width: naturalWidth, height: naturalHeight }
+
+      // [2026-11 白画面事案の再発防止] 計測値が現在のパネルサイズに依存して2つの値の間を
+      // 往復すると(例: パネル高さの違いで一覧の縦スクロールバーが出入りし、その分
+      // 内容高さが変わる)、「計測→報告→FloatingPanelがサイズ変更→再描画→計測」が
+      // 同期更新として連鎖し続け、React が「Maximum update depth exceeded」を投げて
+      // アプリ全体が白くなる。短時間(200ms以内)に8回以上報告されたうえで「1つ前の報告値へ戻る」
+      // 変化が起きたら、収束しない往復とみなし、両者の大きい側(寸法ごと)で確定して以降は
+      // 小さい側へ戻さない。回数で判定するのは、利用者の素早い連打(例: 銅帯の開閉を
+      // 60ms間隔で3回)を往復と誤判定して、最終状態への追従を止めないため。
+      const now = performance.now()
+      const recent = recentReportTimesRef.current.filter((t) => now - t < NATURAL_SIZE_OSCILLATION_WINDOW_MS)
+      recentReportTimesRef.current = recent
+      const prev = prevReportedSizeRef.current
+      if (
+        last &&
+        prev &&
+        prev.width === next.width &&
+        prev.height === next.height &&
+        recent.length >= NATURAL_SIZE_OSCILLATION_MIN_REPORTS
+      ) {
+        next = { width: Math.max(last.width, next.width), height: Math.max(last.height, next.height) }
+        if (next.width === last.width && next.height === last.height) return
+      }
+
+      prevReportedSizeRef.current = last
       lastReportedSizeRef.current = next
+      recentReportTimesRef.current.push(now)
       onNaturalSizeChange(next)
     }
 
@@ -592,12 +632,29 @@ export function PanelInfo({
                         (6列)・列幅計測(`data-auto-col`)には影響しない。 */}
                     {copperSelectorAnchorKeyByMenno.get(card.panel.ban_menno) === card.key && (
                       <div hidden={collapsedBusbarFaces.has(card.panel.ban_menno)}>
-                        <BusbarSelector
-                          id={`busbar-selector-face-${card.panel.ban_menno}`}
-                          faceLabel={String(card.panel.ban_menno)}
-                          rows={rowsOf(busbarRows, String(card.panel.ban_menno))}
-                          onChange={(rows) => changeBusbarRows(String(card.panel.ban_menno), rows)}
-                        />
+                        <ErrorBoundary
+                          label={`busbar-face-${card.panel.ban_menno}`}
+                          resetKeys={[productNo, busbarRows[String(card.panel.ban_menno)]]}
+                          fallback={(error, reset) => (
+                            <div className="error-fallback" role="alert">
+                              <p className="error-fallback__title">面{card.panel.ban_menno}の銅帯欄を表示できません。</p>
+                              <p className="error-fallback__hint">
+                                図面・寸法行・他の面は表示されています。保存済みの銅帯設定は消していません。
+                                再試行しても直らない場合は、ページを再読み込みしてください({error.message})。
+                              </p>
+                              <button type="button" onClick={reset}>
+                                再試行
+                              </button>
+                            </div>
+                          )}
+                        >
+                          <BusbarSelector
+                            id={`busbar-selector-face-${card.panel.ban_menno}`}
+                            faceLabel={String(card.panel.ban_menno)}
+                            rows={rowsOf(busbarRows, String(card.panel.ban_menno))}
+                            onChange={(rows) => changeBusbarRows(String(card.panel.ban_menno), rows)}
+                          />
+                        </ErrorBoundary>
                       </div>
                     )}
                   </li>

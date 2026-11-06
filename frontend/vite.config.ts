@@ -40,7 +40,17 @@ export default defineConfig(({ mode }) => {
   // (Sekisan Navi Phase 1.5 実機確認不具合 修正指示 #9 対応)。
   const backendUrl = env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'
 
+  // 依存最適化キャッシュの置き場所(任意)。未設定なら従来どおり Vite 既定の
+  // `node_modules/.vite`(=稼働中の 5174 と同じ場所)を使う。
+  // 一時 worktree や別ポートで検証用の Vite を起動するときは、`node_modules` を
+  // ジャンクション等で共有していても 5174 のキャッシュを書き換えないよう、
+  // 必ず検証環境専用のディレクトリを指定すること(docs/dev-verification.md)。
+  // 共有すると browserHash が書き換わり、5174 の開きっぱなしのタブが
+  // 依存の読み込み失敗(504 Outdated Optimize Dep)で白画面になる(2026-11 事案)。
+  const cacheDir = env.VITE_CACHE_DIR ? path.resolve(env.VITE_CACHE_DIR) : undefined
+
   return {
+    cacheDir,
     plugins: [react(), copyPdfjsAssetsPlugin()],
     server: {
       // 社内LAN上の他端末からUI確認できるようにするための設定 (レビュー用途限定)。
