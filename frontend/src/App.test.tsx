@@ -3626,6 +3626,51 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
       }
     })
 
+    it.each([
+      ['0_S0', '共通製作仕様書'],
+      ['0_A1', '設計作図完了シート'],
+    ])(
+      'returns to the drawing when the previously selected drawing (P16) is clicked again after selecting the document %s (no need to go through another drawing)',
+      async (docKey, docLabel) => {
+        await useDocuments()
+        render(<App />)
+        await confirmPicker()
+        await waitFor(() => expect(card(docKey)).toBeInTheDocument())
+        // 1. 図面(P16)を選ぶ。
+        fireEvent.click(listItem('16'))
+        await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+        expect(listItem('16')).toHaveAttribute('aria-current', 'true')
+
+        // 2. 書類を選ぶ → 書類の表示用プレビュー(Overlayなし)になり、図面の選択状態は外れる。
+        fireEvent.click(card(docKey))
+        await waitFor(() => expect(screen.getByText(`${docLabel}(表示用プレビュー)`)).toBeInTheDocument())
+        expect(card(docKey)).toHaveAttribute('aria-current', 'true')
+        expect(listItem('16')).not.toHaveAttribute('aria-current')
+        expect(document.querySelectorAll('.product-panel-overlay__area')).toHaveLength(0)
+
+        // 3. 先ほどの図面(P16)を直接選び直す → 別の図面を経由せずに、その図面の表示へ戻る。
+        fireEvent.click(listItem('16'))
+        await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+        expect(screen.queryByText(`${docLabel}(表示用プレビュー)`)).not.toBeInTheDocument()
+        expect(screen.getByText('外形図(P16)')).toBeInTheDocument()
+        expect(screen.getByTestId('drawing-canvas-stub').getAttribute('data-file-url')).not.toContain('design-documents')
+        expect(listItem('16')).toHaveAttribute('aria-current', 'true')
+        expect(card(docKey)).not.toHaveAttribute('aria-current')
+        // 盤情報も選択した図面自身の盤(注記なし)に一致する。
+        const panelInfo = document.querySelector('.panel-info') as HTMLElement
+        expect(within(panelInfo).getByText('高圧受電盤')).toBeInTheDocument()
+        expect(within(panelInfo).queryByRole('note')).not.toBeInTheDocument()
+
+        // 書類 → 別の図面(01)も従来どおり切り替わる。
+        fireEvent.click(card(docKey))
+        await waitFor(() => expect(screen.getByText(`${docLabel}(表示用プレビュー)`)).toBeInTheDocument())
+        fireEvent.click(listItem('01'))
+        await waitFor(() => expect(screen.getByText('質量計算書(ページ番号 01・表示用プレビュー)')).toBeInTheDocument())
+        expect(card(docKey)).not.toHaveAttribute('aria-current')
+        expect(listItem('01')).toHaveAttribute('aria-current', 'true')
+      },
+    )
+
     it('returns to the normal behaviour when a drawing page is selected: an inference page keeps its overlays, a non-inference page shows its cropped preview', async () => {
       await useDocuments()
       render(<App />)

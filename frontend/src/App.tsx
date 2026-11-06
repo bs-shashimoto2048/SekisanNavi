@@ -1405,6 +1405,9 @@ function App() {
   // どちらもBBox選択・盤選択などを解除する(別図面へ移動するため)。
   function handleSelectDesignPage(item: DesignPage) {
     designKeyFromUrlRef.current = null
+    // 書類(0_S0/0_A1)の選択は、図面キー/ページが変わったときに外れる(上のeffect)が、書類を選ぶ前に
+    // 選んでいた図面を選び直す場合はキーが変わらずeffectが走らない。一覧の図面クリックでは常に外す。
+    setSelectedDocumentKey(null)
     setSelectedDesignKey(item.key)
     handleSelectPage(item.inference_page_no)
   }
