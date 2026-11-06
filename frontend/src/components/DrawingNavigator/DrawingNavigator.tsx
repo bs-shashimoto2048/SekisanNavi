@@ -149,9 +149,9 @@ export function DrawingNavigator({
           <section key={type} className="drawing-navigator__group">
             <h3 className="drawing-navigator__group-title">{type}</h3>
             <div className="drawing-navigator__cards">
-              {groupPages.map((page) => (
+              {groupPages.map((page, index) => (
                 <ThumbnailCard
-                  key={page.page_no}
+                  key={`${page.page_no}:${index}`}
                   page={page}
                   selected={page.page_no === selectedPageNo}
                   onClick={() => onSelectPage(page.page_no)}

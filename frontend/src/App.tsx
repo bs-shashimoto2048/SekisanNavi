@@ -79,6 +79,8 @@ import { DesignPagePicker } from './components/DrawingNavigator/DesignPagePicker
 import { designPagesFallbackNote } from './utils/designPagesNote'
 import { loadExcludedKeys, saveExcludedKeys, selectedItems } from './utils/designSelection'
 import { DrawingViewer } from './components/DrawingViewer/DrawingViewer'
+import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary'
+import './components/ErrorBoundary/ErrorBoundary.css'
 import { PanelInfo } from './components/PanelInfo/PanelInfo'
 import { EstimateAggregation } from './components/EstimateAggregation/EstimateAggregation'
 import { EstimateDetail, type DetailTabFilter } from './components/EstimateDetail/EstimateDetail'
@@ -2087,6 +2089,21 @@ function App() {
                 onRectChange={setPanelInfoRect}
                 maxContentSize={panelInfoNaturalSize}
               >
+                <ErrorBoundary
+                  label="panel-info"
+                  resetKeys={[activeProductNo, selectedProductPageNo, selectedDesignKey, selectedDocumentKey]}
+                  fallback={(error, reset) => (
+                    <div className="error-fallback" role="alert">
+                      <p className="error-fallback__title">図面情報を表示できません。</p>
+                      <p className="error-fallback__hint">
+                        図面の表示は継続しています。図面を選び直すか再試行してください。保存済みの設定は消していません({error.message})。
+                      </p>
+                      <button type="button" onClick={reset}>
+                        再試行
+                      </button>
+                    </div>
+                  )}
+                >
                 <PanelInfo
                   panel={panel}
                   panels={activeProductPage?.panels ?? []}
@@ -2099,6 +2116,7 @@ function App() {
                   onSelectPanel={handleSelectPanel}
                   onNaturalSizeChange={setPanelInfoNaturalSize}
                 />
+                </ErrorBoundary>
               </FloatingPanel>
               <FloatingPanel
                 visible={estimateAggregationFloatingVisible}

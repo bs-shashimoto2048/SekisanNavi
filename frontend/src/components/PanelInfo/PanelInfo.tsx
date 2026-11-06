@@ -10,6 +10,8 @@ import { SteelSection } from './SteelSection'
 import { banGroupKey, panelKey } from '../../utils/panel'
 import { useAutoFitGridColumns } from '../../hooks/useAutoFitGridColumns'
 import { BusbarSelector } from '../BusbarSelector/BusbarSelector'
+import { ErrorBoundary } from '../ErrorBoundary/ErrorBoundary'
+import '../ErrorBoundary/ErrorBoundary.css'
 import {
   loadSelections,
   rowsOf,
@@ -592,12 +594,29 @@ export function PanelInfo({
                         (6列)・列幅計測(`data-auto-col`)には影響しない。 */}
                     {copperSelectorAnchorKeyByMenno.get(card.panel.ban_menno) === card.key && (
                       <div hidden={collapsedBusbarFaces.has(card.panel.ban_menno)}>
-                        <BusbarSelector
-                          id={`busbar-selector-face-${card.panel.ban_menno}`}
-                          faceLabel={String(card.panel.ban_menno)}
-                          rows={rowsOf(busbarRows, String(card.panel.ban_menno))}
-                          onChange={(rows) => changeBusbarRows(String(card.panel.ban_menno), rows)}
-                        />
+                        <ErrorBoundary
+                          label={`busbar-face-${card.panel.ban_menno}`}
+                          resetKeys={[productNo, busbarRows[String(card.panel.ban_menno)]]}
+                          fallback={(error, reset) => (
+                            <div className="error-fallback" role="alert">
+                              <p className="error-fallback__title">面{card.panel.ban_menno}の銅帯欄を表示できません。</p>
+                              <p className="error-fallback__hint">
+                                図面・寸法行・他の面は表示されています。保存済みの銅帯設定は消していません。
+                                再試行しても直らない場合は、ページを再読み込みしてください({error.message})。
+                              </p>
+                              <button type="button" onClick={reset}>
+                                再試行
+                              </button>
+                            </div>
+                          )}
+                        >
+                          <BusbarSelector
+                            id={`busbar-selector-face-${card.panel.ban_menno}`}
+                            faceLabel={String(card.panel.ban_menno)}
+                            rows={rowsOf(busbarRows, String(card.panel.ban_menno))}
+                            onChange={(rows) => changeBusbarRows(String(card.panel.ban_menno), rows)}
+                          />
+                        </ErrorBoundary>
                       </div>
                     )}
                   </li>
