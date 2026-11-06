@@ -50,6 +50,13 @@ interface Props {
    * 1ページに複数盤・同一盤の複数矢視(正面図/背面図等)が存在しうる
    * (`DrawingViewer`/`ProductPanelOverlay`へ渡すものと同じ配列)。 */
   panels: PanelPreview[]
+  /** 現在ページに盤(`panels`)が1件も無いときだけ使う、同じ製番内の他の図面の盤
+   * (呼び出し側が、取得元が現在の製番と一致するデータからのみ作る)。選択図面に
+   * 依存して盤情報が消えないようにするためのフォールバックで、行は表示のみ
+   * (現在ページの盤ではないため、中央Viewerの盤選択とは連動させない)。 */
+  fallbackPanels?: PanelPreview[]
+  /** 製番の図面一覧/盤情報を取得中か。取得中は「取得できません」と誤表示しない。 */
+  panelsLoading?: boolean
   /** 製番全体のestcode_df.csv行 (ページに依存しない。Phase 1.14)。panelsの
    * 各行とban_menno/ban_noで突き合わせる。 */
   estimatePanels: EstimatePanelInfo[]
@@ -114,12 +121,20 @@ function formatWithFallback(primary: number | null, fallback: number | null): st
   return formatValue(fallback)
 }
 
+/** 1行の表示に必要な盤の最小項目。`PanelPreview`は構造的にこれを満たす。 */
+type PanelRowSource = Pick<
+  PanelPreview,
+  'ban_menno' | 'ban_no' | 'ban_no_label' | 'ban_meisyou' | 'ban_h1' | 'ban_h2' | 'ban_w' | 'ban_d'
+>
+
 interface PanelCard {
   /** Viewerの`ProductPanelOverlay`と同じ`panelKey`形式。カードクリック時に
    * そのまま`onSelectPanel`へ渡すことで、Viewer側のクリックと全く同じ選択状態
    * (ハイライト・非選択盤のdim表示等)を再現する。 */
   key: string
-  panel: PanelPreview
+  panel: PanelRowSource
+  /** 現在ページの盤(Viewerと連動して選択できる)のときのみ非null。フォールバック行はnull。 */
+  preview: PanelPreview | null
   estimatePanel: EstimatePanelInfo | null
   isSelected: boolean
 }
@@ -199,10 +214,56 @@ function buildPanelCards(
     cards.push({
       key: panelKey(p, index),
       panel: p,
+      preview: p,
       estimatePanel,
       isSelected: selectedGroupKey === groupKey,
     })
   })
+  return cards
+}
+
+/**
+ * 現在ページに盤が無いときの、同じ製番内のフォールバック行を組み立てる。
+ * 他の図面の盤(`fallbackPanels`)を(面, 盤番号)単位で重複除去して並べ、そこに無い盤は
+ * 製番共通のestcode_df.csv行(`estimatePanels`)から補う。どちらにも無い値は推測せず、
+ * 既存どおり"-"表示にする。行は選択不可(`preview`=null)。
+ */
+function buildFallbackCards(
+  fallbackPanels: PanelPreview[],
+  estimatePanels: EstimatePanelInfo[],
+): PanelCard[] {
+  const seen = new Set<string>()
+  const cards: PanelCard[] = []
+  for (const p of fallbackPanels) {
+    const id = `${p.ban_menno}:${p.ban_no_label ?? p.ban_no}`
+    if (seen.has(id)) continue
+    seen.add(id)
+    const estimatePanel =
+      p.ban_no == null
+        ? null
+        : estimatePanels.find((e) => e.ban_menno === p.ban_menno && e.ban_no === p.ban_no) ?? null
+    cards.push({ key: `fallback:${id}`, panel: p, preview: null, estimatePanel, isSelected: false })
+  }
+  for (const e of estimatePanels) {
+    const id = `${e.ban_menno}:${e.ban_no}`
+    if (seen.has(id)) continue
+    seen.add(id)
+    cards.push({
+      key: `fallback:${id}`,
+      panel: {
+        ban_menno: e.ban_menno,
+        ban_no: e.ban_no,
+        ban_meisyou: e.ban_meisyou ?? '',
+        ban_h1: null,
+        ban_h2: null,
+        ban_w: null,
+        ban_d: null,
+      },
+      preview: null,
+      estimatePanel: e,
+      isSelected: false,
+    })
+  }
   return cards
 }
 
@@ -242,11 +303,15 @@ const COLUMN_HEADERS: { key: keyof PanelRowCells; label: string }[] = [
  *   1. 現在ページに1件以上product_df盤があれば、盤単位で一覧を表示する。
  *   2. product_df盤が1件も無く、旧来のダミーDB由来`panel`がある場合のみ、
  *      後方互換のため従来の属性テーブル表示にフォールバックする(今回変更しない)。
- *   3. どちらも無ければ「このページには図面情報がありません」。
+ *   3. どちらも無ければ、同じ製番内の他の図面・製番共通データの盤を表示のみで出す
+ *      (`fallbackPanels`/`estimatePanels`。選択図面に依存して盤情報が消えないようにする)。
+ *   4. それも無ければ「盤情報を取得できません」(パネル自体は消さない)。
  */
 export function PanelInfo({
   panel,
   panels,
+  fallbackPanels = [],
+  panelsLoading = false,
   estimatePanels,
   productNo,
   steel,
@@ -254,7 +319,12 @@ export function PanelInfo({
   onSelectPanel,
   onNaturalSizeChange,
 }: Props) {
-  const cards = buildPanelCards(panels, estimatePanels, selectedPanel)
+  // 優先順位: 1. 現在ページの盤 2. (旧来のダミーDB由来panelがあればそれ) 3. 同じ製番内の
+  // 他の図面・製番共通データの盤(表示のみ) 4. 何も無ければ取得不可の状態表示。
+  const pageCards = buildPanelCards(panels, estimatePanels, selectedPanel)
+  const isFallback = pageCards.length === 0 && panel == null
+  const cards = isFallback ? buildFallbackCards(fallbackPanels, estimatePanels) : pageCards
+  const showFallbackNotice = isFallback && cards.length > 0
   const heading = cards.length > 0 ? `図面情報　${cards.length}件` : '図面情報'
   const copperSelectorAnchorKeyByMenno = buildCopperSelectorAnchorKeys(cards)
 
@@ -425,7 +495,13 @@ export function PanelInfo({
       </div>
 
       {cards.length === 0 && !panel && (
-        <p className="panel-info__empty">このページには図面情報がありません</p>
+        <p className="panel-info__empty">{panelsLoading ? '盤情報を取得中です' : '盤情報を取得できません'}</p>
+      )}
+
+      {showFallbackNotice && (
+        <p className="panel-info__fallback-notice" role="note">
+          この図面には盤情報が紐づいていないため、同じ製番の他の図面・製番共通データの盤情報を表示しています。
+        </p>
       )}
 
       {cards.length > 0 && (
@@ -460,7 +536,9 @@ export function PanelInfo({
                           'panel-info__row panel-info__data-row' +
                           (card.isSelected ? ' panel-info__row--selected' : '')
                         }
-                        onClick={() => onSelectPanel(card.key, card.panel)}
+                        onClick={() => {
+                          if (card.preview) onSelectPanel(card.key, card.preview)
+                        }}
                         aria-pressed={card.isSelected}
                       >
                         <span className="panel-info__cell panel-info__cell--menban" role="cell" data-auto-col={0}>

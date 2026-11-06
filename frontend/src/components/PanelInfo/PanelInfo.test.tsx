@@ -74,17 +74,28 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
     expect(screen.queryByText('誤った数値盤')).not.toBeInTheDocument()
   })
 
-  it('shows the empty message when the current page has no product_df panels and no legacy panel', () => {
+  it('shows a status message (and keeps the panel) when no panel info is available anywhere in the product', () => {
     render(
       <PanelInfo
         panel={null}
         panels={[]}
+        fallbackPanels={[]}
         estimatePanels={[]}
         selectedPanel={null}
         onSelectPanel={() => {}}
       />,
     )
-    expect(screen.getByText('このページには図面情報がありません')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '図面情報' })).toBeInTheDocument()
+    expect(screen.getByText('盤情報を取得できません')).toBeInTheDocument()
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+
+  it('shows a loading state instead of "unavailable" while the product data is being fetched', () => {
+    render(
+      <PanelInfo panel={null} panels={[]} panelsLoading estimatePanels={[]} selectedPanel={null} onSelectPanel={() => {}} />,
+    )
+    expect(screen.getByText('盤情報を取得中です')).toBeInTheDocument()
+    expect(screen.queryByText('盤情報を取得できません')).not.toBeInTheDocument()
   })
 
   it('renders a header row with the 6 columns in order, kept visually fixed via position:sticky inside the scrollable list (Issue #40 追加修正: ヘッダを外に出す旧方式から、他の表と同じ sticky 方式へ変更。横スクロール時もヘッダと列が揃うようにするため)', () => {
@@ -1243,5 +1254,122 @@ describe('PanelInfo: 主回路銅帯の選択欄は1面(ban_menno)につき1つ�
     first.unmount()
     renderThreePanels(() => {}, 'A1TEST002')
     expect(document.querySelector('.busbar-selector__code')).toBeNull()
+  })
+})
+
+describe('PanelInfo: 選択図面に盤情報が無いときの同一製番内フォールバック', () => {
+  const otherPagePanels = [
+    makeProductPanel({ page_no: 8, ban_menno: 1, ban_no: 1, ban_meisyou: '高圧受電盤' }),
+    makeProductPanel({ page_no: 9, ban_menno: 1, ban_no: 1, ban_meisyou: '高圧受電盤' }), // 別ページの同一盤は重複除去
+    makeProductPanel({ page_no: 9, ban_menno: 2, ban_no: 2, ban_meisyou: '低圧電灯盤' }),
+  ]
+
+  it('prefers the current page panels and shows no fallback notice when the page has its own panels', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel({ ban_menno: 3, ban_no: 3, ban_meisyou: '当ページ盤' })]}
+        fallbackPanels={otherPagePanels}
+        estimatePanels={[]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    expect(screen.getByText('当ページ盤')).toBeInTheDocument()
+    expect(screen.queryByText('高圧受電盤')).not.toBeInTheDocument()
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+
+  it('falls back to panels of other drawings of the same product (deduplicated), with a notice and without guessing values', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[]}
+        fallbackPanels={otherPagePanels}
+        estimatePanels={[makeEstimatePanel({ ban_menno: 1, ban_no: 1, ban_meisyou: '高圧受電盤', ban_w: 800, ban_d: 600 })]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    expect(screen.getAllByText('高圧受電盤')).toHaveLength(1)
+    expect(screen.getByText('低圧電灯盤')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /図面情報/ })).toHaveTextContent('2件')
+    expect(screen.getByRole('note')).toHaveTextContent('同じ製番')
+    expect(screen.queryByText('盤情報を取得できません')).not.toBeInTheDocument()
+    // 製番共通データ(estcode)に値がある面1はその値を表示する。
+    const rowOne = screen.getByText('高圧受電盤').closest('button') as HTMLElement
+    expect(within(rowOne).getByText('800')).toBeInTheDocument()
+    expect(within(rowOne).getByText('600')).toBeInTheDocument()
+  })
+
+  it('uses product-wide estimate rows when no drawing of the product has panels, leaving unknown dimensions as "-"', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[]}
+        fallbackPanels={[]}
+        estimatePanels={[
+          makeEstimatePanel({ ban_menno: 4, ban_no: 1, ban_meisyou: '共通データ盤', ban_h: null, ban_w: null, ban_d: null, ban_connect: null }),
+        ]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    const row = screen.getByText('共通データ盤').closest('button') as HTMLElement
+    const cells = within(row).getAllByRole('cell')
+    expect(cells).toHaveLength(6)
+    expect(cells.slice(2).map((c) => c.textContent)).toEqual(['-', '-', '-', '-'])
+  })
+
+  it('does not link fallback rows to the viewer selection (they are not panels of the current page)', () => {
+    const onSelectPanel = vi.fn()
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[]}
+        fallbackPanels={otherPagePanels}
+        estimatePanels={[]}
+        selectedPanel={null}
+        onSelectPanel={onSelectPanel}
+      />,
+    )
+    fireEvent.click(screen.getByText('高圧受電盤').closest('button') as HTMLElement)
+    expect(onSelectPanel).not.toHaveBeenCalled()
+  })
+
+  it('keeps the legacy panel table priority over the fallback (existing behaviour)', () => {
+    render(
+      <PanelInfo
+        panel={{ id: 1, panel_no: 'P-1', name: '旧ダミー盤', attributes: [] } as never}
+        panels={[]}
+        fallbackPanels={otherPagePanels}
+        estimatePanels={[]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    expect(screen.getByText(/P-1 \/ 旧ダミー盤/)).toBeInTheDocument()
+    expect(screen.queryByText('高圧受電盤')).not.toBeInTheDocument()
+  })
+
+  it('keeps the per-face busbar section, fold toggle (◂/▾) and dimension rows working in fallback mode', () => {
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[]}
+        fallbackPanels={otherPagePanels}
+        estimatePanels={[]}
+        productNo="A1TEST001"
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+      />,
+    )
+    expect(screen.getAllByRole('region', { name: /主回路銅帯/ })).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を閉じる' }))
+    expect(screen.getByRole('button', { name: '面1の銅帯設定を開く' })).toHaveTextContent('◂')
+    expect(screen.queryByRole('region', { name: '面1 主回路銅帯' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '面2 主回路銅帯' })).toBeVisible()
+    expect(screen.getByText('高圧受電盤').closest('button')).toBeVisible()
+    expect(screen.getByText('低圧電灯盤').closest('button')).toBeVisible()
   })
 })

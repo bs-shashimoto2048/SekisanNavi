@@ -504,3 +504,10 @@
   color: #4b5563;
   font-weight: 500;
 }
+
+/* 現在ページに盤が無く、同じ製番の他の図面・共通データの盤を表示しているときの注記。 */
+.panel-info__fallback-notice {
+  margin: 0 0 0.3rem;
+  font-size: 0.78rem;
+  color: #6b7280;
+}
