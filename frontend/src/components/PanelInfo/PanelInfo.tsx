@@ -454,10 +454,14 @@ export function PanelInfo({
 
       const headerRow = el.querySelector<HTMLElement>('.panel-info__row--header')
       const dataLines = Array.from(el.querySelectorAll<HTMLElement>('.panel-info__data-line'))
+      const summaryGrid = el.querySelector<HTMLElement>('.panel-info__summary-grid')
       const style = window.getComputedStyle(el)
       const paddingX = parseFloat(style.paddingLeft || '0') + parseFloat(style.paddingRight || '0')
       const naturalTableWidth = Math.max(headerRow?.scrollWidth ?? 0, ...dataLines.map((line) => line.scrollWidth)) + paddingX
-      const naturalWidth = naturalTableWidth
+      // 上段の箱体型式/鋼材カードはmax-content幅で横並びにする。scrollWidthは
+      // 2カードの自然幅と間隔を含むため、盤一覧と上段の大きい方がパネルの幅上限になる。
+      const naturalSummaryWidth = (summaryGrid?.scrollWidth ?? 0) + paddingX
+      const naturalWidth = Math.max(naturalTableWidth, naturalSummaryWidth)
 
       const last = lastReportedSizeRef.current
       if (last && last.width === naturalWidth && last.height === naturalHeight) return

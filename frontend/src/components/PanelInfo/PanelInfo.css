@@ -42,7 +42,9 @@
 /* 参照画面に合わせた上段: 箱体型式と鋼材を左右に置き、盤一覧を下へ続ける。 */
 .panel-info__summary-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* 箱体型式と鋼材は内容の自然幅で並べ、余った幅を均等配分しない。 */
+  grid-template-columns: max-content max-content;
+  width: max-content;
   align-items: stretch;
   gap: 0.45rem;
   /* 縮めない: 縮めるとカードの中身がグリッドからはみ出し、下の盤一覧に重なる(実ブラウザで確認)。
@@ -53,11 +55,11 @@
 }
 
 .panel-info__summary-grid--single {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: max-content;
 }
 
 .panel-info__summary-card {
-  min-width: 0;
+  min-width: max-content;
   /* 高さは内容どおり(上限・内部スクロールなし)。2 カードは grid の stretch で高さが揃う。 */
   border: 1px solid #d7e0ea;
   border-radius: 6px;
@@ -79,6 +81,7 @@
 }
 
 .panel-info__summary-grid .steel-section {
+  width: max-content;
   margin: 0;
   padding: 0.35rem;
   border: 1px solid #d7e0ea;
@@ -86,6 +89,7 @@
 }
 
 .panel-info__summary-grid .box-type-detail {
+  width: max-content;
   /* スクロールはカード側が担う(入れ子のスクロールにしない)。 */
   max-height: none;
   padding: 0.35rem;
@@ -113,10 +117,23 @@
   overflow-y: visible;
 }
 
+/* 自然サイズを幅上限に使う上段カードでは、文字列を折り返さず内容幅で測る。 */
+.panel-info__summary-grid .box-type-detail__table,
+.panel-info__summary-grid .steel-section__table {
+  width: max-content;
+}
+
+.panel-info__summary-grid .box-type-detail__table th,
+.panel-info__summary-grid .box-type-detail__table td,
+.panel-info__summary-grid .steel-section__table th,
+.panel-info__summary-grid .steel-section__table td {
+  white-space: nowrap;
+}
+
 /* 狭い画面では、2カードを縦に並べる(各カードの内容が窮屈にならないように)。 */
 @media (max-width: 960px) {
   .panel-info__summary-grid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: max-content;
   }
 }
 
