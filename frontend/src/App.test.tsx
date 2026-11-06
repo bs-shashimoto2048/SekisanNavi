@@ -3671,6 +3671,65 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
       },
     )
 
+    it('keeps the whole app rendered when a face busbar section is folded: dimension rows stay, only that face busbar section hides, other faces are untouched, also after returning from a document', async () => {
+      await useDocuments()
+      render(<App />)
+      await confirmPicker()
+      await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+      await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+      fireEvent.click(listItem('16'))
+      await waitFor(() => expect(within(panelInfoEl()).getByText('高圧受電盤')).toBeInTheDocument())
+
+      const expectAppAlive = () => {
+        // 折りたたみ後も画面全体(一覧・中央表示・盤情報)が描画されたまま(白画面にならない)。
+        expect(document.querySelector('#root, body')?.childElementCount).toBeGreaterThan(0)
+        expect(listItem('16')).toBeInTheDocument()
+        expect(document.querySelector('.floating-panel--panelInfo')).toBeInTheDocument()
+        expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0)
+        expect(within(panelInfoEl()).getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
+      }
+      const expectDimensionRows = () => {
+        expect(rowTexts().map((cells) => cells.slice(0, 5))).toEqual([
+          ['1/1', '高圧受電盤', '2300', '900', '2200'],
+          ['2/1', '低圧動力盤', expect.any(String), expect.any(String), expect.any(String)],
+        ])
+        expect(infoRow('高圧受電盤')).toBeVisible()
+        expect(infoRow('低圧動力盤')).toBeVisible()
+      }
+
+      expectDimensionRows()
+      fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を閉じる' }))
+      expectAppAlive()
+      expectDimensionRows()
+      // 隠れるのは面1の銅帯欄だけ。面2の銅帯欄・開閉状態は変わらない。
+      expect(screen.queryByRole('region', { name: '面1 主回路銅帯' })).not.toBeInTheDocument()
+      expect(screen.getByRole('region', { name: '面2 主回路銅帯' })).toBeVisible()
+      expect(screen.getByRole('button', { name: '面1の銅帯設定を開く' })).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.getByRole('button', { name: '面2の銅帯設定を閉じる' })).toHaveAttribute('aria-expanded', 'true')
+
+      // 折りたたんだまま盤を選択しても、書類へ切り替えて戻っても、画面は残り寸法行も表示されたまま。
+      fireEvent.click(infoRow('高圧受電盤'))
+      expectAppAlive()
+      fireEvent.click(card('0_S0'))
+      await waitFor(() => expect(screen.getByText('共通製作仕様書(表示用プレビュー)')).toBeInTheDocument())
+      expect(within(panelInfoEl()).getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
+      fireEvent.click(listItem('16'))
+      await waitFor(() => expect(screen.queryByText('共通製作仕様書(表示用プレビュー)')).not.toBeInTheDocument())
+      await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+      expectDimensionRows()
+
+      // 戻った後も、面2を折りたたんでも面1の状態は独立している。
+      fireEvent.click(screen.getByRole('button', { name: '面2の銅帯設定を閉じる' }))
+      expectAppAlive()
+      expectDimensionRows()
+      expect(screen.queryByRole('region', { name: '面2 主回路銅帯' })).not.toBeInTheDocument()
+      // 展開すると両面とも戻る。
+      fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
+      fireEvent.click(screen.getByRole('button', { name: '面2の銅帯設定を開く' }))
+      expect(screen.getByRole('region', { name: '面1 主回路銅帯' })).toBeVisible()
+      expect(screen.getByRole('region', { name: '面2 主回路銅帯' })).toBeVisible()
+    })
+
     it('returns to the normal behaviour when a drawing page is selected: an inference page keeps its overlays, a non-inference page shows its cropped preview', async () => {
       await useDocuments()
       render(<App />)
