@@ -635,7 +635,10 @@ export function PanelInfo({
                         `<button>`の外(sibling)に置くため、盤選択のクリック領域・cell数
                         (6列)・列幅計測(`data-auto-col`)には影響しない。 */}
                     {copperSelectorAnchorKeyByMenno.get(card.panel.ban_menno) === card.key && (
-                      <div>
+                      <div
+                        id={`busbar-selector-face-${card.panel.ban_menno}`}
+                        hidden={!isBusbarFaceExpanded(card.panel.ban_menno)}
+                      >
                         <ErrorBoundary
                           label={`busbar-face-${card.panel.ban_menno}`}
                           resetKeys={[productNo, busbarRows[String(card.panel.ban_menno)]]}
@@ -653,10 +656,8 @@ export function PanelInfo({
                           )}
                         >
                           <BusbarSelector
-                            id={`busbar-selector-face-${card.panel.ban_menno}`}
                             faceLabel={String(card.panel.ban_menno)}
                             rows={busbarRows[String(card.panel.ban_menno)] ?? []}
-                            rowsExpanded={isBusbarFaceExpanded(card.panel.ban_menno)}
                             onChange={(rows) => changeBusbarRows(String(card.panel.ban_menno), rows)}
                           />
                         </ErrorBoundary>
