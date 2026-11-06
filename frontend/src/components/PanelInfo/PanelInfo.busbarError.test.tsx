@@ -8,9 +8,13 @@ import type { PanelPreview } from '../../types/domain'
 const control = vi.hoisted(() => ({ failFace: null as string | null }))
 
 vi.mock('../BusbarSelector/BusbarSelector', () => ({
-  BusbarSelector: ({ faceLabel }: { faceLabel: string }) => {
+  BusbarSelector: ({ faceLabel, rowsExpanded = true }: { faceLabel: string; rowsExpanded?: boolean }) => {
     if (control.failFace === faceLabel) throw new Error(`銅帯欄の描画に失敗(面${faceLabel})`)
-    return <section aria-label={`面${faceLabel} 主回路銅帯`}>面{faceLabel}の銅帯欄</section>
+    return (
+      <section hidden={!rowsExpanded} aria-label={`面${faceLabel} 主回路銅帯`}>
+        面{faceLabel}の銅帯欄
+      </section>
+    )
   },
 }))
 
@@ -60,6 +64,8 @@ describe('PanelInfo: 銅帯欄の描画例外(Error Boundary)', () => {
     control.failFace = '1'
     renderPanelInfo()
 
+    // 別面は初期状態で閉じている。面2だけ開いても、例外面の影響を受けない。
+    fireEvent.click(screen.getByRole('button', { name: '面2の銅帯設定を開く' }))
     // 画面は残り、寸法行は両方表示されたまま。
     expect(screen.getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
     for (const name of ['パネルA', 'パネルB']) {
@@ -83,12 +89,13 @@ describe('PanelInfo: 銅帯欄の描画例外(Error Boundary)', () => {
   })
 
   it('does not touch saved busbar data, still folds other faces, and recovers on retry once the cause is gone', () => {
-    const saved = JSON.stringify({ TESTBUSBAR: { '1': [{ id: 'row-1', selection: { spec: null, phase: null, voltage: null, kva: null } }] } })
+    const saved = JSON.stringify({ TESTBUSBAR: { '1': [{ id: 'row-1', selection: { spec: '標準仕様', phase: '3Φ', voltage: '200V級', kva: '100' } }] } })
     window.localStorage.setItem('sekisan-navi:busbar-selections:v1', saved)
     control.failFace = '1'
     renderPanelInfo()
 
-    // 面2の折りたたみは、面1がエラー表示でも独立して動く(寸法行は残る)。
+    // 面2は未登録なので初期は閉じている。開いてから折りたたみ、独立性を確認する。
+    fireEvent.click(screen.getByRole('button', { name: '面2の銅帯設定を開く' }))
     fireEvent.click(screen.getByRole('button', { name: '面2の銅帯設定を閉じる' }))
     expect(screen.queryByRole('region', { name: '面2 主回路銅帯' })).not.toBeInTheDocument()
     expect(screen.getByText('パネルA').closest('button')).toBeVisible()
