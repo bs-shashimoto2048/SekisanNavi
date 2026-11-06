@@ -36,6 +36,9 @@ interface NaturalSize {
   height: number
 }
 
+/** 自然サイズの報告が「直前の値へ戻る」変化を、往復(振動)とみなす時間幅(ms)。 */
+const NATURAL_SIZE_OSCILLATION_WINDOW_MS = 200
+
 // 取得元の表示ラベル (要件12。旧PanelProperties.tsxから移設)。W/D/H等の項目名は
 // ここにハードコードしない。
 const SOURCE_LABEL: Record<AttributeSource, string> = {
@@ -404,6 +407,9 @@ export function PanelInfo({
   // その`scrollWidth`に`.panel-info`の左右paddingを足した値を自然な幅とする
   // (下限は`FloatingPanel`のkind別最小幅が担う)。
   const lastReportedSizeRef = useRef<NaturalSize | null>(null)
+  // 往復(A→B→A…)の検出用: 1つ前に報告した値と、直近の報告時刻。
+  const prevReportedSizeRef = useRef<NaturalSize | null>(null)
+  const lastReportedAtRef = useRef(0)
   useLayoutEffect(() => {
     if (!onNaturalSizeChange) return
     const el = gridRef.current
@@ -445,8 +451,31 @@ export function PanelInfo({
 
       const last = lastReportedSizeRef.current
       if (last && last.width === naturalWidth && last.height === naturalHeight) return
-      const next = { width: naturalWidth, height: naturalHeight }
+      let next = { width: naturalWidth, height: naturalHeight }
+
+      // [2026-11 白画面事案の再発防止] 計測値が現在のパネルサイズに依存して2つの値の間を
+      // 往復すると(例: パネル高さの違いで一覧の縦スクロールバーが出入りし、その分
+      // 内容高さが変わる)、「計測→報告→FloatingPanelがサイズ変更→再描画→計測」が
+      // 同期更新として連鎖し続け、React が「Maximum update depth exceeded」を投げて
+      // アプリ全体が白くなる。短時間(200ms以内)に「1つ前の報告値へ戻る」変化が起きたら
+      // 往復とみなし、両者の大きい側(寸法ごと)で確定して以降は小さい側へ戻さない。
+      // 利用者の操作による通常の変化(折りたたみ等)は200ms以上の間隔があるため影響しない。
+      const now = performance.now()
+      const prev = prevReportedSizeRef.current
+      if (
+        last &&
+        prev &&
+        prev.width === next.width &&
+        prev.height === next.height &&
+        now - lastReportedAtRef.current < NATURAL_SIZE_OSCILLATION_WINDOW_MS
+      ) {
+        next = { width: Math.max(last.width, next.width), height: Math.max(last.height, next.height) }
+        if (next.width === last.width && next.height === last.height) return
+      }
+
+      prevReportedSizeRef.current = last
       lastReportedSizeRef.current = next
+      lastReportedAtRef.current = now
       onNaturalSizeChange(next)
     }
 

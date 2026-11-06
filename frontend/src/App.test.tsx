@@ -3730,6 +3730,59 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
       expect(screen.getByRole('region', { name: '面2 主回路銅帯' })).toBeVisible()
     })
 
+    it('does not blank the whole app when a face busbar toggle is pressed on a display-preview page (0_S0) while the measured panel height oscillates (Maximum update depth)', async () => {
+      // 2026-11 白画面事案: 表示用プレビュー画面(design=01等)で行末の銅帯開閉ボタンを押すと、
+      // PanelInfo の自然サイズ計測が往復(縦スクロールバーの出入りで高さが変わる)し、
+      // 更新が連鎖して React が例外を投げ、アプリ全体が白くなった。jsdom はレイアウトを
+      // 計算しないため、.panel-info の scrollHeight を2値で交互に返して再現する。
+      const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight')
+      let measures = 0
+      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+        configurable: true,
+        get(this: HTMLElement) {
+          if (!this.classList.contains('panel-info')) return 0
+          measures += 1
+          return measures % 2 === 0 ? 1133 : 1152
+        },
+      })
+      const errors: string[] = []
+      const onError = (event: ErrorEvent) => errors.push(event.message)
+      window.addEventListener('error', onError)
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        await useDocuments()
+        render(<App />)
+        await confirmPicker()
+        await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+        fireEvent.click(card('0_S0'))
+        await waitFor(() => expect(screen.getByText('共通製作仕様書(表示用プレビュー)')).toBeInTheDocument())
+        const toggles = () => within(panelInfoEl()).getAllByRole('button', { name: /の銅帯設定を(閉じる|開く)/ })
+        expect(toggles().length).toBeGreaterThan(0)
+
+        // 行末の開閉ボタン(行末尾ボタン以外では代替しない)を押す。
+        fireEvent.click(toggles()[0])
+        // アプリ全体が維持される(ツリーが消えていない)。
+        expect(listItem('16')).toBeInTheDocument()
+        expect(within(panelInfoEl()).getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
+        expect(within(panelInfoEl()).queryByRole('alert')).not.toBeInTheDocument()
+        // 寸法行は残り、対象面の銅帯欄だけが閉じる(他面は維持)。
+        expect(rowTexts().length).toBeGreaterThan(0)
+        expect(within(panelInfoEl()).getAllByRole('button', { name: /の銅帯設定を開く/ })).toHaveLength(1)
+        expect(errors.filter((m) => /Maximum update depth/.test(m))).toEqual([])
+        expect(consoleError.mock.calls.flat().map(String).filter((m) => /Maximum update depth/.test(m))).toEqual([])
+        // 他の面の開閉も続けて操作できる。
+        if (toggles().length > 1) {
+          fireEvent.click(toggles()[1])
+          expect(within(panelInfoEl()).getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
+        }
+      } finally {
+        window.removeEventListener('error', onError)
+        consoleError.mockRestore()
+        if (original) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', original)
+        else delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollHeight
+      }
+    })
+
     it('returns to the normal behaviour when a drawing page is selected: an inference page keeps its overlays, a non-inference page shows its cropped preview', async () => {
       await useDocuments()
       render(<App />)
