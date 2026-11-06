@@ -36,6 +36,7 @@ import {
 } from './domain/estimateAggregationReal'
 import { visiblePageNosForTarget } from './domain/estimateDrawingFilter'
 import { formatTargetLabel } from './domain/estimateTargetLabel'
+import { selectOutlineFrontPanels } from './domain/panelDimensions'
 import { buildEstimateResultAggregation } from './domain/estimateResultAggregation'
 import {
   EMPTY_EDIT_HISTORY,
@@ -882,6 +883,13 @@ function App() {
   // 取得元が現在の製番と一致するデータだけを使い、別の製番の盤は流用しない。
   const panelInfoFallbackPanels = useMemo(
     () => (productPagesProductNo === activeProductNo ? productPages.flatMap((p) => p.panels) : []),
+    [productPages, productPagesProductNo, activeProductNo],
+  )
+
+  // 盤寸法の補完元: 同じ製番の product_df のうち「外形図」かつ「正面図」の行だけ(`domain/panelDimensions.ts`)。
+  // 現在ページの盤表示とフォールバック表示の両方へ同じものを渡し、同じ規則で寸法を解決する。
+  const panelDimensionSources = useMemo(
+    () => (productPagesProductNo === activeProductNo ? selectOutlineFrontPanels(productPages) : EMPTY_LIST),
     [productPages, productPagesProductNo, activeProductNo],
   )
 
@@ -2115,6 +2123,7 @@ function App() {
                   panel={panel}
                   panels={activeProductPage?.panels ?? EMPTY_LIST}
                   fallbackPanels={panelInfoFallbackPanels}
+                  dimensionSourcePanels={panelDimensionSources}
                   panelsLoading={productPagesLoading}
                   estimatePanels={estimatePanels}
                   productNo={activeProductNo ?? undefined}

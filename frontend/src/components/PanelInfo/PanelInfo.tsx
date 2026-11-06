@@ -19,6 +19,7 @@ import {
   type BusbarRow,
   type BusbarRowsByFace,
 } from '../../domain/busbarSelections'
+import { isSetDimension, resolvePanelDimensions } from '../../domain/panelDimensions'
 import { BoxTypeDetail } from './BoxTypeDetail'
 import './PanelInfo.css'
 
@@ -65,6 +66,10 @@ interface Props {
    * 依存して盤情報が消えないようにするためのフォールバックで、行は表示のみ
    * (現在ページの盤ではないため、中央Viewerの盤選択とは連動させない)。 */
   fallbackPanels?: PanelPreview[]
+  /** 寸法の補完元: 同じ製番の product_df のうち、ZUMEI に「外形図」を含み BAN_TYPE が「正面図」の行
+   * (`selectOutlineFrontPanels`)。estcode_df の寸法が未設定(0・欠損)の項目を、ban_menno/ban_no が
+   * 一致する盤にだけ補う。現在ページの盤・フォールバック行のどちらにも同じ規則を適用する。 */
+  dimensionSourcePanels?: PanelPreview[]
   /** 製番の図面一覧/盤情報を取得中か。取得中は「取得できません」と誤表示しない。 */
   panelsLoading?: boolean
   /** 製番全体のestcode_df.csv行 (ページに依存しない。Phase 1.14)。panelsの
@@ -98,10 +103,6 @@ function formatValue(value: string | number | null | undefined): string {
   return String(value)
 }
 
-function isValidNumber(value: number | null | undefined): value is number {
-  return value != null && !Number.isNaN(value)
-}
-
 // 高さ表示 (Issue #38 Phase 2 指示3章)。PanelPreview.ban_h1/ban_h2を「正面/背面」
 // として扱うが、これはUI仕様上の前提であり、product_df.csv側のデータ定義として
 // 確定した事実ではない (Phase 1調査で確認できたのは、矢視の種別に関わらず
@@ -113,8 +114,9 @@ function isValidNumber(value: number | null | undefined): value is number {
 //   - 正面なし/背面あり          → "- / 2000" (正面値と誤認しないよう明示的に"-"を残す)
 //   - 両方なし                   → ban_hがあればそれを表示、無ければ"-"
 function formatHeight(banH1: number | null, banH2: number | null, fallbackBanH: number | null): string {
-  const hasFront = isValidNumber(banH1)
-  const hasBack = isValidNumber(banH2)
+  // 寸法の0は未設定値(`domain/panelDimensions.ts`)。0を「0」と表示せず、未設定として扱う。
+  const hasFront = isSetDimension(banH1)
+  const hasBack = isSetDimension(banH2)
   if (hasFront && hasBack) {
     return banH1 === banH2 ? formatValue(banH1) : `${formatValue(banH1)} / ${formatValue(banH2)}`
   }
@@ -123,12 +125,10 @@ function formatHeight(banH1: number | null, banH2: number | null, fallbackBanH: 
   return formatValue(fallbackBanH)
 }
 
-// 幅/奥行 (Issue #38 Phase 2 指示4章): EstimatePanelInfo側を優先し、無ければ
-// PanelPreview側をfallbackにする(盤情報1行化以前と優先順位が逆転している点に
-// 注意。estcode_df.csv側の値を積算上の正とする方針)。
-function formatWithFallback(primary: number | null, fallback: number | null): string {
-  if (isValidNumber(primary)) return formatValue(primary)
-  return formatValue(fallback)
+// 幅/奥行: estcode_df.csv(正の値のみ有効)を優先し、未設定(0・欠損)のときは、同じ盤の
+// 外形図・正面図(product_df.csv)の値を使う。どちらも無ければ"-"(`resolvePanelDimensions`)。
+function formatDimension(value: number | null): string {
+  return value == null ? '-' : formatValue(value)
 }
 
 /** 1行の表示に必要な盤の最小項目。`PanelPreview`は構造的にこれを満たす。 */
@@ -160,14 +160,16 @@ interface PanelRowCells {
   connect: string
 }
 
-function buildRowCells(card: PanelCard): PanelRowCells {
+function buildRowCells(card: PanelCard, dimensionSourcePanels: PanelPreview[]): PanelRowCells {
   const { panel, estimatePanel } = card
+  // 現在ページの盤・フォールバック行のどちらも、同じ規則(外形図・正面図行)で寸法を解決する。
+  const dims = resolvePanelDimensions(panel.ban_menno, panel.ban_no, estimatePanel, dimensionSourcePanels)
   return {
     menban: `${formatValue(panel.ban_menno)}/${formatValue(panel.ban_no_label ?? panel.ban_no)}`,
     name: formatValue(estimatePanel?.ban_meisyou ?? panel.ban_meisyou),
-    height: formatHeight(panel.ban_h1, panel.ban_h2, estimatePanel?.ban_h ?? null),
-    width: formatWithFallback(estimatePanel?.ban_w ?? null, panel.ban_w),
-    depth: formatWithFallback(estimatePanel?.ban_d ?? null, panel.ban_d),
+    height: formatHeight(dims.frontHeight, dims.backHeight, dims.fallbackHeight),
+    width: formatDimension(dims.width),
+    depth: formatDimension(dims.depth),
     connect: formatValue(estimatePanel?.ban_connect),
   }
 }
@@ -321,6 +323,7 @@ export function PanelInfo({
   panel,
   panels,
   fallbackPanels = [],
+  dimensionSourcePanels = [],
   panelsLoading = false,
   estimatePanels,
   productNo,
@@ -512,7 +515,7 @@ export function PanelInfo({
     // cardsはpanels/estimatePanels/selectedPanelから毎回新しい配列として
     // 作られるため、依存には実際に高さ/幅へ影響する値のみを列挙する。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panels, estimatePanels, busbarRows, busbarFaceExpansion, steel, isBoxTypeExpanded, boxTypeModel, boxTypeAnalysis, onNaturalSizeChange])
+  }, [panels, estimatePanels, dimensionSourcePanels, busbarRows, busbarFaceExpansion, steel, isBoxTypeExpanded, boxTypeModel, boxTypeAnalysis, onNaturalSizeChange])
 
   return (
     <section className="panel-info" ref={gridRef}>
@@ -578,7 +581,7 @@ export function PanelInfo({
             </div>
             <ul className="panel-info__list">
               {cards.map((card) => {
-                const cells = buildRowCells(card)
+                const cells = buildRowCells(card, dimensionSourcePanels)
                 return (
                   <li key={card.key} role="row">
                     <div className="panel-info__data-line">

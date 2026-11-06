@@ -42,10 +42,13 @@
 /* 参照画面に合わせた上段: 箱体型式と鋼材を左右に置き、盤一覧を下へ続ける。 */
 .panel-info__summary-grid {
   display: grid;
-  /* 箱体型式と鋼材は常に同じ幅の2列にする。片側の長い文字列が他方の幅を奪わず、
-     パネルを縮めたときは両カードが同じ幅で折り返す。自然幅(幅の上限)を測るときは
-     width: max-content にするため、2列は「広い方のカードの自然幅」で揃う。 */
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* 2列は各カードの内容に必要な自然幅(max-content)を上限にする。
+     - 広いとき: 各カードは自然幅のまま。短い側を引き伸ばさず、余った幅は右側の余白になる。
+     - 狭いとき: 空き幅を2列で等分しながら増やし、先に自然幅へ届いた(短い)側はそこで止め、
+       残りを長い側へ渡す。長い側が短い側の幅を奪って極端に潰すことはなく、両方が折り返す。
+     自然幅(パネル幅の上限)は width: max-content で測り、両カードの自然幅の合計+間隔になる。 */
+  grid-template-columns: repeat(2, minmax(0, auto));
+  justify-content: start;
   width: 100%;
   align-items: stretch;
   gap: 0.45rem;
