@@ -99,6 +99,7 @@ describe('PanelInfo: 自然サイズの計測値が往復しても更新が連�
       expect(reports.length).toBeGreaterThan(0)
       // jsdom does not calculate CSS padding, but the content-driven summary width must be retained.
       expect(reports[0].width).toBeGreaterThanOrEqual(920)
+      expect(document.querySelector<HTMLElement>('.panel-info__summary-grid')?.style.width).toBe('')
     } finally {
       if (originalScrollWidth) Object.defineProperty(HTMLElement.prototype, 'scrollWidth', originalScrollWidth)
       else delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollWidth

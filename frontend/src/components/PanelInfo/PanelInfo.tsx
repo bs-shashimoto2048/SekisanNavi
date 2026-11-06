@@ -458,9 +458,13 @@ export function PanelInfo({
       const style = window.getComputedStyle(el)
       const paddingX = parseFloat(style.paddingLeft || '0') + parseFloat(style.paddingRight || '0')
       const naturalTableWidth = Math.max(headerRow?.scrollWidth ?? 0, ...dataLines.map((line) => line.scrollWidth)) + paddingX
-      // 上段の箱体型式/鋼材カードはmax-content幅で横並びにする。scrollWidthは
-      // 2カードの自然幅と間隔を含むため、盤一覧と上段の大きい方がパネルの幅上限になる。
+      // 表示時は上段カードを縮めて折り返すが、幅上限は折り返し前の自然幅で測る。
+      // flex containerを一時的にmax-content幅にして読むことで、現在のpanel幅に
+      // 引きずられず、両カードが折り返し無しで並ぶために必要な最大幅を得る。
+      const previousSummaryWidth = summaryGrid?.style.width
+      if (summaryGrid) summaryGrid.style.width = 'max-content'
       const naturalSummaryWidth = (summaryGrid?.scrollWidth ?? 0) + paddingX
+      if (summaryGrid && previousSummaryWidth != null) summaryGrid.style.width = previousSummaryWidth
       const naturalWidth = Math.max(naturalTableWidth, naturalSummaryWidth)
 
       const last = lastReportedSizeRef.current
