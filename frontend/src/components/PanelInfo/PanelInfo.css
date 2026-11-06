@@ -41,9 +41,11 @@
 
 /* 参照画面に合わせた上段: 箱体型式と鋼材を左右に置き、盤一覧を下へ続ける。 */
 .panel-info__summary-grid {
-  display: flex;
-  /* 自然幅を上限にした2列を保ち、パネルを縮めたときは各内容の幅に応じて縮み、
-     それぞれのカード内で文字を折り返す。 */
+  display: grid;
+  /* 箱体型式と鋼材は常に同じ幅の2列にする。片側の長い文字列が他方の幅を奪わず、
+     パネルを縮めたときは両カードが同じ幅で折り返す。自然幅(幅の上限)を測るときは
+     width: max-content にするため、2列は「広い方のカードの自然幅」で揃う。 */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   width: 100%;
   align-items: stretch;
   gap: 0.45rem;
@@ -54,13 +56,12 @@
 }
 
 .panel-info__summary-grid--single {
-  flex-direction: column;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .panel-info__summary-card {
-  flex: 1 1 max-content;
   min-width: 0;
-  /* 幅が狭いときは内容量に応じて縮み、2列の横幅を自然幅の比率で分ける。 */
+  /* 列幅はグリッドが均等に決める。幅が狭いときはカード内で折り返す。 */
   overflow-wrap: anywhere;
   border: 1px solid #d7e0ea;
   border-radius: 6px;
