@@ -260,3 +260,33 @@
     transparent 4px
   );
 }
+
+
+/* 図面情報は初期幅を自然サイズに合わせたまま、左辺をドラッグして幅だけ調整できる。 */
+.floating-panel__width-resize-handle {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  top: 50%;
+  width: 10px;
+  height: 48px;
+  transform: translateY(-50%);
+  border: 1px solid rgba(71, 85, 105, 0.4);
+  border-left: 0;
+  border-radius: 0 4px 4px 0;
+  background-color: rgba(239, 246, 255, 0.92);
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(71, 85, 105, 0.65) 0,
+    rgba(71, 85, 105, 0.65) 1.5px,
+    transparent 1.5px,
+    transparent 4px
+  );
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.floating-panel__width-resize-handle:focus-visible {
+  outline: 2px solid var(--panel-accent-strong);
+  outline-offset: 1px;
+}
