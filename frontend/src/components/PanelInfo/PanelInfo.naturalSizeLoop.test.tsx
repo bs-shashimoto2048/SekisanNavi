@@ -85,21 +85,24 @@ describe('PanelInfo: 自然サイズの計測値が往復しても更新が連�
 
   it('includes the unwrapped summary-card width in the reported natural width', () => {
     const originalScrollWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth')
-    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
-      configurable: true,
-      get(this: HTMLElement) {
-        if (this.classList.contains('panel-info__summary-grid')) return 920
-        if (this.classList.contains('panel-info__row')) return 600
-        return 0
-      },
-    })
-    const reports: Array<{ width: number; height: number }> = []
-    render(<Host onReport={(size) => reports.push(size)} />)
-    expect(reports.length).toBeGreaterThan(0)
-    // jsdom does not calculate CSS padding, but the content-driven summary width must be retained.
-    expect(reports[0].width).toBeGreaterThanOrEqual(920)
-    if (originalScrollWidth) Object.defineProperty(HTMLElement.prototype, 'scrollWidth', originalScrollWidth)
-    else delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollWidth
+    try {
+      Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+        configurable: true,
+        get(this: HTMLElement) {
+          if (this.classList.contains('panel-info__summary-grid')) return 920
+          if (this.classList.contains('panel-info__row')) return 600
+          return 0
+        },
+      })
+      const reports: Array<{ width: number; height: number }> = []
+      render(<Host onReport={(size) => reports.push(size)} />)
+      expect(reports.length).toBeGreaterThan(0)
+      // jsdom does not calculate CSS padding, but the content-driven summary width must be retained.
+      expect(reports[0].width).toBeGreaterThanOrEqual(920)
+    } finally {
+      if (originalScrollWidth) Object.defineProperty(HTMLElement.prototype, 'scrollWidth', originalScrollWidth)
+      else delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollWidth
+    }
   })
 
   it('does not throw "Maximum update depth exceeded" and settles on the larger value when the measured height oscillates', () => {
