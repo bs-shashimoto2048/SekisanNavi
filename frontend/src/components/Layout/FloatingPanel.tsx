@@ -383,8 +383,8 @@ function reflowForResize(
  * 押されたか」だけを判定する(表・Select・button等は`<h2>`の外側にあるため、
  * 誤ってドラッグが始まることはない)。
  *
- * **リサイズ**: 右下角の専用ハンドル(`.floating-panel__resize-handle`)のみで
- * 対応する(複数辺からのリサイズは今回対象外)。
+ * **リサイズ**: 右下角の専用ハンドル(`.floating-panel__resize-handle`)で高さと幅を、
+ * 図面情報では左辺の専用ハンドル(`.floating-panel__width-resize-handle`)で幅のみを調整する。
  *
  * **初期配置(Issue #25)**: panelを表示ONにした瞬間、その時点で他に表示中の
  * floating panelが無ければViewer右上、既にあれば右端寄せを保ったまま
@@ -449,6 +449,10 @@ export function FloatingPanel({
     startWidth: number
     startHeight: number
   } | null>(null)
+  const widthResizeRef = useRef<{ pointerId: number; startX: number; right: number; startWidth: number } | null>(null)
+  // 初期表示と内容変化時は自然サイズへ合わせる。利用者が幅を変更した後は、
+  // 以後の自然サイズ計測で手動幅を上書きしない。
+  const hasManualPanelInfoWidthRef = useRef(false)
 
   // [Issue #25 追加修正] Viewerサイズ変更時の相対位置追従(reflowForResize)の
   // 基準にする、「ユーザー操作/初期配置によって確定した」anchor。表示ON直後・
@@ -502,17 +506,19 @@ export function FloatingPanel({
         if (prev == null) return prev // 初期配置は表示ON検知用のeffectが担当する
 
         if (maxContentSize != null) {
-          // 内容量への同期: `left`/`top`を`prev`のまま変えずに`width`/`height`
-          // だけ書き換えると、右端/下端アンカーの場合に「幅を広げたら右端から
-          // はみ出す分だけ`container.width - left`が小さくなり、本来の内容
-          // サイズまで広がれない」という不具合が生じる(実ブラウザで確認)。
-          // `reflowForResize`と同じく確定済みanchorを使い、目標サイズに対して
-          // 正しい`left`/`top`を先に算出してから`clampSize`へ渡す。
+          // 内容量への同期: 初期状態では幅・高さとも従来どおり自然サイズへ合わせる。
+          // 図面情報の幅を利用者が調整した後は、自然サイズ計測で幅を戻さず、
+          // 高さだけを内容に合わせる。手動幅はViewer領域内にクランプする。
+          const preserveManualWidth = kind === 'panelInfo' && hasManualPanelInfoWidthRef.current
+          const targetWidth = preserveManualWidth ? prev.width : maxContentSize.width
+          const contentLimit = preserveManualWidth
+            ? { ...maxContentSize, width: nextContainer.width }
+            : maxContentSize
           const left =
             anchor == null
               ? prev.left
               : anchor.xAnchor === 'right'
-                ? nextContainer.width - anchor.xGap - maxContentSize.width
+                ? nextContainer.width - anchor.xGap - targetWidth
                 : anchor.xGap
           const top =
             anchor == null
@@ -520,9 +526,9 @@ export function FloatingPanel({
               : anchor.yAnchor === 'bottom'
                 ? nextContainer.height - anchor.yGap - maxContentSize.height
                 : anchor.yGap
-          const synced = { ...prev, left, top, width: maxContentSize.width, height: maxContentSize.height }
+          const synced = { ...prev, left, top, width: targetWidth, height: maxContentSize.height }
           const next = clampToContainerBounds(
-            clampPosition(clampSize(synced, nextContainer, kind, maxContentSize), nextContainer),
+            clampPosition(clampSize(synced, nextContainer, kind, contentLimit), nextContainer),
             nextContainer,
           )
           // サイズが内容に合わせて変わると右端/下端からの距離も変わるため、
@@ -575,6 +581,8 @@ export function FloatingPanel({
     // `PanelVisibilityToggles`のボタン表示順と一致しているため、
     // 「表示した順に下へ積み重なる」という見た目と結果的に一致する。
     const stackIndex = Math.max(0, visibleKinds.indexOf(kind))
+    // 再表示時は初期の自然サイズへ戻るため、自然サイズ追従を再び有効にする。
+    if (kind === 'panelInfo') hasManualPanelInfoWidthRef.current = false
     const initialRect = computeInitialRect(kind, nextContainer, stackIndex)
     onRectChange(initialRect)
     // [Issue #25 追加修正] 初期配置が確定した時点のanchorを記録する
@@ -644,6 +652,71 @@ export function FloatingPanel({
     if (container && rect != null) {
       confirmedAnchorRef.current = deriveAnchor(rect, container.getBoundingClientRect())
     }
+  }
+
+  function handleWidthResizePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (kind !== 'panelInfo' || e.button !== 0) return
+    e.stopPropagation()
+    e.preventDefault()
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    setInteracting(true)
+    widthResizeRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      right: (rect?.left ?? 0) + (rect?.width ?? MIN_WIDTH_BY_KIND.panelInfo),
+      startWidth: rect?.width ?? MIN_WIDTH_BY_KIND.panelInfo,
+    }
+  }
+
+  function handleWidthResizePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const resize = widthResizeRef.current
+    if (kind !== 'panelInfo' || !resize || resize.pointerId !== e.pointerId) return
+    e.stopPropagation()
+    const container = containerRef.current
+    if (!container) return
+    const { width, height } = container.getBoundingClientRect()
+    const right = Math.min(resize.right, width)
+    const maxWidth = Math.max(0, right)
+    const minWidth = Math.min(MIN_WIDTH_BY_KIND.panelInfo, maxWidth)
+    const nextWidth = Math.min(maxWidth, Math.max(minWidth, resize.startWidth - (e.clientX - resize.startX)))
+    const nextLeft = right - nextWidth
+    hasManualPanelInfoWidthRef.current = true
+    onRectChange((prev) =>
+      prev == null
+        ? prev
+        : clampToContainerBounds({ ...prev, left: nextLeft, width: nextWidth }, { width, height }),
+    )
+  }
+
+  function endWidthResize(e: React.PointerEvent<HTMLDivElement>) {
+    if (widthResizeRef.current?.pointerId !== e.pointerId) return
+    widthResizeRef.current = null
+    setInteracting(false)
+    e.stopPropagation()
+    const container = containerRef.current
+    if (container && rect != null) {
+      confirmedAnchorRef.current = deriveAnchor(rect, container.getBoundingClientRect())
+    }
+  }
+
+  function handleWidthResizeKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (kind !== 'panelInfo' || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || rect == null) return
+    e.preventDefault()
+    const container = containerRef.current
+    if (!container) return
+    const { width, height } = container.getBoundingClientRect()
+    const right = Math.min(rect.left + rect.width, width)
+    const maxWidth = Math.max(0, right)
+    const minWidth = Math.min(MIN_WIDTH_BY_KIND.panelInfo, maxWidth)
+    const delta = e.key === 'ArrowLeft' ? 20 : -20
+    const nextWidth = Math.min(maxWidth, Math.max(minWidth, rect.width + delta))
+    hasManualPanelInfoWidthRef.current = true
+    const next = clampToContainerBounds(
+      { ...rect, left: right - nextWidth, width: nextWidth },
+      { width, height },
+    )
+    onRectChange(next)
+    confirmedAnchorRef.current = deriveAnchor(next, { width, height })
   }
 
   function handleResizePointerDown(e: React.PointerEvent<HTMLDivElement>) {
@@ -716,6 +789,21 @@ export function FloatingPanel({
       onPointerCancel={endDrag}
     >
       <div className="floating-panel__body">{children}</div>
+      {kind === 'panelInfo' && (
+        <div
+          className="floating-panel__width-resize-handle"
+          role="separator"
+          aria-label="図面情報の幅を調整"
+          aria-orientation="vertical"
+          tabIndex={0}
+          title="左右にドラッグして幅を調整"
+          onPointerDown={handleWidthResizePointerDown}
+          onPointerMove={handleWidthResizePointerMove}
+          onPointerUp={endWidthResize}
+          onPointerCancel={endWidthResize}
+          onKeyDown={handleWidthResizeKeyDown}
+        />
+      )}
       <div
         className="floating-panel__resize-handle"
         onPointerDown={handleResizePointerDown}

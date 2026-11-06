@@ -2054,6 +2054,65 @@ describe('App: floating panelのドラッグ移動・リサイズ (Issue #19 追
     expect(parseFloat(panel.style.height)).toBe(150)
   })
 
+  it('resizes only the 図面情報 panel width from its left edge while preserving the auto-sized initial width', async () => {
+    await renderApp()
+    setViewerWrapRect(1200, 700)
+    const panel = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    // 初期配置は右寄せなので、先に少し内側へ動かして左辺を広げる余地を作る。
+    const heading = within(panel).getByRole('heading', { name: /図面情報/ })
+    fireEvent.pointerDown(heading, { pointerId: 9, clientX: 100, clientY: 100, button: 0 })
+    fireEvent.pointerMove(heading, { pointerId: 9, clientX: 300, clientY: 100 })
+    fireEvent.pointerUp(heading, { pointerId: 9, clientX: 300, clientY: 100 })
+    const handle = within(panel).getByRole('separator', { name: '図面情報の幅を調整' })
+    const initialLeft = parseFloat(panel.style.left)
+    const initialWidth = parseFloat(panel.style.width)
+    const initialHeight = parseFloat(panel.style.height)
+    const rightEdge = initialLeft + initialWidth
+
+    fireEvent.pointerDown(handle, {
+      pointerId: 10,
+      clientX: initialLeft,
+      clientY: parseFloat(panel.style.top) + initialHeight / 2,
+      button: 0,
+    })
+    fireEvent.pointerMove(handle, {
+      pointerId: 10,
+      clientX: initialLeft - 80,
+      clientY: parseFloat(panel.style.top) + initialHeight / 2,
+    })
+    fireEvent.pointerUp(handle, {
+      pointerId: 10,
+      clientX: initialLeft - 80,
+      clientY: parseFloat(panel.style.top) + initialHeight / 2,
+    })
+
+    expect(parseFloat(panel.style.width)).toBe(initialWidth + 80)
+    expect(parseFloat(panel.style.left)).toBe(initialLeft - 80)
+    expect(parseFloat(panel.style.height)).toBe(initialHeight)
+    expect(parseFloat(panel.style.left) + parseFloat(panel.style.width)).toBe(rightEdge)
+
+    // 逆方向に動かしても最小幅(590px)より細くならず、Viewerの範囲内に収まる。
+    fireEvent.pointerDown(handle, {
+      pointerId: 11,
+      clientX: initialLeft - 80,
+      clientY: parseFloat(panel.style.top) + initialHeight / 2,
+      button: 0,
+    })
+    fireEvent.pointerMove(handle, {
+      pointerId: 11,
+      clientX: initialLeft + 100000,
+      clientY: parseFloat(panel.style.top) + initialHeight / 2,
+    })
+    fireEvent.pointerUp(handle, {
+      pointerId: 11,
+      clientX: initialLeft + 100000,
+      clientY: parseFloat(panel.style.top) + initialHeight / 2,
+    })
+    expect(parseFloat(panel.style.width)).toBe(590)
+    expect(parseFloat(panel.style.left)).toBe(rightEdge - 590)
+    expect(parseFloat(panel.style.left) + parseFloat(panel.style.width)).toBeLessThanOrEqual(1200)
+  })
+
   it('brings a panel to the front (raises its z-index) when interacted with, without touching Undo/Redo/積算対象 state', async () => {
     await renderApp()
     setViewerWrapRect(1200, 700)
