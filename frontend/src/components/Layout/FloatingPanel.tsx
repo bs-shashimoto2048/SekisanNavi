@@ -383,8 +383,8 @@ function reflowForResize(
  * 押されたか」だけを判定する(表・Select・button等は`<h2>`の外側にあるため、
  * 誤ってドラッグが始まることはない)。
  *
- * **リサイズ**: 右下角の専用ハンドル(`.floating-panel__resize-handle`)で高さと幅を、
- * 図面情報では左辺の専用ハンドル(`.floating-panel__width-resize-handle`)で幅のみを調整する。
+ * **リサイズ**: 全パネル共通で右下角の専用ハンドル(`.floating-panel__resize-handle`)を使う。
+ * 図面情報は子が報告する自然な内容幅を上限として、空白が増える拡大を防ぐ。
  *
  * **初期配置(Issue #25)**: panelを表示ONにした瞬間、その時点で他に表示中の
  * floating panelが無ければViewer右上、既にあれば右端寄せを保ったまま
@@ -449,7 +449,6 @@ export function FloatingPanel({
     startWidth: number
     startHeight: number
   } | null>(null)
-  const widthResizeRef = useRef<{ pointerId: number; startX: number; right: number; startWidth: number } | null>(null)
   // 初期表示と内容変化時は自然サイズへ合わせる。利用者が幅を変更した後は、
   // 以後の自然サイズ計測で手動幅を上書きしない。
   const hasManualPanelInfoWidthRef = useRef(false)
@@ -654,71 +653,6 @@ export function FloatingPanel({
     }
   }
 
-  function handleWidthResizePointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    if (kind !== 'panelInfo' || e.button !== 0) return
-    e.stopPropagation()
-    e.preventDefault()
-    e.currentTarget.setPointerCapture?.(e.pointerId)
-    setInteracting(true)
-    widthResizeRef.current = {
-      pointerId: e.pointerId,
-      startX: e.clientX,
-      right: (rect?.left ?? 0) + (rect?.width ?? MIN_WIDTH_BY_KIND.panelInfo),
-      startWidth: rect?.width ?? MIN_WIDTH_BY_KIND.panelInfo,
-    }
-  }
-
-  function handleWidthResizePointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    const resize = widthResizeRef.current
-    if (kind !== 'panelInfo' || !resize || resize.pointerId !== e.pointerId) return
-    e.stopPropagation()
-    const container = containerRef.current
-    if (!container) return
-    const { width, height } = container.getBoundingClientRect()
-    const right = Math.min(resize.right, width)
-    const maxWidth = Math.max(0, right)
-    const minWidth = Math.min(MIN_WIDTH_BY_KIND.panelInfo, maxWidth)
-    const nextWidth = Math.min(maxWidth, Math.max(minWidth, resize.startWidth - (e.clientX - resize.startX)))
-    const nextLeft = right - nextWidth
-    hasManualPanelInfoWidthRef.current = true
-    onRectChange((prev) =>
-      prev == null
-        ? prev
-        : clampToContainerBounds({ ...prev, left: nextLeft, width: nextWidth }, { width, height }),
-    )
-  }
-
-  function endWidthResize(e: React.PointerEvent<HTMLDivElement>) {
-    if (widthResizeRef.current?.pointerId !== e.pointerId) return
-    widthResizeRef.current = null
-    setInteracting(false)
-    e.stopPropagation()
-    const container = containerRef.current
-    if (container && rect != null) {
-      confirmedAnchorRef.current = deriveAnchor(rect, container.getBoundingClientRect())
-    }
-  }
-
-  function handleWidthResizeKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (kind !== 'panelInfo' || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || rect == null) return
-    e.preventDefault()
-    const container = containerRef.current
-    if (!container) return
-    const { width, height } = container.getBoundingClientRect()
-    const right = Math.min(rect.left + rect.width, width)
-    const maxWidth = Math.max(0, right)
-    const minWidth = Math.min(MIN_WIDTH_BY_KIND.panelInfo, maxWidth)
-    const delta = e.key === 'ArrowLeft' ? 20 : -20
-    const nextWidth = Math.min(maxWidth, Math.max(minWidth, rect.width + delta))
-    hasManualPanelInfoWidthRef.current = true
-    const next = clampToContainerBounds(
-      { ...rect, left: right - nextWidth, width: nextWidth },
-      { width, height },
-    )
-    onRectChange(next)
-    confirmedAnchorRef.current = deriveAnchor(next, { width, height })
-  }
-
   function handleResizePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.button !== 0) return
     e.stopPropagation() // 親(floating-panel本体)のドラッグ判定へ伝播させない
@@ -743,6 +677,7 @@ export function FloatingPanel({
     const { width, height } = container.getBoundingClientRect()
     const dx = e.clientX - resize.startX
     const dy = e.clientY - resize.startY
+    if (kind === 'panelInfo' && dx !== 0) hasManualPanelInfoWidthRef.current = true
     onRectChange((prev) =>
       prev == null
         ? prev
@@ -789,21 +724,6 @@ export function FloatingPanel({
       onPointerCancel={endDrag}
     >
       <div className="floating-panel__body">{children}</div>
-      {kind === 'panelInfo' && (
-        <div
-          className="floating-panel__width-resize-handle"
-          role="separator"
-          aria-label="図面情報の幅を調整"
-          aria-orientation="vertical"
-          tabIndex={0}
-          title="左右にドラッグして幅を調整"
-          onPointerDown={handleWidthResizePointerDown}
-          onPointerMove={handleWidthResizePointerMove}
-          onPointerUp={endWidthResize}
-          onPointerCancel={endWidthResize}
-          onKeyDown={handleWidthResizeKeyDown}
-        />
-      )}
       <div
         className="floating-panel__resize-handle"
         onPointerDown={handleResizePointerDown}
