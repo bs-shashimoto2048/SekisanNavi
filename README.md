@@ -303,6 +303,9 @@ cd frontend && npm run lint
 cd frontend && npm run build   # 型チェックを兼ねたビルド確認
 ```
 
+> 一時 worktree・別ポートで検証用の Vite を起動するときは、稼働中 5174 の依存キャッシュを書き換えないよう、
+> `VITE_CACHE_DIR` に専用ディレクトリを指定すること。手順は [`docs/dev-verification.md`](docs/dev-verification.md) を参照。
+
 2026-09時点(Issue #40 Phase 5)で、Backend 292件・Frontend 714件(36ファイル)の
 テストが全件成功することを確認済み。
 
