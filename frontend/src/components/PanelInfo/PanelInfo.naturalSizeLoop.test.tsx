@@ -88,7 +88,8 @@ describe('PanelInfo: 自然サイズの計測値が往復しても更新が連�
     // 例外(白画面)にならずに描画でき、報告は有限回で収束する。
     expect(() => render(<Host onReport={(s) => reports.push(s)} />)).not.toThrow()
     expect(reports.length).toBeGreaterThan(0)
-    expect(reports.length).toBeLessThanOrEqual(4)
+    // 往復は「200ms以内に8回以上の報告」で検出され、React の同期更新の上限(50回)より手前で止まる。
+    expect(reports.length).toBeLessThanOrEqual(12)
     // 往復した2値のうち大きい側で確定する(以降、小さい側へ戻さない)。
     expect(Math.max(...reports.map((r) => r.height))).toBe(1152)
     expect(reports[reports.length - 1].height).toBe(1152)
@@ -105,6 +106,23 @@ describe('PanelInfo: 自然サイズの計測値が往復しても更新が連�
     expect(within(row).getAllByRole('cell')).toHaveLength(6)
     expect(screen.queryByRole('region', { name: '面1 主回路銅帯' })).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: '面2 主回路銅帯' })).toBeInTheDocument()
+  })
+
+  it('follows the final state after a rapid burst of toggles (e.g. 3 clicks within ~60ms) instead of treating it as an oscillation', () => {
+    // 利用者が同じ開閉ボタンを素早く3回押す: 展開(1000) → 折りたたみ(700) → 展開(1000) → 折りたたみ(700)。
+    // 報告の間隔は約30msで、直前の値へ戻る変化も含むが、報告回数は数回なので往復とはみなさない。
+    // (旧実装は200ms以内に1回でも直前値へ戻ると往復とみなし、最終の折りたたみ状態の高さ(700)を
+    //  報告せず、展開時の高さ(1000)が残った。)
+    heights = [1000, 1000, 700, 700, 1000, 1000, 700, 700]
+    const reports: Array<{ width: number; height: number }> = []
+    const { rerender } = render(<Host onReport={(s) => reports.push(s)} />)
+    for (const step of [2, 4, 6]) {
+      now += 30
+      measureCount = step
+      act(() => rerender(<Host onReport={(s) => reports.push(s)} />))
+    }
+    expect(reports.map((r) => r.height)).toEqual([1000, 700, 1000, 700])
+    expect(reports[reports.length - 1].height).toBe(700)
   })
 
   it('still reports a genuine size change back to an earlier value when it happens well after the previous report', () => {

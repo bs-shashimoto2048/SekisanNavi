@@ -36,8 +36,14 @@ interface NaturalSize {
   height: number
 }
 
-/** 自然サイズの報告が「直前の値へ戻る」変化を、往復(振動)とみなす時間幅(ms)。 */
+/**
+ * 自然サイズの往復(振動)を検出する条件。`NATURAL_SIZE_OSCILLATION_WINDOW_MS` 以内に
+ * `NATURAL_SIZE_OSCILLATION_MIN_REPORTS` 回以上報告されていて、さらに直前の値へ戻る変化が起きたら、
+ * 計測が収束しない暴走ループとみなす。人間の素早い連打(数回)では届かない回数に設定してあり、
+ * 暴走ループ(React の同期更新の上限は50回)は、この回数で十分に手前で止められる。
+ */
 const NATURAL_SIZE_OSCILLATION_WINDOW_MS = 200
+const NATURAL_SIZE_OSCILLATION_MIN_REPORTS = 8
 
 // 取得元の表示ラベル (要件12。旧PanelProperties.tsxから移設)。W/D/H等の項目名は
 // ここにハードコードしない。
@@ -407,9 +413,9 @@ export function PanelInfo({
   // その`scrollWidth`に`.panel-info`の左右paddingを足した値を自然な幅とする
   // (下限は`FloatingPanel`のkind別最小幅が担う)。
   const lastReportedSizeRef = useRef<NaturalSize | null>(null)
-  // 往復(A→B→A…)の検出用: 1つ前に報告した値と、直近の報告時刻。
+  // 往復(A→B→A…)の検出用: 1つ前に報告した値と、直近の報告時刻の一覧。
   const prevReportedSizeRef = useRef<NaturalSize | null>(null)
-  const lastReportedAtRef = useRef(0)
+  const recentReportTimesRef = useRef<number[]>([])
   useLayoutEffect(() => {
     if (!onNaturalSizeChange) return
     const el = gridRef.current
@@ -457,17 +463,20 @@ export function PanelInfo({
       // 往復すると(例: パネル高さの違いで一覧の縦スクロールバーが出入りし、その分
       // 内容高さが変わる)、「計測→報告→FloatingPanelがサイズ変更→再描画→計測」が
       // 同期更新として連鎖し続け、React が「Maximum update depth exceeded」を投げて
-      // アプリ全体が白くなる。短時間(200ms以内)に「1つ前の報告値へ戻る」変化が起きたら
-      // 往復とみなし、両者の大きい側(寸法ごと)で確定して以降は小さい側へ戻さない。
-      // 利用者の操作による通常の変化(折りたたみ等)は200ms以上の間隔があるため影響しない。
+      // アプリ全体が白くなる。短時間(200ms以内)に8回以上報告されたうえで「1つ前の報告値へ戻る」
+      // 変化が起きたら、収束しない往復とみなし、両者の大きい側(寸法ごと)で確定して以降は
+      // 小さい側へ戻さない。回数で判定するのは、利用者の素早い連打(例: 銅帯の開閉を
+      // 60ms間隔で3回)を往復と誤判定して、最終状態への追従を止めないため。
       const now = performance.now()
+      const recent = recentReportTimesRef.current.filter((t) => now - t < NATURAL_SIZE_OSCILLATION_WINDOW_MS)
+      recentReportTimesRef.current = recent
       const prev = prevReportedSizeRef.current
       if (
         last &&
         prev &&
         prev.width === next.width &&
         prev.height === next.height &&
-        now - lastReportedAtRef.current < NATURAL_SIZE_OSCILLATION_WINDOW_MS
+        recent.length >= NATURAL_SIZE_OSCILLATION_MIN_REPORTS
       ) {
         next = { width: Math.max(last.width, next.width), height: Math.max(last.height, next.height) }
         if (next.width === last.width && next.height === last.height) return
@@ -475,7 +484,7 @@ export function PanelInfo({
 
       prevReportedSizeRef.current = last
       lastReportedSizeRef.current = next
-      lastReportedAtRef.current = now
+      recentReportTimesRef.current.push(now)
       onNaturalSizeChange(next)
     }
 
