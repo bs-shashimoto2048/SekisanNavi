@@ -20,14 +20,10 @@ import './BusbarSelector.css'
 // 行のリストを props で受け取る制御コンポーネントで、状態の保持・保存は呼び出し側(PanelInfo)が面ごとに行う。
 
 interface Props {
-  /** 面ごとに盤情報の行末トグルから参照するID。 */
-  id?: string
   /** 面の表示ラベル(例: "1")。 */
   faceLabel: string
   rows: BusbarRow[]
   onChange: (rows: BusbarRow[]) => void
-  /** 入力行を表示するか。見出しと＋ボタンは折りたたみ中も残す。 */
-  rowsExpanded?: boolean
 }
 
 function statusText(selection: BusbarSelection): string | null {
@@ -38,7 +34,7 @@ function statusText(selection: BusbarSelection): string | null {
   return null
 }
 
-export function BusbarSelector({ id, faceLabel, rows, rowsExpanded = true, onChange }: Props) {
+export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
   return (
     <div className="busbar-selector">
       <div className="busbar-selector__header">
@@ -54,7 +50,7 @@ export function BusbarSelector({ id, faceLabel, rows, rowsExpanded = true, onCha
         </button>
       </div>
 
-      <div id={id} role="region" aria-label={`面${faceLabel} 主回路銅帯`} hidden={!rowsExpanded}>
+      <div role="region" aria-label={`面${faceLabel} 主回路銅帯`}>
         {rows.map((row, rowIndex) => {
         const status = statusOf(row.selection)
         const message = statusText(row.selection)
