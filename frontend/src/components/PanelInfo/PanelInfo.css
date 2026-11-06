@@ -47,9 +47,8 @@
   width: 100%;
   align-items: stretch;
   gap: 0.45rem;
-  /* 縮めない: 縮めるとカードの中身がグリッドからはみ出し、下の盤一覧に重なる(実ブラウザで確認)。
-     各カードは内容の全行が見える高さまで広がる(内部スクロール・高さ上限なし)。パネル全体が画面高を
-     超える場合は、パネル外側(`.floating-panel__body`)の縦スクロールで見る。 */
+  /* カードは幅を内容量に応じて縮め、文字を折り返す。高さは各カードの内容に追従し、
+     パネル全体が画面高を超える場合は外側(`.floating-panel__body`)の縦スクロールで見る。 */
   flex: 0 0 auto;
   margin-bottom: 0.4rem;
 }
@@ -61,7 +60,8 @@
 .panel-info__summary-card {
   flex: 1 1 max-content;
   min-width: 0;
-  /* 高さは内容どおり(上限・内部スクロールなし)。2 カードは grid の stretch で高さが揃う。 */
+  /* 幅が狭いときは内容量に応じて縮み、2列の横幅を自然幅の比率で分ける。 */
+  overflow-wrap: anywhere;
   border: 1px solid #d7e0ea;
   border-radius: 6px;
   background: #fff;
@@ -82,6 +82,7 @@
 }
 
 .panel-info__summary-grid .steel-section {
+  min-width: 0;
   margin: 0;
   padding: 0.35rem;
   border: 1px solid #d7e0ea;
@@ -89,6 +90,8 @@
 }
 
 .panel-info__summary-grid .box-type-detail {
+  min-width: 0;
+  width: 100%;
   /* スクロールはカード側が担う(入れ子のスクロールにしない)。 */
   max-height: none;
   padding: 0.35rem;
@@ -111,11 +114,11 @@
 }
 
 .panel-info__summary-grid .steel-section__body {
+  min-width: 0;
   max-height: none;
   overflow: visible;
   overflow-y: visible;
 }
-
 
 .panel-info__tab {
   min-height: 0;
