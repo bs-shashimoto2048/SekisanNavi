@@ -3562,6 +3562,8 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
         fireEvent.click(infoRow('高圧受電盤'))
         expect(infoRow('高圧受電盤').className).not.toContain('--selected')
         expect(infoRow('高圧受電盤')).toHaveAttribute('aria-pressed', 'false')
+        // ＋で未登録の面に最初の入力行を作ると、銅帯設定欄が表示される。
+        fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
         // 書類のまま銅帯設定欄・面ごとの開閉も使える。
         fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を閉じる' }))
         expect(screen.getByRole('button', { name: '面1の銅帯設定を開く' })).toHaveTextContent('◂')
@@ -3698,6 +3700,8 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
       }
 
       expectDimensionRows()
+      fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
+      fireEvent.click(screen.getByRole('button', { name: '面2に銅帯の選択行を追加' }))
       fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を閉じる' }))
       expectAppAlive()
       expectDimensionRows()
@@ -3756,11 +3760,13 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
         await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
         fireEvent.click(card('0_S0'))
         await waitFor(() => expect(screen.getByText('共通製作仕様書(表示用プレビュー)')).toBeInTheDocument())
+        fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
+        fireEvent.click(screen.getByRole('button', { name: '面2に銅帯の選択行を追加' }))
         const toggles = () => within(panelInfoEl()).getAllByRole('button', { name: /の銅帯設定を(閉じる|開く)/ })
         expect(toggles().length).toBeGreaterThan(0)
 
         // 行末の開閉ボタン(行末尾ボタン以外では代替しない)を押す。
-        fireEvent.click(toggles()[0])
+        fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を閉じる' }))
         // アプリ全体が維持される(ツリーが消えていない)。
         expect(listItem('16')).toBeInTheDocument()
         expect(within(panelInfoEl()).getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()

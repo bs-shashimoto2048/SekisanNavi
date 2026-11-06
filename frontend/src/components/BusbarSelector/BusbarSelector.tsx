@@ -14,7 +14,7 @@ import './BusbarSelector.css'
 //
 // 4段階(仕様 → 相数 → 電圧区分 → 容量[kVA])で絞り込み、4項目がそろって対応するコードが 1 件に決まるときだけ、
 // コードと仕様を表示する(0 件・複数件はコードを採用せず、状態を表示する)。対応表は `domain/busbarCodes`
-// (ユーザー提示の DataviewJS のデータ)だけ。初期状態は 4 項目すべて未選択(既定値・初期コードなし)。
+// (ユーザー提示の DataviewJS のデータ)だけ。＋で追加した入力行は 4 項目すべて未選択(既定値・初期コードなし)。
 //
 // 面(`ban_menno`)ごとに 1 つ配置し、「＋」で同じ面に選択行を追加、個別に削除できる。この component は
 // 行のリストを props で受け取る制御コンポーネントで、状態の保持・保存は呼び出し側(PanelInfo)が面ごとに行う。
@@ -26,6 +26,8 @@ interface Props {
   faceLabel: string
   rows: BusbarRow[]
   onChange: (rows: BusbarRow[]) => void
+  /** 入力行を表示するか。見出しと＋ボタンは折りたたみ中も残す。 */
+  rowsExpanded?: boolean
 }
 
 function statusText(selection: BusbarSelection): string | null {
@@ -36,9 +38,9 @@ function statusText(selection: BusbarSelection): string | null {
   return null
 }
 
-export function BusbarSelector({ id, faceLabel, rows, onChange }: Props) {
+export function BusbarSelector({ id, faceLabel, rows, rowsExpanded = true, onChange }: Props) {
   return (
-    <section id={id} className="busbar-selector" aria-label={`面${faceLabel} 主回路銅帯`}>
+    <div className="busbar-selector">
       <div className="busbar-selector__header">
         <span className="busbar-selector__title">面{faceLabel} 主回路銅帯(入力)コード選定</span>
         <button
@@ -52,7 +54,8 @@ export function BusbarSelector({ id, faceLabel, rows, onChange }: Props) {
         </button>
       </div>
 
-      {rows.map((row, rowIndex) => {
+      <div id={id} role="region" aria-label={`面${faceLabel} 主回路銅帯`} hidden={!rowsExpanded}>
+        {rows.map((row, rowIndex) => {
         const status = statusOf(row.selection)
         const message = statusText(row.selection)
         const rowLabel = `面${faceLabel} 銅帯${rowIndex + 1}`
@@ -130,7 +133,8 @@ export function BusbarSelector({ id, faceLabel, rows, onChange }: Props) {
             )}
           </div>
         )
-      })}
-    </section>
+        })}
+      </div>
+    </div>
   )
 }

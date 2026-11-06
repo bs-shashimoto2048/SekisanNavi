@@ -14,7 +14,6 @@ import { ErrorBoundary } from '../ErrorBoundary/ErrorBoundary'
 import '../ErrorBoundary/ErrorBoundary.css'
 import {
   loadSelections,
-  rowsOf,
   saveSelections,
   setFaceRows,
   type BusbarRow,
@@ -364,25 +363,30 @@ export function PanelInfo({
   // 製番が変わったときは、その製番の保存内容を読み直す(render中の state 調整)。
   const [busbarRows, setBusbarRows] = useState<BusbarRowsByFace>(() => loadSelections(productNo))
   const [busbarProductNo, setBusbarProductNo] = useState(productNo)
-  const [collapsedBusbarFaces, setCollapsedBusbarFaces] = useState<Set<number>>(() => new Set())
+  // 面ごとの開閉は明示操作だけを保存し、初期状態は「保存済み行がある面だけ展開」。
+  // 図面データが後から届いても未登録面が誤って展開されないよう、既定状態は描画時に導出する。
+  const [busbarFaceExpansion, setBusbarFaceExpansion] = useState<Map<number, boolean>>(() => new Map())
   if (busbarProductNo !== productNo) {
     setBusbarProductNo(productNo)
     setBusbarRows(loadSelections(productNo))
-    setCollapsedBusbarFaces(new Set())
+    setBusbarFaceExpansion(new Map())
   }
+  function isBusbarFaceExpanded(face: number) {
+    return busbarFaceExpansion.get(face) ?? Boolean(busbarRows[String(face)]?.some((row) => Object.values(row.selection).some(Boolean)))
+  }
+
   function changeBusbarRows(face: string, rows: BusbarRow[]) {
     const next = setFaceRows(busbarRows, face, rows)
     setBusbarRows(next)
+    // ＋で最初の行を作ったときは、その面の入力欄を表示する。
+    if (rows.length > (busbarRows[face]?.length ?? 0)) {
+      setBusbarFaceExpansion((current) => new Map(current).set(Number(face), true))
+    }
     saveSelections(productNo, next)
   }
 
   function toggleBusbarFace(face: number) {
-    setCollapsedBusbarFaces((current) => {
-      const next = new Set(current)
-      if (next.has(face)) next.delete(face)
-      else next.add(face)
-      return next
-    })
+    setBusbarFaceExpansion((current) => new Map(current).set(face, !isBusbarFaceExpanded(face)))
   }
 
   // [Issue #40 追加修正: 表カラム幅の共通自動調整] 各行(button)が独立した
@@ -500,7 +504,7 @@ export function PanelInfo({
     // cardsはpanels/estimatePanels/selectedPanelから毎回新しい配列として
     // 作られるため、依存には実際に高さ/幅へ影響する値のみを列挙する。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panels, estimatePanels, busbarRows, collapsedBusbarFaces, steel, isBoxTypeExpanded, boxTypeModel, boxTypeAnalysis, onNaturalSizeChange])
+  }, [panels, estimatePanels, busbarRows, busbarFaceExpansion, steel, isBoxTypeExpanded, boxTypeModel, boxTypeAnalysis, onNaturalSizeChange])
 
   return (
     <section className="panel-info" ref={gridRef}>
@@ -614,13 +618,13 @@ export function PanelInfo({
                         <button
                           type="button"
                           className="panel-info__busbar-toggle"
-                          aria-expanded={!collapsedBusbarFaces.has(card.panel.ban_menno)}
+                          aria-expanded={isBusbarFaceExpanded(card.panel.ban_menno)}
                           aria-controls={`busbar-selector-face-${card.panel.ban_menno}`}
-                          aria-label={`面${card.panel.ban_menno}の銅帯設定を${collapsedBusbarFaces.has(card.panel.ban_menno) ? '開く' : '閉じる'}`}
-                          title={`面${card.panel.ban_menno}の銅帯設定を${collapsedBusbarFaces.has(card.panel.ban_menno) ? '開く' : '閉じる'}`}
+                          aria-label={`面${card.panel.ban_menno}の銅帯設定を${isBusbarFaceExpanded(card.panel.ban_menno) ? '閉じる' : '開く'}`}
+                          title={`面${card.panel.ban_menno}の銅帯設定を${isBusbarFaceExpanded(card.panel.ban_menno) ? '閉じる' : '開く'}`}
                           onClick={() => toggleBusbarFace(card.panel.ban_menno)}
                         >
-                          {collapsedBusbarFaces.has(card.panel.ban_menno) ? '◂' : '▾'}
+                          {isBusbarFaceExpanded(card.panel.ban_menno) ? '▾' : '◂'}
                         </button>
                       )}
                     </div>
@@ -631,7 +635,7 @@ export function PanelInfo({
                         `<button>`の外(sibling)に置くため、盤選択のクリック領域・cell数
                         (6列)・列幅計測(`data-auto-col`)には影響しない。 */}
                     {copperSelectorAnchorKeyByMenno.get(card.panel.ban_menno) === card.key && (
-                      <div hidden={collapsedBusbarFaces.has(card.panel.ban_menno)}>
+                      <div>
                         <ErrorBoundary
                           label={`busbar-face-${card.panel.ban_menno}`}
                           resetKeys={[productNo, busbarRows[String(card.panel.ban_menno)]]}
@@ -651,7 +655,8 @@ export function PanelInfo({
                           <BusbarSelector
                             id={`busbar-selector-face-${card.panel.ban_menno}`}
                             faceLabel={String(card.panel.ban_menno)}
-                            rows={rowsOf(busbarRows, String(card.panel.ban_menno))}
+                            rows={busbarRows[String(card.panel.ban_menno)] ?? []}
+                            rowsExpanded={isBusbarFaceExpanded(card.panel.ban_menno)}
                             onChange={(rows) => changeBusbarRows(String(card.panel.ban_menno), rows)}
                           />
                         </ErrorBoundary>
