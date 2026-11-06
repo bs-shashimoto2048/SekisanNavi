@@ -100,7 +100,9 @@ describe('PanelInfo: 自然サイズの計測値が往復しても更新が連�
 
   it('keeps the dimension rows and folds a face without throwing while the measured height oscillates', () => {
     render(<Host onReport={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
     fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
+    fireEvent.click(screen.getByRole('button', { name: '面2の銅帯設定を開く' }))
     fireEvent.click(screen.getByRole('button', { name: '面2に銅帯の選択行を追加' }))
     expect(() => fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を閉じる' }))).not.toThrow()
     const row = screen.getByText('パネルA').closest('button') as HTMLElement

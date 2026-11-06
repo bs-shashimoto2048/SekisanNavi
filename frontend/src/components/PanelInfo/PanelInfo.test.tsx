@@ -1119,9 +1119,15 @@ describe('PanelInfo: 主回路銅帯の選択欄は1面(ban_menno)につき1つ�
     // 既存の選択・編集テストは、利用者が＋を押した状態から始める。
     if (addRows) {
       if (!screen.queryByRole('combobox', { name: '面1 銅帯1 仕様' })) {
+        if (screen.queryByRole('button', { name: '面1の銅帯設定を開く' })) {
+          fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
+        }
         fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
       }
       if (!screen.queryByRole('combobox', { name: '面2 銅帯1 仕様' })) {
+        if (screen.queryByRole('button', { name: '面2の銅帯設定を開く' })) {
+          fireEvent.click(screen.getByRole('button', { name: '面2の銅帯設定を開く' }))
+        }
         fireEvent.click(screen.getByRole('button', { name: '面2に銅帯の選択行を追加' }))
       }
     }
@@ -1144,11 +1150,15 @@ describe('PanelInfo: 主回路銅帯の選択欄は1面(ban_menno)につき1つ�
     for (const face of ['1', '2']) {
       expect(screen.getByRole('button', { name: `面${face}の銅帯設定を開く` })).toHaveAttribute('aria-expanded', 'false')
       expect(screen.queryByRole('region', { name: `面${face} 主回路銅帯` })).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: `面${face}に銅帯の選択行を追加` })).toBeVisible()
+      expect(screen.queryByRole('button', { name: `面${face}に銅帯の選択行を追加` })).not.toBeInTheDocument()
     }
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
     expect(document.querySelectorAll('.busbar-selector__row')).toHaveLength(0)
 
+    // 行末の開閉ボタンで欄全体が開き、ここで初めて見出しと＋が現れる。
+    fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
+    expect(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' })).toBeVisible()
+    expect(screen.queryByRole('combobox', { name: '面1 銅帯1 仕様' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
     expect(screen.getByRole('button', { name: '面1の銅帯設定を閉じる' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('combobox', { name: '面1 銅帯1 仕様' })).toBeVisible()
@@ -1272,6 +1282,7 @@ describe('PanelInfo: 主回路銅帯の選択欄は1面(ban_menno)につき1つ�
 
   it('keeps an empty row folded by default after reload and lets plus reopen it', () => {
     const first = renderThreePanels(() => {}, 'A1EMPTY001', false)
+    fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
     fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
     expect(screen.getByRole('combobox', { name: '面1 銅帯1 仕様' })).toBeVisible()
     first.unmount()
@@ -1280,7 +1291,8 @@ describe('PanelInfo: 主回路銅帯の選択欄は1面(ban_menno)につき1つ�
     expect(screen.getByRole('button', { name: '面1の銅帯設定を開く' })).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('combobox', { name: '面1 銅帯1 仕様' })).not.toBeInTheDocument()
 
-    // 保存済みの未選択行が残っていても、＋を押せば入力欄を表示する。
+    // 保存済みの未選択行が残っていても、欄を開いて＋を押せば入力欄を表示する。
+    fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
     fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
     expect(screen.getByRole('button', { name: '面1の銅帯設定を閉じる' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('combobox', { name: '面1 銅帯1 仕様' })).toBeVisible()
@@ -1402,6 +1414,7 @@ describe('PanelInfo: 選択図面に盤情報が無いときの同一製番内�
   })
 
   it('keeps the per-face busbar section, fold toggle (◂/▾) and dimension rows working in fallback mode', () => {
+    window.localStorage.clear()
     render(
       <PanelInfo
         panel={null}
@@ -1413,7 +1426,9 @@ describe('PanelInfo: 選択図面に盤情報が無いときの同一製番内�
         onSelectPanel={() => {}}
       />,
     )
+    fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
     fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
+    fireEvent.click(screen.getByRole('button', { name: '面2の銅帯設定を開く' }))
     fireEvent.click(screen.getByRole('button', { name: '面2に銅帯の選択行を追加' }))
     expect(screen.getAllByRole('region', { name: /主回路銅帯/ })).toHaveLength(2)
     fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を閉じる' }))

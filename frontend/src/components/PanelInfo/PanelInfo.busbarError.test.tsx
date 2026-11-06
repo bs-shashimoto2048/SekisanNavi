@@ -64,7 +64,9 @@ describe('PanelInfo: 銅帯欄の描画例外(Error Boundary)', () => {
     control.failFace = '1'
     renderPanelInfo()
 
-    // 別面は初期状態で閉じている。面2だけ開いても、例外面の影響を受けない。
+    // 例外面を展開すると、その面の欄だけにエラー表示が現れる。
+    fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
+    // 別面も独立して展開できる。
     fireEvent.click(screen.getByRole('button', { name: '面2の銅帯設定を開く' }))
     // 画面は残り、寸法行は両方表示されたまま。
     expect(screen.getByRole('heading', { name: /図面情報/ })).toBeInTheDocument()
