@@ -509,10 +509,10 @@ export function FloatingPanel({
           // 図面情報の幅を利用者が調整した後は、自然サイズ計測で幅を戻さず、
           // 高さだけを内容に合わせる。手動幅はViewer領域内にクランプする。
           const preserveManualWidth = kind === 'panelInfo' && hasManualPanelInfoWidthRef.current
-          const targetWidth = preserveManualWidth ? prev.width : maxContentSize.width
-          const contentLimit = preserveManualWidth
-            ? { ...maxContentSize, width: nextContainer.width }
-            : maxContentSize
+          // 手動幅は自然幅の範囲内で保持する。内容が短くなった場合は余白を残さないよう
+          // 新しい自然幅まで縮め、内容が長くなっても手動幅より自動で広げない。
+          const targetWidth = preserveManualWidth ? Math.min(prev.width, maxContentSize.width) : maxContentSize.width
+          const contentLimit = maxContentSize
           const left =
             anchor == null
               ? prev.left
