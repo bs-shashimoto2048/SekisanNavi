@@ -5,12 +5,10 @@
 // Vite (ESM ネイティブ) との相性は良好であることを確認済み。
 import * as pdfjsLib from 'pdfjs-dist'
 
-// Viteの `new URL(..., import.meta.url)` パターンでワーカーを解決する。
-// (pdfjs-dist公式ドキュメント記載のバンドラー向け標準的な設定方法)
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
-).href
+// workerはVite設定のcopyPdfjsAssetsPluginが public/pdfjs へコピーし、
+// same-originから配信する。node_modulesが別worktreeへのjunctionでも/@fsの403を避ける。
+export const PDFJS_WORKER_URL = '/pdfjs/pdf.worker.min.mjs'
+pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL
 
 // [日本語PDF文字化け修正] 日本語を含むCJK圏PDFは、フォント自体は
 // 埋め込まれていても、文字コード→字体(CID)の対応付けに事前定義された

@@ -27,6 +27,15 @@ function copyPdfjsAssetsPlugin(): Plugin {
         fs.mkdirSync(destPath, { recursive: true })
         fs.cpSync(srcPath, destPath, { recursive: true })
       }
+      // PDF.jsのworkerはnode_modulesの実体が別worktreeにある場合、Viteが/@fs経由で
+      // 参照して403にすることがある。publicへコピーし、常に同一オリジンから配信する。
+      const workerSrc = path.resolve(process.cwd(), 'node_modules/pdfjs-dist/build/pdf.worker.min.mjs')
+      const workerDest = path.resolve(process.cwd(), 'public/pdfjs/pdf.worker.min.mjs')
+      if (!fs.existsSync(workerSrc)) {
+        throw new Error(`pdfjs-dist workerが見つかりません: ${workerSrc}`)
+      }
+      fs.mkdirSync(path.dirname(workerDest), { recursive: true })
+      fs.copyFileSync(workerSrc, workerDest)
     },
   }
 }
