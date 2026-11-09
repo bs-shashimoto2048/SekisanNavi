@@ -421,4 +421,35 @@ export function resetEstimateResultQuantity(productNo: string, resultId: number)
   )
 }
 
+/** 盤の箱コードを手修正する。同じ盤の箱行を置き換え(2件目は作らない)、再評価後の最新の
+ * 積算結果一覧を返す。手修正は再評価・再読込でも保持される。 */
+export function overrideBoxCode(
+  productNo: string,
+  banMenno: number,
+  banNo: number,
+  input: { master_item_id: number; reason?: string; updated_by?: string },
+): Promise<EstimateResultEvaluateResponse> {
+  return sendJson(
+    `/api/products/${encodeURIComponent(productNo)}/box-selections/${banMenno}/${banNo}`,
+    'PUT',
+    input,
+  )
+}
+
+/** 箱コードの手修正を取り消し、自動選定へ戻す。再評価後の最新の積算結果一覧を返す。 */
+export async function resetBoxCode(
+  productNo: string,
+  banMenno: number,
+  banNo: number,
+): Promise<EstimateResultEvaluateResponse> {
+  const res = await fetch(
+    `${BASE_URL}/api/products/${encodeURIComponent(productNo)}/box-selections/${banMenno}/${banNo}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) {
+    throw new ApiError(res.status, await extractErrorMessage(res))
+  }
+  return (await res.json()) as EstimateResultEvaluateResponse
+}
+
 export { ApiError }

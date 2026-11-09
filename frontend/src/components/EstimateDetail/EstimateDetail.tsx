@@ -6,6 +6,8 @@ import {
   judgmentMethodLabel,
   parseDesignDataRef,
 } from '../../domain/drawingEvidencePresentation'
+import { isBoxResult } from '../../domain/boxCodeSelection'
+import { EstimateBoxCodeCell } from './EstimateBoxCodeCell'
 import { EstimateResultFactorCell } from './EstimateResultFactorCell'
 import { EstimateResultQuantityCell } from './EstimateResultQuantityCell'
 import './EstimateDetail.css'
@@ -124,6 +126,10 @@ interface Props {
   onOverrideResultQuantity?: (result: EstimateResult, newQuantity: number, reason: string) => void
   /** 数量の「初期値へ戻す」操作 (Issue #40 Phase 6後半)。 */
   onResetResultQuantity?: (result: EstimateResult) => void
+  /** 箱コード自動選定の行で、コードを手修正する(同じ盤の1件を置き換える)。 */
+  onOverrideBoxCode?: (result: EstimateResult, masterItemId: number) => void
+  /** 箱コードの手修正を取り消して自動選定へ戻す。 */
+  onResetBoxCode?: (result: EstimateResult) => void
   /** 行のHover/クリックで根拠BBoxをViewer上に強調する (Issue #40 Phase 3の
    * `handleFocusResultEvidence`をそのまま再利用する想定)。設計データのみの
    * 行(`evidence`にdetection_idが無い)では何も起きない(指示7章/8章)。 */
@@ -168,6 +174,8 @@ export function EstimateDetail({
   onResetResultFactor = () => {},
   onOverrideResultQuantity = () => {},
   onResetResultQuantity = () => {},
+  onOverrideBoxCode = () => {},
+  onResetBoxCode = () => {},
   onFocusResultEvidence = () => {},
   selectedResultId = null,
   onSelectResultRow = () => {},
@@ -268,7 +276,18 @@ export function EstimateDetail({
                     onSelectResultRow(result)
                   }}
                 >
-                  <td className="estimate-detail__col-rr-code">{result.code}</td>
+                  <td className="estimate-detail__col-rr-code">
+                    {isBoxResult(result) ? (
+                      <EstimateBoxCodeCell
+                        result={result}
+                        masterItemById={masterItemById}
+                        onChange={(masterItemId) => onOverrideBoxCode(result, masterItemId)}
+                        onReset={() => onResetBoxCode(result)}
+                      />
+                    ) : (
+                      result.code
+                    )}
+                  </td>
                   <td className="estimate-detail__col-rr-name">{content ?? MISSING_VALUE_PLACEHOLDER}</td>
                   <td className="estimate-detail__col-rr-qty">
                     <EstimateResultQuantityCell
@@ -295,7 +314,7 @@ export function EstimateDetail({
                   <td className="estimate-detail__col-rr-method">
                     <span>{judgmentMethodLabel(result.judgment_method)}</span>
                     {result.status === 'needs_review' && (
-                      <span className="estimate-detail__needs-review-badge" title="新旧経路の重複、または盤所属の判定が一意でないため要確認">
+                      <span className="estimate-detail__needs-review-badge" title="新旧経路や箱コード自動選定との重複、盤所属の判定が一意でない、または箱コードを一意に決められないため要確認">
                         ⚠要確認
                       </span>
                     )}

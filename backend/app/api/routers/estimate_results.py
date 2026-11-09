@@ -9,6 +9,10 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.deps import get_db
+from app.domain.box_code_selection import BOX_CATEGORIES
+from app.repositories.estimate_box_overrides import delete_box_override, set_box_override
+from app.repositories.master import get_master_item
+from app.services.box_code_candidates import box_result_key
 from app.domain.estimate_rules import EstimateResultEvidence
 from app.repositories.drawing_evidence_types import list_evidence_types
 from app.services.drawing_evidence_candidates import list_drawing_evidence_type_candidates
@@ -28,6 +32,7 @@ from app.schemas.estimate_rules import (
     DrawingEvidenceTypeOut,
     EstimateResultEvaluateOut,
     EstimateResultEvidenceOut,
+    BoxCodeOverrideIn,
     EstimateResultFactorOverrideIn,
     EstimateResultOut,
     EstimateResultQuantityOverrideIn,
@@ -129,6 +134,79 @@ def evaluate_estimate_results(
         results=[_result_out(conn, r) for r in results],
         skipped_rule_master_ids=outcome.skipped_rule_master_ids,
     )
+
+
+def _re_evaluate(conn: sqlite3.Connection, product_no: str) -> EstimateResultEvaluateOut:
+    root = get_data_source_root(conn)
+    try:
+        outcome = build_all_candidates(conn, root, product_no)
+    except DataSourceError as e:
+        raise _error_to_http(e) from e
+    results = replace_results_for_product(conn, product_no=product_no, candidates=outcome.candidates)
+    return EstimateResultEvaluateOut(
+        results=[_result_out(conn, r) for r in results],
+        skipped_rule_master_ids=outcome.skipped_rule_master_ids,
+    )
+
+
+@router.put(
+    "/{product_no}/box-selections/{ban_menno}/{ban_no}",
+    response_model=EstimateResultEvaluateOut,
+)
+def override_box_code(
+    product_no: str,
+    ban_menno: int,
+    ban_no: int,
+    body: BoxCodeOverrideIn,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> EstimateResultEvaluateOut:
+    """盤の箱コードの手修正。同じ盤の箱行(`box:面:盤`)の1件を置き換える(2件目は作らない)。
+
+    手修正は`estimate_box_overrides`に保存し、再評価・再読込でも保持する。選べるのは箱3カテゴリの
+    コードのみで、その盤の品名カテゴリが確定している場合は同じカテゴリの中からだけ選べる。
+    保存後に再評価して、最新の積算結果一覧を返す。
+    """
+    key = box_result_key(ban_menno, ban_no)
+    current = next(
+        (r for r in list_results_for_product(conn, product_no=product_no) if r.result_key == key), None
+    )
+    if current is None:
+        raise HTTPException(status_code=404, detail="指定された盤の箱コード行が見つかりません。")
+    item = get_master_item(conn, body.master_item_id)
+    if item is None:
+        raise HTTPException(status_code=422, detail="指定された部品台帳コードが見つかりません。")
+    if item.category not in BOX_CATEGORIES:
+        raise HTTPException(status_code=422, detail="箱の品名カテゴリ(箱･単独/箱･左右/箱･中)のコードのみ選べます。")
+    if current.box_category is not None and item.category != current.box_category:
+        raise HTTPException(
+            status_code=422,
+            detail=f"この盤の品名カテゴリは「{current.box_category}」です。同じカテゴリのコードを選んでください。",
+        )
+    set_box_override(
+        conn,
+        product_no=product_no,
+        ban_menno=ban_menno,
+        ban_no=ban_no,
+        master_item_id=item.id,
+        reason=body.reason,
+        updated_by=body.updated_by,
+    )
+    return _re_evaluate(conn, product_no)
+
+
+@router.delete(
+    "/{product_no}/box-selections/{ban_menno}/{ban_no}",
+    response_model=EstimateResultEvaluateOut,
+)
+def reset_box_code(
+    product_no: str,
+    ban_menno: int,
+    ban_no: int,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> EstimateResultEvaluateOut:
+    """箱コードの手修正を取り消し、自動選定へ戻す(以後の再評価は自動選定に追従する)。"""
+    delete_box_override(conn, product_no=product_no, ban_menno=ban_menno, ban_no=ban_no)
+    return _re_evaluate(conn, product_no)
 
 
 @router.patch(

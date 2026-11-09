@@ -89,6 +89,9 @@ class EstimateResultOut(BaseModel):
     price: float | None
     labor: float | None
     status: str
+    # 箱コード自動選定の行の品名カテゴリ(箱以外はnull)と、箱コードの手修正有無。
+    box_category: str | None = None
+    code_overridden: bool = False
     # Issue #40 Phase 4: 係数編集UIが候補値を知るためのAPI専用フィールド
     # (`estimate_results`自体には保存しない。`source_rule_id`が指す
     # `estimate_rule_masters.allowed_factors`をrouter側で都度引く。
@@ -96,6 +99,14 @@ class EstimateResultOut(BaseModel):
     # 未設定(候補未定義=自由入力)、または`source_rule_id`自体がnullの場合はnull。
     allowed_factors: list[float] | None = None
     evidence: list[EstimateResultEvidenceOut] = []
+
+
+class BoxCodeOverrideIn(BaseModel):
+    """箱コードの手修正。`master_item_id`は部品台帳(箱3カテゴリ)のid。"""
+
+    master_item_id: int
+    reason: str | None = None
+    updated_by: str | None = None
 
 
 class EstimateResultEvaluateOut(BaseModel):

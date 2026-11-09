@@ -17,6 +17,8 @@ import {
   fetchSteelOutline,
   fetchProductHeader,
   fetchEstimateResults,
+  overrideBoxCode,
+  resetBoxCode,
   fetchMasterItems,
   fetchPanel,
   fetchProductDrawings,
@@ -38,6 +40,7 @@ import { visiblePageNosForTarget } from './domain/estimateDrawingFilter'
 import { formatTargetLabel } from './domain/estimateTargetLabel'
 import { selectOutlineFrontPanels } from './domain/panelDimensions'
 import { buildEstimateResultAggregation } from './domain/estimateResultAggregation'
+import { isBoxResult } from './domain/boxCodeSelection'
 import {
   EMPTY_EDIT_HISTORY,
   popRedo,
@@ -747,9 +750,28 @@ function App() {
       setEstimateResults([])
       return
     }
+    let cancelled = false
     fetchEstimateResults(activeProductNo)
-      .then((results) => setEstimateResults(results))
-      .catch((e: unknown) => setError(describeFetchError(e, '積算結果を取得できませんでした')))
+      .then((results) => {
+        if (cancelled) return
+        setEstimateResults(results)
+        // 箱コード自動選定の行がまだ無い製番(初めて開く製番・自動選定の導入前に評価済みの製番)は、
+        // 1回だけ評価して箱コードを積算明細へ追加する。評価済み(箱の行がある)製番では再評価しない
+        // ので、利用者の手修正は評価で上書きされない(手修正はBackendで保持される)。
+        if (!results.some(isBoxResult)) {
+          evaluateEstimateResults(activeProductNo)
+            .then((outcome) => {
+              if (!cancelled) setEstimateResults(outcome.results)
+            })
+            .catch((e: unknown) => console.warn('箱コードの自動選定(積算結果の評価)に失敗しました', e))
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(describeFetchError(e, '積算結果を取得できませんでした'))
+      })
+    return () => {
+      cancelled = true
+    }
   }, [activeProductNo])
 
   // 積算コードMaster全件をid引きのMapとして取得する (次work指示1章)。製番に依存しない
@@ -1113,6 +1135,32 @@ function App() {
       setError(null)
     } catch (e) {
       setError(describeFetchError(e, '係数の変更に失敗しました'))
+    }
+  }
+
+  // 箱コード(自動選定)の手修正・自動選定へ戻す。Backendが手修正を保存して再評価し、最新の
+  // 積算結果一覧を返すので、そのまま置き換える(同じ盤の行は増えない)。
+  async function handleOverrideBoxCode(result: EstimateResult, masterItemId: number) {
+    if (result.target_panel_ban_menno == null || result.target_panel_ban_no == null) return
+    try {
+      const outcome = await overrideBoxCode(activeProductNo, result.target_panel_ban_menno, result.target_panel_ban_no, {
+        master_item_id: masterItemId,
+      })
+      setEstimateResults(outcome.results)
+      setError(null)
+    } catch (e) {
+      setError(describeFetchError(e, '箱コードの変更に失敗しました'))
+    }
+  }
+
+  async function handleResetBoxCode(result: EstimateResult) {
+    if (result.target_panel_ban_menno == null || result.target_panel_ban_no == null) return
+    try {
+      const outcome = await resetBoxCode(activeProductNo, result.target_panel_ban_menno, result.target_panel_ban_no)
+      setEstimateResults(outcome.results)
+      setError(null)
+    } catch (e) {
+      setError(describeFetchError(e, '箱コードを自動選定へ戻せませんでした'))
     }
   }
 
@@ -2172,6 +2220,8 @@ function App() {
                   onResetResultFactor={handleResetEstimateResultFactor}
                   onOverrideResultQuantity={handleOverrideEstimateResultQuantity}
                   onResetResultQuantity={handleResetEstimateResultQuantity}
+                  onOverrideBoxCode={handleOverrideBoxCode}
+                  onResetBoxCode={handleResetBoxCode}
                   onFocusResultEvidence={handleFocusResultEvidence}
                   selectedResultId={detailSelectedResultId}
                   onSelectResultRow={handleSelectEstimateDetailRow}

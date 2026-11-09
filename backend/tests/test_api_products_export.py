@@ -110,7 +110,8 @@ def _setup_product_with_result(client, monkeypatch, tmp_path, db_path):
 
     evaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate")
     assert evaluated.status_code == 200
-    assert len(evaluated.json()["results"]) == 1
+    # ルール結果1件 + 箱コード自動選定(盤1/1)1件。
+    assert len([r for r in evaluated.json()["results"] if not r["result_key"].startswith("box:")]) == 1
     return master_item
 
 

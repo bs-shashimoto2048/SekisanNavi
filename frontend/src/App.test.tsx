@@ -453,6 +453,9 @@ vi.mock('./api/client', () => ({
     results: buildLiveEstimateResults(),
     skipped_rule_master_ids: [],
   })),
+  // 箱コード自動選定の手修正・自動選定へ戻す(個別のテストが戻り値を差し替える)。
+  overrideBoxCode: vi.fn(async () => ({ results: [], skipped_rule_master_ids: [] })),
+  resetBoxCode: vi.fn(async () => ({ results: [], skipped_rule_master_ids: [] })),
   fetchDrawingEvidenceTypes: vi.fn(async () => []),
   // 図面情報追加パネルの「候補／確認待ち」読み取り専用表示用。
   // 他のテストは中身を検証しないため空配列で十分(表示そのものは
@@ -4013,5 +4016,93 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
     render(<App />)
     await waitFor(() => expect(screen.getByText('design.csv を読み込めないため、従来の図面一覧を表示しています')).toBeInTheDocument())
     expect(document.body.textContent).not.toContain('secret')
+  })
+})
+
+// 箱コード自動選定(部品台帳の箱3カテゴリ): 積算明細への反映・手修正。
+// 選定ロジック自体はBackend(test_box_code_selection.py/test_box_code_api.py)で検証済みで、
+// ここでは「製番を開いたときの自動評価」と「明細上のコード変更」の画面側の挙動を確認する。
+describe('App: 箱コード自動選定', () => {
+  function boxRow(overrides: Partial<EstimateResult> = {}): EstimateResult {
+    return {
+      ...buildLiveEstimateResults()[0],
+      id: 9001,
+      result_key: 'box:1:1',
+      master_item_id: null,
+      code: '',
+      target_panel_ban_menno: 1,
+      target_panel_ban_no: 1,
+      status: 'needs_review',
+      judgment_method: 'needs_confirmation',
+      judgment_scope: 'panel',
+      source_rule_id: null,
+      box_category: '箱・単独',
+      code_overridden: false,
+      ...overrides,
+    }
+  }
+
+  async function mocks() {
+    return await import('./api/client')
+  }
+
+  afterEach(async () => {
+    const api = await mocks()
+    vi.mocked(api.fetchEstimateResults).mockImplementation(async () => buildLiveEstimateResults())
+  })
+
+  it('evaluates once when opening a product that has no box rows yet, and shows the evaluated rows', async () => {
+    const api = await mocks()
+    vi.mocked(api.evaluateEstimateResults).mockClear()
+    vi.mocked(api.evaluateEstimateResults).mockImplementationOnce(async () => ({
+      results: [...buildLiveEstimateResults(), boxRow()],
+      skipped_rule_master_ids: [],
+    }))
+    render(<App />)
+    await waitFor(() => expect(api.evaluateEstimateResults).toHaveBeenCalledTimes(1))
+    const panel = await waitFor(() => {
+      const el = document.querySelector('.estimate-detail') as HTMLElement
+      expect(within(el).getByText('面1/盤1')).toBeInTheDocument()
+      return el
+    })
+    expect(within(panel).getByText('要確認', { selector: '.estimate-box-code__state' })).toBeInTheDocument()
+  })
+
+  it('does not re-evaluate on open when box rows already exist (manual choices are never overwritten by an automatic pass)', async () => {
+    const api = await mocks()
+    vi.mocked(api.evaluateEstimateResults).mockClear()
+    vi.mocked(api.fetchEstimateResults).mockImplementation(async () => [...buildLiveEstimateResults(), boxRow({ code_overridden: true, status: 'reviewed' })])
+    render(<App />)
+    await waitFor(() => {
+      const el = document.querySelector('.estimate-detail') as HTMLElement
+      expect(within(el).getByText('手修正')).toBeInTheDocument()
+    })
+    expect(api.evaluateEstimateResults).not.toHaveBeenCalled()
+  })
+
+  it('changing the box code on the detail row calls the API for that panel and replaces the list with the response (one row per panel)', async () => {
+    const api = await mocks()
+    vi.mocked(api.fetchEstimateResults).mockImplementation(async () => [...buildLiveEstimateResults(), boxRow()])
+    const chosen = masterItems.find((m) => m.category === '箱・単独')!
+    vi.mocked(api.overrideBoxCode).mockClear()
+    vi.mocked(api.overrideBoxCode).mockImplementationOnce(async () => ({
+      results: [
+        ...buildLiveEstimateResults(),
+        boxRow({ master_item_id: chosen.id, code: chosen.code, status: 'reviewed', code_overridden: true }),
+      ],
+      skipped_rule_master_ids: [],
+    }))
+    render(<App />)
+    const select = (await waitFor(() => {
+      const el = document.querySelector('.estimate-detail') as HTMLElement
+      return within(el).getByRole('combobox', { name: '面1/盤1の箱コード' })
+    })) as HTMLSelectElement
+    fireEvent.change(select, { target: { value: String(chosen.id) } })
+    await waitFor(() => expect(api.overrideBoxCode).toHaveBeenCalledWith(expect.any(String), 1, 1, { master_item_id: chosen.id }))
+    await waitFor(() => {
+      const el = document.querySelector('.estimate-detail') as HTMLElement
+      expect(within(el).getAllByText('面1/盤1')).toHaveLength(1)
+      expect(within(el).getByText('手修正')).toBeInTheDocument()
+    })
   })
 })

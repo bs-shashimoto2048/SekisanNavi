@@ -1,0 +1,67 @@
+/* 箱コード自動選定の行のコードセル(対象盤・選定状態・コード選択)。
+   手修正は赤字、要確認は橙、自動選定は緑(数量・係数セルと同じ配色思想)。 */
+.estimate-box-code {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 9.5rem;
+}
+
+.estimate-box-code__head {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.estimate-box-code__panel {
+  font-size: 0.72rem;
+  color: #475569;
+}
+
+.estimate-box-code__state {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0 0.3rem;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+}
+
+.estimate-box-code__state[data-state='auto'] {
+  color: #15803d;
+}
+
+.estimate-box-code__state[data-state='manual'] {
+  color: #b91c1c;
+}
+
+.estimate-box-code__state[data-state='needs_review'] {
+  color: #b45309;
+}
+
+.estimate-box-code__select {
+  font: inherit;
+  font-size: 0.78rem;
+  max-width: 14rem;
+  padding: 0.05rem 0.2rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  background: #fff;
+  color: #334155;
+}
+
+.estimate-box-code--needs_review .estimate-box-code__select {
+  border-color: #b45309;
+}
+
+.estimate-box-code__reset {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0 0.3rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+}

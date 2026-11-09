@@ -120,7 +120,8 @@ def test_evaluate_endpoint_creates_results_and_list_endpoint_reads_them_back(
     res = client.post("/api/products/A1GV2421/estimate-results/evaluate")
     assert res.status_code == 200
     body = res.json()
-    assert len(body["results"]) == 1
+    # ルール結果1件 + 箱コード自動選定(盤1/1)1件。
+    assert [r["result_key"].startswith("box:") for r in body["results"]] == [False, True]
     assert body["skipped_rule_master_ids"] == []
     result = body["results"][0]
     assert result["status"] == "auto"
@@ -129,7 +130,7 @@ def test_evaluate_endpoint_creates_results_and_list_endpoint_reads_them_back(
 
     listed = client.get("/api/products/A1GV2421/estimate-results")
     assert listed.status_code == 200
-    assert len(listed.json()) == 1
+    assert len(listed.json()) == 2
     assert listed.json()[0]["id"] == result["id"]
 
 
@@ -180,10 +181,11 @@ def test_deleting_the_only_evidence_removes_the_result_on_reevaluation(
     assert del_res.status_code == 204
 
     reevaluated = client.post("/api/products/A1GV2421/estimate-results/evaluate").json()
-    assert reevaluated["results"] == []
+    # ルール結果は削除され、箱コード自動選定(設計データ由来)の行だけが残る。
+    assert [r["result_key"] for r in reevaluated["results"]] == ["box:1:1"]
 
     listed = client.get("/api/products/A1GV2421/estimate-results").json()
-    assert listed == []
+    assert [r["result_key"] for r in listed] == ["box:1:1"]
 
 
 def test_drawing_evidence_types_endpoint_returns_empty_when_none_seeded(client):
