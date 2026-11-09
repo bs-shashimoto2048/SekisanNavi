@@ -62,7 +62,8 @@ _COLUMNS = """
     initial_factor, current_factor, factor_overridden, factor_override_reason,
     factor_updated_at, factor_updated_by, judgment_method, judgment_scope,
     target_panel_ban_menno, target_panel_ban_no, target_drawing_page_id,
-    judgment_reason, source_rule_id, unit_price, unit_labor, price, labor, status
+    judgment_reason, source_rule_id, unit_price, unit_labor, price, labor, status,
+    box_category, code_overridden
 """
 
 
@@ -99,6 +100,8 @@ def _row_to_result(row: sqlite3.Row) -> EstimateResult:
         price=row["price"],
         labor=row["labor"],
         status=EstimateResultStatus(row["status"]),
+        box_category=row["box_category"],
+        code_overridden=bool(row["code_overridden"]),
     )
 
 
@@ -283,6 +286,7 @@ def replace_results_for_product(
                     target_panel_ban_menno = ?, target_panel_ban_no = ?,
                     target_drawing_page_id = ?, judgment_reason = ?, source_rule_id = ?,
                     unit_price = ?, unit_labor = ?, status = ?,
+                    box_category = ?, code_overridden = ?,
                     current_factor = CASE WHEN factor_overridden = 1 THEN current_factor ELSE ? END,
                     initial_quantity = ?,
                     current_quantity = CASE WHEN quantity_overridden = 1 THEN current_quantity ELSE ? END,
@@ -293,6 +297,8 @@ def replace_results_for_product(
                 (
                     *common_params,
                     candidate.status.value,
+                    candidate.box_category,
+                    1 if candidate.code_overridden else 0,
                     candidate.initial_factor,
                     candidate.quantity,
                     candidate.quantity,
@@ -320,9 +326,10 @@ def replace_results_for_product(
                      initial_factor, current_factor, factor_overridden,
                      judgment_method, judgment_scope, target_panel_ban_menno, target_panel_ban_no,
                      target_drawing_page_id, judgment_reason, source_rule_id,
-                     unit_price, unit_labor, price, labor, status)
+                     unit_price, unit_labor, price, labor, status,
+                     box_category, code_overridden)
                 VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ? * ?, ? * ?, ?)
+                        ? * ?, ? * ?, ?, ?, ?)
                 """,
                 (
                     product_no,
@@ -349,6 +356,8 @@ def replace_results_for_product(
                     candidate.unit_labor,
                     candidate.quantity * candidate.initial_factor,
                     candidate.status.value,
+                    candidate.box_category,
+                    1 if candidate.code_overridden else 0,
                 ),
             )
             result_id = cursor.lastrowid

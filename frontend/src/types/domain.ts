@@ -638,6 +638,11 @@ export interface EstimateResult {
    * `allowed_factors`をAPI応答時に展開したもの。未設定(候補未定義=自由入力)
    * の場合はnull。`source_rule_id`自体がnullの場合も常にnull。 */
   allowed_factors: number[] | null
+  /** 箱コード自動選定の行の品名カテゴリ(箱･単独/箱･左右/箱･中)。箱以外の行、および接続情報が
+   * 不明でカテゴリを決められない要確認行はnull。 */
+  box_category?: string | null
+  /** 箱コードを利用者が手修正した行か(再評価・再読込でも保持される)。 */
+  code_overridden?: boolean
   evidence: EstimateResultEvidence[]
 }
 

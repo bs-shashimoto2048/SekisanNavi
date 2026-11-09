@@ -20,8 +20,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.domain.estimate_rules import EstimateResultCandidate, EstimateResultStatus
+from app.repositories.estimate_box_overrides import list_box_overrides
+from app.services.box_code_candidates import build_box_candidates, mark_duplicates_with_detection_results
+from app.services.data_source import resolve_product_dir
+from app.services.estcode_df import load_estcode_df
 from app.services.estimate_rule_evaluator import evaluate_product
 from app.services.legacy_detection_adapter import build_legacy_candidates
+from app.services.product_df import load_product_df
 
 
 @dataclass
@@ -63,8 +68,20 @@ def build_all_candidates(
                 note = "要確認: 同一コードが新方式(ルール評価)・旧方式(直接付与)の両方から算出されました"
                 c.judgment_reason = f"{c.judgment_reason} / {note}" if c.judgment_reason else note
 
+    # 箱コード自動選定(盤ごとに最大1件、数量1)。図面検出由来の明細とは根拠なく合算・
+    # 重複排除せず、同じ盤・同じコードがあれば双方を要確認にして両方残す。
+    resolution = resolve_product_dir(data_source_root, product_no)
+    box_candidates = build_box_candidates(
+        conn,
+        product_no=product_no,
+        df_result=load_product_df(resolution.ccv_dir, resolution.product_no),
+        estcode_result=load_estcode_df(resolution.ccv_dir, resolution.product_no),
+        overrides=list_box_overrides(conn, product_no),
+    )
+    conflicting.extend(mark_duplicates_with_detection_results(box_candidates, all_candidates))
+
     return CombinedEvaluationOutcome(
-        candidates=all_candidates,
+        candidates=[*all_candidates, *box_candidates],
         skipped_rule_master_ids=rule_outcome.skipped_rule_master_ids,
         conflicting_code_targets=conflicting,
     )

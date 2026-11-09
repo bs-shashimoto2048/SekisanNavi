@@ -114,8 +114,9 @@ def test_create_confirmation_saves_manual_detection_with_panel_assignment(client
     body = res.json()
     assert body["product_no"] == "A1GV2421"
     assert body["confirmed_at"]
-    assert body["item_count"] == 1
-    assert len(body["items"]) == 1
+    # 図面検出由来1件 + 箱コード自動選定(盤1/1)1件。
+    assert body["item_count"] == 2
+    assert len(body["items"]) == 2
 
     item = body["items"][0]
     # [Issue #40 Phase 6-A] 確定対象はEstimateResultのため、旧Detectionベース

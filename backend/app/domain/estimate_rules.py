@@ -415,6 +415,12 @@ class EstimateResult:
     labor: float | None
     status: EstimateResultStatus
     evidence: list["EstimateResultEvidence"] = field(default_factory=list)
+    # 箱コード自動選定(`app.services.box_code_candidates`)で生成した行の品名カテゴリ
+    # (箱･単独/箱･左右/箱･中)。箱以外の行は None。接続情報が不明で品名カテゴリを決められない
+    # 要確認行も None(UIは3カテゴリすべてから選べるようにする)。
+    box_category: str | None = None
+    # 箱コードが利用者の手修正値かどうか(再評価・再読込でも保持される)。
+    code_overridden: bool = False
 
 
 @dataclass
@@ -485,6 +491,8 @@ class EstimateResultCandidate:
     # 要確認として残す」判定(`app.services.estimate_result_pipeline`)が、
     # NEEDS_REVIEWを明示的に設定する用途で使う(13章「推測でdedupeしない」)。
     status: EstimateResultStatus = EstimateResultStatus.AUTO
+    box_category: str | None = None
+    code_overridden: bool = False
 
 
 __all__ = [

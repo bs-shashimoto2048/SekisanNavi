@@ -178,7 +178,7 @@ def test_design_data_only_result_is_confirmable_with_evidence_snapshot(client, m
     res = _confirm(client)
     assert res.status_code == 201
     body = res.json()
-    assert body["item_count"] == 1
+    assert body["item_count"] == 2  # ルール結果1件 + 箱コード自動選定(盤1/1)1件
     item = body["items"][0]
     assert item["judgment_method"] == "design_data"
     assert item["detection_id"] is None

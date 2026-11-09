@@ -135,7 +135,9 @@ def test_merges_legacy_and_rule_candidates_when_codes_differ(client, monkeypatch
     with get_connection(db_path) as conn:
         outcome = build_all_candidates(conn, str(tmp_path), "A1GV2421")
 
-    assert len(outcome.candidates) == 2
+    detection_derived = [c for c in outcome.candidates if not c.result_key.startswith("box:")]
+    assert len(detection_derived) == 2
+    assert len(outcome.candidates) == 3  # + 箱コード自動選定(盤1/1)
     assert outcome.conflicting_code_targets == []
     for c in outcome.candidates:
         assert c.status == EstimateResultStatus.AUTO
@@ -177,12 +179,14 @@ def test_same_code_from_both_origins_at_the_same_target_is_flagged_needs_review(
     with get_connection(db_path) as conn:
         outcome = build_all_candidates(conn, str(tmp_path), "A1GV2421")
 
-    assert len(outcome.candidates) == 2
+    # 箱コード自動選定の行(盤1/1)は別に1件加わる。新旧の衝突判定の対象外。
+    detection_derived = [c for c in outcome.candidates if not c.result_key.startswith("box:")]
+    assert len(outcome.candidates) == 3
     assert len(outcome.conflicting_code_targets) == 1
-    assert all(c.status == EstimateResultStatus.NEEDS_REVIEW for c in outcome.candidates)
+    assert all(c.status == EstimateResultStatus.NEEDS_REVIEW for c in detection_derived)
     # 衝突検出後も、根拠(evidence)・result_keyはそれぞれ元のまま保持される
     # (機械的に一方を破棄しない)。
-    result_keys = {c.result_key for c in outcome.candidates}
+    result_keys = {c.result_key for c in detection_derived}
     assert len(result_keys) == 2
 
 
@@ -218,6 +222,6 @@ def test_persisting_conflicting_candidates_keeps_both_rows_and_marks_needs_revie
 
     res = client.post("/api/products/A1GV2421/estimate-results/evaluate")
     assert res.status_code == 200
-    results = res.json()["results"]
-    assert len(results) == 2
+    results = [r for r in res.json()["results"] if not r["result_key"].startswith("box:")]
+    assert len(results) == 2  # 箱コード自動選定の行(box:)は別枠
     assert all(r["status"] == "needs_review" for r in results)
