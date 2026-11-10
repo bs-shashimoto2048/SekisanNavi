@@ -1,6 +1,8 @@
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ComponentProps } from 'react'
 import { PanelInfo } from './PanelInfo'
+import css from './PanelBoxCodeSelector.css?raw'
 import { panelKey } from '../../utils/panel'
 import type {
   BoxTypeAnalysis,
@@ -551,6 +553,148 @@ describe('PanelInfo: 盤ごとの箱コード選定', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: '自動選定に戻す' }))
     expect(onResetBoxCode).toHaveBeenCalledWith(result)
+  })
+})
+
+describe('PanelInfo: 盤ごとのまとまり(カード)と箱体情報の1行表示', () => {
+  const items = [10, 11].map(
+    (id) =>
+      ({
+        id,
+        code: String(11000 + id),
+        category: '箱･左右',
+        model: 'OS2-920',
+        rating: '2.3*0.9*2.0',
+        note: null,
+        total_price_a: 1000,
+        box_parts_price: null,
+        painting_price: null,
+        setup_a: null,
+        sheet_metal_price: null,
+        assembly_price: null,
+        inspection_price: null,
+      }) as EstimateMasterItem,
+  )
+  function boxRow(menno: number, no: number, masterItemId: number): EstimateResult {
+    return {
+      id: menno * 10 + no,
+      product_no: 'A1TEST',
+      result_key: `box:${menno}:${no}`,
+      master_item_id: masterItemId,
+      code: String(11000 + masterItemId),
+      quantity: 1,
+      initial_quantity: 1,
+      current_quantity: 1,
+      quantity_overridden: false,
+      quantity_override_reason: null,
+      quantity_updated_at: null,
+      quantity_updated_by: null,
+      applicable_unit: 'unit',
+      initial_factor: 1,
+      current_factor: 1,
+      factor_overridden: false,
+      factor_override_reason: null,
+      factor_updated_at: null,
+      factor_updated_by: null,
+      judgment_method: 'design_data',
+      judgment_scope: 'panel',
+      target_panel_ban_menno: menno,
+      target_panel_ban_no: no,
+      target_drawing_page_id: null,
+      judgment_reason: null,
+      source_rule_id: null,
+      unit_price: 1000,
+      unit_labor: null,
+      price: 1000,
+      labor: null,
+      status: 'auto',
+      allowed_factors: null,
+      evidence: [],
+      box_category: '箱･左右',
+      code_overridden: false,
+    }
+  }
+  function renderTwoPanels(onSelectPanel: () => void = () => {}, extra: Partial<ComponentProps<typeof PanelInfo>> = {}) {
+    return render(
+      <PanelInfo
+        panel={null}
+        panels={[
+          makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: 'パネルA', ban_type: '正面図' }),
+          makeProductPanel({ ban_menno: 1, ban_no: 2, ban_meisyou: 'パネルB', ban_type: '正面図' }),
+          makeProductPanel({ ban_menno: 2, ban_no: 3, ban_meisyou: 'パネルC', ban_type: '正面図' }),
+        ]}
+        estimatePanels={[]}
+        selectedPanel={null}
+        onSelectPanel={onSelectPanel}
+        boxResults={[boxRow(1, 1, 10), boxRow(1, 2, 11), boxRow(2, 3, 10)]}
+        masterItemById={new Map(items.map((i) => [i.id, i]))}
+        {...extra}
+      />,
+    )
+  }
+  const cards = () => [...document.querySelectorAll<HTMLElement>('.panel-info__panel-card')]
+
+  it('groups each panel into its own card: header (面/盤・名称・寸法・接続) then box info, with no other panel inside', () => {
+    renderTwoPanels()
+    const list = cards()
+    expect(list).toHaveLength(3)
+    list.forEach((card, i) => {
+      const header = card.querySelector('.panel-info__data-line')
+      const box = card.querySelector('.panel-info__box-code')
+      expect(header).not.toBeNull()
+      expect(box).not.toBeNull()
+      // 見出しの直後に箱体情報が続く。
+      expect(header!.nextElementSibling).toBe(box)
+      // 1枚のカードには見出し(盤の行)が1つだけ=隣の盤の情報を含まない。
+      expect(card.querySelectorAll('.panel-info__data-row')).toHaveLength(1)
+      expect(within(card).getAllByRole('combobox', { name: /の箱コード$/ })).toHaveLength(1)
+      expect(card.textContent).toContain(['パネルA', 'パネルB', 'パネルC'][i])
+    })
+    // 銅帯欄は、その面の最初の盤のカード内(箱体情報の下)にだけある。
+    expect(list[0].querySelector('[id="busbar-selector-face-1"]')).not.toBeNull()
+    expect(list[1].querySelector('[id^="busbar-selector-face-"]')).toBeNull()
+    expect(list[2].querySelector('[id="busbar-selector-face-2"]')).not.toBeNull()
+    const box0 = list[0].querySelector('.panel-info__box-code')!
+    expect(box0.nextElementSibling).toBe(list[0].querySelector('[id="busbar-selector-face-1"]'))
+  })
+
+  it('renders the box info as a single row of items: label, state, select, and reset only when overridden', () => {
+    renderTwoPanels(() => {}, {
+      boxResults: [{ ...boxRow(1, 1, 10), code_overridden: true, status: 'reviewed' }, boxRow(1, 2, 11), boxRow(2, 3, 10)],
+    })
+    const first = cards()[0].querySelector('.panel-info__box-code .estimate-box-code') as HTMLElement
+    expect([...first.children].map((c) => c.tagName + '.' + c.className.split(' ')[0])).toEqual([
+      'SPAN.estimate-box-code__label',
+      'SPAN.estimate-box-code__state',
+      'SELECT.estimate-box-code__select',
+      'BUTTON.estimate-box-code__reset',
+    ])
+    const second = cards()[1].querySelector('.panel-info__box-code .estimate-box-code') as HTMLElement
+    expect([...second.children].map((c) => c.tagName)).toEqual(['SPAN', 'SPAN', 'SELECT'])
+  })
+
+  it('uses nowrap/row styles so the box info never wraps (jsdom cannot lay out, so the CSS contract is checked)', () => {
+    const box = css.match(/\.estimate-box-code \{[^}]*\}/)?.[0] ?? ''
+    expect(box).toContain('flex-direction: row')
+    expect(box).toContain('flex-wrap: nowrap')
+    expect(box).toContain('white-space: nowrap')
+    expect(box).not.toMatch(/flex-direction:\s*column/)
+  })
+
+  it('keeps panel selection, box code change, and reset wired per panel', () => {
+    const onSelectPanel = vi.fn()
+    const onOverrideBoxCode = vi.fn()
+    const onResetBoxCode = vi.fn()
+    const overridden = { ...boxRow(2, 3, 10), code_overridden: true, status: 'reviewed' as const }
+    renderTwoPanels(onSelectPanel, { boxResults: [boxRow(1, 1, 10), boxRow(1, 2, 11), overridden], onOverrideBoxCode, onResetBoxCode })
+    fireEvent.click(getRow('パネルB'))
+    expect(onSelectPanel).toHaveBeenCalledTimes(1)
+    fireEvent.change(screen.getByRole('combobox', { name: '面1/盤2の箱コード' }), { target: { value: '10' } })
+    expect(onOverrideBoxCode).toHaveBeenCalledWith(expect.objectContaining({ target_panel_ban_no: 2 }), 10)
+    fireEvent.click(screen.getByRole('button', { name: '自動選定に戻す' }))
+    expect(onResetBoxCode).toHaveBeenCalledWith(overridden)
+    // 箱体情報を操作しても盤選択は走らない(上の1回だけ)。
+    expect(onSelectPanel).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -1430,13 +1574,84 @@ describe('PanelInfo: 主回路銅帯の選択欄は1面(ban_menno)につき1つ�
     pick('面2 銅帯1 仕様', '公共建築')
     fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
     expect((screen.getByRole('combobox', { name: '面1 銅帯2 仕様' }) as HTMLSelectElement).value).toBe('')
-    expect(screen.queryByRole('button', { name: '面2 銅帯1を削除' })).not.toBeInTheDocument() // 面2は1行のみ
+    expect(screen.getByRole('button', { name: '面2 銅帯1を削除' })).toBeInTheDocument() // 唯一の行も削除できる
     // 追加行を選択してから、1行目を削除しても 2 行目は残る。
     pick('面1 銅帯2 仕様', '公共建築')
     fireEvent.click(screen.getByRole('button', { name: '面1 銅帯1を削除' }))
     expect(screen.queryByRole('combobox', { name: '面1 銅帯2 仕様' })).not.toBeInTheDocument()
     expect((screen.getByRole('combobox', { name: '面1 銅帯1 仕様' }) as HTMLSelectElement).value).toBe('公共建築')
     expect((screen.getByRole('combobox', { name: '面2 銅帯1 仕様' }) as HTMLSelectElement).value).toBe('公共建築')
+  })
+
+  it('deletes the only row of a face: notifies the parent with no rows, keeps the face open for re-adding, leaves other faces alone, and stays empty after reload', () => {
+    const onBusbarRowsChange = vi.fn()
+    const render3 = (productNo = 'A1DEL001') =>
+      render(
+        <PanelInfo
+          panel={null}
+          panels={[
+            makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: 'パネルA', ban_type: '正面図' }),
+            makeProductPanel({ ban_menno: 2, ban_no: 3, ban_meisyou: 'パネルC', ban_type: '正面図' }),
+          ]}
+          estimatePanels={[]}
+          productNo={productNo}
+          selectedPanel={null}
+          onSelectPanel={() => {}}
+          onBusbarRowsChange={onBusbarRowsChange}
+        />,
+      )
+    const first = render3()
+    for (const face of ['1', '2']) {
+      fireEvent.click(screen.getByRole('button', { name: `面${face}の銅帯設定を開く` }))
+      fireEvent.click(screen.getByRole('button', { name: `面${face}に銅帯の選択行を追加` }))
+    }
+    // 面1・面2とも、4項目を選んで確定させる。
+    for (const face of ['1', '2']) {
+      pick(`面${face} 銅帯1 仕様`, '標準仕様')
+      pick(`面${face} 銅帯1 相数`, '3Φ')
+      pick(`面${face} 銅帯1 電圧区分`, '200V級')
+      pick(`面${face} 銅帯1 容量（kVA）`, '100')
+    }
+    onBusbarRowsChange.mockClear()
+
+    // 面1の唯一の行を削除。
+    fireEvent.click(screen.getByRole('button', { name: '面1 銅帯1を削除' }))
+    expect(onBusbarRowsChange).toHaveBeenCalledTimes(1)
+    expect(onBusbarRowsChange).toHaveBeenCalledWith('A1DEL001', 1, [])
+    expect(screen.queryByRole('combobox', { name: '面1 銅帯1 仕様' })).not.toBeInTheDocument()
+    // 面1は開いたまま「＋」だけが残り、再追加できる。面2は変わらない。
+    expect(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' })).toBeVisible()
+    expect((screen.getByRole('combobox', { name: '面2 銅帯1 仕様' }) as HTMLSelectElement).value).toBe('標準仕様')
+    first.unmount()
+
+    // 再読込: 面1は空のまま(行を復元しない)、面2は復元される。
+    render3()
+    expect(screen.queryByRole('combobox', { name: '面1 銅帯1 仕様' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '面1の銅帯設定を開く' })).toHaveAttribute('aria-expanded', 'false')
+    expect((screen.getByRole('combobox', { name: '面2 銅帯1 仕様' }) as HTMLSelectElement).value).toBe('標準仕様')
+    // 再読込時の同期通知は、行が残っている面(面2)だけ。削除済みの面1を再保存しない。
+    expect(onBusbarRowsChange.mock.calls.filter((c) => c[1] === 1 && (c[2] as unknown[]).length > 0)).toEqual([])
+  })
+
+  it('does not notify the parent when an unconfirmed (incomplete) only row is deleted, since nothing was persisted for it', () => {
+    const onBusbarRowsChange = vi.fn()
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: 'パネルA', ban_type: '正面図' })]}
+        estimatePanels={[]}
+        productNo="A1DEL002"
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+        onBusbarRowsChange={onBusbarRowsChange}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
+    fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
+    pick('面1 銅帯1 仕様', '標準仕様') // 途中まで(未確定)
+    fireEvent.click(screen.getByRole('button', { name: '面1 銅帯1を削除' }))
+    expect(onBusbarRowsChange).not.toHaveBeenCalled()
+    expect(screen.queryByRole('combobox', { name: '面1 銅帯1 仕様' })).not.toBeInTheDocument()
   })
 
   it('keeps an empty row folded by default after reload and lets plus reopen it', () => {

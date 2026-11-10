@@ -2,7 +2,8 @@
 //
 // - 面(`ban_menno`)ごとに、独立した選択行のリストを持つ。行は「＋」で同じ面に追加でき、個別に削除できる。
 //   他の行・他の面の選択・削除には影響しない。
-// - ＋で追加した行は 4 項目すべて未選択(既定値・初期コードは選ばない)。未登録の面では入力行自体を表示しない。
+// - ＋で追加した行は 4 項目すべて未選択(既定値・初期コードは選ばない)。未登録の面では入力行自体を表示しない
+//   (行が 0 件の面は、見出しと「＋」だけを表示する)。最後の 1 行も削除でき、削除後は 0 行に戻る。
 // - 保存先はブラウザーの localStorage(製番ごと)。サーバー・API・出力・DB・設定は変更しない。
 //   読み込み時は、保存された値が対応表(busbarCodes)の絞り込みと矛盾する場合、その段以降を未選択に戻す。
 import { BUSBAR_STEPS, EMPTY_SELECTION, optionsFor, type BusbarSelection } from './busbarCodes'
@@ -18,7 +19,7 @@ export type BusbarRowsByFace = Record<string, BusbarRow[]>
 
 export const BUSBAR_STORAGE_KEY = 'sekisan-navi:busbar-selections:v1'
 export const BUSBAR_FACTOR_OPTIONS = [0.2, 0.5, 0.6, 0.7, 0.8, 1.0, 1.4] as const
-/** 面の最初の(未選択の)行の固定 ID。保存前でも描画が安定するようにする。 */
+/** 面の最初の(未選択の)行の固定 ID。保存前でも描画が安定するようにする(＋で最初の行を作るときの ID)。 */
 export const FIRST_ROW_ID = 'row-1'
 
 let rowCounter = 0
@@ -32,10 +33,9 @@ export function emptyRow(id: string = newRowId()): BusbarRow {
   return { id, selection: { ...EMPTY_SELECTION }, factor: 1.0 }
 }
 
-/** その面の行(未保存なら、未選択の 1 行)。 */
+/** その面の行(未登録なら空。初期状態で未選択の行は作らない)。 */
 export function rowsOf(byFace: BusbarRowsByFace, face: string): BusbarRow[] {
-  const rows = byFace[face]
-  return rows && rows.length > 0 ? rows : [emptyRow(FIRST_ROW_ID)]
+  return byFace[face] ?? []
 }
 
 export function setFaceRows(byFace: BusbarRowsByFace, face: string, rows: BusbarRow[]): BusbarRowsByFace {
@@ -50,13 +50,14 @@ export function updateRowFactor(rows: BusbarRow[], id: string, factor: number): 
   return rows.map((r) => (r.id === id ? { ...r, factor } : r))
 }
 
+/** 最初の 1 行は固定 ID(`FIRST_ROW_ID`)、2 行目以降は一意な ID で、未選択の行を追加する。 */
 export function addRow(rows: BusbarRow[]): BusbarRow[] {
-  return [...rows, emptyRow()]
+  const id = rows.length === 0 ? FIRST_ROW_ID : newRowId()
+  return [...rows, emptyRow(id)]
 }
 
-/** 個別削除。最後の 1 行は削除せず、未選択に戻す(面には常に 1 行以上ある)。 */
+/** 個別削除。最後の 1 行も削除でき(0 行になる)、他の行・他の面には影響しない。 */
 export function removeRow(rows: BusbarRow[], id: string): BusbarRow[] {
-  if (rows.length <= 1) return rows.map((r) => (r.id === id ? { ...r, selection: { ...EMPTY_SELECTION } } : r))
   return rows.filter((r) => r.id !== id)
 }
 

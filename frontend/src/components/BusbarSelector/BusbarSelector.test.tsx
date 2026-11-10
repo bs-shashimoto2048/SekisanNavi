@@ -91,9 +91,8 @@ describe('BusbarSelector', () => {
     expect(document.querySelector('.busbar-selector__code')).toBeNull()
   })
 
-  it('adds an unselected row with "＋", deletes rows individually, and shows no delete button for a single row', () => {
+  it('adds an unselected row with "＋" and deletes rows individually', () => {
     render(<Harness />)
-    expect(screen.queryByRole('button', { name: /を削除/ })).not.toBeInTheDocument()
     pick('面1 銅帯1 仕様', '標準仕様')
 
     fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
@@ -107,6 +106,23 @@ describe('BusbarSelector', () => {
     expect(screen.getAllByRole('group')).toHaveLength(2)
     expect(select('面1 銅帯1 仕様').value).toBe('標準仕様')
     expect(select('面1 銅帯2 仕様').value).toBe('')
+  })
+
+  it('shows no selection row when there are no rows, creates the first row only with "＋", and can delete the only row', () => {
+    render(<Harness initial={[]} />)
+    expect(screen.queryAllByRole('group')).toHaveLength(0)
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /を削除/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
+    expect(screen.getAllByRole('group')).toHaveLength(1)
+    expect(select('面1 銅帯1 仕様').value).toBe('')
+    // 行が 1 つだけでも削除でき、削除後は選択行が消えて「＋」で再追加できる。
+    fireEvent.click(screen.getByRole('button', { name: '面1 銅帯1を削除' }))
+    expect(screen.queryAllByRole('group')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
+    expect(screen.getAllByRole('group')).toHaveLength(1)
   })
 
   it('keeps rows of different faces independent (separate instances)', () => {

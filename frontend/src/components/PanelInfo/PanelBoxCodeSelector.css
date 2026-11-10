@@ -2,24 +2,23 @@
    手修正は赤字、要確認は橙、自動選定は緑(数量・係数セルと同じ配色思想)。 */
 .estimate-box-code {
   display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  min-width: 9.5rem;
-}
-
-.estimate-box-code__head {
-  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
+  /* 1行に収める。幅が足りないときは折り返さず、親(.panel-info__list-scroll)の横スクロールで見る。 */
   white-space: nowrap;
+  width: max-content;
 }
 
-.estimate-box-code__panel {
+.estimate-box-code__label {
   font-size: 0.72rem;
+  font-weight: 700;
   color: #475569;
 }
 
 .estimate-box-code__state {
+  flex: 0 0 auto;
   font-size: 0.68rem;
   font-weight: 700;
   padding: 0 0.3rem;
@@ -42,6 +41,7 @@
 .estimate-box-code__select {
   font: inherit;
   font-size: 0.78rem;
+  flex: 0 0 auto;
   max-width: 14rem;
   padding: 0.05rem 0.2rem;
   border: 1px solid #cbd5e1;
@@ -55,7 +55,7 @@
 }
 
 .estimate-box-code__reset {
-  align-self: flex-start;
+  flex: 0 0 auto;
   font: inherit;
   font-size: 0.7rem;
   padding: 0 0.3rem;

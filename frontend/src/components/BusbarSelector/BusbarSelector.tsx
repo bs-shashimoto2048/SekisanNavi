@@ -60,17 +60,15 @@ export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
           <div className="busbar-selector__row" key={row.id} role="group" aria-label={rowLabel}>
             <div className="busbar-selector__row-head">
               <span className="busbar-selector__row-title">銅帯 {rowIndex + 1}</span>
-              {rows.length > 1 && (
-                <button
-                  type="button"
-                  className="busbar-selector__remove"
-                  onClick={() => onChange(removeRow(rows, row.id))}
-                  aria-label={`${rowLabel}を削除`}
-                  title="この行を削除"
-                >
-                  ✕
-                </button>
-              )}
+              <button
+                type="button"
+                className="busbar-selector__remove"
+                onClick={() => onChange(removeRow(rows, row.id))}
+                aria-label={`${rowLabel}を削除`}
+                title="この行を削除"
+              >
+                ✕
+              </button>
             </div>
             <div className="busbar-selector__fields">
               {BUSBAR_STEPS.map(({ key, label }, i) => {
