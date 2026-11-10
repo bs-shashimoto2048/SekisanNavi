@@ -18,6 +18,7 @@ from app.db.migrate import run_migrations
 
 _0011_FILENAME = "0011_estimate_quantity_override.py"
 _0012_FILENAME = "0012_box_code_selection.py"
+_0013_FILENAME = "0013_estimate_busbar_selections.py"
 
 
 def _apply_migrations_up_to_0010(conn: sqlite3.Connection) -> None:
@@ -109,7 +110,7 @@ def test_existing_estimate_results_rows_survive_0011_with_backfilled_initial_and
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
 
     applied = run_migrations(db_path)
-    assert applied == [_0011_FILENAME, _0012_FILENAME]
+    assert applied == [_0011_FILENAME, _0012_FILENAME, _0013_FILENAME]
 
     with get_connection(db_path) as conn:
         conn.execute("PRAGMA foreign_keys = ON")

@@ -20,6 +20,7 @@ describe('busbarSelections: 面ごとの行', () => {
     const rows = rowsOf({}, '1')
     expect(rows).toHaveLength(1)
     expect(rows[0].selection).toEqual(EMPTY_SELECTION)
+    expect(rows[0].factor).toBe(1.0)
   })
 
   it('adds an unselected row to the same face', () => {
@@ -61,14 +62,14 @@ describe('busbarSelections: 面ごとの行', () => {
 describe('busbarSelections: 保存と再表示', () => {
   it('round-trips per product number', () => {
     const rows = [
-      { id: 'a', selection: { spec: '標準仕様', phase: '3Φ', voltage: '200V級', kva: '100' } },
-      { id: 'b', selection: { ...EMPTY_SELECTION } },
+      { id: 'a', factor: 0.7, selection: { spec: '標準仕様', phase: '3Φ', voltage: '200V級', kva: '100' } },
+      { id: 'b', factor: 1.0, selection: { ...EMPTY_SELECTION } },
     ]
     saveSelections('A1TEST001', { '1': rows })
     expect(loadSelections('A1TEST001')).toEqual({ '1': rows })
     expect(loadSelections('A1TEST002')).toEqual({})
     // 別の製番の保存は互いに上書きしない。
-    saveSelections('A1TEST002', { '2': [{ id: 'c', selection: { ...EMPTY_SELECTION } }] })
+    saveSelections('A1TEST002', { '2': [{ id: 'c', factor: 1.0, selection: { ...EMPTY_SELECTION } }] })
     expect(Object.keys(loadSelections('A1TEST001'))).toEqual(['1'])
     expect(Object.keys(loadSelections('A1TEST002'))).toEqual(['2'])
   })
@@ -89,9 +90,9 @@ describe('busbarSelections: 保存と再表示', () => {
   it('resets the contradictory stage and everything after it when restoring', () => {
     const cleaned = sanitizeRowsByFace({
       '1': [
-        { id: 'r1', selection: { spec: '標準仕様', phase: '1Φ', voltage: '200V級', kva: '100' } }, // 1Φ に 200V級 は無い
-        { id: 'r2', selection: { spec: '不明', phase: '3Φ', voltage: '200V級', kva: '100' } },
-        { id: 'r1', selection: { ...EMPTY_SELECTION } }, // 重複 ID は捨てる
+        { id: 'r1', factor: 0.5, selection: { spec: '標準仕様', phase: '1Φ', voltage: '200V級', kva: '100' } }, // 1Φ に 200V級 は無い
+        { id: 'r2', factor: 1.4, selection: { spec: '不明', phase: '3Φ', voltage: '200V級', kva: '100' } },
+        { id: 'r1', factor: 0.6, selection: { ...EMPTY_SELECTION } }, // 重複 ID は捨てる
         { selection: {} }, // ID なしは捨てる
       ],
       '2': 'not-an-array',
@@ -99,6 +100,17 @@ describe('busbarSelections: 保存と再表示', () => {
     expect(Object.keys(cleaned)).toEqual(['1'])
     expect(cleaned['1'].map((r) => r.id)).toEqual(['r1', 'r2'])
     expect(cleaned['1'][0].selection).toEqual({ spec: '標準仕様', phase: '1Φ', voltage: null, kva: null })
+    expect(cleaned['1'].map((r) => r.factor)).toEqual([0.5, 1.4])
     expect(cleaned['1'][1].selection).toEqual(EMPTY_SELECTION)
+  })
+
+  it('defaults missing or invalid saved factors to 1.0', () => {
+    const cleaned = sanitizeRowsByFace({
+      '1': [
+        { id: 'missing', selection: { ...EMPTY_SELECTION } },
+        { id: 'invalid', factor: 0.9, selection: { ...EMPTY_SELECTION } },
+      ],
+    })
+    expect(cleaned['1'].map((row) => row.factor)).toEqual([1.0, 1.0])
   })
 })

@@ -10,8 +10,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.deps import get_db
 from app.domain.box_code_selection import BOX_CATEGORIES
+from app.domain.busbar_selections import BUSBAR_ALLOWED_FACTORS
+from app.domain.master_categories import COPPER_BUS_CODE_CATEGORIES
 from app.repositories.estimate_box_overrides import delete_box_override, set_box_override
-from app.repositories.master import get_master_item
+from app.repositories.estimate_busbar_selections import list_selections, replace_face_selections
+from app.repositories.master import get_master_item, get_master_item_by_code
 from app.services.box_code_candidates import box_result_key
 from app.domain.estimate_rules import EstimateResultEvidence
 from app.repositories.drawing_evidence_types import list_evidence_types
@@ -33,6 +36,7 @@ from app.schemas.estimate_rules import (
     EstimateResultEvaluateOut,
     EstimateResultEvidenceOut,
     BoxCodeOverrideIn,
+    BusbarSelectionsReplaceIn,
     EstimateResultFactorOverrideIn,
     EstimateResultOut,
     EstimateResultQuantityOverrideIn,
@@ -57,11 +61,46 @@ def _evidence_out(evidence: list[EstimateResultEvidence]) -> list[EstimateResult
 def _result_out(conn: sqlite3.Connection, result) -> EstimateResultOut:
     data = {k: v for k, v in result.__dict__.items() if k != "evidence"}
     allowed_factors = (
-        get_allowed_factors(conn, result.source_rule_id) if result.source_rule_id is not None else None
+        list(BUSBAR_ALLOWED_FACTORS)
+        if result.result_key.startswith("busbar:")
+        else get_allowed_factors(conn, result.source_rule_id) if result.source_rule_id is not None else None
     )
     return EstimateResultOut(
         **data, allowed_factors=allowed_factors, evidence=_evidence_out(result.evidence)
     )
+
+
+@router.get("/{product_no}/busbar-selections")
+def read_busbar_selections(product_no: str, conn: sqlite3.Connection = Depends(get_db)):
+    """主回路銅帯の選択コード・係数を製番単位で返す。"""
+    return [
+        {"ban_menno": row.ban_menno, "row_id": row.row_id, "code": row.code, "factor": row.factor}
+        for row in list_selections(conn, product_no)
+    ]
+
+
+@router.put("/{product_no}/busbar-selections/{ban_menno}", response_model=EstimateResultEvaluateOut)
+def replace_busbar_selections(
+    product_no: str,
+    ban_menno: int,
+    body: BusbarSelectionsReplaceIn,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> EstimateResultEvaluateOut:
+    """指定面の銅帯選択行を置換し、積算結果を再評価する。
+
+    各行のコードと係数はPanelInfoの選択状態が正本。行の削除・未選択化は
+    この面の保存内容から消し、対応するEstimateResultも再評価で除去する。
+    """
+    if ban_menno <= 0:
+        raise HTTPException(status_code=422, detail="面番号は1以上を指定してください。")
+    rows: list[tuple[str, str, float]] = []
+    for row in body.rows:
+        item = get_master_item_by_code(conn, row.code)
+        if item is None or item.category not in COPPER_BUS_CODE_CATEGORIES:
+            raise HTTPException(status_code=422, detail=f"主回路銅帯のコードが見つかりません: {row.code}")
+        rows.append((row.row_id, row.code, row.factor))
+    replace_face_selections(conn, product_no=product_no, ban_menno=ban_menno, selections=rows)
+    return _re_evaluate(conn, product_no)
 
 
 @evidence_types_router.get("", response_model=list[DrawingEvidenceTypeOut])

@@ -456,6 +456,7 @@ vi.mock('./api/client', () => ({
   // 箱コード自動選定の手修正・自動選定へ戻す(個別のテストが戻り値を差し替える)。
   overrideBoxCode: vi.fn(async () => ({ results: [], skipped_rule_master_ids: [] })),
   resetBoxCode: vi.fn(async () => ({ results: [], skipped_rule_master_ids: [] })),
+  replaceBusbarSelections: vi.fn(async () => ({ results: buildLiveEstimateResults(), skipped_rule_master_ids: [] })),
   fetchDrawingEvidenceTypes: vi.fn(async () => []),
   // 図面情報追加パネルの「候補／確認待ち」読み取り専用表示用。
   // 他のテストは中身を検証しないため空配列で十分(表示そのものは

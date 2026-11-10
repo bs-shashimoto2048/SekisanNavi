@@ -65,6 +65,15 @@ function formatResultPrice(price: number | null): string {
   return `¥${price.toLocaleString('ja-JP')}`
 }
 
+function formatResultLabor(labor: number | null): string {
+  // 工数の基準値が未登録なら、推測せず金額と同じく未設定表示にする。
+  return labor == null ? MISSING_VALUE_PLACEHOLDER : labor.toLocaleString('ja-JP')
+}
+
+function isBusbarResult(result: EstimateResult): boolean {
+  return result.result_key.startsWith('busbar:')
+}
+
 /** `masterItemById`と同様、省略時の既定値を固定参照にする。 */
 const EMPTY_DETECTION_MAP = new Map<number, Detection>()
 
@@ -151,7 +160,7 @@ interface Props {
  * 右ペイン③「積算明細」領域 (Issue #40 Phase 5: EstimateResultを正本とする
  * 積算結果の一覧・確認・係数修正を行う場所)。
  *
- * **表示列(指示5章)**: コード/内容/数量/適用単位/係数/金額/判定 の7列。
+ * **表示列**: コード/内容/数量/適用単位/係数/金額/工数/判定。
  * 判定理由・新旧経路の根拠区別(AI/手動)等の詳細情報は常時表示せず、
  * 「理由」ボタンのtitleへ逃がす(指示6章「常時長文表示は不要」)。
  *
@@ -239,13 +248,14 @@ export function EstimateDetail({
               <th className="estimate-detail__col-rr-unit">適用単位</th>
               <th className="estimate-detail__col-rr-factor">係数</th>
               <th className="estimate-detail__col-rr-price">金額</th>
+              <th className="estimate-detail__col-rr-labor">工数</th>
               <th className="estimate-detail__col-rr-method">判定</th>
             </tr>
           </thead>
           <tbody>
             {visibleResults.length === 0 && (
               <tr>
-                <td className="estimate-detail__empty" colSpan={7}>
+                <td className="estimate-detail__empty" colSpan={8}>
                   積算結果がありません
                 </td>
               </tr>
@@ -304,13 +314,18 @@ export function EstimateDetail({
                       : MISSING_VALUE_PLACEHOLDER}
                   </td>
                   <td className="estimate-detail__col-rr-factor">
-                    <EstimateResultFactorCell
-                      result={result}
-                      onOverride={(newFactor) => onOverrideResultFactor(result, newFactor)}
-                      onReset={() => onResetResultFactor(result)}
-                    />
+                    {isBusbarResult(result) ? (
+                      <span aria-label="主回路銅帯の係数">{result.current_factor.toFixed(1)}</span>
+                    ) : (
+                      <EstimateResultFactorCell
+                        result={result}
+                        onOverride={(newFactor) => onOverrideResultFactor(result, newFactor)}
+                        onReset={() => onResetResultFactor(result)}
+                      />
+                    )}
                   </td>
                   <td className="estimate-detail__col-rr-price">{formatResultPrice(result.price)}</td>
+                  <td className="estimate-detail__col-rr-labor">{formatResultLabor(result.labor)}</td>
                   <td className="estimate-detail__col-rr-method">
                     <span>{judgmentMethodLabel(result.judgment_method)}</span>
                     {result.status === 'needs_review' && (

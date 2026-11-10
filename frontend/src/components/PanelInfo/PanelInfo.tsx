@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type {
   AttributeSource,
   EstimatePanelInfo,
@@ -10,6 +10,7 @@ import { SteelSection } from './SteelSection'
 import { banGroupKey, panelKey } from '../../utils/panel'
 import { useAutoFitGridColumns } from '../../hooks/useAutoFitGridColumns'
 import { BusbarSelector } from '../BusbarSelector/BusbarSelector'
+import { statusOf } from '../../domain/busbarCodes'
 import { ErrorBoundary } from '../ErrorBoundary/ErrorBoundary'
 import '../ErrorBoundary/ErrorBoundary.css'
 import {
@@ -91,6 +92,8 @@ interface Props {
    * `FloatingPanel`の`maxContentSize`へ渡り、リサイズ上限・自動フィットに
    * 使われる)。未指定の場合はこの機能自体を使わない(テスト等での簡略化用)。 */
   onNaturalSizeChange?: (size: NaturalSize) => void
+  /** 保存済み/変更後の主回路銅帯行を積算結果へ反映する。 */
+  onBusbarRowsChange?: (productNo: string, face: number, rows: BusbarRow[]) => void
 }
 
 // null/undefined/NaN/空文字はそのまま出さず"-"に統一する (指示書8章)。
@@ -331,6 +334,7 @@ export function PanelInfo({
   selectedPanel,
   onSelectPanel,
   onNaturalSizeChange,
+  onBusbarRowsChange,
 }: Props) {
   // 優先順位: 1. 現在ページの盤 2. (旧来のダミーDB由来panelがあればそれ) 3. 同じ製番内の
   // 他の図面・製番共通データの盤(表示のみ) 4. 何も無ければ取得不可の状態表示。
@@ -369,11 +373,21 @@ export function PanelInfo({
   // 面ごとの開閉は明示操作だけを保存し、初期状態は「保存済み行がある面だけ展開」。
   // 図面データが後から届いても未登録面が誤って展開されないよう、既定状態は描画時に導出する。
   const [busbarFaceExpansion, setBusbarFaceExpansion] = useState<Map<number, boolean>>(() => new Map())
+  const syncedBusbarProductNo = useRef<string | undefined>(undefined)
   if (busbarProductNo !== productNo) {
     setBusbarProductNo(productNo)
     setBusbarRows(loadSelections(productNo))
     setBusbarFaceExpansion(new Map())
   }
+  useEffect(() => {
+    if (!productNo || !onBusbarRowsChange || syncedBusbarProductNo.current === productNo) return
+    syncedBusbarProductNo.current = productNo
+    for (const [face, rows] of Object.entries(busbarRows)) {
+      if (rows.some((row) => statusOf(row.selection).kind === 'unique')) {
+        onBusbarRowsChange(productNo, Number(face), rows)
+      }
+    }
+  }, [productNo, busbarRows, onBusbarRowsChange])
   function isBusbarFaceExpanded(face: number) {
     return busbarFaceExpansion.get(face) ?? Boolean(busbarRows[String(face)]?.some((row) => Object.values(row.selection).some(Boolean)))
   }
@@ -386,6 +400,7 @@ export function PanelInfo({
       setBusbarFaceExpansion((current) => new Map(current).set(Number(face), true))
     }
     saveSelections(productNo, next)
+    if (productNo && onBusbarRowsChange) onBusbarRowsChange(productNo, Number(face), rows)
   }
 
   function toggleBusbarFace(face: number) {

@@ -30,6 +30,7 @@ _0010_FILENAME = "0010_estimate_confirmation_result_snapshot.py"
 # 「0010だけが適用される」という前提のassertionはここで更新する必要がある)。
 _0011_FILENAME = "0011_estimate_quantity_override.py"
 _0012_FILENAME = "0012_box_code_selection.py"
+_0013_FILENAME = "0013_estimate_busbar_selections.py"
 
 
 def _apply_migrations_up_to_0009(conn: sqlite3.Connection) -> None:
@@ -117,7 +118,7 @@ def test_existing_fk_bearing_confirmation_rows_survive_0010_byte_identical(tmp_p
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
 
     applied = run_migrations(db_path)
-    assert applied == [_0010_FILENAME, _0011_FILENAME, _0012_FILENAME]
+    assert applied == [_0010_FILENAME, _0011_FILENAME, _0012_FILENAME, _0013_FILENAME]
 
     with get_connection(db_path) as conn:
         conn.execute("PRAGMA foreign_keys = ON")

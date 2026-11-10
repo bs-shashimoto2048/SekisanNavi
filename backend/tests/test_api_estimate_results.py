@@ -516,3 +516,51 @@ def test_quantity_and_factor_overrides_both_survive_independently(client, monkey
     assert both["factor_overridden"] is True
     assert both["current_quantity"] == 3
     assert both["current_factor"] == 0.5
+
+
+def test_busbar_selection_persists_factor_and_creates_price_labor_result(client, monkeypatch, tmp_path, db_path):
+    _setup_product_and_rule(client, monkeypatch, tmp_path, db_path)
+    # The checkout may not contain the private master workbook, so add a minimal
+    # copper-bus master row to this isolated test DB rather than relying on it.
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """INSERT INTO estimate_master_items
+               (code, category, model, rating, total_price_a)
+               VALUES (?, ?, ?, ?, ?)""",
+            ("44241", "入力（主回路銅帯）", "3×30", "1Φ 10kVA", 250),
+        )
+    path = "/api/products/A1GV2421/busbar-selections/1"
+    payload = {"rows": [{"row_id": "row-test-1", "code": "44241", "factor": 0.5}]}
+
+    saved = client.put(path, json=payload)
+    assert saved.status_code == 200, saved.text
+    busbar = next(row for row in saved.json()["results"] if row["result_key"] == "busbar:1:row-test-1")
+    assert busbar["code"] == "44241"
+    assert busbar["initial_factor"] == 0.5
+    assert busbar["current_factor"] == 0.5
+    assert busbar["allowed_factors"] == [0.2, 0.5, 0.6, 0.7, 0.8, 1.0, 1.4]
+    assert busbar["price"] == 125
+    # No approved labor base is present in this master/result source; do not fabricate one.
+    assert busbar["unit_labor"] is None
+    assert busbar["labor"] is None
+
+    persisted = client.get("/api/products/A1GV2421/busbar-selections")
+    assert persisted.status_code == 200
+    assert persisted.json() == [{"ban_menno": 1, "row_id": "row-test-1", "code": "44241", "factor": 0.5}]
+
+    updated = client.put(path, json={"rows": [{"row_id": "row-test-1", "code": "44241", "factor": 0.6}]})
+    updated_row = next(row for row in updated.json()["results"] if row["result_key"] == "busbar:1:row-test-1")
+    assert updated_row["current_factor"] == 0.6
+    assert updated_row["factor_overridden"] is False
+
+    removed = client.put(path, json={"rows": []})
+    assert not any(row["result_key"] == "busbar:1:row-test-1" for row in removed.json()["results"])
+
+
+def test_busbar_selection_rejects_factor_outside_fixed_choices(client, monkeypatch, tmp_path, db_path):
+    _setup_product_and_rule(client, monkeypatch, tmp_path, db_path)
+    res = client.put(
+        "/api/products/A1GV2421/busbar-selections/1",
+        json={"rows": [{"row_id": "row-a", "code": "44241", "factor": 0.9}]},
+    )
+    assert res.status_code == 422
