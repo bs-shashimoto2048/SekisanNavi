@@ -114,8 +114,10 @@ interface Props {
   /** 変更後の主回路銅帯行を保存し、積算結果へ反映する(利用者の操作のときだけ呼ぶ。表示の復元では呼ばない)。
    * `preserved`は、サーバーに保存済みだが対応表に無く表示できない行(その面の保存時に消さず送り直す)。 */
   onBusbarRowsChange?: (productNo: string, face: number, rows: BusbarRow[], preserved?: ServerBusbarRow[]) => void
-  /** サーバー保存済みの銅帯選択。渡された場合、製番を開いたとき1回だけ localStorage と統合して表示を復元する
-   * (`domain/busbarServerSync`。保存はしない)。省略時は localStorage のみ(従来の挙動)。 */
+  /** サーバー保存済みの銅帯選択。`undefined`(省略)は localStorage のみを使う従来の挙動。渡す場合は、
+   * `null`=取得中、`BusbarServerState`=取得結果(成功・失敗)。現在の製番の取得結果を統合するまでは
+   * 銅帯の追加・編集・削除を無効にする(取得結果との競合で入力・保存済みの選択を失わないため)。
+   * 統合は製番を開いたとき1回だけで、localStorage との統合・表示の復元のみ(保存はしない)。 */
   busbarServer?: BusbarServerState | null
   /** 盤ごとの箱コード選定結果と変更操作。 */
   boxResults?: EstimateResult[]
@@ -363,7 +365,7 @@ export function PanelInfo({
   onSelectPanel,
   onNaturalSizeChange,
   onBusbarRowsChange,
-  busbarServer = null,
+  busbarServer,
   boxResults = [],
   masterItemById = EMPTY_MASTER_ITEMS,
   onOverrideBoxCode = () => {},
@@ -433,6 +435,10 @@ export function PanelInfo({
       setBusbarFetchError(busbarServer.message ?? 'サーバーの保存内容を取得できませんでした')
     }
   }
+  // 現在の製番のサーバー取得結果を統合し終えるまで(成功・失敗どちらでも統合後に解除)、銅帯の変更を受け付けない。
+  // 状態は製番ごとに持つ(`busbarMergedFor`は製番が変わるたびに未統合へ戻る)ため、前の製番の取得結果や
+  // 完了状態では新しい製番の操作は有効にならない。`busbarServer`が`undefined`(未使用)のときは制限しない。
+  const busbarLoading = productNo !== undefined && busbarServer !== undefined && busbarMergedFor !== productNo
   // 統合後の表示内容を localStorage にも反映する(次回の GET 失敗時の表示・入力途中行の保持のため。サーバーへは送らない)。
   useEffect(() => {
     if (busbarMergedFor && busbarMergedFor === productNo && busbarServer?.status === 'ok') {
@@ -446,6 +452,8 @@ export function PanelInfo({
   }
 
   function changeBusbarRows(face: string, rows: BusbarRow[]) {
+    // 取得中は変更を受け付けない(UIでも無効化済み。ここは二重の保険)。
+    if (busbarLoading) return
     const next = setFaceRows(busbarRows, face, rows)
     setBusbarRows(next)
     // ＋で行を追加したときは、その面の入力欄を表示する。行を削除したときは、削除前の開閉状態を
@@ -812,6 +820,7 @@ export function PanelInfo({
                             faceLabel={String(card.panel.ban_menno)}
                             rows={busbarRows[String(card.panel.ban_menno)] ?? []}
                             onChange={(rows) => changeBusbarRows(String(card.panel.ban_menno), rows)}
+                            loading={busbarLoading}
                           />
                         </ErrorBoundary>
                       </div>

@@ -219,3 +219,16 @@
 .busbar-selector__value {
   color: #1f2937;
 }
+
+/* サーバー保存内容の取得中表示。操作は無効(disabled)にし、取得が終われば消える。 */
+.busbar-selector__loading {
+  margin: 0 0 0.3rem;
+  font-size: 0.8rem;
+  color: #92400e;
+}
+
+.busbar-selector__add:disabled,
+.busbar-selector__remove:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
