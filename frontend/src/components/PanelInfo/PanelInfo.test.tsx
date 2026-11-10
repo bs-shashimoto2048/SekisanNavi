@@ -1245,6 +1245,40 @@ describe('PanelInfo: 主回路銅帯の選択欄は1面(ban_menno)につき1つ�
     expect(document.querySelector('.busbar-selector__code')).toBeNull()
   })
 
+  it('does not persist a blank row, but persists selected code and factor changes', () => {
+    const onBusbarRowsChange = vi.fn()
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: 'パネルA', ban_type: '正面図' })]}
+        estimatePanels={[]}
+        productNo="A1BUSBAR001"
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+        onBusbarRowsChange={onBusbarRowsChange}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
+    fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
+    expect(onBusbarRowsChange).not.toHaveBeenCalled()
+
+    selectFace1('1')
+    expect(onBusbarRowsChange).toHaveBeenCalledTimes(1)
+    expect(onBusbarRowsChange.mock.lastCall?.[2]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ factor: 1 })]),
+    )
+
+    fireEvent.change(screen.getByRole('combobox', { name: '面1 銅帯1 係数' }), { target: { value: '0.8' } })
+    expect(onBusbarRowsChange).toHaveBeenCalledTimes(2)
+    expect(onBusbarRowsChange.mock.lastCall?.[2]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ factor: 0.8 })]),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
+    expect(onBusbarRowsChange).toHaveBeenCalledTimes(2)
+  })
+
   it('keeps the cell structure (6 cells per row) and does not select the panel when the selector is operated', () => {
     const onSelectPanel = vi.fn()
     renderThreePanels(onSelectPanel)
