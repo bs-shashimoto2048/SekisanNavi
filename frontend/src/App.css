@@ -148,10 +148,22 @@
 /* Header直下の残り全体。MainArea(左ペイン+Viewer+Master)とRightPaneを
    同階層の横並びflexアイテムにする (指示書7章の核心)。 */
 .app-workspace {
+  position: relative;
   display: flex;
   flex-direction: row;
   flex: 1;
   min-height: 0;
+}
+
+/* FloatingPanelを中央Viewer内に閉じ込めず、図面一覧を含むワークスペース全体
+   まで拡張できる透明な配置レイヤー。外側はクリックを背後へ通し、パネル本体
+   だけが入力を受け取る。資料PDFのように画面端までリサイズできる一方、
+   アプリのヘッダー領域にははみ出さない。 */
+.app-workspace__floating-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
 }
 
 /* 左ペイン+Viewer(上段) と 積算コードMaster(下段) の縦2分割。 */

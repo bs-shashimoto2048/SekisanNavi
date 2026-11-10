@@ -68,6 +68,7 @@
    都度計算するため、ここではCSSで固定値を持たない。 */
 .floating-panel {
   position: absolute;
+  pointer-events: auto;
   /* Viewer内部Overlayの最大値(Tooltip: 50)より確実に前面へ出す。実際の重なり順は
      `FloatingPanel.tsx`側でパネルごとにz-indexを個別採番する(操作したパネルが
      前面に来る)。 */
