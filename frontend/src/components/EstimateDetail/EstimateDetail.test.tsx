@@ -129,7 +129,7 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     ]
     renderDetail({ results })
     const rows = screen.getAllByRole('row').slice(1)
-    expect(rows.map((row) => within(row).getAllByRole('cell')[0].textContent)).toEqual(['面2', '面1', '面1'])
+    expect(rows.map((row) => within(row).getAllByRole('cell')[0].textContent)).toEqual(['2', '1', '1'])
   })
 
   it('sorts by face and numeric amounts ascending/descending when the header is clicked', () => {

@@ -431,7 +431,7 @@ export function EstimateDetail({
                   }}
                 >
                   <td className="estimate-detail__col-rr-panel">
-                    {panelNumberOf(result) == null ? MISSING_VALUE_PLACEHOLDER : `面${panelNumberOf(result)}`}
+                    {panelNumberOf(result) == null ? MISSING_VALUE_PLACEHOLDER : panelNumberOf(result)}
                   </td>
                   <td className="estimate-detail__col-rr-code">{result.code}</td>
                   <td className="estimate-detail__col-rr-name">{content ?? MISSING_VALUE_PLACEHOLDER}</td>
