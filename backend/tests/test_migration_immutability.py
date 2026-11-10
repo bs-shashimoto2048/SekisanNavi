@@ -111,6 +111,7 @@ def test_0009_alone_adds_columns_to_a_db_where_0008_was_applied_without_them(tmp
         "0010_estimate_confirmation_result_snapshot.py",
         "0011_estimate_quantity_override.py",
         "0012_box_code_selection.py",
+        "0013_estimate_busbar_selections.py",
     ]
 
     with get_connection(db_path) as conn:

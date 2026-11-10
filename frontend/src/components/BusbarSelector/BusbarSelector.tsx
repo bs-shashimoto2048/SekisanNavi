@@ -7,7 +7,7 @@ import {
   statusOf,
   type BusbarSelection,
 } from '../../domain/busbarCodes'
-import { addRow, removeRow, updateRow, type BusbarRow } from '../../domain/busbarSelections'
+import { addRow, BUSBAR_FACTOR_OPTIONS, removeRow, updateRow, updateRowFactor, type BusbarRow } from '../../domain/busbarSelections'
 import './BusbarSelector.css'
 
 // 主回路銅帯(入力)コード選定UI (盤情報の盤一覧の下)。
@@ -108,6 +108,18 @@ export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
                 </span>
               )}
             </div>
+            <label className="busbar-selector__factor">
+              <span className="busbar-selector__label">係数</span>
+              <select
+                value={row.factor}
+                aria-label={`${rowLabel} 係数`}
+                onChange={(e) => onChange(updateRowFactor(rows, row.id, Number(e.target.value)))}
+              >
+                {BUSBAR_FACTOR_OPTIONS.map((factor) => (
+                  <option key={factor} value={factor}>{factor.toFixed(1)}</option>
+                ))}
+              </select>
+            </label>
             {status.kind === 'unique' && (
               <div className="busbar-selector__result" data-status={status.kind}>
                 <dl className="busbar-selector__summary" aria-label="選定結果">

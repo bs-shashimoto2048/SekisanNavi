@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { BusbarSelector } from './BusbarSelector'
-import { FIRST_ROW_ID, emptyRow, type BusbarRow } from '../../domain/busbarSelections'
+import { BUSBAR_FACTOR_OPTIONS, FIRST_ROW_ID, emptyRow, type BusbarRow } from '../../domain/busbarSelections'
 
 function Harness({ face = '1', initial }: { face?: string; initial?: BusbarRow[] }) {
   const [rows, setRows] = useState<BusbarRow[]>(initial ?? [emptyRow(FIRST_ROW_ID)])
@@ -25,6 +25,14 @@ describe('BusbarSelector', () => {
     expect(document.querySelector('.busbar-selector__code')).toBeNull()
     expect(screen.getByText('選定コード')).toBeInTheDocument()
     expect(document.querySelector('.busbar-selector__code-placeholder')?.textContent).toBe('—')
+    expect(select('面1 銅帯1 係数').value).toBe('1')
+    expect(optionTexts('面1 銅帯1 係数')).toEqual(BUSBAR_FACTOR_OPTIONS.map((factor) => factor.toFixed(1)))
+  })
+
+  it('updates and retains the selected coefficient per row', () => {
+    render(<Harness />)
+    pick('面1 銅帯1 係数', '1.4')
+    expect(select('面1 銅帯1 係数').value).toBe('1.4')
   })
 
   it('narrows the candidates step by step and shows 区分なし（1Φ） for 1Φ', () => {
@@ -76,7 +84,7 @@ describe('BusbarSelector', () => {
 
   it('shows "no match" and adopts no code when the stored combination matches nothing', () => {
     render(
-      <Harness initial={[{ id: 'x', selection: { spec: '標準仕様', phase: '1Φ', voltage: '200V級', kva: '100' } }]} />,
+      <Harness initial={[{ id: 'x', factor: 1, selection: { spec: '標準仕様', phase: '1Φ', voltage: '200V級', kva: '100' } }]} />,
     )
     expect(document.querySelector('.busbar-selector__code-placeholder')?.textContent).toBe('該当なし')
     expect(document.querySelector('.busbar-selector__code-placeholder')?.getAttribute('title')).toContain('一致するコードがありません')

@@ -269,7 +269,8 @@
    任せる(個別の`width`/`min-width`指定は廃止)。数量・金額のみ右寄せを
    維持する(幅とは無関係な配置の指定のため残す)。 */
 .estimate-detail__col-rr-qty,
-.estimate-detail__col-rr-price {
+.estimate-detail__col-rr-price,
+.estimate-detail__col-rr-labor {
   text-align: right;
 }
 

@@ -111,10 +111,26 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     expect(screen.queryByRole('tab', { name: /マニュアル/ })).not.toBeInTheDocument()
   })
 
-  it('shows コード/内容/数量/適用単位/係数/金額/判定 as the 7 columns', () => {
+  it('shows コード/内容/数量/適用単位/係数/金額/工数/判定 as the 8 columns', () => {
     renderDetail({ results: [makeResult()] })
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent)
-    expect(headers).toEqual(['コード', '内容', '数量', '適用単位', '係数', '金額', '判定'])
+    expect(headers).toEqual(['コード', '内容', '数量', '適用単位', '係数', '金額', '工数', '判定'])
+  })
+
+  it('shows a busbar coefficient and does not invent a missing labor amount', () => {
+    const result = makeResult({
+      result_key: 'busbar:1:row-1',
+      code: '44815',
+      current_factor: 1.4,
+      unit_price: 250,
+      price: 350,
+      unit_labor: null,
+      labor: null,
+    })
+    renderDetail({ results: [result] })
+    expect(screen.getByLabelText('主回路銅帯の係数')).toHaveTextContent('1.4')
+    expect(screen.getByText('¥350')).toBeInTheDocument()
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0)
   })
 
   it('"全て" tab includes every EstimateResult regardless of judgment_method', () => {

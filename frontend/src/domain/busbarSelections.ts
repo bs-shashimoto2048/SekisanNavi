@@ -10,12 +10,14 @@ import { BUSBAR_STEPS, EMPTY_SELECTION, optionsFor, type BusbarSelection } from 
 export interface BusbarRow {
   id: string
   selection: BusbarSelection
+  factor: number
 }
 
 /** 面番号(文字列)→選択行のリスト。 */
 export type BusbarRowsByFace = Record<string, BusbarRow[]>
 
 export const BUSBAR_STORAGE_KEY = 'sekisan-navi:busbar-selections:v1'
+export const BUSBAR_FACTOR_OPTIONS = [0.2, 0.5, 0.6, 0.7, 0.8, 1.0, 1.4] as const
 /** 面の最初の(未選択の)行の固定 ID。保存前でも描画が安定するようにする。 */
 export const FIRST_ROW_ID = 'row-1'
 
@@ -27,7 +29,7 @@ export function newRowId(): string {
 }
 
 export function emptyRow(id: string = newRowId()): BusbarRow {
-  return { id, selection: { ...EMPTY_SELECTION } }
+  return { id, selection: { ...EMPTY_SELECTION }, factor: 1.0 }
 }
 
 /** その面の行(未保存なら、未選択の 1 行)。 */
@@ -42,6 +44,10 @@ export function setFaceRows(byFace: BusbarRowsByFace, face: string, rows: Busbar
 
 export function updateRow(rows: BusbarRow[], id: string, selection: BusbarSelection): BusbarRow[] {
   return rows.map((r) => (r.id === id ? { ...r, selection } : r))
+}
+
+export function updateRowFactor(rows: BusbarRow[], id: string, factor: number): BusbarRow[] {
+  return rows.map((r) => (r.id === id ? { ...r, factor } : r))
 }
 
 export function addRow(rows: BusbarRow[]): BusbarRow[] {
@@ -79,7 +85,11 @@ export function sanitizeRowsByFace(raw: unknown): BusbarRowsByFace {
       const id = (r as { id?: unknown }).id
       if (typeof id !== 'string' || id === '' || seen.has(id)) continue
       seen.add(id)
-      clean.push({ id, selection: sanitizeSelection((r as { selection?: unknown }).selection) })
+      const rawFactor = (r as { factor?: unknown }).factor
+      const factor = typeof rawFactor === 'number' && BUSBAR_FACTOR_OPTIONS.some((value) => value === rawFactor)
+        ? rawFactor
+        : 1.0
+      clean.push({ id, selection: sanitizeSelection((r as { selection?: unknown }).selection), factor })
     }
     if (clean.length > 0) result[face] = clean
   }

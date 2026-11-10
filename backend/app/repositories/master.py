@@ -89,3 +89,11 @@ def get_master_item(conn: sqlite3.Connection, master_item_id: int) -> EstimateMa
         (master_item_id,),
     ).fetchone()
     return _row_to_master_item(row) if row else None
+
+
+def get_master_item_by_code(conn: sqlite3.Connection, code: str) -> EstimateMasterItem | None:
+    row = conn.execute(
+        f"SELECT {_COLUMNS} FROM estimate_master_items WHERE code = ? ORDER BY id LIMIT 1",
+        (code,),
+    ).fetchone()
+    return _row_to_master_item(row) if row else None

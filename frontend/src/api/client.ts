@@ -452,4 +452,17 @@ export async function resetBoxCode(
   return (await res.json()) as EstimateResultEvaluateResponse
 }
 
+/** 面の主回路銅帯選択行を保存し、係数を適用した積算結果を再評価する。 */
+export function replaceBusbarSelections(
+  productNo: string,
+  banMenno: number,
+  rows: Array<{ row_id: string; code: string; factor: number }>,
+): Promise<EstimateResultEvaluateResponse> {
+  return sendJson(
+    `/api/products/${encodeURIComponent(productNo)}/busbar-selections/${banMenno}`,
+    'PUT',
+    { rows },
+  )
+}
+
 export { ApiError }

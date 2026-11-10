@@ -16,6 +16,7 @@ from app.domain.estimate_rules import (
     JudgmentMethod,
     JudgmentScope,
 )
+from app.domain.busbar_selections import BUSBAR_ALLOWED_FACTORS
 
 
 class DrawingEvidenceTypeOut(BaseModel):
@@ -107,6 +108,31 @@ class BoxCodeOverrideIn(BaseModel):
     master_item_id: int
     reason: str | None = None
     updated_by: str | None = None
+
+
+class BusbarSelectionRowIn(BaseModel):
+    row_id: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9_-]+$")
+    code: str = Field(min_length=1, max_length=40)
+    factor: float = Field(default=1.0)
+
+    @field_validator("factor")
+    @classmethod
+    def _validate_factor(cls, value: float) -> float:
+        if not math.isfinite(value) or not any(abs(value - allowed) < 1e-9 for allowed in BUSBAR_ALLOWED_FACTORS):
+            raise ValueError(f"係数は次の候補から選択してください: {list(BUSBAR_ALLOWED_FACTORS)}")
+        return value
+
+
+class BusbarSelectionsReplaceIn(BaseModel):
+    rows: list[BusbarSelectionRowIn] = Field(max_length=100)
+
+    @field_validator("rows")
+    @classmethod
+    def _unique_row_ids(cls, rows: list[BusbarSelectionRowIn]) -> list[BusbarSelectionRowIn]:
+        ids = [row.row_id for row in rows]
+        if len(ids) != len(set(ids)):
+            raise ValueError("選択行IDは重複できません。")
+        return rows
 
 
 class EstimateResultEvaluateOut(BaseModel):

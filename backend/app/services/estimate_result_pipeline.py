@@ -22,6 +22,7 @@ from pathlib import Path
 from app.domain.estimate_rules import EstimateResultCandidate, EstimateResultStatus
 from app.repositories.estimate_box_overrides import list_box_overrides
 from app.services.box_code_candidates import build_box_candidates, mark_duplicates_with_detection_results
+from app.services.busbar_code_candidates import build_busbar_candidates
 from app.services.data_source import resolve_product_dir
 from app.services.estcode_df import load_estcode_df
 from app.services.estimate_rule_evaluator import evaluate_product
@@ -80,8 +81,10 @@ def build_all_candidates(
     )
     conflicting.extend(mark_duplicates_with_detection_results(box_candidates, all_candidates))
 
+    busbar_candidates = build_busbar_candidates(conn, product_no)
+
     return CombinedEvaluationOutcome(
-        candidates=[*all_candidates, *box_candidates],
+        candidates=[*all_candidates, *box_candidates, *busbar_candidates],
         skipped_rule_master_ids=rule_outcome.skipped_rule_master_ids,
         conflicting_code_targets=conflicting,
     )

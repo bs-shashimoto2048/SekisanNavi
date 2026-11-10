@@ -19,6 +19,7 @@ import {
   fetchEstimateResults,
   overrideBoxCode,
   resetBoxCode,
+  replaceBusbarSelections,
   fetchMasterItems,
   fetchPanel,
   fetchProductDrawings,
@@ -41,6 +42,8 @@ import { formatTargetLabel } from './domain/estimateTargetLabel'
 import { selectOutlineFrontPanels } from './domain/panelDimensions'
 import { buildEstimateResultAggregation } from './domain/estimateResultAggregation'
 import { isBoxResult } from './domain/boxCodeSelection'
+import { statusOf } from './domain/busbarCodes'
+import type { BusbarRow } from './domain/busbarSelections'
 import {
   EMPTY_EDIT_HISTORY,
   popRedo,
@@ -1164,6 +1167,22 @@ function App() {
     }
   }
 
+  const handleBusbarRowsChange = useCallback(async (productNo: string, face: number, rows: BusbarRow[]) => {
+    const selectedRows = rows.flatMap((row) => {
+      const status = statusOf(row.selection)
+      return status.kind === 'unique'
+        ? [{ row_id: row.id, code: status.record.code, factor: row.factor }]
+        : []
+    })
+    try {
+      const outcome = await replaceBusbarSelections(productNo, face, selectedRows)
+      if (activeProductNo === productNo) setEstimateResults(outcome.results)
+      setError(null)
+    } catch (e) {
+      if (activeProductNo === productNo) setError(describeFetchError(e, '主回路銅帯の積算反映に失敗しました'))
+    }
+  }, [activeProductNo])
+
   async function handleResetEstimateResultFactor(result: EstimateResult) {
     try {
       const updated = await resetEstimateResultFactor(activeProductNo, result.id)
@@ -2179,6 +2198,7 @@ function App() {
                   selectedPanel={selectedPanel}
                   onSelectPanel={handleSelectPanel}
                   onNaturalSizeChange={setPanelInfoNaturalSize}
+                  onBusbarRowsChange={handleBusbarRowsChange}
                 />
                 </ErrorBoundary>
               </FloatingPanel>
