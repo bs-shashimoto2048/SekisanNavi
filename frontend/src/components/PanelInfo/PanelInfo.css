@@ -561,3 +561,36 @@
   font-size: 0.78rem;
   color: #6b7280;
 }
+
+/* 主回路銅帯: サーバー保存内容の取得失敗・ブラウザー保存内容との差異の通知。他の情報を隠さず、一覧の上に1ブロックで出す。 */
+.panel-info__busbar-sync {
+  margin: 0.4rem 0;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #f59e0b;
+  border-left-width: 4px;
+  border-radius: 6px;
+  background: #fffbeb;
+  color: #78350f;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.panel-info__busbar-sync-text {
+  margin: 0 0 0.25rem;
+}
+
+.panel-info__busbar-sync-list {
+  margin: 0 0 0.3rem;
+  padding-left: 1.2rem;
+}
+
+.panel-info__busbar-sync-close {
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0 0.5rem;
+  border: 1px solid #d6b370;
+  border-radius: 4px;
+  background: #fff;
+  color: #78350f;
+  cursor: pointer;
+}

@@ -1617,7 +1617,7 @@ describe('PanelInfo: 主回路銅帯の選択欄は1面(ban_menno)につき1つ�
     // 面1の唯一の行を削除。
     fireEvent.click(screen.getByRole('button', { name: '面1 銅帯1を削除' }))
     expect(onBusbarRowsChange).toHaveBeenCalledTimes(1)
-    expect(onBusbarRowsChange).toHaveBeenCalledWith('A1DEL001', 1, [])
+    expect(onBusbarRowsChange).toHaveBeenCalledWith('A1DEL001', 1, [], undefined)
     expect(screen.queryByRole('combobox', { name: '面1 銅帯1 仕様' })).not.toBeInTheDocument()
     // 面1は開いたまま「＋」だけが残り、再追加できる。面2は変わらない。
     expect(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' })).toBeVisible()
@@ -1629,8 +1629,8 @@ describe('PanelInfo: 主回路銅帯の選択欄は1面(ban_menno)につき1つ�
     expect(screen.queryByRole('combobox', { name: '面1 銅帯1 仕様' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '面1の銅帯設定を開く' })).toHaveAttribute('aria-expanded', 'false')
     expect((screen.getByRole('combobox', { name: '面2 銅帯1 仕様' }) as HTMLSelectElement).value).toBe('標準仕様')
-    // 再読込時の同期通知は、行が残っている面(面2)だけ。削除済みの面1を再保存しない。
-    expect(onBusbarRowsChange.mock.calls.filter((c) => c[1] === 1 && (c[2] as unknown[]).length > 0)).toEqual([])
+    // 再読込しても保存API(onBusbarRowsChange)は呼ばれない(表示の復元と保存操作を分離)。
+    expect(onBusbarRowsChange).toHaveBeenCalledTimes(1)
   })
 
   it('does not notify the parent when an unconfirmed (incomplete) only row is deleted, since nothing was persisted for it', () => {
@@ -1652,6 +1652,191 @@ describe('PanelInfo: 主回路銅帯の選択欄は1面(ban_menno)につき1つ�
     fireEvent.click(screen.getByRole('button', { name: '面1 銅帯1を削除' }))
     expect(onBusbarRowsChange).not.toHaveBeenCalled()
     expect(screen.queryByRole('combobox', { name: '面1 銅帯1 仕様' })).not.toBeInTheDocument()
+  })
+
+  describe('サーバー保存済みの銅帯選択の復元(別ブラウザー・localStorage空でも表示。復元ではPUTしない)', () => {
+    const PRODUCT = 'A1SYNC01'
+    const serverRow = (face: number, rowId: string, code = '44815', factor = 1.0) => ({
+      ban_menno: face,
+      row_id: rowId,
+      code,
+      factor,
+    })
+    const localRow = (
+      id: string,
+      factor = 1.0,
+      selection: { spec: string | null; phase: string | null; voltage: string | null; kva: string | null } = {
+        spec: '標準仕様',
+        phase: '3Φ',
+        voltage: '200V級',
+        kva: '100',
+      },
+    ) => ({ id, factor, selection })
+    function renderWithServer(
+      busbarServer: ComponentProps<typeof PanelInfo>['busbarServer'],
+      onBusbarRowsChange = vi.fn(),
+    ) {
+      const view = render(
+        <PanelInfo
+          panel={null}
+          panels={[
+            makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: 'パネルA', ban_type: '正面図' }),
+            makeProductPanel({ ban_menno: 2, ban_no: 3, ban_meisyou: 'パネルC', ban_type: '正面図' }),
+          ]}
+          estimatePanels={[]}
+          productNo={PRODUCT}
+          selectedPanel={null}
+          onSelectPanel={() => {}}
+          onBusbarRowsChange={onBusbarRowsChange}
+          busbarServer={busbarServer}
+        />,
+      )
+      return { view, onBusbarRowsChange }
+    }
+    const factorOf = (face: number) =>
+      (screen.getByRole('combobox', { name: `面${face} 銅帯1 係数` }) as HTMLSelectElement).value
+    const codesOf = (face: number) =>
+      [...document.querySelectorAll(`#busbar-selector-face-${face} .busbar-selector__code-value`)].map((e) => e.textContent)
+    const syncNotice = () => screen.getByRole('status', { name: /サーバー保存内容/ })
+    const stored = () =>
+      JSON.parse(window.localStorage.getItem('sekisan-navi:busbar-selections:v1') ?? '{}')[PRODUCT] ?? {}
+    const seedLocal = (byFace: Record<string, unknown[]>) =>
+      window.localStorage.setItem('sekisan-navi:busbar-selections:v1', JSON.stringify({ [PRODUCT]: byFace }))
+
+    it('restores the server rows (code and factor) in a browser whose localStorage is empty, without any save call', () => {
+      window.localStorage.clear()
+      const { onBusbarRowsChange } = renderWithServer({
+        productNo: PRODUCT,
+        status: 'ok',
+        rows: [serverRow(1, 'row-1', '44815', 0.7), serverRow(2, 'row-1', '44816', 1.4)],
+      })
+      expect(screen.getByRole('button', { name: '面1の銅帯設定を閉じる' })).toHaveAttribute('aria-expanded', 'true')
+      expect(codesOf(1)).toEqual(['44815'])
+      expect(codesOf(2)).toEqual(['44816'])
+      expect(factorOf(1)).toBe('0.7')
+      expect(factorOf(2)).toBe('1.4')
+      expect(onBusbarRowsChange).not.toHaveBeenCalled() // 表示の復元ではPUTしない
+      expect(screen.queryByRole('status', { name: /サーバー保存内容/ })).not.toBeInTheDocument()
+      // 復元内容は localStorage にも反映される(次回のGET失敗時の表示用)。
+      expect(Object.keys(stored()).sort()).toEqual(['1', '2'])
+    })
+
+    it('does not revive deleted rows from an old localStorage when the server returns an empty list, and tells the user', () => {
+      seedLocal({ '1': [localRow('row-1', 0.5)] })
+      const { onBusbarRowsChange } = renderWithServer({ productNo: PRODUCT, status: 'ok', rows: [] })
+      expect(screen.queryByRole('combobox', { name: '面1 銅帯1 仕様' })).not.toBeInTheDocument()
+      expect(document.querySelectorAll('.busbar-selector__row')).toHaveLength(0)
+      expect(syncNotice()).toHaveTextContent('サーバーに保存されていない')
+      expect(syncNotice()).toHaveTextContent('サーバーへは何も送っていません')
+      expect(onBusbarRowsChange).not.toHaveBeenCalled()
+      expect(stored()).toEqual({}) // 古い保存内容も消える(次回以降に復活しない)
+    })
+
+    it('keeps an unfinished local input row when the server has nothing, so typing is not silently lost', () => {
+      seedLocal({ '1': [localRow('row-1', 1, { spec: '標準仕様', phase: null, voltage: null, kva: null })] })
+      const { onBusbarRowsChange } = renderWithServer({ productNo: PRODUCT, status: 'ok', rows: [] })
+      expect((screen.getByRole('combobox', { name: '面1 銅帯1 仕様' }) as HTMLSelectElement).value).toBe('標準仕様')
+      expect(onBusbarRowsChange).not.toHaveBeenCalled()
+    })
+
+    it('keeps the localStorage display and shows the failure when the server read failed (nothing is lost, nothing is sent)', () => {
+      seedLocal({ '1': [localRow('row-1', 0.8)] })
+      const { onBusbarRowsChange } = renderWithServer({
+        productNo: PRODUCT,
+        status: 'error',
+        rows: [],
+        message: 'サーバーに接続できませんでした',
+      })
+      expect(codesOf(1)).toEqual(['44815'])
+      expect(factorOf(1)).toBe('0.8')
+      expect(syncNotice()).toHaveTextContent('取得できなかったため、このブラウザーの保存内容を表示しています')
+      expect(syncNotice()).toHaveTextContent('サーバーに接続できませんでした')
+      expect(onBusbarRowsChange).not.toHaveBeenCalled()
+      expect(Object.keys(stored())).toEqual(['1']) // localStorageは失われない
+    })
+
+    it('prefers the server value and reports a conflict when a complete local row differs (no silent overwrite or resend)', () => {
+      seedLocal({ '1': [localRow('row-1', 0.5)] })
+      const { onBusbarRowsChange } = renderWithServer({
+        productNo: PRODUCT,
+        status: 'ok',
+        rows: [serverRow(1, 'row-1', '44815', 1.4)],
+      })
+      expect(factorOf(1)).toBe('1.4')
+      expect(syncNotice()).toHaveTextContent('サーバーの値を表示しています')
+      expect(onBusbarRowsChange).not.toHaveBeenCalled()
+    })
+
+    it('after restoring, edit / add / delete go through the save call per face and the screen matches what is sent', () => {
+      window.localStorage.clear()
+      const { onBusbarRowsChange } = renderWithServer({
+        productNo: PRODUCT,
+        status: 'ok',
+        rows: [serverRow(1, 'row-1', '44815', 0.7), serverRow(2, 'row-1', '44816', 1.0)],
+      })
+      // 係数の編集 → 面1だけ保存(復元した行IDのまま、係数0.5)。
+      fireEvent.change(screen.getByRole('combobox', { name: '面1 銅帯1 係数' }), { target: { value: '0.5' } })
+      expect(onBusbarRowsChange).toHaveBeenCalledTimes(1)
+      const [product, face, rows] = onBusbarRowsChange.mock.calls[0]
+      expect([product, face, rows.map((r: { id: string; factor: number }) => [r.id, r.factor])]).toEqual([
+        PRODUCT,
+        1,
+        [['row-1', 0.5]],
+      ])
+      expect(factorOf(2)).toBe('1') // 面2は変わらない
+      // 面1に行を追加(未確定のためPUTしない)→ 復元行を削除 → 確定済みの行は無くなる。
+      fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
+      expect(onBusbarRowsChange).toHaveBeenCalledTimes(1)
+      fireEvent.click(screen.getByRole('button', { name: '面1 銅帯1を削除' }))
+      expect(onBusbarRowsChange).toHaveBeenCalledTimes(2)
+      expect(onBusbarRowsChange.mock.calls[1][1]).toBe(1)
+      expect(
+        onBusbarRowsChange.mock.calls[1][2].filter((r: { selection: { kva: string | null } }) => r.selection.kva !== null),
+      ).toEqual([])
+      // 面2の唯一の行を削除 → 面2だけ空で保存。
+      fireEvent.click(screen.getByRole('button', { name: '面2 銅帯1を削除' }))
+      expect(onBusbarRowsChange).toHaveBeenCalledTimes(3)
+      expect(onBusbarRowsChange.mock.calls[2][1]).toBe(2)
+      expect(onBusbarRowsChange.mock.calls[2][2]).toEqual([])
+      expect(document.querySelectorAll('#busbar-selector-face-2 .busbar-selector__row')).toHaveLength(0)
+    })
+
+    it('passes server rows that cannot be shown (code not in the table) along with the face save so they are not deleted', () => {
+      window.localStorage.clear()
+      const { onBusbarRowsChange } = renderWithServer({
+        productNo: PRODUCT,
+        status: 'ok',
+        rows: [serverRow(1, 'row-1', '44815', 1.0), serverRow(1, 'row-z', '99999', 0.8)],
+      })
+      expect(syncNotice()).toHaveTextContent('コード99999は選択欄の対応表に無いため表示できません')
+      fireEvent.change(screen.getByRole('combobox', { name: '面1 銅帯1 係数' }), { target: { value: '0.5' } })
+      expect(onBusbarRowsChange).toHaveBeenCalledTimes(1)
+      expect(onBusbarRowsChange.mock.calls[0][3]).toEqual([serverRow(1, 'row-z', '99999', 0.8)])
+    })
+
+    it('ignores a server result that belongs to a different product, and applies the matching one once', () => {
+      window.localStorage.clear()
+      const { view, onBusbarRowsChange } = renderWithServer({
+        productNo: 'OTHER',
+        status: 'ok',
+        rows: [serverRow(1, 'row-1')],
+      })
+      expect(document.querySelectorAll('.busbar-selector__row')).toHaveLength(0)
+      view.rerender(
+        <PanelInfo
+          panel={null}
+          panels={[makeProductPanel({ ban_menno: 1, ban_no: 1, ban_meisyou: 'パネルA', ban_type: '正面図' })]}
+          estimatePanels={[]}
+          productNo={PRODUCT}
+          selectedPanel={null}
+          onSelectPanel={() => {}}
+          onBusbarRowsChange={onBusbarRowsChange}
+          busbarServer={{ productNo: PRODUCT, status: 'ok', rows: [serverRow(1, 'row-1')] }}
+        />,
+      )
+      expect(document.querySelectorAll('.busbar-selector__row')).toHaveLength(1)
+      expect(onBusbarRowsChange).not.toHaveBeenCalled()
+    })
   })
 
   it('keeps an empty row folded by default after reload and lets plus reopen it', () => {
