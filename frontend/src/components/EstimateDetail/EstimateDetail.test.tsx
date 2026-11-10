@@ -115,9 +115,47 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     renderDetail({ results: [makeResult()] })
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent)
     expect(headers).toEqual([
-      'コード', '内容', '数量', '適用単位', '係数', '金額', '工数',
+      '面番号', 'コード', '内容', '数量', '適用単位', '係数', '金額', '工数',
       '総合価格A', '箱・部品価格', '塗装価格', '設A', '板金', '組立', '検査', '判定',
     ])
+    expect(screen.getAllByRole('button', { name: /で昇順に並べ替え/ })).toHaveLength(16)
+  })
+
+  it('shows the target face first, deriving the face for busbar rows from result_key', () => {
+    const results = [
+      makeResult({ id: 1, code: 'B', target_panel_ban_menno: 2 }),
+      makeResult({ id: 2, code: 'A', target_panel_ban_menno: 1 }),
+      makeResult({ id: 3, code: 'C', result_key: 'busbar:1:row-1', target_panel_ban_menno: null }),
+    ]
+    renderDetail({ results })
+    const rows = screen.getAllByRole('row').slice(1)
+    expect(rows.map((row) => within(row).getAllByRole('cell')[0].textContent)).toEqual(['面2', '面1', '面1'])
+  })
+
+  it('sorts by face and numeric amounts ascending/descending when the header is clicked', () => {
+    const results = [
+      makeResult({ id: 1, code: 'B', target_panel_ban_menno: 2, price: 200 }),
+      makeResult({ id: 2, code: 'A', target_panel_ban_menno: 1, price: 100 }),
+      makeResult({ id: 3, code: 'C', result_key: 'busbar:1:row-1', target_panel_ban_menno: null, price: 50 }),
+    ]
+    renderDetail({ results })
+    const rowCodes = () => screen.getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell')[1].textContent)
+
+    const faceHeader = screen.getByRole('columnheader', { name: '面番号' })
+    fireEvent.click(within(faceHeader).getByRole('button'))
+    expect(faceHeader).toHaveAttribute('aria-sort', 'ascending')
+    expect(rowCodes()).toEqual(['A', 'C', 'B'])
+    fireEvent.click(within(faceHeader).getByRole('button'))
+    expect(faceHeader).toHaveAttribute('aria-sort', 'descending')
+    expect(rowCodes()).toEqual(['B', 'A', 'C'])
+
+    const priceHeader = screen.getByRole('columnheader', { name: '金額' })
+    fireEvent.click(within(priceHeader).getByRole('button'))
+    expect(priceHeader).toHaveAttribute('aria-sort', 'ascending')
+    expect(rowCodes()).toEqual(['C', 'A', 'B'])
+    fireEvent.click(within(priceHeader).getByRole('button'))
+    expect(priceHeader).toHaveAttribute('aria-sort', 'descending')
+    expect(rowCodes()).toEqual(['B', 'A', 'C'])
   })
 
   it('shows a busbar coefficient and does not invent a missing labor amount', () => {

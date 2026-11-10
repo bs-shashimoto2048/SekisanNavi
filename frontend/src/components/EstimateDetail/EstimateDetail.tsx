@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Detection, EstimateMasterItem, EstimateResult } from '../../types/domain'
 import {
   applicableUnitLabel,
@@ -80,6 +80,104 @@ function isBoxResult(result: EstimateResult): boolean {
 /** `masterItemById`と同様、省略時の既定値を固定参照にする。 */
 const EMPTY_DETECTION_MAP = new Map<number, Detection>()
 
+type SortKey =
+  | 'panel'
+  | 'code'
+  | 'content'
+  | 'quantity'
+  | 'unit'
+  | 'factor'
+  | 'price'
+  | 'labor'
+  | 'totalPriceA'
+  | 'boxPartsPrice'
+  | 'paintingPrice'
+  | 'setupA'
+  | 'sheetMetalPrice'
+  | 'assemblyPrice'
+  | 'inspectionPrice'
+  | 'judgment'
+
+type SortValue = string | number | null
+
+interface SortState {
+  key: SortKey
+  direction: 'ascending' | 'descending'
+}
+
+const SORTABLE_COLUMNS: { key: SortKey; label: string; className: string }[] = [
+  { key: 'panel', label: '面番号', className: 'estimate-detail__col-rr-panel' },
+  { key: 'code', label: 'コード', className: 'estimate-detail__col-rr-code' },
+  { key: 'content', label: '内容', className: 'estimate-detail__col-rr-name' },
+  { key: 'quantity', label: '数量', className: 'estimate-detail__col-rr-qty' },
+  { key: 'unit', label: '適用単位', className: 'estimate-detail__col-rr-unit' },
+  { key: 'factor', label: '係数', className: 'estimate-detail__col-rr-factor' },
+  { key: 'price', label: '金額', className: 'estimate-detail__col-rr-price' },
+  { key: 'labor', label: '工数', className: 'estimate-detail__col-rr-labor' },
+  { key: 'totalPriceA', label: '総合価格A', className: 'estimate-detail__col-rr-master-price' },
+  { key: 'boxPartsPrice', label: '箱・部品価格', className: 'estimate-detail__col-rr-master-price' },
+  { key: 'paintingPrice', label: '塗装価格', className: 'estimate-detail__col-rr-master-price' },
+  { key: 'setupA', label: '設A', className: 'estimate-detail__col-rr-master-price' },
+  { key: 'sheetMetalPrice', label: '板金', className: 'estimate-detail__col-rr-master-price' },
+  { key: 'assemblyPrice', label: '組立', className: 'estimate-detail__col-rr-master-price' },
+  { key: 'inspectionPrice', label: '検査', className: 'estimate-detail__col-rr-master-price' },
+  { key: 'judgment', label: '判定', className: 'estimate-detail__col-rr-method' },
+]
+
+/** 面番号は盤行の対象面を使い、盤単位ではない銅帯行は result_key から取る。 */
+function panelNumberOf(result: EstimateResult): number | null {
+  if (result.target_panel_ban_menno != null) return result.target_panel_ban_menno
+  const busbarMatch = /^busbar:(\d+):/.exec(result.result_key)
+  return busbarMatch ? Number(busbarMatch[1]) : null
+}
+
+function contentOf(result: EstimateResult, masterItemById: Map<number, EstimateMasterItem>): string {
+  const master = result.master_item_id != null ? masterItemById.get(result.master_item_id) : null
+  const model = master?.model?.trim() || null
+  const rating = master?.rating?.trim() || null
+  return [model, rating].filter((value): value is string => !!value).join(' / ') || master?.category || ''
+}
+
+function sortValueOf(
+  result: EstimateResult,
+  key: SortKey,
+  masterItemById: Map<number, EstimateMasterItem>,
+): SortValue {
+  const master = result.master_item_id != null ? masterItemById.get(result.master_item_id) : null
+  switch (key) {
+    case 'panel': return panelNumberOf(result)
+    case 'code': return result.code
+    case 'content': return contentOf(result, masterItemById)
+    case 'quantity': return result.current_quantity
+    case 'unit': {
+      const unit = isBoxResult(result) ? 'face' : result.applicable_unit
+      return unit == null ? null : applicableUnitLabel(unit)
+    }
+    case 'factor': return result.current_factor
+    case 'price': return result.price
+    case 'labor': return result.labor
+    case 'totalPriceA': return master?.total_price_a ?? null
+    case 'boxPartsPrice': return master?.box_parts_price ?? null
+    case 'paintingPrice': return master?.painting_price ?? null
+    case 'setupA': return master?.setup_a ?? null
+    case 'sheetMetalPrice': return master?.sheet_metal_price ?? null
+    case 'assemblyPrice': return master?.assembly_price ?? null
+    case 'inspectionPrice': return master?.inspection_price ?? null
+    case 'judgment': return `${judgmentMethodLabel(result.judgment_method)} ${result.status === 'needs_review' ? '要確認' : ''}`
+  }
+}
+
+function compareSortValues(left: SortValue, right: SortValue, direction: SortState['direction']): number {
+  // 未設定値は、昇順・降順どちらでも末尾にまとめる。
+  if (left == null && right == null) return 0
+  if (left == null) return 1
+  if (right == null) return -1
+  const comparison = typeof left === 'number' && typeof right === 'number'
+    ? left - right
+    : String(left).localeCompare(String(right), 'ja', { numeric: true, sensitivity: 'base' })
+  return direction === 'ascending' ? comparison : -comparison
+}
+
 /** 根拠情報の表示 (Issue #40 Phase 5指示7章、Phase 6-B指示B-1、Phase 6-F指示B)。
  * AI/手動は積算結果の種類ではなく根拠情報の取得元であるため、ここ(根拠詳細)
  * でのみ表示する(判定方法タブには出さない、指示1章)。設計データ根拠は、
@@ -159,7 +257,7 @@ interface Props {
  * **表示列**: 計算結果の列に、マスタの総合価格A・箱/部品・塗装・設A・板金・組立・検査を追加する。
  * 係数はこの画面では編集せず、小数1桁の読み取り専用表示とする。
  * 判定理由・新旧経路の根拠区別(AI/手動)等の詳細情報は常時表示せず、
- * 「理由」ボタンのtitleへ逃がす(指示6章「常時長文表示は不要」)。
+ * 「理由」「根拠」ボタンから開くポップアップで詳細を確認する。
  *
  * **新旧同一コード衝突の可視化(指示13章)**: 新旧経路が同一コードを算出し、
  * 一意に統合できなかった行(`status === 'needs_review'`、
@@ -195,6 +293,28 @@ export function EstimateDetail({
 
   const visibleResults =
     tabFilter === 'all' ? results : results.filter((r) => matchesDetailTab(r, tabFilter))
+
+  const [sortState, setSortState] = useState<SortState | null>(null)
+  const sortedResults = useMemo(() => {
+    if (!sortState) return visibleResults
+    return visibleResults
+      .map((result, index) => ({ result, index }))
+      .sort((left, right) =>
+        compareSortValues(
+          sortValueOf(left.result, sortState.key, masterItemById),
+          sortValueOf(right.result, sortState.key, masterItemById),
+          sortState.direction,
+        ) || left.index - right.index,
+      )
+      .map(({ result }) => result)
+  }, [visibleResults, sortState, masterItemById])
+
+  const handleSort = (key: SortKey) => {
+    setSortState((current) => ({
+      key,
+      direction: current?.key === key && current.direction === 'ascending' ? 'descending' : 'ascending',
+    }))
+  }
 
   const tableRef = useRef<HTMLTableElement>(null)
   const lastReportedWidthRef = useRef(0)
@@ -257,32 +377,34 @@ export function EstimateDetail({
         <table ref={tableRef} className="estimate-detail__table estimate-detail__table--rule-result auto-fit-table">
           <thead>
             <tr>
-              <th className="estimate-detail__col-rr-code">コード</th>
-              <th className="estimate-detail__col-rr-name">内容</th>
-              <th className="estimate-detail__col-rr-qty">数量</th>
-              <th className="estimate-detail__col-rr-unit">適用単位</th>
-              <th className="estimate-detail__col-rr-factor">係数</th>
-              <th className="estimate-detail__col-rr-price">金額</th>
-              <th className="estimate-detail__col-rr-labor">工数</th>
-              <th className="estimate-detail__col-rr-master-price">総合価格A</th>
-              <th className="estimate-detail__col-rr-master-price">箱・部品価格</th>
-              <th className="estimate-detail__col-rr-master-price">塗装価格</th>
-              <th className="estimate-detail__col-rr-master-price">設A</th>
-              <th className="estimate-detail__col-rr-master-price">板金</th>
-              <th className="estimate-detail__col-rr-master-price">組立</th>
-              <th className="estimate-detail__col-rr-master-price">検査</th>
-              <th className="estimate-detail__col-rr-method">判定</th>
+              {SORTABLE_COLUMNS.map((column) => (
+                <th
+                  key={column.key}
+                  className={column.className}
+                  aria-sort={sortState?.key === column.key ? sortState.direction : 'none'}
+                >
+                  <button
+                    type="button"
+                    className="estimate-detail__sort-button"
+                    aria-label={`${column.label}で${sortState?.key === column.key && sortState.direction === 'ascending' ? '降順' : '昇順'}に並べ替え`}
+                    data-sort-direction={sortState?.key === column.key ? sortState.direction : 'none'}
+                    onClick={() => handleSort(column.key)}
+                  >
+                    {column.label}
+                  </button>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {visibleResults.length === 0 && (
+            {sortedResults.length === 0 && (
               <tr>
-                <td className="estimate-detail__empty" colSpan={15}>
+                <td className="estimate-detail__empty" colSpan={SORTABLE_COLUMNS.length}>
                   積算結果がありません
                 </td>
               </tr>
             )}
-            {visibleResults.map((result) => {
+            {sortedResults.map((result) => {
               const master = result.master_item_id != null ? (masterItemById.get(result.master_item_id) ?? null) : null
               const model = master?.model?.trim() || null
               const rating = master?.rating?.trim() || null
@@ -308,6 +430,9 @@ export function EstimateDetail({
                     onSelectResultRow(result)
                   }}
                 >
+                  <td className="estimate-detail__col-rr-panel">
+                    {panelNumberOf(result) == null ? MISSING_VALUE_PLACEHOLDER : `面${panelNumberOf(result)}`}
+                  </td>
                   <td className="estimate-detail__col-rr-code">{result.code}</td>
                   <td className="estimate-detail__col-rr-name">{content ?? MISSING_VALUE_PLACEHOLDER}</td>
                   <td className="estimate-detail__col-rr-qty">
