@@ -125,6 +125,22 @@ describe('BusbarSelector', () => {
     expect(screen.getAllByRole('group')).toHaveLength(1)
   })
 
+  it('disables plus, selects, factor and delete and shows a loading notice while loading, and re-enables them afterwards', () => {
+    const rows: BusbarRow[] = [{ id: 'row-1', factor: 0.7, selection: { spec: '標準仕様', phase: '3Φ', voltage: '200V級', kva: '100' } }]
+    const { rerender } = render(<BusbarSelector faceLabel="1" rows={rows} onChange={() => {}} loading />)
+    expect(screen.getByText(/サーバーの保存内容を読み込み中です/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '面1 銅帯1を削除' })).toBeDisabled()
+    for (const label of ['仕様', '相数', '電圧区分', '容量（kVA）', '係数']) {
+      expect(select(`面1 銅帯1 ${label}`).disabled).toBe(true)
+    }
+    rerender(<BusbarSelector faceLabel="1" rows={rows} onChange={() => {}} />)
+    expect(screen.queryByText(/サーバーの保存内容を読み込み中です/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '面1 銅帯1を削除' })).toBeEnabled()
+    expect(select('面1 銅帯1 係数').disabled).toBe(false)
+  })
+
   it('keeps rows of different faces independent (separate instances)', () => {
     render(
       <>

@@ -24,6 +24,9 @@ interface Props {
   faceLabel: string
   rows: BusbarRow[]
   onChange: (rows: BusbarRow[]) => void
+  /** サーバー保存済みの選択を取得中。追加・編集・削除を無効にし、読み込み中と分かる表示を出す
+   * (取得結果との競合で、入力や保存済みの選択を失わないため)。 */
+  loading?: boolean
 }
 
 function statusText(selection: BusbarSelection): string | null {
@@ -34,7 +37,7 @@ function statusText(selection: BusbarSelection): string | null {
   return null
 }
 
-export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
+export function BusbarSelector({ faceLabel, rows, onChange, loading = false }: Props) {
   return (
     <div className="busbar-selector">
       <div className="busbar-selector__header">
@@ -43,6 +46,7 @@ export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
           type="button"
           className="busbar-selector__add"
           onClick={() => onChange(addRow(rows))}
+          disabled={loading}
           aria-label={`面${faceLabel}に銅帯の選択行を追加`}
           title="選択行を追加"
         >
@@ -50,7 +54,13 @@ export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
         </button>
       </div>
 
-      <div role="region" aria-label={`面${faceLabel} 主回路銅帯`}>
+      {loading && (
+        <p className="busbar-selector__loading" role="status">
+          サーバーの保存内容を読み込み中です…(完了するまで追加・編集・削除はできません)
+        </p>
+      )}
+
+      <div role="region" aria-label={`面${faceLabel} 主回路銅帯`} aria-busy={loading}>
         {rows.map((row, rowIndex) => {
         const status = statusOf(row.selection)
         const message = statusText(row.selection)
@@ -64,6 +74,7 @@ export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
                 type="button"
                 className="busbar-selector__remove"
                 onClick={() => onChange(removeRow(rows, row.id))}
+                disabled={loading}
                 aria-label={`${rowLabel}を削除`}
                 title="この行を削除"
               >
@@ -81,7 +92,7 @@ export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
                     </span>
                     <select
                       value={value ?? ''}
-                      disabled={options.length === 0}
+                      disabled={loading || options.length === 0}
                       aria-label={`${rowLabel} ${label}`}
                       onChange={(e) => onChange(updateRow(rows, row.id, selectStep(row.selection, i, e.target.value)))}
                     >
@@ -110,6 +121,7 @@ export function BusbarSelector({ faceLabel, rows, onChange }: Props) {
               <span className="busbar-selector__label">係数</span>
               <select
                 value={row.factor}
+                disabled={loading}
                 aria-label={`${rowLabel} 係数`}
                 onChange={(e) => onChange(updateRowFactor(rows, row.id, Number(e.target.value)))}
               >

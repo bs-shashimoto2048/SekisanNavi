@@ -16,6 +16,12 @@ import { statusOf } from '../../domain/busbarCodes'
 import { ErrorBoundary } from '../ErrorBoundary/ErrorBoundary'
 import '../ErrorBoundary/ErrorBoundary.css'
 import {
+  describeBusbarSyncIssue,
+  mergeServerBusbar,
+  type BusbarSyncIssue,
+  type ServerBusbarRow,
+} from '../../domain/busbarServerSync'
+import {
   loadSelections,
   saveSelections,
   setFaceRows,
@@ -34,6 +40,15 @@ import './PanelInfo.css'
  * 変えない」)。`useAutoFitGridColumns`へ渡す列数と、各セルの
  * `data-auto-col` indexが一致している必要がある。 */
 const COLUMN_COUNT = 6
+
+/** サーバー保存済みの主回路銅帯の取得結果(`App.tsx`が製番ごとに取得して渡す)。 */
+export interface BusbarServerState {
+  productNo: string
+  status: 'ok' | 'error'
+  rows: ServerBusbarRow[]
+  /** status が error のときの、取得失敗の説明。 */
+  message?: string
+}
 const EMPTY_MASTER_ITEMS = new Map<number, EstimateMasterItem>()
 
 interface NaturalSize {
@@ -96,8 +111,14 @@ interface Props {
    * `FloatingPanel`の`maxContentSize`へ渡り、リサイズ上限・自動フィットに
    * 使われる)。未指定の場合はこの機能自体を使わない(テスト等での簡略化用)。 */
   onNaturalSizeChange?: (size: NaturalSize) => void
-  /** 保存済み/変更後の主回路銅帯行を積算結果へ反映する。 */
-  onBusbarRowsChange?: (productNo: string, face: number, rows: BusbarRow[]) => void
+  /** 変更後の主回路銅帯行を保存し、積算結果へ反映する(利用者の操作のときだけ呼ぶ。表示の復元では呼ばない)。
+   * `preserved`は、サーバーに保存済みだが対応表に無く表示できない行(その面の保存時に消さず送り直す)。 */
+  onBusbarRowsChange?: (productNo: string, face: number, rows: BusbarRow[], preserved?: ServerBusbarRow[]) => void
+  /** サーバー保存済みの銅帯選択。`undefined`(省略)は localStorage のみを使う従来の挙動。渡す場合は、
+   * `null`=取得中、`BusbarServerState`=取得結果(成功・失敗)。現在の製番の取得結果を統合するまでは
+   * 銅帯の追加・編集・削除を無効にする(取得結果との競合で入力・保存済みの選択を失わないため)。
+   * 統合は製番を開いたとき1回だけで、localStorage との統合・表示の復元のみ(保存はしない)。 */
+  busbarServer?: BusbarServerState | null
   /** 盤ごとの箱コード選定結果と変更操作。 */
   boxResults?: EstimateResult[]
   masterItemById?: Map<number, EstimateMasterItem>
@@ -344,6 +365,7 @@ export function PanelInfo({
   onSelectPanel,
   onNaturalSizeChange,
   onBusbarRowsChange,
+  busbarServer,
   boxResults = [],
   masterItemById = EMPTY_MASTER_ITEMS,
   onOverrideBoxCode = () => {},
@@ -379,33 +401,59 @@ export function PanelInfo({
   // 添付の盤情報画面に合わせ、上段の箱体型式・鋼材は初期表示で展開する。
   const [isBoxTypeExpanded, setIsBoxTypeExpanded] = useState(true)
 
-  // 主回路銅帯の選択(面ごとの複数行)。製番ごとにブラウザーへ保存し、再表示で復元する。
-  // 製番が変わったときは、その製番の保存内容を読み直す(render中の state 調整)。
+  // 主回路銅帯の選択(面ごとの複数行)。表示の元は、サーバー保存済みの内容(`busbarServer`)と、このブラウザーの
+  // localStorage(入力途中の行を含む画面の入力状態)の統合結果。製番が変わったときは、その製番の保存内容を
+  // 読み直す(render中の state 調整)。
   const [busbarRows, setBusbarRows] = useState<BusbarRowsByFace>(() => loadSelections(productNo))
   const [busbarProductNo, setBusbarProductNo] = useState(productNo)
   // 面ごとの開閉は明示操作だけを保存し、初期状態は「保存済み行がある面だけ展開」。
   // 図面データが後から届いても未登録面が誤って展開されないよう、既定状態は描画時に導出する。
   const [busbarFaceExpansion, setBusbarFaceExpansion] = useState<Map<number, boolean>>(() => new Map())
-  const syncedBusbarProductNo = useRef<string | undefined>(undefined)
+  // サーバー内容との統合状態: どの製番で統合済みか / 表示できないサーバー行 / 利用者へ知らせる差異・取得失敗。
+  const [busbarMergedFor, setBusbarMergedFor] = useState<string | undefined>(undefined)
+  const [busbarPreserved, setBusbarPreserved] = useState<Record<string, ServerBusbarRow[]>>({})
+  const [busbarSyncIssues, setBusbarSyncIssues] = useState<BusbarSyncIssue[]>([])
+  const [busbarFetchError, setBusbarFetchError] = useState<string | null>(null)
   if (busbarProductNo !== productNo) {
     setBusbarProductNo(productNo)
     setBusbarRows(loadSelections(productNo))
     setBusbarFaceExpansion(new Map())
-  }
-  useEffect(() => {
-    if (!productNo || !onBusbarRowsChange || syncedBusbarProductNo.current === productNo) return
-    syncedBusbarProductNo.current = productNo
-    for (const [face, rows] of Object.entries(busbarRows)) {
-      if (rows.some((row) => statusOf(row.selection).kind === 'unique')) {
-        onBusbarRowsChange(productNo, Number(face), rows)
-      }
+    setBusbarMergedFor(undefined)
+    setBusbarPreserved({})
+    setBusbarSyncIssues([])
+    setBusbarFetchError(null)
+  } else if (productNo && busbarServer && busbarServer.productNo === productNo && busbarMergedFor !== productNo) {
+    // 製番を開いたとき1回だけ、サーバー保存済みの銅帯選択を図面情報へ復元する。**表示の復元だけ**で、
+    // サーバーへは何も送らない(PUTしない)。取得に失敗していたら localStorage の表示を維持し、失敗を知らせる。
+    setBusbarMergedFor(productNo)
+    if (busbarServer.status === 'ok') {
+      const merged = mergeServerBusbar(busbarRows, busbarServer.rows)
+      setBusbarRows(merged.rows)
+      setBusbarPreserved(merged.preserved)
+      setBusbarSyncIssues(merged.issues)
+    } else {
+      setBusbarFetchError(busbarServer.message ?? 'サーバーの保存内容を取得できませんでした')
     }
-  }, [productNo, busbarRows, onBusbarRowsChange])
+  }
+  // 現在の製番のサーバー取得結果を統合し終えるまで(成功・失敗どちらでも統合後に解除)、銅帯の変更を受け付けない。
+  // 状態は製番ごとに持つ(`busbarMergedFor`は製番が変わるたびに未統合へ戻る)ため、前の製番の取得結果や
+  // 完了状態では新しい製番の操作は有効にならない。`busbarServer`が`undefined`(未使用)のときは制限しない。
+  const busbarLoading = productNo !== undefined && busbarServer !== undefined && busbarMergedFor !== productNo
+  // 統合後の表示内容を localStorage にも反映する(次回の GET 失敗時の表示・入力途中行の保持のため。サーバーへは送らない)。
+  useEffect(() => {
+    if (busbarMergedFor && busbarMergedFor === productNo && busbarServer?.status === 'ok') {
+      saveSelections(productNo, busbarRows)
+    }
+    // 統合が完了した時点の1回だけ保存する(以後の編集は changeBusbarRows が保存する)。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busbarMergedFor])
   function isBusbarFaceExpanded(face: number) {
     return busbarFaceExpansion.get(face) ?? Boolean(busbarRows[String(face)]?.some((row) => Object.values(row.selection).some(Boolean)))
   }
 
   function changeBusbarRows(face: string, rows: BusbarRow[]) {
+    // 取得中は変更を受け付けない(UIでも無効化済み。ここは二重の保険)。
+    if (busbarLoading) return
     const next = setFaceRows(busbarRows, face, rows)
     setBusbarRows(next)
     // ＋で行を追加したときは、その面の入力欄を表示する。行を削除したときは、削除前の開閉状態を
@@ -432,7 +480,7 @@ export function PanelInfo({
     const previousSignature = persistedSignature(busbarRows[face] ?? [])
     const nextSignature = persistedSignature(rows)
     if (productNo && onBusbarRowsChange && previousSignature !== nextSignature) {
-      onBusbarRowsChange(productNo, Number(face), rows)
+      onBusbarRowsChange(productNo, Number(face), rows, busbarPreserved[face])
     }
   }
 
@@ -597,6 +645,40 @@ export function PanelInfo({
         <SteelSection steel={steel} panelModels={estimatePanels.map((e) => e.model)} defaultExpanded />
       </div>
 
+      {(busbarFetchError !== null || busbarSyncIssues.length > 0) && (
+        <div className="panel-info__busbar-sync" role="status" aria-label="主回路銅帯のサーバー保存内容の確認">
+          {busbarFetchError !== null && (
+            <p className="panel-info__busbar-sync-text">
+              主回路銅帯: サーバーの保存内容を取得できなかったため、このブラウザーの保存内容を表示しています。
+              サーバーの内容とは異なる場合があります({busbarFetchError})。
+            </p>
+          )}
+          {busbarSyncIssues.length > 0 && (
+            <>
+              <p className="panel-info__busbar-sync-text">
+                主回路銅帯: サーバーの保存内容とこのブラウザーの保存内容に差がありました。サーバーの内容を優先して表示し、
+                サーバーへは何も送っていません。
+              </p>
+              <ul className="panel-info__busbar-sync-list">
+                {busbarSyncIssues.map((issue) => (
+                  <li key={`${issue.kind}:${issue.face}:${issue.rowId}`}>{describeBusbarSyncIssue(issue)}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          <button
+            type="button"
+            className="panel-info__busbar-sync-close"
+            onClick={() => {
+              setBusbarFetchError(null)
+              setBusbarSyncIssues([])
+            }}
+          >
+            閉じる
+          </button>
+        </div>
+      )}
+
       {cards.length === 0 && !panel && (
         <p className="panel-info__empty">{panelsLoading ? '盤情報を取得中です' : '盤情報を取得できません'}</p>
       )}
@@ -738,6 +820,7 @@ export function PanelInfo({
                             faceLabel={String(card.panel.ban_menno)}
                             rows={busbarRows[String(card.panel.ban_menno)] ?? []}
                             onChange={(rows) => changeBusbarRows(String(card.panel.ban_menno), rows)}
+                            loading={busbarLoading}
                           />
                         </ErrorBoundary>
                       </div>

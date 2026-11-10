@@ -456,6 +456,8 @@ vi.mock('./api/client', () => ({
   // 箱コード自動選定の手修正・自動選定へ戻す(個別のテストが戻り値を差し替える)。
   overrideBoxCode: vi.fn(async () => ({ results: [], skipped_rule_master_ids: [] })),
   resetBoxCode: vi.fn(async () => ({ results: [], skipped_rule_master_ids: [] })),
+  // サーバー保存済みの銅帯選択(既定は未保存=空配列)。個別のテストが戻り値を差し替える。
+  fetchBusbarSelections: vi.fn(async (): Promise<unknown[]> => []),
   replaceBusbarSelections: vi.fn(async () => ({ results: buildLiveEstimateResults(), skipped_rule_master_ids: [] })),
   fetchDrawingEvidenceTypes: vi.fn(async () => []),
   // 図面情報追加パネルの「候補／確認待ち」読み取り専用表示用。
@@ -3745,6 +3747,200 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
       expect(screen.queryByRole('combobox', { name: '面1 銅帯1 仕様' })).not.toBeInTheDocument()
       // 面2の保存には触れていない(面2向けの呼び出しは無い)。
       expect(vi.mocked(replaceBusbarSelections).mock.calls.some((call) => call[1] === 2)).toBe(false)
+    })
+
+    it('restores the server-saved busbar rows when the product is opened in a browser with empty localStorage, without sending any save request', async () => {
+      await useDocuments()
+      const { fetchBusbarSelections, replaceBusbarSelections } = await import('./api/client')
+      vi.mocked(fetchBusbarSelections).mockResolvedValue([
+        { ban_menno: 1, row_id: 'row-1', code: '44815', factor: 0.7 },
+      ])
+      vi.mocked(replaceBusbarSelections).mockClear()
+      window.localStorage.clear()
+      try {
+        render(<App />)
+        await confirmPicker()
+        await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+        await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+        fireEvent.click(listItem('16'))
+        await waitFor(() => expect(within(panelInfoEl()).getByText('高圧受電盤')).toBeInTheDocument())
+
+        await waitFor(() =>
+          expect(
+            [...document.querySelectorAll('#busbar-selector-face-1 .busbar-selector__code-value')].map((e) => e.textContent),
+          ).toEqual(['44815']),
+        )
+        expect((screen.getByRole('combobox', { name: '面1 銅帯1 係数' }) as HTMLSelectElement).value).toBe('0.7')
+        // 面2(サーバーに無い面)は空のまま。
+        expect(screen.queryByRole('combobox', { name: '面2 銅帯1 仕様' })).not.toBeInTheDocument()
+        // 製番を開いただけでは、銅帯の保存(PUT)は一切行われない。
+        expect(vi.mocked(fetchBusbarSelections)).toHaveBeenCalledWith(expect.any(String))
+        expect(vi.mocked(replaceBusbarSelections)).not.toHaveBeenCalled()
+      } finally {
+        vi.mocked(fetchBusbarSelections).mockResolvedValue([])
+      }
+    })
+
+    it('keeps the localStorage busbar rows and shows the failure when the server-saved busbar rows could not be read', async () => {
+      await useDocuments()
+      const { fetchBusbarSelections, replaceBusbarSelections } = await import('./api/client')
+      vi.mocked(fetchBusbarSelections).mockRejectedValue(new Error('network error'))
+      vi.mocked(replaceBusbarSelections).mockClear()
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      window.localStorage.clear()
+      try {
+        const productNo = 'A1GV2421'
+        window.localStorage.setItem(
+          'sekisan-navi:busbar-selections:v1',
+          JSON.stringify({
+            [productNo]: {
+              '1': [{ id: 'row-1', factor: 0.8, selection: { spec: '標準仕様', phase: '3Φ', voltage: '200V級', kva: '100' } }],
+            },
+          }),
+        )
+        render(<App />)
+        await confirmPicker()
+        await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+        await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+        fireEvent.click(listItem('16'))
+        await waitFor(() => expect(within(panelInfoEl()).getByText('高圧受電盤')).toBeInTheDocument())
+
+        await waitFor(() => expect(screen.getByRole('status', { name: /サーバー保存内容/ })).toBeInTheDocument())
+        expect(screen.getByRole('status', { name: /サーバー保存内容/ })).toHaveTextContent('取得できなかったため')
+        expect(
+          [...document.querySelectorAll('#busbar-selector-face-1 .busbar-selector__code-value')].map((e) => e.textContent),
+        ).toEqual(['44815'])
+        expect((screen.getByRole('combobox', { name: '面1 銅帯1 係数' }) as HTMLSelectElement).value).toBe('0.8')
+        expect(warn).toHaveBeenCalled() // ログでも判別できる
+        expect(vi.mocked(replaceBusbarSelections)).not.toHaveBeenCalled()
+        expect(window.localStorage.getItem('sekisan-navi:busbar-selections:v1')).toContain('row-1')
+      } finally {
+        warn.mockRestore()
+        vi.mocked(fetchBusbarSelections).mockResolvedValue([])
+      }
+    })
+
+    it('keeps the busbar controls disabled with a loading notice while the server read is pending, then enables them and shows the saved rows, with no save request', async () => {
+      await useDocuments()
+      const { fetchBusbarSelections, replaceBusbarSelections } = await import('./api/client')
+      let release!: (rows: Array<{ ban_menno: number; row_id: string; code: string; factor: number }>) => void
+      vi.mocked(fetchBusbarSelections).mockImplementation(
+        () => new Promise((resolve) => { release = resolve as typeof release }),
+      )
+      vi.mocked(replaceBusbarSelections).mockClear()
+      window.localStorage.clear()
+      try {
+        render(<App />)
+        await confirmPicker()
+        await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+        await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+        fireEvent.click(listItem('16'))
+        await waitFor(() => expect(within(panelInfoEl()).getByText('高圧受電盤')).toBeInTheDocument())
+
+        // 取得中: 欄を開いても＋は押せず、読み込み中と分かる。図面情報の他の操作(盤選択・折りたたみ)は使える。
+        fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
+        expect(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' })).toBeDisabled()
+        expect(screen.getAllByText(/サーバーの保存内容を読み込み中です/).length).toBeGreaterThan(0)
+        fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を閉じる' }))
+        expect(screen.getByRole('button', { name: '面1の銅帯設定を開く' })).toHaveAttribute('aria-expanded', 'false')
+        fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
+
+        // 取得完了(成功): 保存済みの行・係数が表示され、操作が有効になる。保存(PUT)は発行されない。
+        await act(async () => {
+          release([{ ban_menno: 1, row_id: 'row-1', code: '44815', factor: 0.7 }])
+        })
+        await waitFor(() => expect(screen.queryAllByText(/サーバーの保存内容を読み込み中です/)).toHaveLength(0))
+        expect(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' })).toBeEnabled()
+        expect(
+          [...document.querySelectorAll('#busbar-selector-face-1 .busbar-selector__code-value')].map((e) => e.textContent),
+        ).toEqual(['44815'])
+        expect((screen.getByRole('combobox', { name: '面1 銅帯1 係数' }) as HTMLSelectElement).value).toBe('0.7')
+        expect(vi.mocked(replaceBusbarSelections)).not.toHaveBeenCalled()
+      } finally {
+        vi.mocked(fetchBusbarSelections).mockReset()
+        vi.mocked(fetchBusbarSelections).mockResolvedValue([])
+      }
+    })
+
+    it('enables the busbar controls after a failed server read, keeping the localStorage rows and showing the failure notice', async () => {
+      await useDocuments()
+      const { fetchBusbarSelections, replaceBusbarSelections } = await import('./api/client')
+      let fail!: (e: Error) => void
+      vi.mocked(fetchBusbarSelections).mockImplementation(
+        () => new Promise((_, reject) => { fail = reject }),
+      )
+      vi.mocked(replaceBusbarSelections).mockClear()
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      window.localStorage.clear()
+      window.localStorage.setItem(
+        'sekisan-navi:busbar-selections:v1',
+        JSON.stringify({
+          A1GV2421: {
+            '1': [{ id: 'row-1', factor: 0.8, selection: { spec: '標準仕様', phase: '3Φ', voltage: '200V級', kva: '100' } }],
+          },
+        }),
+      )
+      try {
+        render(<App />)
+        await confirmPicker()
+        await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+        await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+        fireEvent.click(listItem('16'))
+        await waitFor(() => expect(within(panelInfoEl()).getByText('高圧受電盤')).toBeInTheDocument())
+        expect(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' })).toBeDisabled()
+        expect(screen.getByRole('combobox', { name: '面1 銅帯1 係数' })).toBeDisabled()
+
+        await act(async () => {
+          fail(new Error('network error'))
+        })
+        await waitFor(() => expect(screen.getByRole('status', { name: /サーバー保存内容/ })).toHaveTextContent('取得できなかったため'))
+        expect(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' })).toBeEnabled()
+        expect(screen.getByRole('combobox', { name: '面1 銅帯1 係数' })).toBeEnabled()
+        expect((screen.getByRole('combobox', { name: '面1 銅帯1 係数' }) as HTMLSelectElement).value).toBe('0.8')
+        expect(vi.mocked(replaceBusbarSelections)).not.toHaveBeenCalled()
+      } finally {
+        warn.mockRestore()
+        vi.mocked(fetchBusbarSelections).mockReset()
+        vi.mocked(fetchBusbarSelections).mockResolvedValue([])
+      }
+    })
+
+    it('does not let a late server result of the previous product affect the newly opened product (no rows, no save, no failure notice)', async () => {
+      await useDocuments()
+      const { fetchBusbarSelections, replaceBusbarSelections } = await import('./api/client')
+      let releaseOld!: (rows: Array<{ ban_menno: number; row_id: string; code: string; factor: number }>) => void
+      vi.mocked(fetchBusbarSelections).mockImplementation((productNo: string) =>
+        productNo === 'A1GV2421'
+          ? new Promise((resolve) => { releaseOld = resolve as typeof releaseOld })
+          : Promise.resolve([]),
+      )
+      vi.mocked(replaceBusbarSelections).mockClear()
+      window.localStorage.clear()
+      try {
+        render(<App />)
+        await confirmPicker()
+        await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+        await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+
+        // 旧製番(A1GV2421)の取得が保留のまま、別の製番へ切り替える。
+        fireEvent.click(screen.getByRole('button', { name: '製番を開く' }))
+        fireEvent.change(await screen.findByPlaceholderText('例: A1GV24'), { target: { value: 'A1LW0626' } })
+        fireEvent.click(screen.getByRole('button', { name: '開く' }))
+        await waitFor(() => expect(screen.getByText('製番: A1LW0626')).toBeInTheDocument())
+        await waitFor(() => expect(vi.mocked(fetchBusbarSelections)).toHaveBeenCalledWith('A1LW0626'))
+
+        // 旧製番の応答が遅れて返っても、新製番には何も表示・保存されない。
+        await act(async () => {
+          releaseOld([{ ban_menno: 1, row_id: 'row-1', code: '44815', factor: 0.7 }])
+        })
+        expect(document.querySelectorAll('.busbar-selector__row')).toHaveLength(0)
+        expect(document.querySelector('.panel-info__busbar-sync')).toBeNull()
+        expect(vi.mocked(replaceBusbarSelections)).not.toHaveBeenCalled()
+        expect(window.localStorage.getItem('sekisan-navi:busbar-selections:v1') ?? '').not.toContain('44815')
+      } finally {
+        vi.mocked(fetchBusbarSelections).mockReset()
+        vi.mocked(fetchBusbarSelections).mockResolvedValue([])
+      }
     })
 
     it('keeps the whole app rendered when a face busbar section is folded: dimension rows stay, only that face busbar section hides, other faces are untouched, also after returning from a document', async () => {

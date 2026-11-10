@@ -20,6 +20,7 @@ import {
   overrideBoxCode,
   resetBoxCode,
   replaceBusbarSelections,
+  fetchBusbarSelections,
   fetchMasterItems,
   fetchPanel,
   fetchProductDrawings,
@@ -44,6 +45,8 @@ import { buildEstimateResultAggregation } from './domain/estimateResultAggregati
 import { isBoxResult } from './domain/boxCodeSelection'
 import { statusOf } from './domain/busbarCodes'
 import type { BusbarRow } from './domain/busbarSelections'
+import type { ServerBusbarRow } from './domain/busbarServerSync'
+import type { BusbarServerState } from './components/PanelInfo/PanelInfo'
 import {
   EMPTY_EDIT_HISTORY,
   popRedo,
@@ -777,6 +780,34 @@ function App() {
     }
   }, [activeProductNo])
 
+  // 主回路銅帯: サーバー保存済みの選択を取得し、図面情報へ復元するために渡す(別ブラウザーでも同じ行を表示)。
+  // GETのみで、保存・評価は行わない。取得に失敗した場合は status:'error' を渡し、図面情報側が
+  // このブラウザーの保存内容(localStorage)の表示を維持したうえで、取得失敗を画面に表示する。
+  const [busbarServer, setBusbarServer] = useState<BusbarServerState | null>(null)
+  useEffect(() => {
+    setBusbarServer(null)
+    if (activeProductNo == null) return
+    let cancelled = false
+    fetchBusbarSelections(activeProductNo)
+      .then((rows) => {
+        if (!cancelled) setBusbarServer({ productNo: activeProductNo, status: 'ok', rows })
+      })
+      .catch((e: unknown) => {
+        console.warn('主回路銅帯のサーバー保存内容を取得できませんでした', e)
+        if (!cancelled) {
+          setBusbarServer({
+            productNo: activeProductNo,
+            status: 'error',
+            rows: [],
+            message: describeFetchError(e, '主回路銅帯のサーバー保存内容を取得できませんでした'),
+          })
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeProductNo])
+
   // 積算コードMaster全件をid引きのMapとして取得する (次work指示1章)。製番に依存しない
   // マスタデータのため、初回1回だけ取得する (EstimateMasterPicker.tsxの初回全件取得と
   // 同じ`fetchMasterItems({})`呼び出しだが、用途が異なるため別々に取得している)。
@@ -1171,13 +1202,24 @@ function App() {
     }
   }
 
-  const handleBusbarRowsChange = useCallback(async (productNo: string, face: number, rows: BusbarRow[]) => {
+  const handleBusbarRowsChange = useCallback(async (
+    productNo: string,
+    face: number,
+    rows: BusbarRow[],
+    preserved: ServerBusbarRow[] = [],
+  ) => {
     const selectedRows = rows.flatMap((row) => {
       const status = statusOf(row.selection)
       return status.kind === 'unique'
         ? [{ row_id: row.id, code: status.record.code, factor: row.factor }]
         : []
     })
+    // サーバーに保存済みだが画面の対応表で表示できない行は、その面を保存するときも消さずに送り直す。
+    for (const keep of preserved) {
+      if (!selectedRows.some((row) => row.row_id === keep.row_id)) {
+        selectedRows.push({ row_id: keep.row_id, code: keep.code, factor: keep.factor })
+      }
+    }
     try {
       const outcome = await replaceBusbarSelections(productNo, face, selectedRows)
       if (activeProductNo === productNo) setEstimateResults(outcome.results)
@@ -2203,6 +2245,7 @@ function App() {
                   onSelectPanel={handleSelectPanel}
                   onNaturalSizeChange={setPanelInfoNaturalSize}
                   onBusbarRowsChange={handleBusbarRowsChange}
+                  busbarServer={busbarServer}
                   boxResults={boxCodeResults}
                   masterItemById={masterItemById}
                   onOverrideBoxCode={handleOverrideBoxCode}

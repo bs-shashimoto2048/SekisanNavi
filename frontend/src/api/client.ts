@@ -2,6 +2,7 @@
 //
 // React Query等は導入せず、fetchの薄いラッパーに留めている。
 // 将来データ量が増えてキャッシュ戦略が必要になった時点で見直す。
+import type { ServerBusbarRow } from '../domain/busbarServerSync'
 import type {
   DataSourceSetting,
   DataSourceTestResult,
@@ -450,6 +451,11 @@ export async function resetBoxCode(
     throw new ApiError(res.status, await extractErrorMessage(res))
   }
   return (await res.json()) as EstimateResultEvaluateResponse
+}
+
+/** 製番のサーバー保存済みの主回路銅帯選択(面ごとの確定行)を取得する。読み取り専用(評価も保存もしない)。 */
+export function fetchBusbarSelections(productNo: string): Promise<ServerBusbarRow[]> {
+  return getJson(`/api/products/${encodeURIComponent(productNo)}/busbar-selections`)
 }
 
 /** 面の主回路銅帯選択行を保存し、係数を適用した積算結果を再評価する。 */
