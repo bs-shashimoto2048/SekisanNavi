@@ -44,6 +44,31 @@ function Harness() {
   )
 }
 
+function NaturalHeightHarness({ naturalHeight }: { naturalHeight: number }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [rect, setRect] = useState<FloatingPanelRect | null>(null)
+  const onRectChange = (
+    update: FloatingPanelRect | ((previous: FloatingPanelRect | null) => FloatingPanelRect | null),
+  ) => setRect((previous) => (typeof update === 'function' ? update(previous) : update))
+
+  return (
+    <div ref={containerRef} data-testid="viewer-wrap">
+      <FloatingPanel
+        visible
+        kind="panelInfo"
+        visibleKinds={['panelInfo']}
+        containerRef={containerRef}
+        initialTopOffset={99}
+        rect={rect}
+        onRectChange={onRectChange}
+        maxContentSize={{ width: 720, height: naturalHeight }}
+      >
+        <h2>図面情報</h2>
+      </FloatingPanel>
+    </div>
+  )
+}
+
 describe('FloatingPanel: 図面情報の右下リサイズ', () => {
   afterEach(() => {
     cleanup()
@@ -84,5 +109,31 @@ describe('FloatingPanel: 図面情報の右下リサイズ', () => {
 
     expect(parseFloat(panel.style.width)).toBe(720)
     expect(parseFloat(panel.style.left)).toBe(left)
+  })
+
+  it('keeps the initial top position while natural content height grows to the viewport limit', async () => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    )
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      ...viewerBounds,
+      bottom: 1000,
+      height: 1000,
+    } as DOMRect)
+
+    const { rerender } = render(<NaturalHeightHarness naturalHeight={500} />)
+    const panel = document.querySelector('.floating-panel--panelInfo') as HTMLElement
+    expect(parseFloat(panel.style.top)).toBe(147)
+
+    rerender(<NaturalHeightHarness naturalHeight={800} />)
+    expect(parseFloat(panel.style.top)).toBe(147)
+
+    rerender(<NaturalHeightHarness naturalHeight={1200} />)
+    expect(parseFloat(panel.style.top)).toBe(147)
+    expect(parseFloat(panel.style.height)).toBe(853)
   })
 })
