@@ -102,6 +102,7 @@ def test_a1ge4568_selects_one_box_code_per_panel_with_quantity_one(client, monke
         assert row["master_item_id"] == item["id"] and row["code"] == item["code"]
         assert row["quantity"] == 1 and row["status"] == "auto" and row["box_category"] == cat
         assert row["judgment_scope"] == "panel" and row["code_overridden"] is False
+        assert row["applicable_unit"] == "face"
         assert row["unit_price"] == item["total_price_a"]  # 価格はマスタ値そのまま(推測しない)
     assert [(r["target_panel_ban_menno"], r["target_panel_ban_no"]) for r in rows] == [(1, 1), (2, 2), (3, 3)]
 

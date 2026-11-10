@@ -111,10 +111,13 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     expect(screen.queryByRole('tab', { name: /マニュアル/ })).not.toBeInTheDocument()
   })
 
-  it('shows コード/内容/数量/適用単位/係数/金額/工数/判定 as the 8 columns', () => {
+  it('shows estimate fields and master price/labor breakdown columns', () => {
     renderDetail({ results: [makeResult()] })
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent)
-    expect(headers).toEqual(['コード', '内容', '数量', '適用単位', '係数', '金額', '工数', '判定'])
+    expect(headers).toEqual([
+      'コード', '内容', '数量', '適用単位', '係数', '金額', '工数',
+      '総合価格A', '箱・部品価格', '塗装価格', '設A', '板金', '組立', '検査', '判定',
+    ])
   })
 
   it('shows a busbar coefficient and does not invent a missing labor amount', () => {
@@ -128,7 +131,7 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
       labor: null,
     })
     renderDetail({ results: [result] })
-    expect(screen.getByLabelText('主回路銅帯の係数')).toHaveTextContent('1.4')
+    expect(screen.getByLabelText('係数')).toHaveTextContent('1.4')
     expect(screen.getByText('¥350')).toBeInTheDocument()
     expect(screen.getAllByText('-').length).toBeGreaterThan(0)
   })
@@ -282,6 +285,13 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     expect(document.querySelector('tbody .estimate-detail__col-rr-unit')?.textContent).toBe('-')
   })
 
+  it('shows box result units as 1面 even when an older saved row still says unit', () => {
+    renderDetail({
+      results: [makeResult({ result_key: 'box:1:1', applicable_unit: 'unit' })],
+    })
+    expect(document.querySelector('tbody .estimate-detail__col-rr-unit')).toHaveTextContent('1面')
+  })
+
   it('shows price formatted with a currency prefix, and "-" (never 0円) when null', () => {
     const { rerender } = renderDetail({ results: [makeResult({ price: 1000 })] })
     expect(screen.getByText('¥1,000')).toBeInTheDocument()
@@ -428,16 +438,40 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     expect(onFocusResultEvidence).toHaveBeenCalledWith(result)
   })
 
-  it('calls onOverrideResultFactor/onResetResultFactor from the embedded factor cell', () => {
-    const onOverrideResultFactor = vi.fn()
-    const onResetResultFactor = vi.fn()
+  it('shows every factor read-only with one decimal place', () => {
     const result = makeResult({ current_factor: 0.7, allowed_factors: [0.5, 0.7, 1.0], factor_overridden: true })
-    renderDetail({ results: [result], onOverrideResultFactor, onResetResultFactor })
-    fireEvent.change(screen.getByLabelText('係数'), { target: { value: '0.5' } })
-    expect(onOverrideResultFactor).toHaveBeenCalledWith(result, 0.5)
-    const factorCell = screen.getByLabelText('係数').closest('.estimate-result-factor-cell') as HTMLElement
-    fireEvent.click(within(factorCell).getByRole('button', { name: '初期値へ戻す' }))
-    expect(onResetResultFactor).toHaveBeenCalledWith(result)
+    renderDetail({ results: [result] })
+    expect(screen.getByLabelText('係数')).toHaveTextContent('0.7')
+    expect(screen.queryByRole('combobox', { name: '係数' })).not.toBeInTheDocument()
+  })
+
+  it('shows the master price and labor fields without inventing missing values', () => {
+    const master = {
+      ...masterItemById.get(10)!,
+      total_price_a: 315300,
+      box_parts_price: 61600,
+      painting_price: 89100,
+      setup_a: 216,
+      sheet_metal_price: 1096,
+      assembly_price: 351,
+      inspection_price: 15,
+    }
+    renderDetail({ results: [makeResult()], masterItemById: new Map([[10, master]]) })
+    const row = screen.getByText('11001').closest('tr') as HTMLElement
+    for (const value of ['315,300', '61,600', '89,100', '216', '1,096', '351', '15']) {
+      expect(within(row).getByText(value)).toBeInTheDocument()
+    }
+
+    const missingMaster = { ...master, box_parts_price: null }
+    const { container } = renderDetail({ results: [makeResult()], masterItemById: new Map([[10, missingMaster]]) })
+    expect(container.querySelectorAll('tbody .estimate-detail__col-rr-master-price')[1]).toHaveTextContent('-')
+  })
+
+  it('reports the table natural width for the floating panel initial size', () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(1200)
+    const onNaturalWidthChange = vi.fn()
+    renderDetail({ results: [makeResult()], onNaturalWidthChange })
+    expect(onNaturalWidthChange).toHaveBeenCalledWith(1224)
   })
 
   it('shows "積算結果がありません" when there are no results', () => {
@@ -467,12 +501,11 @@ describe('EstimateDetail: 行クリックによる持続選択 (Issue #40 Phase 
     expect(rowB.className).not.toContain('estimate-detail__row--selected')
   })
 
-  it('does not trigger row selection when clicking inside the quantity/factor cell or the reason/evidence buttons', () => {
+  it('does not trigger row selection when clicking inside the quantity cell or the reason/evidence buttons', () => {
     const onSelectResultRow = vi.fn()
     const result = makeResult()
     renderDetail({ results: [result], onSelectResultRow })
     fireEvent.click(screen.getByLabelText('数量'))
-    fireEvent.click(screen.getByLabelText('係数'))
     fireEvent.click(screen.getByRole('button', { name: '根拠' }))
     expect(onSelectResultRow).not.toHaveBeenCalled()
   })

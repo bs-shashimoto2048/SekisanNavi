@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { Detection, EstimateMasterItem, EstimateResult } from '../../types/domain'
 import {
   applicableUnitLabel,
@@ -6,7 +7,6 @@ import {
   judgmentMethodLabel,
   parseDesignDataRef,
 } from '../../domain/drawingEvidencePresentation'
-import { EstimateResultFactorCell } from './EstimateResultFactorCell'
 import { EstimateResultQuantityCell } from './EstimateResultQuantityCell'
 import './EstimateDetail.css'
 
@@ -68,8 +68,12 @@ function formatResultLabor(labor: number | null): string {
   return labor == null ? MISSING_VALUE_PLACEHOLDER : labor.toLocaleString('ja-JP')
 }
 
-function isBusbarResult(result: EstimateResult): boolean {
-  return result.result_key.startsWith('busbar:')
+function formatMasterValue(value: number | null | undefined): string {
+  return value == null ? MISSING_VALUE_PLACEHOLDER : value.toLocaleString('ja-JP')
+}
+
+function isBoxResult(result: EstimateResult): boolean {
+  return result.result_key.startsWith('box:')
 }
 
 /** `masterItemById`と同様、省略時の既定値を固定参照にする。 */
@@ -125,10 +129,6 @@ interface Props {
    * 対象切替=盤/製番仕様の軸のため)。 */
   tabFilter: DetailTabFilter
   onTabFilterChange: (filter: DetailTabFilter) => void
-  /** 係数の手修正 (Issue #40 7-3章)。API呼び出し・状態更新はApp.tsx側の責務。 */
-  onOverrideResultFactor?: (result: EstimateResult, newFactor: number) => void
-  /** 「初期値へ戻す」操作 (Issue #40 7-3章)。 */
-  onResetResultFactor?: (result: EstimateResult) => void
   /** 数量の手修正 (Issue #40 Phase 6後半)。理由入力必須。 */
   onOverrideResultQuantity?: (result: EstimateResult, newQuantity: number, reason: string) => void
   /** 数量の「初期値へ戻す」操作 (Issue #40 Phase 6後半)。 */
@@ -148,13 +148,15 @@ interface Props {
    * id集合。該当する行を視覚的に区別し、「根拠→結果」の導線にする
    * (既存のdetection_id→EstimateResult機構をApp.tsx側で再利用して渡される)。 */
   relatedToSelectedBboxResultIds?: Set<number>
+  /** 自然幅をFloatingPanelへ報告し、初期表示を可能な限り全列表示にする。 */
+  onNaturalWidthChange?: (width: number) => void
 }
 
 /**
- * 右ペイン③「積算明細」領域 (Issue #40 Phase 5: EstimateResultを正本とする
- * 積算結果の一覧・確認・係数修正を行う場所)。
+ * 右ペイン③「積算明細」領域 (EstimateResultを正本とする積算結果の一覧・確認・数量修正を行う場所)。
  *
- * **表示列**: コード/内容/数量/適用単位/係数/金額/工数/判定。
+ * **表示列**: 計算結果の列に、マスタの総合価格A・箱/部品・塗装・設A・板金・組立・検査を追加する。
+ * 係数はこの画面では編集せず、小数1桁の読み取り専用表示とする。
  * 判定理由・新旧経路の根拠区別(AI/手動)等の詳細情報は常時表示せず、
  * 「理由」ボタンのtitleへ逃がす(指示6章「常時長文表示は不要」)。
  *
@@ -173,14 +175,13 @@ export function EstimateDetail({
   detectionById = EMPTY_DETECTION_MAP,
   tabFilter,
   onTabFilterChange,
-  onOverrideResultFactor = () => {},
-  onResetResultFactor = () => {},
   onOverrideResultQuantity = () => {},
   onResetResultQuantity = () => {},
   onFocusResultEvidence = () => {},
   selectedResultId = null,
   onSelectResultRow = () => {},
   relatedToSelectedBboxResultIds,
+  onNaturalWidthChange,
 }: Props) {
   // タブ件数と表示行は同じ判定関数(matchesDetailTab)で求め、両者がずれないようにする。
   const counts: Record<DetailTabFilter, number> = {
@@ -193,6 +194,27 @@ export function EstimateDetail({
 
   const visibleResults =
     tabFilter === 'all' ? results : results.filter((r) => matchesDetailTab(r, tabFilter))
+
+  const tableRef = useRef<HTMLTableElement>(null)
+  const lastReportedWidthRef = useRef(0)
+  useEffect(() => {
+    if (!onNaturalWidthChange) return
+    const table = tableRef.current
+    if (!table) return
+    const report = () => {
+      if (table.scrollWidth <= 0) return
+      const width = Math.ceil(table.scrollWidth + 24) // パネル左右のpadding/border分
+      if (width > 0 && width !== lastReportedWidthRef.current) {
+        lastReportedWidthRef.current = width
+        onNaturalWidthChange(width)
+      }
+    }
+    report()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(report)
+    observer.observe(table)
+    return () => observer.disconnect()
+  }, [onNaturalWidthChange, results, masterItemById, tabFilter])
 
   return (
     <section className="estimate-detail">
@@ -231,7 +253,7 @@ export function EstimateDetail({
       </div>
 
       <div className="estimate-detail__table-scroll">
-        <table className="estimate-detail__table estimate-detail__table--rule-result auto-fit-table">
+        <table ref={tableRef} className="estimate-detail__table estimate-detail__table--rule-result auto-fit-table">
           <thead>
             <tr>
               <th className="estimate-detail__col-rr-code">コード</th>
@@ -241,13 +263,20 @@ export function EstimateDetail({
               <th className="estimate-detail__col-rr-factor">係数</th>
               <th className="estimate-detail__col-rr-price">金額</th>
               <th className="estimate-detail__col-rr-labor">工数</th>
+              <th className="estimate-detail__col-rr-master-price">総合価格A</th>
+              <th className="estimate-detail__col-rr-master-price">箱・部品価格</th>
+              <th className="estimate-detail__col-rr-master-price">塗装価格</th>
+              <th className="estimate-detail__col-rr-master-price">設A</th>
+              <th className="estimate-detail__col-rr-master-price">板金</th>
+              <th className="estimate-detail__col-rr-master-price">組立</th>
+              <th className="estimate-detail__col-rr-master-price">検査</th>
               <th className="estimate-detail__col-rr-method">判定</th>
             </tr>
           </thead>
           <tbody>
             {visibleResults.length === 0 && (
               <tr>
-                <td className="estimate-detail__empty" colSpan={8}>
+                <td className="estimate-detail__empty" colSpan={15}>
                   積算結果がありません
                 </td>
               </tr>
@@ -290,23 +319,22 @@ export function EstimateDetail({
                     />
                   </td>
                   <td className="estimate-detail__col-rr-unit">
-                    {result.applicable_unit != null
-                      ? applicableUnitLabel(result.applicable_unit)
+                    {(isBoxResult(result) ? 'face' : result.applicable_unit) != null
+                      ? applicableUnitLabel(isBoxResult(result) ? 'face' : result.applicable_unit!)
                       : MISSING_VALUE_PLACEHOLDER}
                   </td>
                   <td className="estimate-detail__col-rr-factor">
-                    {isBusbarResult(result) ? (
-                      <span aria-label="主回路銅帯の係数">{result.current_factor.toFixed(1)}</span>
-                    ) : (
-                      <EstimateResultFactorCell
-                        result={result}
-                        onOverride={(newFactor) => onOverrideResultFactor(result, newFactor)}
-                        onReset={() => onResetResultFactor(result)}
-                      />
-                    )}
+                    <span aria-label="係数">{result.current_factor.toFixed(1)}</span>
                   </td>
                   <td className="estimate-detail__col-rr-price">{formatResultPrice(result.price)}</td>
                   <td className="estimate-detail__col-rr-labor">{formatResultLabor(result.labor)}</td>
+                  <td className="estimate-detail__col-rr-master-price">{formatMasterValue(master?.total_price_a)}</td>
+                  <td className="estimate-detail__col-rr-master-price">{formatMasterValue(master?.box_parts_price)}</td>
+                  <td className="estimate-detail__col-rr-master-price">{formatMasterValue(master?.painting_price)}</td>
+                  <td className="estimate-detail__col-rr-master-price">{formatMasterValue(master?.setup_a)}</td>
+                  <td className="estimate-detail__col-rr-master-price">{formatMasterValue(master?.sheet_metal_price)}</td>
+                  <td className="estimate-detail__col-rr-master-price">{formatMasterValue(master?.assembly_price)}</td>
+                  <td className="estimate-detail__col-rr-master-price">{formatMasterValue(master?.inspection_price)}</td>
                   <td className="estimate-detail__col-rr-method">
                     <span>{judgmentMethodLabel(result.judgment_method)}</span>
                     {result.status === 'needs_review' && (
