@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { EstimateDetail } from './EstimateDetail'
-import { EstimateBoxCodeCell } from './EstimateBoxCodeCell'
+import { EstimateDetail } from '../EstimateDetail/EstimateDetail'
+import { PanelBoxCodeSelector } from './PanelBoxCodeSelector'
 import {
   BOX_CATEGORIES,
   boxCodeOptionGroups,
@@ -97,9 +97,9 @@ describe('boxCodeSelection helpers', () => {
   })
 })
 
-describe('EstimateBoxCodeCell', () => {
+describe('PanelBoxCodeSelector', () => {
   it('shows the target panel and selection state, and lists same-category codes only', () => {
-    render(<EstimateBoxCodeCell result={boxResult()} masterItemById={MASTER_BY_ID} onChange={() => {}} onReset={() => {}} />)
+    render(<PanelBoxCodeSelector result={boxResult()} masterItemById={MASTER_BY_ID} onChange={() => {}} onReset={() => {}} />)
     expect(screen.getByText('面1/盤1')).toBeInTheDocument()
     expect(screen.getByText('自動選定')).toBeInTheDocument()
     const select = screen.getByRole('combobox', { name: '面1/盤1の箱コード' }) as HTMLSelectElement
@@ -113,7 +113,7 @@ describe('EstimateBoxCodeCell', () => {
 
   it('calls onChange with the chosen master item id', () => {
     const onChange = vi.fn()
-    render(<EstimateBoxCodeCell result={boxResult()} masterItemById={MASTER_BY_ID} onChange={onChange} onReset={() => {}} />)
+    render(<PanelBoxCodeSelector result={boxResult()} masterItemById={MASTER_BY_ID} onChange={onChange} onReset={() => {}} />)
     fireEvent.change(screen.getByRole('combobox'), { target: { value: '2' } })
     expect(onChange).toHaveBeenCalledWith(2)
   })
@@ -121,7 +121,7 @@ describe('EstimateBoxCodeCell', () => {
   it('shows manual state and a reset button for an overridden row', () => {
     const onReset = vi.fn()
     render(
-      <EstimateBoxCodeCell
+      <PanelBoxCodeSelector
         result={boxResult({ code_overridden: true, status: 'reviewed', master_item_id: 2, code: '11002' })}
         masterItemById={MASTER_BY_ID}
         onChange={() => {}}
@@ -135,7 +135,7 @@ describe('EstimateBoxCodeCell', () => {
 
   it('needs-review row has no code selected yet and a placeholder; choosing does not auto-pick', () => {
     render(
-      <EstimateBoxCodeCell
+      <PanelBoxCodeSelector
         result={boxResult({ master_item_id: null, code: '', status: 'needs_review', box_category: null })}
         masterItemById={MASTER_BY_ID}
         onChange={() => {}}
@@ -163,32 +163,27 @@ describe('EstimateDetail with box rows', () => {
     )
   }
 
-  it('renders one row per panel with panel, code, model/rating, quantity 1 and state', () => {
+  it('renders box results as ordinary estimate rows without an editor', () => {
     renderDetail([
       boxResult({ id: 1 }),
       boxResult({ id: 2, result_key: 'box:2:2', target_panel_ban_menno: 2, target_panel_ban_no: 2, master_item_id: 3, code: '11003', box_category: '箱･左右' }),
     ])
     const rows = screen.getAllByRole('row').slice(1)
     expect(rows).toHaveLength(2)
-    expect(within(rows[0]).getByText('面1/盤1')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('11001')).toBeInTheDocument()
     expect(within(rows[0]).getByText('OS2-920 / 2.3*0.9*2.0')).toBeInTheDocument()
-    expect(within(rows[1]).getByText('面2/盤2')).toBeInTheDocument()
-    expect(within(rows[0]).getByRole('combobox')).toHaveValue('1')
+    expect(within(rows[1]).getByText('11003')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: /箱コード/ })).not.toBeInTheDocument()
   })
 
-  it('changing the code calls the handler for that row without selecting the row, and non-box rows keep a plain code', () => {
-    const onOverrideBoxCode = vi.fn()
+  it('shows box and non-box codes as plain text in the code column', () => {
     const onSelectResultRow = vi.fn()
     renderDetail(
       [boxResult(), boxResult({ id: 9, result_key: '18323:panel:1:1', master_item_id: null, code: '18323', box_category: null })],
-      { onOverrideBoxCode, onSelectResultRow },
+      { onSelectResultRow },
     )
-    fireEvent.change(screen.getByRole('combobox', { name: '面1/盤1の箱コード' }), { target: { value: '2' } })
-    expect(onOverrideBoxCode).toHaveBeenCalledTimes(1)
-    expect(onOverrideBoxCode.mock.calls[0][0].id).toBe(1)
-    expect(onOverrideBoxCode.mock.calls[0][1]).toBe(2)
-    expect(onSelectResultRow).not.toHaveBeenCalled()
-    expect(screen.getAllByRole('combobox')).toHaveLength(1) // 箱以外の行にはコード選択欄を出さない
+    expect(screen.getByText('11001')).toBeInTheDocument()
     expect(screen.getByText('18323')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
 })

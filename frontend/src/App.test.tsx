@@ -4020,7 +4020,7 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
   })
 })
 
-// 箱コード自動選定(部品台帳の箱3カテゴリ): 積算明細への反映・手修正。
+// 箱コード自動選定(部品台帳の箱3カテゴリ): 図面情報で手修正し、明細は通常行として表示。
 // 選定ロジック自体はBackend(test_box_code_selection.py/test_box_code_api.py)で検証済みで、
 // ここでは「製番を開いたときの自動評価」と「明細上のコード変更」の画面側の挙動を確認する。
 describe('App: 箱コード自動選定', () => {
@@ -4052,7 +4052,7 @@ describe('App: 箱コード自動選定', () => {
     vi.mocked(api.fetchEstimateResults).mockImplementation(async () => buildLiveEstimateResults())
   })
 
-  it('evaluates once when opening a product that has no box rows yet, and shows the evaluated rows', async () => {
+  it('evaluates once when opening a product that has no box rows yet, and shows the selector in drawing info', async () => {
     const api = await mocks()
     vi.mocked(api.evaluateEstimateResults).mockClear()
     vi.mocked(api.evaluateEstimateResults).mockImplementationOnce(async () => ({
@@ -4062,11 +4062,12 @@ describe('App: 箱コード自動選定', () => {
     render(<App />)
     await waitFor(() => expect(api.evaluateEstimateResults).toHaveBeenCalledTimes(1))
     const panel = await waitFor(() => {
-      const el = document.querySelector('.estimate-detail') as HTMLElement
-      expect(within(el).getByText('面1/盤1')).toBeInTheDocument()
+      const el = document.querySelector('.panel-info') as HTMLElement
+      expect(within(el).getByRole('combobox', { name: '面1/盤1の箱コード' })).toBeInTheDocument()
       return el
     })
     expect(within(panel).getByText('要確認', { selector: '.estimate-box-code__state' })).toBeInTheDocument()
+    expect(document.querySelector('.estimate-detail')?.querySelector('[aria-label="面1/盤1の箱コード"]')).toBeNull()
   })
 
   it('does not re-evaluate on open when box rows already exist (manual choices are never overwritten by an automatic pass)', async () => {
@@ -4075,13 +4076,13 @@ describe('App: 箱コード自動選定', () => {
     vi.mocked(api.fetchEstimateResults).mockImplementation(async () => [...buildLiveEstimateResults(), boxRow({ code_overridden: true, status: 'reviewed' })])
     render(<App />)
     await waitFor(() => {
-      const el = document.querySelector('.estimate-detail') as HTMLElement
+      const el = document.querySelector('.panel-info') as HTMLElement
       expect(within(el).getByText('手修正')).toBeInTheDocument()
     })
     expect(api.evaluateEstimateResults).not.toHaveBeenCalled()
   })
 
-  it('changing the box code on the detail row calls the API for that panel and replaces the list with the response (one row per panel)', async () => {
+  it('changing the box code in drawing info calls the API and the detail remains a plain result list', async () => {
     const api = await mocks()
     vi.mocked(api.fetchEstimateResults).mockImplementation(async () => [...buildLiveEstimateResults(), boxRow()])
     const chosen = masterItems.find((m) => m.category === '箱・単独')!
@@ -4095,15 +4096,17 @@ describe('App: 箱コード自動選定', () => {
     }))
     render(<App />)
     const select = (await waitFor(() => {
-      const el = document.querySelector('.estimate-detail') as HTMLElement
+      const el = document.querySelector('.panel-info') as HTMLElement
       return within(el).getByRole('combobox', { name: '面1/盤1の箱コード' })
     })) as HTMLSelectElement
     fireEvent.change(select, { target: { value: String(chosen.id) } })
     await waitFor(() => expect(api.overrideBoxCode).toHaveBeenCalledWith(expect.any(String), 1, 1, { master_item_id: chosen.id }))
     await waitFor(() => {
-      const el = document.querySelector('.estimate-detail') as HTMLElement
-      expect(within(el).getAllByText('面1/盤1')).toHaveLength(1)
+      const el = document.querySelector('.panel-info') as HTMLElement
       expect(within(el).getByText('手修正')).toBeInTheDocument()
     })
+    const detail = document.querySelector('.estimate-detail') as HTMLElement
+    expect(within(detail).queryByRole('combobox', { name: /箱コード/ })).not.toBeInTheDocument()
+    expect(within(detail).getByText(chosen.code)).toBeInTheDocument()
   })
 })

@@ -1,4 +1,4 @@
-import './EstimateBoxCodeCell.css'
+import './PanelBoxCodeSelector.css'
 import type { EstimateMasterItem, EstimateResult } from '../../types/domain'
 import {
   BOX_SELECTION_STATE_LABEL,
@@ -24,7 +24,7 @@ interface Props {
  * 選択肢はその盤の品名カテゴリのコードだけ(接続情報が不明な盤は箱3カテゴリすべて)。
  * コード未確定(要確認)の行は、選ぶまで空欄(「コードを選択」)のまま。
  */
-export function EstimateBoxCodeCell({ result, masterItemById, onChange, onReset }: Props) {
+export function PanelBoxCodeSelector({ result, masterItemById, onChange, onReset }: Props) {
   const groups = boxCodeOptionGroups(result, masterItemById.values())
   const state = boxSelectionState(result)
   const selectedValue = result.master_item_id != null ? String(result.master_item_id) : ''

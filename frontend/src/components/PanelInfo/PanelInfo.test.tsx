@@ -4,7 +4,9 @@ import { PanelInfo } from './PanelInfo'
 import { panelKey } from '../../utils/panel'
 import type {
   BoxTypeAnalysis,
+  EstimateMasterItem,
   EstimatePanelInfo,
+  EstimateResult,
   Panel,
   PanelPreview,
   SteelOutline,
@@ -431,6 +433,124 @@ describe('PanelInfo (Issue #38 Phase 2: カラム型1行一覧への再設計)',
     )
     const row = getRow('高圧受電盤')
     expect(row.getAttribute('aria-pressed')).toBe('true')
+  })
+})
+
+describe('PanelInfo: 盤ごとの箱コード選定', () => {
+  function boxResult(overrides: Partial<EstimateResult> = {}): EstimateResult {
+    return {
+      id: 71,
+      product_no: 'A1GE4568',
+      result_key: 'box:5:5',
+      master_item_id: 10,
+      code: '11010',
+      quantity: 1,
+      initial_quantity: 1,
+      current_quantity: 1,
+      quantity_overridden: false,
+      quantity_override_reason: null,
+      quantity_updated_at: null,
+      quantity_updated_by: null,
+      applicable_unit: 'unit',
+      initial_factor: 1,
+      current_factor: 1,
+      factor_overridden: false,
+      factor_override_reason: null,
+      factor_updated_at: null,
+      factor_updated_by: null,
+      judgment_method: 'design_data',
+      judgment_scope: 'panel',
+      target_panel_ban_menno: 5,
+      target_panel_ban_no: 5,
+      target_drawing_page_id: null,
+      judgment_reason: null,
+      source_rule_id: null,
+      unit_price: 1000,
+      unit_labor: null,
+      price: 1000,
+      labor: null,
+      status: 'auto',
+      allowed_factors: null,
+      evidence: [],
+      box_category: '箱･左右',
+      code_overridden: false,
+      ...overrides,
+    }
+  }
+
+  const boxItems: EstimateMasterItem[] = [
+    {
+      id: 10,
+      code: '11010',
+      category: '箱･左右',
+      model: 'OS2-920',
+      rating: '2.3*0.9*2.0',
+      note: null,
+      total_price_a: 1000,
+      box_parts_price: null,
+      painting_price: null,
+      setup_a: null,
+      sheet_metal_price: null,
+      assembly_price: null,
+      inspection_price: null,
+    } as EstimateMasterItem,
+    {
+      id: 11,
+      code: '11011',
+      category: '箱･左右',
+      model: 'OS2-1020',
+      rating: '2.3*1.0*2.0',
+      note: null,
+      total_price_a: 1100,
+      box_parts_price: null,
+      painting_price: null,
+      setup_a: null,
+      sheet_metal_price: null,
+      assembly_price: null,
+      inspection_price: null,
+    } as EstimateMasterItem,
+  ]
+
+  it('shows the box selector under its matching panel row and sends code changes to the override handler', () => {
+    const onOverrideBoxCode = vi.fn()
+    const result = boxResult()
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel()]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+        boxResults={[result]}
+        masterItemById={new Map(boxItems.map((item) => [item.id, item]))}
+        onOverrideBoxCode={onOverrideBoxCode}
+      />,
+    )
+
+    const select = screen.getByRole('combobox', { name: '面5/盤5の箱コード' })
+    expect(within(select).getAllByRole('option')).toHaveLength(2)
+    fireEvent.change(select, { target: { value: '11' } })
+    expect(onOverrideBoxCode).toHaveBeenCalledWith(result, 11)
+    expect(screen.getByText('2300')).toBeInTheDocument() // 寸法行は編集欄と独立して残る
+  })
+
+  it('offers reset to automatic selection for a manually overridden panel', () => {
+    const onResetBoxCode = vi.fn()
+    const result = boxResult({ code_overridden: true, status: 'reviewed' })
+    render(
+      <PanelInfo
+        panel={null}
+        panels={[makeProductPanel()]}
+        estimatePanels={[makeEstimatePanel()]}
+        selectedPanel={null}
+        onSelectPanel={() => {}}
+        boxResults={[result]}
+        masterItemById={new Map(boxItems.map((item) => [item.id, item]))}
+        onResetBoxCode={onResetBoxCode}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '自動選定に戻す' }))
+    expect(onResetBoxCode).toHaveBeenCalledWith(result)
   })
 })
 
