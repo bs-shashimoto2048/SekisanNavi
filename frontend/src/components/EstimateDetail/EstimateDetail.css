@@ -129,6 +129,22 @@
   color: #1d4ed8;
 }
 
+.estimate-detail__sort-button::after {
+  content: '↕';
+  color: #94a3b8;
+  font-size: 0.75em;
+}
+
+.estimate-detail__sort-button[data-sort-direction='ascending']::after {
+  content: '↑';
+  color: #2563eb;
+}
+
+.estimate-detail__sort-button[data-sort-direction='descending']::after {
+  content: '↓';
+  color: #2563eb;
+}
+
 .estimate-detail__sort-indicator {
   font-size: 0.78rem; /* 全体フォント拡大 指示1章: 旧0.7rem→引き上げ */
   color: #2563eb;
