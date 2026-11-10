@@ -35,8 +35,10 @@ interface Props {
    * `Math.max(0, -1)`により`stackIndex`は常に0として扱われるため、
    * 既存4panel用の配列をそのまま渡しても問題ない。 */
   visibleKinds: FloatingPanelKind[]
-  /** 位置・大きさのクランプ基準にする全幅レイヤー(`app-workspace__floating-layer`)。 */
+  /** 位置・大きさのクランプ基準にするviewport全体のレイヤー(`app-workspace__floating-layer`)。 */
   containerRef: React.RefObject<HTMLDivElement | null>
+  /** 初期位置を従来のワークスペース上端に保つためのviewport上のオフセット。 */
+  initialTopOffset?: number
   /** 現在の位置・大きさ (Issue #19 追加修正: 移動/リサイズ後もセッション中は
    * 保持する必要があるため、`App.tsx`側のstateとして持ち上げてcontrolledにする。
    * `visible`がfalseになりこのcomponentがunmountされても値は消えない)。
@@ -46,11 +48,11 @@ interface Props {
   /** [2026-10 追加修正: 内容量に応じたサイズ上限] 子(`children`)が自身の
    * 「折り返し・省略無しで表示するために必要な自然なサイズ」を実測して
    * 報告してくる場合に渡す。渡された場合、このpanelの幅/高さは
-   * `Math.min(ワークスペース残り領域, この値)`(ただしkind別最小サイズを下回らない)
+   * `Math.min(viewport残り領域, この値)`(ただしkind別最小サイズを下回らない)
    * を上限とし、この値が変化するたび(タブ開閉・データ増減等)現在のサイズを
    * この値へ同期する(内容が少ない時に残り領域を埋めて伸びること・内容が
    * 全て収まった状態からさらに空白目的で拡大することの両方を防ぐ)。
-   * 渡さない(`undefined`/`null`)kindはワークスペース全体を上限とする
+   * 渡さない(`undefined`/`null`)kindはviewport全体を上限とする
    * (他のfloating panelの挙動は変更しない)。 */
   maxContentSize?: Size | null
   /** ワークスペース全体を基準にした初期水平オフセット(操作ガイド用)。 */
@@ -205,7 +207,7 @@ function clampPosition(rect: FloatingPanelRect, container: Size): FloatingPanelR
 }
 
 // [2026-10 追加修正: 内容量に応じたサイズ上限] `contentMax`が渡された場合、
-// 「Viewer残り領域」と「内容が必要とする自然なサイズ」のうち小さい方を上限に
+// 「viewport残り領域」と「内容が必要とする自然なサイズ」のうち小さい方を上限に
 // する(ただしkind別最小サイズは下回らない)。これにより、内容がすべて
 // 収まっているにもかかわらず、空白を増やす目的でそれ以上拡大することを防ぐ
 // (`contentMax`省略時はワークスペース全体が上限)。
@@ -230,7 +232,7 @@ function clampSize(
   }
 }
 
-// [2026-10 追加修正: リサイズ上限を親(Viewer)領域内に収める] `clampSize`の
+// [2026-10 追加修正: リサイズ上限を親領域内に収める] `clampSize`の
 // `maxWidth`/`maxHeight`はkind別の最小サイズを下回らないよう下駄を履かせて
 // いるため、「Viewerの表示領域がそのkindの最小サイズより狭い」場合には
 // 最小サイズの方を優先してしまい、結果としてpanelがViewer表示領域を超えて
@@ -256,13 +258,13 @@ function clampToContainerBounds(rect: FloatingPanelRect, container: Size): Float
  * [Issue #25] 新規表示時の既定配置を計算する。
  *
  * 配置ルール(指示1章):
- * - 基本的にワークスペース右端寄せ(`left`は常に`container.width - SIDE_MARGIN - width`)。
+ * - 基本的にviewport右端寄せ(`left`は常に`container.width - SIDE_MARGIN - width`)。
  * - その時点で表示中のfloating panelが他に無ければ右上(`stackIndex===0`)。
  * - 既に表示中のpanelがあれば、その分だけ`STACK_OFFSET`ずつ下へずらす
  *   (`stackIndex`は「自分より前に表示されている他panelの数」。呼び出し側
  *   (`FloatingPanel`本体)が`visibleKinds`から算出して渡す)。
- * - Viewer下端を超える場合は、最低でも`MIN_HEIGHT_BY_KIND`分は収まる位置まで
- *   `top`をclampする(指示: 「Viewer下端を超える場合はclamp」)。
+ * - viewport下端を超える場合は、最低でも`MIN_HEIGHT_BY_KIND`分は収まる位置まで
+ *   `top`をclampする。
  *
  * kind別の初期幅(`DEFAULT_WIDTH_BY_KIND`)・高さの伸び方(`HEIGHT_FRACTION_BY_KIND`)
  * 自体は既存の値を維持する(指示: 「kindごとの初期幅は維持する」)。
@@ -281,6 +283,7 @@ function computeInitialRect(
   container: Size,
   stackIndex: number,
   initialLeftOffset = 0,
+  initialTopOffset = 0,
 ): FloatingPanelRect {
   const minHeight = MIN_HEIGHT_BY_KIND[kind]
   const width = Math.max(
@@ -292,10 +295,14 @@ function computeInitialRect(
       ? Math.min(initialLeftOffset + SIDE_MARGIN, Math.max(0, container.width - width))
       : Math.max(0, container.width - SIDE_MARGIN - width)
 
-  const maxTop = Math.max(TOP_CLEARANCE, container.height - BOTTOM_MARGIN - minHeight)
-  const top = Math.min(TOP_CLEARANCE + Math.max(0, stackIndex) * STACK_OFFSET, maxTop)
+  const desiredTop = initialTopOffset + TOP_CLEARANCE + Math.max(0, stackIndex) * STACK_OFFSET
+  const maxTop = Math.max(0, container.height - BOTTOM_MARGIN - minHeight)
+  const top = Math.min(desiredTop, maxTop)
 
-  const desiredHeight = Math.max(minHeight, container.height * HEIGHT_FRACTION_BY_KIND[kind])
+  // 表示範囲の上限はviewportまで広げる一方、初期サイズは従来と同じく
+  // ワークスペース高を基準にする。
+  const workspaceHeight = Math.max(0, container.height - initialTopOffset)
+  const desiredHeight = Math.max(minHeight, workspaceHeight * HEIGHT_FRACTION_BY_KIND[kind])
   const height = Math.min(desiredHeight, Math.max(minHeight, container.height - BOTTOM_MARGIN - top))
 
   return clampToContainerBounds(clampPosition(clampSize({ top, left, width, height }, container, kind), container), container)
@@ -433,6 +440,7 @@ export function FloatingPanel({
   kind,
   visibleKinds,
   containerRef,
+  initialTopOffset = 0,
   rect,
   onRectChange,
   maxContentSize,
@@ -592,13 +600,13 @@ export function FloatingPanel({
     const stackIndex = Math.max(0, visibleKinds.indexOf(kind))
     // 再表示時は初期の自然サイズへ戻るため、自然サイズ追従を再び有効にする。
     if (kind === 'panelInfo') hasManualPanelInfoWidthRef.current = false
-    const initialRect = computeInitialRect(kind, nextContainer, stackIndex, initialLeftOffset)
+    const initialRect = computeInitialRect(kind, nextContainer, stackIndex, initialLeftOffset, initialTopOffset)
     onRectChange(initialRect)
     // [Issue #25 追加修正] 初期配置が確定した時点のanchorを記録する
     // (以後のcontainer resizeはこのanchorからの距離を保つ)。
     confirmedAnchorRef.current = deriveAnchor(initialRect, nextContainer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, visibleKinds])
+  }, [visible, visibleKinds, initialTopOffset])
 
   function bringToFront() {
     zCounter += 1

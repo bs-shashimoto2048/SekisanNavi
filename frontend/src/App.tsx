@@ -433,10 +433,31 @@ function App() {
   // callback refはportalのmount先をstateへ反映する。
   const floatingPanelBoundsRef = useRef<HTMLDivElement>(null)
   const [floatingPanelLayer, setFloatingPanelLayer] = useState<HTMLDivElement | null>(null)
+  const [floatingPanelTopOffset, setFloatingPanelTopOffset] = useState(0)
   const setFloatingPanelLayerRef = useCallback((node: HTMLDivElement | null) => {
     floatingPanelBoundsRef.current = node
+    if (node) {
+      setFloatingPanelTopOffset(node.parentElement?.getBoundingClientRect().top ?? 0)
+    }
     setFloatingPanelLayer(node)
   }, [])
+
+  // パネルの移動範囲はviewport全体だが、初回表示位置は従来どおり
+  // ツールバー下のワークスペース内に保つ。警告表示やウィンドウリサイズで
+  // ワークスペース上端が動いた場合も、次回表示位置を追従させる。
+  useEffect(() => {
+    const workspace = floatingPanelLayer?.parentElement
+    if (!workspace) return
+
+    const updateTopOffset = () => setFloatingPanelTopOffset(workspace.getBoundingClientRect().top)
+    const observer = new ResizeObserver(updateTopOffset)
+    observer.observe(workspace)
+    window.addEventListener('resize', updateTopOffset)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', updateTopOffset)
+    }
+  }, [floatingPanelLayer])
 
   // [Issue #25] 現在表示中のfloating panel種別一覧(固定の宣言順:
   // 図面情報→盤情報→積算集約→積算明細→部品台帳。Issue #40 Phase 6-Cで
@@ -2224,6 +2245,7 @@ function App() {
               kind="panelInfo"
               visibleKinds={visibleFloatingKinds}
               containerRef={floatingPanelBoundsRef}
+              initialTopOffset={floatingPanelTopOffset}
               rect={panelInfoRect}
               onRectChange={setPanelInfoRect}
               maxContentSize={panelInfoNaturalSize}
@@ -2269,6 +2291,7 @@ function App() {
               kind="aggregation"
               visibleKinds={visibleFloatingKinds}
               containerRef={floatingPanelBoundsRef}
+              initialTopOffset={floatingPanelTopOffset}
               rect={aggregationRect}
               onRectChange={setAggregationRect}
             >
@@ -2289,6 +2312,7 @@ function App() {
               kind="detail"
               visibleKinds={visibleFloatingKinds}
               containerRef={floatingPanelBoundsRef}
+              initialTopOffset={floatingPanelTopOffset}
               rect={detailRect}
               onRectChange={setDetailRect}
             >
@@ -2317,6 +2341,7 @@ function App() {
               kind="master"
               visibleKinds={visibleFloatingKinds}
               containerRef={floatingPanelBoundsRef}
+              initialTopOffset={floatingPanelTopOffset}
               rect={masterRect}
               onRectChange={setMasterRect}
             >
@@ -2330,6 +2355,7 @@ function App() {
               kind="drawingEvidence"
               visibleKinds={visibleFloatingKinds}
               containerRef={floatingPanelBoundsRef}
+              initialTopOffset={floatingPanelTopOffset}
               rect={drawingEvidenceRect}
               onRectChange={setDrawingEvidenceRect}
             >
@@ -2349,6 +2375,7 @@ function App() {
               kind="guide"
               visibleKinds={visibleFloatingKinds}
               containerRef={floatingPanelBoundsRef}
+              initialTopOffset={floatingPanelTopOffset}
               initialLeftOffset={leftPaneWidth + 6}
               rect={viewerGuideRect}
               onRectChange={setViewerGuideRect}
