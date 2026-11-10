@@ -155,12 +155,11 @@
   min-height: 0;
 }
 
-/* FloatingPanelを中央Viewer内に閉じ込めず、図面一覧を含むワークスペース全体
-   まで拡張できる透明な配置レイヤー。外側はクリックを背後へ通し、パネル本体
-   だけが入力を受け取る。資料PDFのように画面端までリサイズできる一方、
-   アプリのヘッダー領域にははみ出さない。 */
+/* FloatingPanelを資料PDFと同じ画面全体の座標系で扱う透明な配置レイヤー。
+   パネル本体だけが入力を受け取り、外側はクリックを背後へ通す。タイトルバー
+   やツールバーの上までドラッグできるよう、ワークスペース内ではなくviewportに固定する。 */
 .app-workspace__floating-layer {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 100;
   pointer-events: none;
