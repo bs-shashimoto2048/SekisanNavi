@@ -3707,6 +3707,46 @@ describe('App: design.csv基準の図面一覧 (5175隔離環境の図面一覧�
       },
     )
 
+    it('deleting the only busbar row of a face sends an empty row list for that face to the save API, and keeps the other face untouched', async () => {
+      await useDocuments()
+      const { replaceBusbarSelections } = await import('./api/client')
+      window.localStorage.clear()
+      render(<App />)
+      await confirmPicker()
+      await waitFor(() => expect(card('0_S0')).toBeInTheDocument())
+      await waitFor(() => expect(document.querySelectorAll('.product-panel-overlay__area').length).toBeGreaterThan(0))
+      fireEvent.click(listItem('16'))
+      await waitFor(() => expect(within(panelInfoEl()).getByText('高圧受電盤')).toBeInTheDocument())
+
+      // 未登録のうちは入力行がなく、＋で初めて1行目が出る。
+      expect(screen.queryByRole('combobox', { name: '面1 銅帯1 仕様' })).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: '面1の銅帯設定を開く' }))
+      expect(screen.queryByRole('combobox', { name: '面1 銅帯1 仕様' })).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: '面1に銅帯の選択行を追加' }))
+      const pick = (label: string, value: string) =>
+        fireEvent.change(screen.getByRole('combobox', { name: label }), { target: { value } })
+      pick('面1 銅帯1 仕様', '標準仕様')
+      pick('面1 銅帯1 相数', '3Φ')
+      pick('面1 銅帯1 電圧区分', '200V級')
+      pick('面1 銅帯1 容量（kVA）', '100')
+      await waitFor(() =>
+        expect(vi.mocked(replaceBusbarSelections)).toHaveBeenLastCalledWith(
+          expect.any(String),
+          1,
+          [expect.objectContaining({ code: '44815', factor: 1 })],
+        ),
+      )
+
+      // 唯一の行を削除すると、その面の保存内容を空にする(PUT rows: [])。
+      fireEvent.click(screen.getByRole('button', { name: '面1 銅帯1を削除' }))
+      await waitFor(() =>
+        expect(vi.mocked(replaceBusbarSelections)).toHaveBeenLastCalledWith(expect.any(String), 1, []),
+      )
+      expect(screen.queryByRole('combobox', { name: '面1 銅帯1 仕様' })).not.toBeInTheDocument()
+      // 面2の保存には触れていない(面2向けの呼び出しは無い)。
+      expect(vi.mocked(replaceBusbarSelections).mock.calls.some((call) => call[1] === 2)).toBe(false)
+    })
+
     it('keeps the whole app rendered when a face busbar section is folded: dimension rows stay, only that face busbar section hides, other faces are untouched, also after returning from a document', async () => {
       await useDocuments()
       render(<App />)

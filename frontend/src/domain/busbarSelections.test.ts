@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   BUSBAR_STORAGE_KEY,
+  FIRST_ROW_ID,
   addRow,
   emptyRow,
   loadSelections,
@@ -16,46 +17,58 @@ import { EMPTY_SELECTION } from './busbarCodes'
 beforeEach(() => window.localStorage.clear())
 
 describe('busbarSelections: 面ごとの行', () => {
-  it('starts each face with one unselected row', () => {
-    const rows = rowsOf({}, '1')
-    expect(rows).toHaveLength(1)
-    expect(rows[0].selection).toEqual(EMPTY_SELECTION)
-    expect(rows[0].factor).toBe(1.0)
+  it('starts each face with no rows (no initial unselected row)', () => {
+    expect(rowsOf({}, '1')).toEqual([])
+    expect(rowsOf({ '2': [emptyRow('x')] }, '1')).toEqual([])
   })
 
-  it('adds an unselected row to the same face', () => {
-    const rows = addRow(rowsOf({}, '1'))
+  it('creates the first unselected row only when adding, then adds more to the same face', () => {
+    const first = addRow(rowsOf({}, '1'))
+    expect(first).toHaveLength(1)
+    expect(first[0].selection).toEqual(EMPTY_SELECTION)
+    expect(first[0].factor).toBe(1.0)
+    expect(first[0].id).toBe(FIRST_ROW_ID)
+    const rows = addRow(first)
     expect(rows).toHaveLength(2)
     expect(rows[1].selection).toEqual(EMPTY_SELECTION)
     expect(rows[1].id).not.toBe(rows[0].id)
   })
 
   it('removes one row individually without touching the others', () => {
-    let rows = rowsOf({}, '1')
-    rows = addRow(addRow(rows))
+    let rows = addRow(addRow(addRow(rowsOf({}, '1'))))
     rows = updateRow(rows, rows[0].id, { spec: '標準仕様', phase: null, voltage: null, kva: null })
     rows = updateRow(rows, rows[2].id, { spec: '公共建築', phase: null, voltage: null, kva: null })
     const removed = removeRow(rows, rows[1].id)
     expect(removed.map((r) => r.selection.spec)).toEqual(['標準仕様', '公共建築'])
   })
 
-  it('resets (does not delete) the last remaining row', () => {
-    let rows = rowsOf({}, '1')
+  it('deletes the only remaining row (the face goes back to no rows)', () => {
+    let rows = addRow(rowsOf({}, '1'))
     rows = updateRow(rows, rows[0].id, { spec: '標準仕様', phase: '3Φ', voltage: null, kva: null })
-    const after = removeRow(rows, rows[0].id)
-    expect(after).toHaveLength(1)
-    expect(after[0].selection).toEqual(EMPTY_SELECTION)
+    expect(removeRow(rows, rows[0].id)).toEqual([])
   })
 
   it('keeps faces independent', () => {
     let byFace = {}
-    byFace = setFaceRows(byFace, '1', addRow(rowsOf(byFace, '1')))
-    const face2 = rowsOf(byFace, '2')
+    byFace = setFaceRows(byFace, '1', addRow(addRow(rowsOf(byFace, '1'))))
+    const face2 = addRow(rowsOf(byFace, '2'))
     byFace = setFaceRows(byFace, '2', updateRow(face2, face2[0].id, { spec: '公共建築', phase: null, voltage: null, kva: null }))
     expect(rowsOf(byFace, '1')).toHaveLength(2)
     expect(rowsOf(byFace, '2')).toHaveLength(1)
     expect(rowsOf(byFace, '1').every((r) => r.selection.spec === null)).toBe(true)
     expect(rowsOf(byFace, '2')[0].selection.spec).toBe('公共建築')
+    // 面2の最後の行を削除しても、面1の行は変わらない。
+    byFace = setFaceRows(byFace, '2', removeRow(rowsOf(byFace, '2'), face2[0].id))
+    expect(rowsOf(byFace, '2')).toEqual([])
+    expect(rowsOf(byFace, '1')).toHaveLength(2)
+  })
+
+  it('does not restore a face whose rows were all deleted after save and reload', () => {
+    saveSelections('A1TEST', { '1': [emptyRow('a')], '2': [emptyRow('b')] })
+    saveSelections('A1TEST', { '1': removeRow(loadSelections('A1TEST')['1'], 'a'), '2': loadSelections('A1TEST')['2'] })
+    const reloaded = loadSelections('A1TEST')
+    expect(rowsOf(reloaded, '1')).toEqual([])
+    expect(rowsOf(reloaded, '2').map((r) => r.id)).toEqual(['b'])
   })
 })
 

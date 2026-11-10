@@ -100,7 +100,7 @@ describe('boxCodeSelection helpers', () => {
 describe('PanelBoxCodeSelector', () => {
   it('shows the target panel and selection state, and lists same-category codes only', () => {
     render(<PanelBoxCodeSelector result={boxResult()} masterItemById={MASTER_BY_ID} onChange={() => {}} onReset={() => {}} />)
-    expect(screen.getByText('面1/盤1')).toBeInTheDocument()
+    expect(screen.getByText('箱体')).toBeInTheDocument()
     expect(screen.getByText('自動選定')).toBeInTheDocument()
     const select = screen.getByRole('combobox', { name: '面1/盤1の箱コード' }) as HTMLSelectElement
     expect(select.value).toBe('1')

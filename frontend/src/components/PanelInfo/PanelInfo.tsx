@@ -408,9 +408,15 @@ export function PanelInfo({
   function changeBusbarRows(face: string, rows: BusbarRow[]) {
     const next = setFaceRows(busbarRows, face, rows)
     setBusbarRows(next)
-    // ＋で最初の行を作ったときは、その面の入力欄を表示する。
-    if (rows.length > (busbarRows[face]?.length ?? 0)) {
+    // ＋で行を追加したときは、その面の入力欄を表示する。行を削除したときは、削除前の開閉状態を
+    // 明示的に保持する(既定の開閉は「保存済み行がある面だけ展開」で導出されるため、最後の行を削除すると
+    // 面が閉じて「＋」が隠れ、再追加できなくなってしまうのを防ぐ)。
+    const previousLength = busbarRows[face]?.length ?? 0
+    if (rows.length > previousLength) {
       setBusbarFaceExpansion((current) => new Map(current).set(Number(face), true))
+    } else if (rows.length < previousLength) {
+      const wasExpanded = isBusbarFaceExpanded(Number(face))
+      setBusbarFaceExpansion((current) => new Map(current).set(Number(face), wasExpanded))
     }
     saveSelections(productNo, next)
     // 空の入力行を追加しただけでは積算に反映する選択内容は変わらない。
@@ -631,7 +637,11 @@ export function PanelInfo({
                       result.target_panel_ban_no === card.panel.ban_no,
                     ) ?? null
                 return (
-                  <li key={card.key} role="row">
+                  <li
+                    key={card.key}
+                    role="row"
+                    className={'panel-info__panel-card' + (card.isSelected ? ' panel-info__panel-card--selected' : '')}
+                  >
                     <div className="panel-info__data-line">
                       <button
                         type="button"
@@ -688,7 +698,7 @@ export function PanelInfo({
                       )}
                     </div>
                     {boxResult && (
-                      <div className="panel-info__box-code" aria-label={`${cells.menban} 箱体情報`}>
+                      <div className="panel-info__box-code" role="group" aria-label={`${cells.menban} 箱体情報`}>
                         <PanelBoxCodeSelector
                           result={boxResult}
                           masterItemById={masterItemById}

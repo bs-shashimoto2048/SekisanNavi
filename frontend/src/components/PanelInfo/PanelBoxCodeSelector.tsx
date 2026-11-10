@@ -20,7 +20,9 @@ interface Props {
 /**
  * 箱コード自動選定の行(`result_key = box:面:盤`)のコードセル。
  *
- * 対象盤・選定状態(自動選定/手修正/要確認)を常に表示し、コードは選択欄で変更できる。
+ * 選定状態(自動選定/手修正/要確認)を常に表示し、コードは選択欄で変更できる。盤の見出し直下に、
+ * 「箱体 | 状態 | コード選択 | 自動選定に戻す」を折り返さず 1 行で並べる(対象盤はスクリーンリーダー用に
+ * 選択欄の aria-label へ持たせ、見出し行が盤を示す)。
  * 選択肢はその盤の品名カテゴリのコードだけ(接続情報が不明な盤は箱3カテゴリすべて)。
  * コード未確定(要確認)の行は、選ぶまで空欄(「コードを選択」)のまま。
  */
@@ -32,12 +34,10 @@ export function PanelBoxCodeSelector({ result, masterItemById, onChange, onReset
 
   return (
     <div className={`estimate-box-code estimate-box-code--${state}`}>
-      <div className="estimate-box-code__head">
-        <span className="estimate-box-code__panel">{panel}</span>
-        <span className="estimate-box-code__state" data-state={state}>
-          {BOX_SELECTION_STATE_LABEL[state]}
-        </span>
-      </div>
+      <span className="estimate-box-code__label">箱体</span>
+      <span className="estimate-box-code__state" data-state={state}>
+        {BOX_SELECTION_STATE_LABEL[state]}
+      </span>
       <select
         className="estimate-box-code__select"
         aria-label={`${panel}の箱コード`}

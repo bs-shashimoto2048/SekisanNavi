@@ -198,18 +198,55 @@
 .panel-info__list {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 0.5rem;
   margin: 0;
-  padding: 0;
+  padding: 0.1rem 0;
   list-style: none;
+  /* 全カードを同じ(最も広い内容の)幅にそろえる。狭い画面では親の横スクロールで見る。 */
+  width: max-content;
+  min-width: 100%;
 }
 
-/* 盤ごとの箱コード選定欄。寸法行とは別要素に置き、行ボタンのクリックや
+/* 盤ごとのまとまり(カード)。見出し(面/盤・盤名称・寸法・接続)の直下に、箱体情報→主回路銅帯を
+   置き、枠線・左アクセント・背景で隣の盤と区切る。 */
+.panel-info__panel-card {
+  border: 1px solid #b8c4d3;
+  border-left: 4px solid #64748b;
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.panel-info__panel-card--selected {
+  border-color: #2563eb;
+  border-left-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.25);
+}
+
+/* 盤の見出し行(寸法・接続を含む)。カード内で一段濃い背景にして、本体(箱体・銅帯)と区別する。 */
+.panel-info__panel-card > .panel-info__data-line {
+  background: #eef2f7;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.panel-info__panel-card > .panel-info__data-line .panel-info__data-row {
+  background: transparent;
+}
+
+/* 盤ごとの箱体情報(1行)。寸法行とは別要素に置き、行ボタンのクリックや
    6列の幅計測に影響させず、盤ごとに編集できるようにする。 */
 .panel-info__box-code {
-  padding: 0.25rem 0.4rem 0.35rem 1.25rem;
+  display: flex;
+  align-items: center;
+  padding: 0.3rem 0.5rem 0.3rem 0.75rem;
   border-bottom: 1px dashed #d7dee8;
   background: #fbfcfe;
+}
+
+/* 盤カード内の銅帯欄: 本体側の余白をそろえ、最後の区切り線は出さない。 */
+.panel-info__panel-card > div[id^='busbar-selector-face-'] {
+  padding: 0.3rem 0.5rem 0.4rem 0.75rem;
+  background: #fff;
 }
 
 /* 見出し行・データ行で共有するCSS Grid列定義。

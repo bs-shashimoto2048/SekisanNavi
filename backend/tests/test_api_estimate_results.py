@@ -524,7 +524,7 @@ def test_busbar_selection_persists_factor_and_creates_price_labor_result(client,
     # copper-bus master row to this isolated test DB rather than relying on it.
     with sqlite3.connect(db_path) as conn:
         conn.execute(
-            """INSERT INTO estimate_master_items
+            """INSERT OR REPLACE INTO estimate_master_items
                (code, category, model, rating, total_price_a)
                VALUES (?, ?, ?, ?, ?)""",
             ("44241", "入力（主回路銅帯）", "3×30", "1Φ 10kVA", 250),
@@ -555,6 +555,39 @@ def test_busbar_selection_persists_factor_and_creates_price_labor_result(client,
 
     removed = client.put(path, json={"rows": []})
     assert not any(row["result_key"] == "busbar:1:row-test-1" for row in removed.json()["results"])
+
+
+def test_busbar_deleting_the_only_row_of_a_face_persists_and_keeps_other_faces(client, monkeypatch, tmp_path, db_path):
+    """面の唯一の銅帯行を削除(rows=[])すると、その面の保存が空になり再評価・再取得後も復活せず、
+    他の面の選択は残る。"""
+    _setup_product_and_rule(client, monkeypatch, tmp_path, db_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO estimate_master_items
+               (code, category, model, rating, total_price_a)
+               VALUES (?, ?, ?, ?, ?)""",
+            ("44241", "入力（主回路銅帯）", "3×30", "1Φ 10kVA", 250),
+        )
+    base = "/api/products/A1GV2421/busbar-selections"
+    for face in (1, 2):
+        res = client.put(f"{base}/{face}", json={"rows": [{"row_id": "row-1", "code": "44241", "factor": 1.0}]})
+        assert res.status_code == 200, res.text
+
+    deleted = client.put(f"{base}/1", json={"rows": []})
+    assert deleted.status_code == 200, deleted.text
+    keys = {row["result_key"] for row in deleted.json()["results"]}
+    assert "busbar:1:row-1" not in keys
+    assert "busbar:2:row-1" in keys
+
+    # 再取得・再評価後も、面1は空のまま(復活しない)で、面2は残る。
+    assert client.get(base).json() == [{"ban_menno": 2, "row_id": "row-1", "code": "44241", "factor": 1.0}]
+    again = client.post("/api/products/A1GV2421/estimate-results/evaluate")
+    assert again.status_code == 200, again.text
+    keys = {row["result_key"] for row in again.json()["results"]}
+    assert "busbar:1:row-1" not in keys
+    assert "busbar:2:row-1" in keys
+    listed = client.get("/api/products/A1GV2421/estimate-results").json()
+    assert [row["result_key"] for row in listed if row["result_key"].startswith("busbar:")] == ["busbar:2:row-1"]
 
 
 def test_busbar_selection_rejects_factor_outside_fixed_choices(client, monkeypatch, tmp_path, db_path):
