@@ -35,7 +35,7 @@ interface Props {
    * `Math.max(0, -1)`により`stackIndex`は常に0として扱われるため、
    * 既存4panel用の配列をそのまま渡しても問題ない。 */
   visibleKinds: FloatingPanelKind[]
-  /** 位置・大きさのクランプ基準にするコンテナ要素(`app-workspace__viewer-wrap`)。 */
+  /** 位置・大きさのクランプ基準にする全幅レイヤー(`app-workspace__floating-layer`)。 */
   containerRef: React.RefObject<HTMLDivElement | null>
   /** 現在の位置・大きさ (Issue #19 追加修正: 移動/リサイズ後もセッション中は
    * 保持する必要があるため、`App.tsx`側のstateとして持ち上げてcontrolledにする。
@@ -46,13 +46,15 @@ interface Props {
   /** [2026-10 追加修正: 内容量に応じたサイズ上限] 子(`children`)が自身の
    * 「折り返し・省略無しで表示するために必要な自然なサイズ」を実測して
    * 報告してくる場合に渡す。渡された場合、このpanelの幅/高さは
-   * `Math.min(Viewer残り領域, この値)`(ただしkind別最小サイズを下回らない)
+   * `Math.min(ワークスペース残り領域, この値)`(ただしkind別最小サイズを下回らない)
    * を上限とし、この値が変化するたび(タブ開閉・データ増減等)現在のサイズを
    * この値へ同期する(内容が少ない時に残り領域を埋めて伸びること・内容が
    * 全て収まった状態からさらに空白目的で拡大することの両方を防ぐ)。
-   * 渡さない(`undefined`/`null`)kindは従来どおりViewer領域のみを上限とする
+   * 渡さない(`undefined`/`null`)kindはワークスペース全体を上限とする
    * (他のfloating panelの挙動は変更しない)。 */
   maxContentSize?: Size | null
+  /** ワークスペース全体を基準にした初期水平オフセット(操作ガイド用)。 */
+  initialLeftOffset?: number
   children: ReactNode
 }
 
@@ -206,7 +208,7 @@ function clampPosition(rect: FloatingPanelRect, container: Size): FloatingPanelR
 // 「Viewer残り領域」と「内容が必要とする自然なサイズ」のうち小さい方を上限に
 // する(ただしkind別最小サイズは下回らない)。これにより、内容がすべて
 // 収まっているにもかかわらず、空白を増やす目的でそれ以上拡大することを防ぐ
-// (`contentMax`省略時は従来どおりViewer領域のみが上限)。
+// (`contentMax`省略時はワークスペース全体が上限)。
 function clampSize(
   rect: FloatingPanelRect,
   container: Size,
@@ -254,7 +256,7 @@ function clampToContainerBounds(rect: FloatingPanelRect, container: Size): Float
  * [Issue #25] 新規表示時の既定配置を計算する。
  *
  * 配置ルール(指示1章):
- * - 基本的にViewer右端寄せ(`left`は常に`container.width - SIDE_MARGIN - width`)。
+ * - 基本的にワークスペース右端寄せ(`left`は常に`container.width - SIDE_MARGIN - width`)。
  * - その時点で表示中のfloating panelが他に無ければ右上(`stackIndex===0`)。
  * - 既に表示中のpanelがあれば、その分だけ`STACK_OFFSET`ずつ下へずらす
  *   (`stackIndex`は「自分より前に表示されている他panelの数」。呼び出し側
@@ -274,14 +276,21 @@ function clampToContainerBounds(rect: FloatingPanelRect, container: Size): Float
  * 既存の座標ベースの汎用ロジックがそのまま働く(leftが小さい値になる結果、
  * `deriveAnchor`が自動的に`xAnchor:'left'`を導出するため)。
  */
-function computeInitialRect(kind: FloatingPanelKind, container: Size, stackIndex: number): FloatingPanelRect {
+function computeInitialRect(
+  kind: FloatingPanelKind,
+  container: Size,
+  stackIndex: number,
+  initialLeftOffset = 0,
+): FloatingPanelRect {
   const minHeight = MIN_HEIGHT_BY_KIND[kind]
   const width = Math.max(
     MIN_WIDTH_BY_KIND[kind],
     Math.min(DEFAULT_WIDTH_BY_KIND[kind], container.width - SIDE_MARGIN * 2),
   )
   const left =
-    kind === 'guide' ? SIDE_MARGIN : Math.max(0, container.width - SIDE_MARGIN - width)
+    kind === 'guide'
+      ? Math.min(initialLeftOffset + SIDE_MARGIN, Math.max(0, container.width - width))
+      : Math.max(0, container.width - SIDE_MARGIN - width)
 
   const maxTop = Math.max(TOP_CLEARANCE, container.height - BOTTOM_MARGIN - minHeight)
   const top = Math.min(TOP_CLEARANCE + Math.max(0, stackIndex) * STACK_OFFSET, maxTop)
@@ -294,7 +303,7 @@ function computeInitialRect(kind: FloatingPanelKind, container: Size, stackIndex
 
 /** [Issue #25 追加修正] panelが「どちらの辺から測った距離を基準に追従するか」を
  * 表す、確定済みのanchor情報。`xGap`/`yGap`は常にpxの絶対値(その時点の
- * コンテナサイズに対する相対値ではない)で保持し、Viewerサイズが変わるたびに
+ * コンテナサイズに対する相対値ではない)で保持し、ワークスペースサイズが変わるたびに
  * この値自体を上書きしない(下記`reflowForResize`のコメント参照)。 */
 interface Anchor {
   xAnchor: 'left' | 'right'
@@ -322,7 +331,7 @@ function deriveAnchor(rect: FloatingPanelRect, container: Size): Anchor {
 }
 
 /**
- * [Issue #25、追加修正で確定済みanchor方式へ変更] Viewerサイズ変更時に、
+ * [Issue #25、追加修正で確定済みanchor方式へ変更] ワークスペースサイズ変更時に、
  * pixel座標をそのまま据え置く(＝相対位置が崩れる)のではなく、「確定済みの
  * anchor(`deriveAnchor`で算出し、表示ON直後・drag終了時・resize終了時にのみ
  * 更新される)」からの距離を保ったまま新しいコンテナサイズへ位置を追従させる。
@@ -369,7 +378,7 @@ function reflowForResize(
  * 盤情報・積算集約・積算明細・積算コードMaster・操作ガイドをViewer上へ重ねて
  * 表示するためのfloating panelシェル (Issue #19 Phase 2/4で新設・拡張、
  * 追加修正でドラッグ移動・リサイズに対応、さらなる追加修正で積算コードMaster
- * も対象に追加、Issue #25で初期配置(右端寄せの積み重ね)・Viewerサイズ変更時の
+ * も対象に追加、Issue #25で初期配置(右端寄せの積み重ね)・ワークスペースサイズ変更時の
  * 相対位置追従を追加、Issue #31で操作ガイド(`kind==='guide'`)を追加)。
  *
  * `PanelInfo`/`EstimateAggregation`/`EstimateDetail`/`EstimateMasterPicker`/
@@ -392,7 +401,7 @@ function reflowForResize(
  * 「表示ONにした瞬間の再配置」は、以前の「非表示→表示で直前の位置へ戻る」
  * という挙動を置き換えるものである(指示1章の「新たに表示したpanelは…
  * 配置する」を、表示ON操作のたびに評価する形で実装した)。表示中のdrag/resize
- * 自体・表示中のままのViewerサイズ変更時の追従(`reflowForResize`)は、
+ * 自体・表示中のままのワークスペースサイズ変更時の追従(`reflowForResize`)は、
  * 従来どおりrectをそのまま保持・追従する。
  *
  * **位置・サイズの保持**: `rect`はこのcomponent自身のstateではなく`App.tsx`側で
@@ -427,6 +436,7 @@ export function FloatingPanel({
   rect,
   onRectChange,
   maxContentSize,
+  initialLeftOffset = 0,
   children,
 }: Props) {
   const [zIndex, setZIndex] = useState(100)
@@ -453,7 +463,7 @@ export function FloatingPanel({
   // 以後の自然サイズ計測で手動幅を上書きしない。
   const hasManualPanelInfoWidthRef = useRef(false)
 
-  // [Issue #25 追加修正] Viewerサイズ変更時の相対位置追従(reflowForResize)の
+  // [Issue #25 追加修正] ワークスペースサイズ変更時の相対位置追従(reflowForResize)の
   // 基準にする、「ユーザー操作/初期配置によって確定した」anchor。表示ON直後・
   // drag終了時・resize終了時にのみ更新する(container resizeによる一時的な
   // clampでは更新しない。上記`reflowForResize`のコメント参照)。
@@ -467,11 +477,11 @@ export function FloatingPanel({
   // 描画されないため、コンテナ変化を追う必要が無い)。
   //
   // useLayoutEffectではなくuseEffect(passive)を使う理由は既存どおり:
-  // `containerRef`は親(`App.tsx`側の`.app-workspace__viewer-wrap`)が持つrefの
+  // `containerRef`は親(`App.tsx`側の`.app-workspace__floating-layer`)が持つrefの
   // ため、Reactのcommit順序上、useLayoutEffectだと初回マウント時に
   // `containerRef.current`がまだnullのままになる(floating panelが一切
   // 描画されない不具合として顕在化した実績がある)。
-  // [2026-10 追加修正: 内容量に応じた自動フィット] 従来は「Viewerサイズ変化への
+  // [2026-10 追加修正: 内容量に応じた自動フィット] 従来は「ワークスペースサイズ変化への
   // 追従」専用だったが、`maxContentSize`(子が実測して報告する「内容を全て
   // 表示するために必要な自然なサイズ」)が変化した場合にも、同じ1つの関数
   // (`recompute`)の中で処理するよう統合した。2つの独立したeffectに分けて
@@ -485,11 +495,11 @@ export function FloatingPanel({
   // 「ウィンドウの高さは、表示中の内容に必要な高さを基準にしてください」
   // 「将来鋼材テーブルに行が追加されたら必要な高さが増える構成に」)。
   // `maxContentSize`が無いkindは、従来どおり現在のサイズをそのまま維持しつつ
-  // Viewer領域内に収める(`clampSize`のcontentMax引数がundefinedになるだけで
+  // ワークスペース内に収める(`clampSize`のcontentMax引数がundefinedになるだけで
   // 既存の計算式自体は変えない)。
   //
   // useLayoutEffectではなくuseEffect(passive)を使う理由は既存どおり:
-  // `containerRef`は親(`App.tsx`側の`.app-workspace__viewer-wrap`)が持つrefの
+  // `containerRef`は親(`App.tsx`側の`.app-workspace__floating-layer`)が持つrefの
   // ため、Reactのcommit順序上、useLayoutEffectだと初回マウント時に
   // `containerRef.current`がまだnullのままになる(floating panelが一切
   // 描画されない不具合として顕在化した実績がある)。
@@ -507,7 +517,7 @@ export function FloatingPanel({
         if (maxContentSize != null) {
           // 内容量への同期: 初期状態では幅・高さとも従来どおり自然サイズへ合わせる。
           // 図面情報の幅を利用者が調整した後は、自然サイズ計測で幅を戻さず、
-          // 高さだけを内容に合わせる。手動幅はViewer領域内にクランプする。
+          // 高さだけを内容に合わせる。手動幅はワークスペース内にクランプする。
           const preserveManualWidth = kind === 'panelInfo' && hasManualPanelInfoWidthRef.current
           // 手動幅は自然幅の範囲内で保持する。内容が短くなった場合は余白を残さないよう
           // 新しい自然幅まで縮め、内容が長くなっても手動幅より自動で広げない。
@@ -582,7 +592,7 @@ export function FloatingPanel({
     const stackIndex = Math.max(0, visibleKinds.indexOf(kind))
     // 再表示時は初期の自然サイズへ戻るため、自然サイズ追従を再び有効にする。
     if (kind === 'panelInfo') hasManualPanelInfoWidthRef.current = false
-    const initialRect = computeInitialRect(kind, nextContainer, stackIndex)
+    const initialRect = computeInitialRect(kind, nextContainer, stackIndex, initialLeftOffset)
     onRectChange(initialRect)
     // [Issue #25 追加修正] 初期配置が確定した時点のanchorを記録する
     // (以後のcontainer resizeはこのanchorからの距離を保つ)。

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ApiError,
   createEvidenceDetection,
@@ -427,8 +428,15 @@ function App() {
   // [Issue #31] 操作ガイドの位置・大きさ。右端カスケードの4panelとは独立して
   // 保持する(`visibleFloatingKinds`には含めない。下記コメント参照)。
   const [viewerGuideRect, setViewerGuideRect] = useState<FloatingPanelRect | null>(null)
-  // floating panelの位置・大きさのクランプ基準となるコンテナ要素。
-  const viewerWrapRef = useRef<HTMLDivElement>(null)
+  // floating panelは図面Viewerだけでなく、図面一覧を含むワークスペース全幅を
+  // 使えるよう専用レイヤーへportalする。ref objectはFloatingPanelへ渡し、
+  // callback refはportalのmount先をstateへ反映する。
+  const floatingPanelBoundsRef = useRef<HTMLDivElement>(null)
+  const [floatingPanelLayer, setFloatingPanelLayer] = useState<HTMLDivElement | null>(null)
+  const setFloatingPanelLayerRef = useCallback((node: HTMLDivElement | null) => {
+    floatingPanelBoundsRef.current = node
+    setFloatingPanelLayer(node)
+  }, [])
 
   // [Issue #25] 現在表示中のfloating panel種別一覧(固定の宣言順:
   // 図面情報→盤情報→積算集約→積算明細→部品台帳。Issue #40 Phase 6-Cで
@@ -2159,13 +2167,10 @@ function App() {
               )}
             </div>
             <PaneSplitter onDrag={resizeLeftPaneBy} ariaLabel="図面一覧の幅を変更" />
-            {/* Issue #19 Phase 2: 積算集約・積算明細を右ペインから外し、この
-                Viewer上へfloating panelとして重ねて表示する。DrawingViewer自体
-                (内部のOverlay z-index/pointer-events契約、docs/architecture.md
-                15章)は変更せず、その外側にposition:relativeのコンテナを1枚
-                追加して、floating panel/トグルバーをこのコンテナ基準で
-                絶対配置するだけにしている。 */}
-            <div className="app-workspace__viewer-wrap" ref={viewerWrapRef}>
+            {/* DrawingViewerは従来どおりViewer領域に描画する。操作パネルは
+                Viewerや図面一覧の幅に制限されないよう、後段の全幅レイヤーへ
+                portalして表示する。 */}
+            <div className="app-workspace__viewer-wrap">
               <DrawingViewer
                 productNo={activeProductNo}
                 pageNo={awaitingDesignSelection ? null : viewerPageNo}
@@ -2208,144 +2213,151 @@ function App() {
                 evidenceDisplayNameByKey={evidenceDisplayNameByKey}
                 focusPanel={viewerFocusPanel}
               />
-              <FloatingPanel
-                visible={panelInfoFloatingVisible}
-                kind="panelInfo"
-                visibleKinds={visibleFloatingKinds}
-                containerRef={viewerWrapRef}
-                rect={panelInfoRect}
-                onRectChange={setPanelInfoRect}
-                maxContentSize={panelInfoNaturalSize}
-              >
-                <ErrorBoundary
-                  label="panel-info"
-                  resetKeys={[activeProductNo, selectedProductPageNo, selectedDesignKey, selectedDocumentKey]}
-                  fallback={(error, reset) => (
-                    <div className="error-fallback" role="alert">
-                      <p className="error-fallback__title">図面情報を表示できません。</p>
-                      <p className="error-fallback__hint">
-                        図面の表示は継続しています。図面を選び直すか再試行してください。保存済みの設定は消していません({error.message})。
-                      </p>
-                      <button type="button" onClick={reset}>
-                        再試行
-                      </button>
-                    </div>
-                  )}
-                >
-                <PanelInfo
-                  panel={panel}
-                  panels={activeProductPage?.panels ?? EMPTY_LIST}
-                  fallbackPanels={panelInfoFallbackPanels}
-                  dimensionSourcePanels={panelDimensionSources}
-                  panelsLoading={productPagesLoading}
-                  estimatePanels={estimatePanels}
-                  productNo={activeProductNo ?? undefined}
-                  steel={steel}
-                  selectedPanel={selectedPanel}
-                  onSelectPanel={handleSelectPanel}
-                  onNaturalSizeChange={setPanelInfoNaturalSize}
-                  onBusbarRowsChange={handleBusbarRowsChange}
-                  busbarServer={busbarServer}
-                  boxResults={boxCodeResults}
-                  masterItemById={masterItemById}
-                  onOverrideBoxCode={handleOverrideBoxCode}
-                  onResetBoxCode={handleResetBoxCode}
-                />
-                </ErrorBoundary>
-              </FloatingPanel>
-              <FloatingPanel
-                visible={estimateAggregationFloatingVisible}
-                kind="aggregation"
-                visibleKinds={visibleFloatingKinds}
-                containerRef={viewerWrapRef}
-                rect={aggregationRect}
-                onRectChange={setAggregationRect}
-              >
-                <EstimateAggregation
-                  targets={estimateResultAggregationData.targets}
-                  lineItems={estimateResultAggregationData.lineItems}
-                  totalLineItems={estimateResultAggregationData.totalLineItems}
-                  selectedTargetId={selectedEstimateTargetId}
-                  productNo={activeProductNo}
-                  needsReviewCount={estimateResultNeedsReviewCount}
-                  onNavigateToNeedsReview={handleNavigateToNeedsReview}
-                  overriddenCount={estimateResultOverriddenCount}
-                  onNavigateToOverridden={handleNavigateToOverridden}
-                />
-              </FloatingPanel>
-              <FloatingPanel
-                visible={estimateDetailFloatingVisible}
-                kind="detail"
-                visibleKinds={visibleFloatingKinds}
-                containerRef={viewerWrapRef}
-                rect={detailRect}
-                onRectChange={setDetailRect}
-              >
-                <EstimateDetail
-                  results={estimateResultsForSelectedTarget}
-                  masterItemById={masterItemById}
-                  detectionById={detectionById}
-                  tabFilter={estimateDetailTabFilter}
-                  onTabFilterChange={setEstimateDetailTabFilter}
-                  onOverrideResultFactor={handleOverrideEstimateResultFactor}
-                  onResetResultFactor={handleResetEstimateResultFactor}
-                  onOverrideResultQuantity={handleOverrideEstimateResultQuantity}
-                  onResetResultQuantity={handleResetEstimateResultQuantity}
-                  onFocusResultEvidence={handleFocusResultEvidence}
-                  selectedResultId={detailSelectedResultId}
-                  onSelectResultRow={handleSelectEstimateDetailRow}
-                  relatedToSelectedBboxResultIds={relatedToSelectedBboxResultIds}
-                />
-              </FloatingPanel>
-              {/* [追加修正: 積算コードMasterのfloating panel化] 従来は
-                  MainArea下段に常設していたが、他3panelと同じくViewer上へ
-                  floating panelとして重ねる。`EstimateMasterPicker`自体の
-                  業務ロジック・選択状態・BBox追加モードとの連携は変更していない。 */}
-              <FloatingPanel
-                visible={estimateMasterFloatingVisible}
-                kind="master"
-                visibleKinds={visibleFloatingKinds}
-                containerRef={viewerWrapRef}
-                rect={masterRect}
-                onRectChange={setMasterRect}
-              >
-                <EstimateMasterPicker selectedItemId={selectedMasterItemId} onSelectItem={handleSelectMasterItem} />
-              </FloatingPanel>
-              {/* [Issue #40 Phase 3] 「図面情報」floating panel。新しいBBox
-                  作成の主導線。既存の部品台帳(EstimateMasterPicker)は変更せず
-                  そのまま併存させる(指示: 既存Manual BBoxとの互換維持)。 */}
-              <FloatingPanel
-                visible={drawingEvidenceFloatingVisible}
-                kind="drawingEvidence"
-                visibleKinds={visibleFloatingKinds}
-                containerRef={viewerWrapRef}
-                rect={drawingEvidenceRect}
-                onRectChange={setDrawingEvidenceRect}
-              >
-                <DrawingEvidencePanel
-                  selectedKey={selectedEvidenceTypeKey}
-                  onSelectKey={handleSelectEvidenceType}
-                  relatedResults={relatedEstimateResultsForSelectedDetection}
-                  onFocusResult={handleFocusResultEvidence}
-                />
-              </FloatingPanel>
-              {/* [Issue #31] Viewer内「操作ガイド」。既存4panelと同じ
-                  FloatingPanelシェルをそのまま再利用する(`kind="guide"`により
-                  右端カスケードには混ぜず、常にViewer左上へ単独配置される。
-                  `FloatingPanel.tsx::computeInitialRect`参照)。 */}
-              <FloatingPanel
-                visible={viewerGuideVisible}
-                kind="guide"
-                visibleKinds={visibleFloatingKinds}
-                containerRef={viewerWrapRef}
-                rect={viewerGuideRect}
-                onRectChange={setViewerGuideRect}
-              >
-                <ViewerGuide />
-              </FloatingPanel>
             </div>
           </div>
         </div>
+        <div className="app-workspace__floating-layer" ref={setFloatingPanelLayerRef} />
+        {floatingPanelLayer && createPortal(
+          <>
+            <FloatingPanel
+              visible={panelInfoFloatingVisible}
+              kind="panelInfo"
+              visibleKinds={visibleFloatingKinds}
+              containerRef={floatingPanelBoundsRef}
+              rect={panelInfoRect}
+              onRectChange={setPanelInfoRect}
+              maxContentSize={panelInfoNaturalSize}
+            >
+              <ErrorBoundary
+                label="panel-info"
+                resetKeys={[activeProductNo, selectedProductPageNo, selectedDesignKey, selectedDocumentKey]}
+                fallback={(error, reset) => (
+                  <div className="error-fallback" role="alert">
+                    <p className="error-fallback__title">図面情報を表示できません。</p>
+                    <p className="error-fallback__hint">
+                      図面の表示は継続しています。図面を選び直すか再試行してください。保存済みの設定は消していません({error.message})。
+                    </p>
+                    <button type="button" onClick={reset}>
+                      再試行
+                    </button>
+                  </div>
+                )}
+              >
+              <PanelInfo
+                panel={panel}
+                panels={activeProductPage?.panels ?? EMPTY_LIST}
+                fallbackPanels={panelInfoFallbackPanels}
+                dimensionSourcePanels={panelDimensionSources}
+                panelsLoading={productPagesLoading}
+                estimatePanels={estimatePanels}
+                productNo={activeProductNo ?? undefined}
+                steel={steel}
+                selectedPanel={selectedPanel}
+                onSelectPanel={handleSelectPanel}
+                onNaturalSizeChange={setPanelInfoNaturalSize}
+                onBusbarRowsChange={handleBusbarRowsChange}
+                busbarServer={busbarServer}
+                boxResults={boxCodeResults}
+                masterItemById={masterItemById}
+                onOverrideBoxCode={handleOverrideBoxCode}
+                onResetBoxCode={handleResetBoxCode}
+              />
+              </ErrorBoundary>
+            </FloatingPanel>
+            <FloatingPanel
+              visible={estimateAggregationFloatingVisible}
+              kind="aggregation"
+              visibleKinds={visibleFloatingKinds}
+              containerRef={floatingPanelBoundsRef}
+              rect={aggregationRect}
+              onRectChange={setAggregationRect}
+            >
+              <EstimateAggregation
+                targets={estimateResultAggregationData.targets}
+                lineItems={estimateResultAggregationData.lineItems}
+                totalLineItems={estimateResultAggregationData.totalLineItems}
+                selectedTargetId={selectedEstimateTargetId}
+                productNo={activeProductNo}
+                needsReviewCount={estimateResultNeedsReviewCount}
+                onNavigateToNeedsReview={handleNavigateToNeedsReview}
+                overriddenCount={estimateResultOverriddenCount}
+                onNavigateToOverridden={handleNavigateToOverridden}
+              />
+            </FloatingPanel>
+            <FloatingPanel
+              visible={estimateDetailFloatingVisible}
+              kind="detail"
+              visibleKinds={visibleFloatingKinds}
+              containerRef={floatingPanelBoundsRef}
+              rect={detailRect}
+              onRectChange={setDetailRect}
+            >
+              <EstimateDetail
+                results={estimateResultsForSelectedTarget}
+                masterItemById={masterItemById}
+                detectionById={detectionById}
+                tabFilter={estimateDetailTabFilter}
+                onTabFilterChange={setEstimateDetailTabFilter}
+                onOverrideResultFactor={handleOverrideEstimateResultFactor}
+                onResetResultFactor={handleResetEstimateResultFactor}
+                onOverrideResultQuantity={handleOverrideEstimateResultQuantity}
+                onResetResultQuantity={handleResetEstimateResultQuantity}
+                onFocusResultEvidence={handleFocusResultEvidence}
+                selectedResultId={detailSelectedResultId}
+                onSelectResultRow={handleSelectEstimateDetailRow}
+                relatedToSelectedBboxResultIds={relatedToSelectedBboxResultIds}
+              />
+            </FloatingPanel>
+            {/* [追加修正: 積算コードMasterのfloating panel化] 従来は
+                MainArea下段に常設していたが、他3panelと同じくViewer上へ
+                floating panelとして重ねる。`EstimateMasterPicker`自体の
+                業務ロジック・選択状態・BBox追加モードとの連携は変更していない。 */}
+            <FloatingPanel
+              visible={estimateMasterFloatingVisible}
+              kind="master"
+              visibleKinds={visibleFloatingKinds}
+              containerRef={floatingPanelBoundsRef}
+              rect={masterRect}
+              onRectChange={setMasterRect}
+            >
+              <EstimateMasterPicker selectedItemId={selectedMasterItemId} onSelectItem={handleSelectMasterItem} />
+            </FloatingPanel>
+            {/* [Issue #40 Phase 3] 「図面情報」floating panel。新しいBBox
+                作成の主導線。既存の部品台帳(EstimateMasterPicker)は変更せず
+                そのまま併存させる(指示: 既存Manual BBoxとの互換維持)。 */}
+            <FloatingPanel
+              visible={drawingEvidenceFloatingVisible}
+              kind="drawingEvidence"
+              visibleKinds={visibleFloatingKinds}
+              containerRef={floatingPanelBoundsRef}
+              rect={drawingEvidenceRect}
+              onRectChange={setDrawingEvidenceRect}
+            >
+              <DrawingEvidencePanel
+                selectedKey={selectedEvidenceTypeKey}
+                onSelectKey={handleSelectEvidenceType}
+                relatedResults={relatedEstimateResultsForSelectedDetection}
+                onFocusResult={handleFocusResultEvidence}
+              />
+            </FloatingPanel>
+            {/* [Issue #31] Viewer内「操作ガイド」。既存4panelと同じ
+                FloatingPanelシェルをそのまま再利用する(`kind="guide"`により
+                右端カスケードには混ぜず、常にViewer左上へ単独配置される。
+                `FloatingPanel.tsx::computeInitialRect`参照)。 */}
+            <FloatingPanel
+              visible={viewerGuideVisible}
+              kind="guide"
+              visibleKinds={visibleFloatingKinds}
+              containerRef={floatingPanelBoundsRef}
+              initialLeftOffset={leftPaneWidth + 6}
+              rect={viewerGuideRect}
+              onRectChange={setViewerGuideRect}
+            >
+              <ViewerGuide />
+            </FloatingPanel>
+          </>,
+          floatingPanelLayer,
+        )}
       </div>
 
       {isSettingsOpen && (
