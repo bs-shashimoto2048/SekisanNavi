@@ -400,7 +400,21 @@ export function PanelInfo({
       setBusbarFaceExpansion((current) => new Map(current).set(Number(face), true))
     }
     saveSelections(productNo, next)
-    if (productNo && onBusbarRowsChange) onBusbarRowsChange(productNo, Number(face), rows)
+    // 空の入力行を追加しただけでは積算に反映する選択内容は変わらない。
+    // 特に未登録面の「＋」で空の PUT を送ると、利用者には反映失敗として見える。
+    // 保存対象(一意に確定したコード・係数)が変化したときだけ親へ通知する。
+    const persistedSignature = (items: BusbarRow[]) =>
+      JSON.stringify(
+        items.flatMap((row) => {
+          const status = statusOf(row.selection)
+          return status.kind === 'unique' ? [{ row_id: row.id, code: status.record.code, factor: row.factor }] : []
+        }),
+      )
+    const previousSignature = persistedSignature(busbarRows[face] ?? [])
+    const nextSignature = persistedSignature(rows)
+    if (productNo && onBusbarRowsChange && previousSignature !== nextSignature) {
+      onBusbarRowsChange(productNo, Number(face), rows)
+    }
   }
 
   function toggleBusbarFace(face: number) {
