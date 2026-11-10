@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type {
   AttributeSource,
+  EstimateMasterItem,
   EstimatePanelInfo,
+  EstimateResult,
   Panel,
   PanelPreview,
   SteelOutline,
@@ -22,6 +24,7 @@ import {
 } from '../../domain/busbarSelections'
 import { isSetDimension, resolvePanelDimensions } from '../../domain/panelDimensions'
 import { BoxTypeDetail } from './BoxTypeDetail'
+import { PanelBoxCodeSelector } from './PanelBoxCodeSelector'
 import './PanelInfo.css'
 
 /** 列数(面/盤・盤名称・高さ・幅・奥行・接続の6列、`COLUMN_HEADERS`と対応)。
@@ -31,6 +34,7 @@ import './PanelInfo.css'
  * 変えない」)。`useAutoFitGridColumns`へ渡す列数と、各セルの
  * `data-auto-col` indexが一致している必要がある。 */
 const COLUMN_COUNT = 6
+const EMPTY_MASTER_ITEMS = new Map<number, EstimateMasterItem>()
 
 interface NaturalSize {
   width: number
@@ -94,6 +98,11 @@ interface Props {
   onNaturalSizeChange?: (size: NaturalSize) => void
   /** 保存済み/変更後の主回路銅帯行を積算結果へ反映する。 */
   onBusbarRowsChange?: (productNo: string, face: number, rows: BusbarRow[]) => void
+  /** 盤ごとの箱コード選定結果と変更操作。 */
+  boxResults?: EstimateResult[]
+  masterItemById?: Map<number, EstimateMasterItem>
+  onOverrideBoxCode?: (result: EstimateResult, masterItemId: number) => void
+  onResetBoxCode?: (result: EstimateResult) => void
 }
 
 // null/undefined/NaN/空文字はそのまま出さず"-"に統一する (指示書8章)。
@@ -335,6 +344,10 @@ export function PanelInfo({
   onSelectPanel,
   onNaturalSizeChange,
   onBusbarRowsChange,
+  boxResults = [],
+  masterItemById = EMPTY_MASTER_ITEMS,
+  onOverrideBoxCode = () => {},
+  onResetBoxCode = () => {},
 }: Props) {
   // 優先順位: 1. 現在ページの盤 2. (旧来のダミーDB由来panelがあればそれ) 3. 同じ製番内の
   // 他の図面・製番共通データの盤(表示のみ) 4. 何も無ければ取得不可の状態表示。
@@ -611,6 +624,12 @@ export function PanelInfo({
             <ul className="panel-info__list">
               {cards.map((card) => {
                 const cells = buildRowCells(card, dimensionSourcePanels)
+                const boxResult = card.panel.ban_no == null
+                  ? null
+                  : boxResults.find((result) =>
+                      result.target_panel_ban_menno === card.panel.ban_menno &&
+                      result.target_panel_ban_no === card.panel.ban_no,
+                    ) ?? null
                 return (
                   <li key={card.key} role="row">
                     <div className="panel-info__data-line">
@@ -668,6 +687,16 @@ export function PanelInfo({
                         </button>
                       )}
                     </div>
+                    {boxResult && (
+                      <div className="panel-info__box-code" aria-label={`${cells.menban} 箱体情報`}>
+                        <PanelBoxCodeSelector
+                          result={boxResult}
+                          masterItemById={masterItemById}
+                          onChange={(masterItemId) => onOverrideBoxCode(boxResult, masterItemId)}
+                          onReset={() => onResetBoxCode(boxResult)}
+                        />
+                      </div>
+                    )}
                     {/* 主回路銅帯の選択(仕様→相数→電圧区分→容量の4段階)。銅帯は面
                         (ban_menno)ごとに選ぶ運用のため、盤(ban_no)ごとには複製せず、
                         その面の代表行(最初に現れた盤、`copperSelectorAnchorKeyByMenno`)

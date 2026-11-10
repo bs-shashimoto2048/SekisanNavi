@@ -1127,6 +1127,10 @@ function App() {
     return []
   }, [estimateResults, selectedEstimateTargetId, focusedEstimateTarget, viewerFocusPanel])
 
+  // 箱コードの編集元は積算明細ではなく図面情報。表示対象を盤ごとに照合するため、
+  // 選択中の積算対象に絞る前の製番全体の箱行を PanelInfo へ渡す。
+  const boxCodeResults = useMemo(() => estimateResults.filter(isBoxResult), [estimateResults])
+
   // [Issue #40 Phase 4] 係数の手修正・初期値復元。API呼び出し後、返ってきた
   // 最新の積算結果でestimateResults内の該当行だけを置き換える(reevaluate
   // (評価器の再実行)とは異なり、この操作単体では他の行に影響しないため
@@ -2199,6 +2203,10 @@ function App() {
                   onSelectPanel={handleSelectPanel}
                   onNaturalSizeChange={setPanelInfoNaturalSize}
                   onBusbarRowsChange={handleBusbarRowsChange}
+                  boxResults={boxCodeResults}
+                  masterItemById={masterItemById}
+                  onOverrideBoxCode={handleOverrideBoxCode}
+                  onResetBoxCode={handleResetBoxCode}
                 />
                 </ErrorBoundary>
               </FloatingPanel>
@@ -2240,8 +2248,6 @@ function App() {
                   onResetResultFactor={handleResetEstimateResultFactor}
                   onOverrideResultQuantity={handleOverrideEstimateResultQuantity}
                   onResetResultQuantity={handleResetEstimateResultQuantity}
-                  onOverrideBoxCode={handleOverrideBoxCode}
-                  onResetBoxCode={handleResetBoxCode}
                   onFocusResultEvidence={handleFocusResultEvidence}
                   selectedResultId={detailSelectedResultId}
                   onSelectResultRow={handleSelectEstimateDetailRow}

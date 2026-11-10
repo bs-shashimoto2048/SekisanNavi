@@ -204,6 +204,14 @@
   list-style: none;
 }
 
+/* 盤ごとの箱コード選定欄。寸法行とは別要素に置き、行ボタンのクリックや
+   6列の幅計測に影響させず、盤ごとに編集できるようにする。 */
+.panel-info__box-code {
+  padding: 0.25rem 0.4rem 0.35rem 1.25rem;
+  border-bottom: 1px dashed #d7dee8;
+  background: #fbfcfe;
+}
+
 /* 見出し行・データ行で共有するCSS Grid列定義。
    [Issue #40 追加修正: 表カラム幅の共通自動調整] 各行(button)は独立した
    grid containerのため、以前は実測pxを手動チューニングした固定値
