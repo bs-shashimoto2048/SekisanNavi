@@ -26,8 +26,6 @@ import {
   fetchPanel,
   fetchProductDrawings,
   fetchProjectInfo,
-  overrideEstimateResultFactor,
-  resetEstimateResultFactor,
   overrideEstimateResultQuantity,
   resetEstimateResultQuantity,
   updateDetectionBBox,
@@ -421,6 +419,7 @@ function App() {
   const [panelInfoNaturalSize, setPanelInfoNaturalSize] = useState<{ width: number; height: number } | null>(null)
   const [aggregationRect, setAggregationRect] = useState<FloatingPanelRect | null>(null)
   const [detailRect, setDetailRect] = useState<FloatingPanelRect | null>(null)
+  const [estimateDetailNaturalWidth, setEstimateDetailNaturalWidth] = useState<number | null>(null)
   const [masterRect, setMasterRect] = useState<FloatingPanelRect | null>(null)
   // [Issue #40 Phase 3] 図面情報の位置・大きさ。既存4panelと同じ右端カスケードへ
   // 参加させる(`visibleFloatingKinds`に含める。下記コメント参照)。
@@ -1191,20 +1190,6 @@ function App() {
   // 選択中の積算対象に絞る前の製番全体の箱行を PanelInfo へ渡す。
   const boxCodeResults = useMemo(() => estimateResults.filter(isBoxResult), [estimateResults])
 
-  // [Issue #40 Phase 4] 係数の手修正・初期値復元。API呼び出し後、返ってきた
-  // 最新の積算結果でestimateResults内の該当行だけを置き換える(reevaluate
-  // (評価器の再実行)とは異なり、この操作単体では他の行に影響しないため
-  // 全体を再取得しない)。
-  async function handleOverrideEstimateResultFactor(result: EstimateResult, newFactor: number) {
-    try {
-      const updated = await overrideEstimateResultFactor(activeProductNo, result.id, { current_factor: newFactor })
-      setEstimateResults((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
-      setError(null)
-    } catch (e) {
-      setError(describeFetchError(e, '係数の変更に失敗しました'))
-    }
-  }
-
   // 箱コード(自動選定)の手修正・自動選定へ戻す。Backendが手修正を保存して再評価し、最新の
   // 積算結果一覧を返すので、そのまま置き換える(同じ盤の行は増えない)。
   async function handleOverrideBoxCode(result: EstimateResult, masterItemId: number) {
@@ -1257,16 +1242,6 @@ function App() {
       if (activeProductNo === productNo) setError(describeFetchError(e, '主回路銅帯の積算反映に失敗しました'))
     }
   }, [activeProductNo])
-
-  async function handleResetEstimateResultFactor(result: EstimateResult) {
-    try {
-      const updated = await resetEstimateResultFactor(activeProductNo, result.id)
-      setEstimateResults((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
-      setError(null)
-    } catch (e) {
-      setError(describeFetchError(e, '係数の初期値復元に失敗しました'))
-    }
-  }
 
   // [Issue #40 Phase 6後半] 数量の手修正・初期値復元。係数の手修正と同じ
   // パターン(更新された行だけをestimateResultsへ反映、全体の再取得はしない)。
@@ -2315,6 +2290,7 @@ function App() {
               initialTopOffset={floatingPanelTopOffset}
               rect={detailRect}
               onRectChange={setDetailRect}
+              maxContentWidth={estimateDetailNaturalWidth}
             >
               <EstimateDetail
                 results={estimateResultsForSelectedTarget}
@@ -2322,14 +2298,13 @@ function App() {
                 detectionById={detectionById}
                 tabFilter={estimateDetailTabFilter}
                 onTabFilterChange={setEstimateDetailTabFilter}
-                onOverrideResultFactor={handleOverrideEstimateResultFactor}
-                onResetResultFactor={handleResetEstimateResultFactor}
                 onOverrideResultQuantity={handleOverrideEstimateResultQuantity}
                 onResetResultQuantity={handleResetEstimateResultQuantity}
                 onFocusResultEvidence={handleFocusResultEvidence}
                 selectedResultId={detailSelectedResultId}
                 onSelectResultRow={handleSelectEstimateDetailRow}
                 relatedToSelectedBboxResultIds={relatedToSelectedBboxResultIds}
+                onNaturalWidthChange={setEstimateDetailNaturalWidth}
               />
             </FloatingPanel>
             {/* [追加修正: 積算コードMasterのfloating panel化] 従来は

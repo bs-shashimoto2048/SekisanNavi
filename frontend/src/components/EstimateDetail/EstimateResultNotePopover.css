@@ -1,0 +1,31 @@
+/* 積算明細の「理由」「根拠」ポップオーバー。表の overflow で切れないよう body へ portal し、
+   fixed で配置する。floating panel(z-indexを採番)より前面に出す。 */
+.estimate-note-popover {
+  position: fixed;
+  z-index: 100000;
+  box-sizing: border-box;
+  max-width: min(32rem, calc(100vw - 16px));
+  max-height: min(24rem, calc(100vh - 16px));
+  overflow: auto;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1e293b;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.25);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.estimate-note-popover__heading {
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+/* 改行(根拠の条件式の字下げ・複数行)をそのまま読めるようにする。 */
+.estimate-note-popover__body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

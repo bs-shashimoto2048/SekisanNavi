@@ -111,10 +111,13 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     expect(screen.queryByRole('tab', { name: /マニュアル/ })).not.toBeInTheDocument()
   })
 
-  it('shows コード/内容/数量/適用単位/係数/金額/工数/判定 as the 8 columns', () => {
+  it('shows estimate fields and master price/labor breakdown columns', () => {
     renderDetail({ results: [makeResult()] })
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent)
-    expect(headers).toEqual(['コード', '内容', '数量', '適用単位', '係数', '金額', '工数', '判定'])
+    expect(headers).toEqual([
+      'コード', '内容', '数量', '適用単位', '係数', '金額', '工数',
+      '総合価格A', '箱・部品価格', '塗装価格', '設A', '板金', '組立', '検査', '判定',
+    ])
   })
 
   it('shows a busbar coefficient and does not invent a missing labor amount', () => {
@@ -128,7 +131,7 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
       labor: null,
     })
     renderDetail({ results: [result] })
-    expect(screen.getByLabelText('主回路銅帯の係数')).toHaveTextContent('1.4')
+    expect(screen.getByLabelText('係数')).toHaveTextContent('1.4')
     expect(screen.getByText('¥350')).toBeInTheDocument()
     expect(screen.getAllByText('-').length).toBeGreaterThan(0)
   })
@@ -282,6 +285,13 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     expect(document.querySelector('tbody .estimate-detail__col-rr-unit')?.textContent).toBe('-')
   })
 
+  it('shows box result units as 1面 even when an older saved row still says unit', () => {
+    renderDetail({
+      results: [makeResult({ result_key: 'box:1:1', applicable_unit: 'unit' })],
+    })
+    expect(document.querySelector('tbody .estimate-detail__col-rr-unit')).toHaveTextContent('1面')
+  })
+
   it('shows price formatted with a currency prefix, and "-" (never 0円) when null', () => {
     const { rerender } = renderDetail({ results: [makeResult({ price: 1000 })] })
     expect(screen.getByText('¥1,000')).toBeInTheDocument()
@@ -303,9 +313,13 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     expect(screen.getByText('IS2 / 2300*900*2200')).toBeInTheDocument()
   })
 
-  it('shows a 理由 button (with judgment_reason as its title) only when present', () => {
+  it('opens a popover with judgment_reason when 理由 is pressed (no title tooltip); shows 理由情報なし when absent', () => {
     const { rerender } = renderDetail({ results: [makeResult({ judgment_reason: 'VCT + CH / 同一盤' })] })
-    expect(screen.getByRole('button', { name: '判定理由' }).title).toBe('VCT + CH / 同一盤')
+    const button = screen.getByRole('button', { name: '判定理由' })
+    expect(button).not.toHaveAttribute('title')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    fireEvent.click(button)
+    expect(within(screen.getByRole('dialog', { name: '判定理由' })).getByText('VCT + CH / 同一盤')).toBeInTheDocument()
 
     rerender(
       <EstimateDetail
@@ -315,13 +329,46 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
         onTabFilterChange={() => {}}
       />,
     )
-    expect(screen.queryByRole('button', { name: '判定理由' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '判定理由' }))
+    expect(within(screen.getByRole('dialog', { name: '判定理由' })).getByText('理由情報なし')).toBeInTheDocument()
+  })
+
+  it('shows 根拠情報なし in the 根拠 popover when evidence is empty', () => {
+    renderDetail({ results: [makeResult({ evidence: [] })] })
+    fireEvent.click(screen.getByRole('button', { name: '根拠' }))
+    expect(within(screen.getByRole('dialog', { name: '根拠' })).getByText('根拠情報なし')).toBeInTheDocument()
+  })
+
+  it('closes the popover with Escape or an outside click, but not on a click inside it', () => {
+    renderDetail({ results: [makeResult({ judgment_reason: 'VCT + CH / 同一盤' })] })
+    const open = () => fireEvent.click(screen.getByRole('button', { name: '判定理由' }))
+    open()
+    // 同じボタンの再クリックで閉じる
+    fireEvent.click(screen.getByRole('button', { name: '判定理由' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    open()
+    fireEvent.pointerDown(screen.getByText('VCT + CH / 同一盤'))
+    expect(screen.getByRole('dialog', { name: '判定理由' })).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    open()
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('does not select the row when clicking inside an open popover', () => {
+    const onSelectResultRow = vi.fn()
+    renderDetail({ results: [makeResult({ judgment_reason: 'VCT + CH / 同一盤' })], onSelectResultRow })
+    fireEvent.click(screen.getByRole('button', { name: '判定理由' }))
+    fireEvent.click(screen.getByText('VCT + CH / 同一盤'))
+    expect(onSelectResultRow).not.toHaveBeenCalled()
   })
 
   it('shows a 根拠 button summarizing evidence provenance (AI/手動) from detectionById', () => {
     renderDetail({ results: [makeResult()] })
-    const button = screen.getByRole('button', { name: '根拠' })
-    expect(button.title).toContain('取得元: 手動')
+    fireEvent.click(screen.getByRole('button', { name: '根拠' }))
+    const body = screen.getByRole('dialog', { name: '根拠' }).querySelector('.estimate-note-popover__body')?.textContent ?? ''
+    expect(body).toContain('取得元: 手動')
   })
 
   it('[Issue #40 Phase 6-B] shows design_data evidence as a Japanese condition line, not raw field names/JSON', () => {
@@ -345,12 +392,13 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
         }),
       ],
     })
-    const button = screen.getByRole('button', { name: '根拠' })
-    expect(button.title).toContain('幅: 1200 ≥ 900')
-    expect(button.title).toContain('奥行: 2200 = 2200')
+    fireEvent.click(screen.getByRole('button', { name: '根拠' }))
+    const body = screen.getByRole('dialog', { name: '根拠' }).querySelector('.estimate-note-popover__body')?.textContent ?? ''
+    expect(body).toContain('幅: 1200 ≥ 900')
+    expect(body).toContain('奥行: 2200 = 2200')
     // 内部field名(ban_w/ban_d)をそのまま表示しない。
-    expect(button.title).not.toContain('ban_w')
-    expect(button.title).not.toContain('ban_d')
+    expect(body).not.toContain('ban_w')
+    expect(body).not.toContain('ban_d')
   })
 
   it('[Issue #40 Phase 6-F] shows OR condition (design_data_any_of) branches with matched/unmatched markers', () => {
@@ -385,9 +433,10 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
         }),
       ],
     })
-    const button = screen.getByRole('button', { name: '根拠' })
-    expect(button.title).toContain('○ 型式: IS2 が "IS" で始まる')
-    expect(button.title).toContain('× 型式: IS2 が "OS" で始まる')
+    fireEvent.click(screen.getByRole('button', { name: '根拠' }))
+    const body = screen.getByRole('dialog', { name: '根拠' }).querySelector('.estimate-note-popover__body')?.textContent ?? ''
+    expect(body).toContain('○ 型式: IS2 が "IS" で始まる')
+    expect(body).toContain('× 型式: IS2 が "OS" で始まる')
   })
 
   it('[Issue #40 Phase 6-B] falls back to a plain "設計データ" label for pre-Phase-6-B design_data_ref values ({"panel": "..."} only)', () => {
@@ -400,8 +449,9 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
         }),
       ],
     })
-    const button = screen.getByRole('button', { name: '根拠' })
-    expect(button.title).toContain('設計データ')
+    fireEvent.click(screen.getByRole('button', { name: '根拠' }))
+    const body = screen.getByRole('dialog', { name: '根拠' }).querySelector('.estimate-note-popover__body')?.textContent ?? ''
+    expect(body).toContain('設計データ')
   })
 
   it('shows a needs-review badge only when status === needs_review', () => {
@@ -428,16 +478,40 @@ describe('EstimateDetail (Issue #40 Phase 5: EstimateResultを正本とする積
     expect(onFocusResultEvidence).toHaveBeenCalledWith(result)
   })
 
-  it('calls onOverrideResultFactor/onResetResultFactor from the embedded factor cell', () => {
-    const onOverrideResultFactor = vi.fn()
-    const onResetResultFactor = vi.fn()
+  it('shows every factor read-only with one decimal place', () => {
     const result = makeResult({ current_factor: 0.7, allowed_factors: [0.5, 0.7, 1.0], factor_overridden: true })
-    renderDetail({ results: [result], onOverrideResultFactor, onResetResultFactor })
-    fireEvent.change(screen.getByLabelText('係数'), { target: { value: '0.5' } })
-    expect(onOverrideResultFactor).toHaveBeenCalledWith(result, 0.5)
-    const factorCell = screen.getByLabelText('係数').closest('.estimate-result-factor-cell') as HTMLElement
-    fireEvent.click(within(factorCell).getByRole('button', { name: '初期値へ戻す' }))
-    expect(onResetResultFactor).toHaveBeenCalledWith(result)
+    renderDetail({ results: [result] })
+    expect(screen.getByLabelText('係数')).toHaveTextContent('0.7')
+    expect(screen.queryByRole('combobox', { name: '係数' })).not.toBeInTheDocument()
+  })
+
+  it('shows the master price and labor fields without inventing missing values', () => {
+    const master = {
+      ...masterItemById.get(10)!,
+      total_price_a: 315300,
+      box_parts_price: 61600,
+      painting_price: 89100,
+      setup_a: 216,
+      sheet_metal_price: 1096,
+      assembly_price: 351,
+      inspection_price: 15,
+    }
+    renderDetail({ results: [makeResult()], masterItemById: new Map([[10, master]]) })
+    const row = screen.getByText('11001').closest('tr') as HTMLElement
+    for (const value of ['315,300', '61,600', '89,100', '216', '1,096', '351', '15']) {
+      expect(within(row).getByText(value)).toBeInTheDocument()
+    }
+
+    const missingMaster = { ...master, box_parts_price: null }
+    const { container } = renderDetail({ results: [makeResult()], masterItemById: new Map([[10, missingMaster]]) })
+    expect(container.querySelectorAll('tbody .estimate-detail__col-rr-master-price')[1]).toHaveTextContent('-')
+  })
+
+  it('reports the table natural width for the floating panel initial size', () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(1200)
+    const onNaturalWidthChange = vi.fn()
+    renderDetail({ results: [makeResult()], onNaturalWidthChange })
+    expect(onNaturalWidthChange).toHaveBeenCalledWith(1224)
   })
 
   it('shows "積算結果がありません" when there are no results', () => {
@@ -467,12 +541,11 @@ describe('EstimateDetail: 行クリックによる持続選択 (Issue #40 Phase 
     expect(rowB.className).not.toContain('estimate-detail__row--selected')
   })
 
-  it('does not trigger row selection when clicking inside the quantity/factor cell or the reason/evidence buttons', () => {
+  it('does not trigger row selection when clicking inside the quantity cell or the reason/evidence buttons', () => {
     const onSelectResultRow = vi.fn()
     const result = makeResult()
     renderDetail({ results: [result], onSelectResultRow })
     fireEvent.click(screen.getByLabelText('数量'))
-    fireEvent.click(screen.getByLabelText('係数'))
     fireEvent.click(screen.getByRole('button', { name: '根拠' }))
     expect(onSelectResultRow).not.toHaveBeenCalled()
   })

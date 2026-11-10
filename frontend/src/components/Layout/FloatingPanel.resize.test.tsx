@@ -69,6 +69,30 @@ function NaturalHeightHarness({ naturalHeight }: { naturalHeight: number }) {
   )
 }
 
+function NaturalDetailWidthHarness({ naturalWidth }: { naturalWidth: number }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [rect, setRect] = useState<FloatingPanelRect | null>(null)
+  const onRectChange = (
+    update: FloatingPanelRect | ((previous: FloatingPanelRect | null) => FloatingPanelRect | null),
+  ) => setRect((previous) => (typeof update === 'function' ? update(previous) : update))
+
+  return (
+    <div ref={containerRef} data-testid="viewer-wrap">
+      <FloatingPanel
+        visible
+        kind="detail"
+        visibleKinds={['detail']}
+        containerRef={containerRef}
+        rect={rect}
+        onRectChange={onRectChange}
+        maxContentWidth={naturalWidth}
+      >
+        <h2>積算明細</h2>
+      </FloatingPanel>
+    </div>
+  )
+}
+
 describe('FloatingPanel: 図面情報の右下リサイズ', () => {
   afterEach(() => {
     cleanup()
@@ -135,5 +159,22 @@ describe('FloatingPanel: 図面情報の右下リサイズ', () => {
     rerender(<NaturalHeightHarness naturalHeight={1200} />)
     expect(parseFloat(panel.style.top)).toBe(147)
     expect(parseFloat(panel.style.height)).toBe(853)
+  })
+
+  it('expands the detail panel to its natural table width without changing height', () => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    )
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(viewerBounds)
+
+    render(<NaturalDetailWidthHarness naturalWidth={1040} />)
+    const panel = document.querySelector('.floating-panel--detail') as HTMLElement
+    expect(parseFloat(panel.style.width)).toBe(1040)
+    expect(parseFloat(panel.style.height)).toBe(304)
+    expect(parseFloat(panel.style.left)).toBe(140)
   })
 })

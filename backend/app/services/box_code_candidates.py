@@ -176,7 +176,7 @@ def _to_candidate(
         product_no=product_no,
         result_key=box_result_key(panel.ban_menno, panel.ban_no),
         quantity=1.0,
-        applicable_unit=ApplicableUnit.UNIT,
+        applicable_unit=ApplicableUnit.FACE,
         initial_factor=1.0,
         judgment_scope=JudgmentScope.PANEL,
         target_panel_ban_menno=panel.ban_menno,

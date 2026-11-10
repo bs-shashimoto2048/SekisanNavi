@@ -55,6 +55,8 @@ interface Props {
    * 渡さない(`undefined`/`null`)kindはviewport全体を上限とする
    * (他のfloating panelの挙動は変更しない)。 */
   maxContentSize?: Size | null
+  /** 内容の自然幅のみを使って初期表示幅を決める。高さは変更しない。 */
+  maxContentWidth?: number | null
   /** ワークスペース全体を基準にした初期水平オフセット(操作ガイド用)。 */
   initialLeftOffset?: number
   children: ReactNode
@@ -444,6 +446,7 @@ export function FloatingPanel({
   rect,
   onRectChange,
   maxContentSize,
+  maxContentWidth,
   initialLeftOffset = 0,
   children,
 }: Props) {
@@ -470,6 +473,7 @@ export function FloatingPanel({
   // 初期表示と内容変化時は自然サイズへ合わせる。利用者が幅を変更した後は、
   // 以後の自然サイズ計測で手動幅を上書きしない。
   const hasManualPanelInfoWidthRef = useRef(false)
+  const hasManualDetailWidthRef = useRef(false)
 
   // [Issue #25 追加修正] ワークスペースサイズ変更時の相対位置追従(reflowForResize)の
   // 基準にする、「ユーザー操作/初期配置によって確定した」anchor。表示ON直後・
@@ -558,6 +562,24 @@ export function FloatingPanel({
           return next
         }
 
+        if (kind === 'detail' && maxContentWidth != null) {
+          const availableWidth = anchor?.xAnchor === 'right'
+            ? nextContainer.width - anchor.xGap
+            : nextContainer.width - prev.left
+          const targetWidth = hasManualDetailWidthRef.current
+            ? prev.width
+            : Math.max(MIN_WIDTH_BY_KIND.detail, Math.min(maxContentWidth, availableWidth))
+          const left = anchor?.xAnchor === 'right'
+            ? nextContainer.width - anchor.xGap - targetWidth
+            : prev.left
+          const synced = clampToContainerBounds(
+            clampPosition(clampSize({ ...prev, left, width: targetWidth }, nextContainer, kind), nextContainer),
+            nextContainer,
+          )
+          confirmedAnchorRef.current = deriveAnchor(synced, nextContainer)
+          return synced
+        }
+
         if (anchor == null)
           return clampToContainerBounds(
             clampPosition(clampSize(prev, nextContainer, kind, maxContentSize), nextContainer),
@@ -577,7 +599,7 @@ export function FloatingPanel({
     // 入れる(呼び出し側で同じ値でも新しいobject literalが渡され、参照比較だと
     // 無駄にeffectが張り直されるのを避けるため)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [containerRef, kind, visible, maxContentSize?.width, maxContentSize?.height])
+  }, [containerRef, kind, visible, maxContentSize?.width, maxContentSize?.height, maxContentWidth])
 
   // [Issue #25] 表示ONにした瞬間(初回マウント時を含む)、既存panel群を踏まえた
   // 右端寄せ+積み重ねの初期配置を計算し直す。`visibleKinds`(他panelの表示
@@ -604,7 +626,18 @@ export function FloatingPanel({
     const stackIndex = Math.max(0, visibleKinds.indexOf(kind))
     // 再表示時は初期の自然サイズへ戻るため、自然サイズ追従を再び有効にする。
     if (kind === 'panelInfo') hasManualPanelInfoWidthRef.current = false
-    const initialRect = computeInitialRect(kind, nextContainer, stackIndex, initialLeftOffset, initialTopOffset)
+    if (kind === 'detail') hasManualDetailWidthRef.current = false
+    let initialRect = computeInitialRect(kind, nextContainer, stackIndex, initialLeftOffset, initialTopOffset)
+    if (kind === 'detail' && maxContentWidth != null) {
+      const width = Math.max(
+        MIN_WIDTH_BY_KIND.detail,
+        Math.min(maxContentWidth, nextContainer.width - SIDE_MARGIN * 2),
+      )
+      initialRect = clampToContainerBounds(
+        clampPosition({ ...initialRect, left: Math.max(0, nextContainer.width - SIDE_MARGIN - width), width }, nextContainer),
+        nextContainer,
+      )
+    }
     onRectChange(initialRect)
     // [Issue #25 追加修正] 初期配置が確定した時点のanchorを記録する
     // (以後のcontainer resizeはこのanchorからの距離を保つ)。
@@ -700,6 +733,7 @@ export function FloatingPanel({
     const dx = e.clientX - resize.startX
     const dy = e.clientY - resize.startY
     if (kind === 'panelInfo' && dx !== 0) hasManualPanelInfoWidthRef.current = true
+    if (kind === 'detail' && dx !== 0) hasManualDetailWidthRef.current = true
     onRectChange((prev) =>
       prev == null
         ? prev
