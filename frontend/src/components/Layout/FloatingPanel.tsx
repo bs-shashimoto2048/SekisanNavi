@@ -323,7 +323,7 @@ interface Anchor {
  * 算出する。表示ONにした瞬間(初期配置直後)・drag終了時・resize終了時、
  * すなわち「ユーザー操作/初期配置によって位置が確定したタイミング」でのみ
  * 呼び出し、確定済みanchor(`confirmedAnchorRef`)を更新する。 */
-function deriveAnchor(rect: FloatingPanelRect, container: Size): Anchor {
+function deriveAnchor(rect: FloatingPanelRect, container: Size, preferredYAnchor?: Anchor['yAnchor']): Anchor {
   const leftGap = rect.left
   const rightGap = container.width - (rect.left + rect.width)
   const topGap = rect.top
@@ -332,8 +332,8 @@ function deriveAnchor(rect: FloatingPanelRect, container: Size): Anchor {
   return {
     xAnchor: rightGap <= leftGap ? 'right' : 'left',
     xGap: rightGap <= leftGap ? rightGap : leftGap,
-    yAnchor: bottomGap <= topGap ? 'bottom' : 'top',
-    yGap: bottomGap <= topGap ? bottomGap : topGap,
+    yAnchor: preferredYAnchor ?? (bottomGap <= topGap ? 'bottom' : 'top'),
+    yGap: preferredYAnchor === 'bottom' || (preferredYAnchor == null && bottomGap <= topGap) ? bottomGap : topGap,
   }
 }
 
@@ -548,9 +548,13 @@ export function FloatingPanel({
             clampPosition(clampSize(synced, nextContainer, kind, contentLimit), nextContainer),
             nextContainer,
           )
-          // サイズが内容に合わせて変わると右端/下端からの距離も変わるため、
-          // resize-drag終了時(`endResize`)と同様にanchorを更新しておく。
-          confirmedAnchorRef.current = deriveAnchor(next, nextContainer)
+          // サイズが内容に合わせて変わると端からの距離も変わるためanchorを
+          // 更新する。図面情報は自然高に同期した結果、表示直後の短い高さから
+          // 下端anchorへ切り替わると、次の計測で初期位置より上へ押し上げられる。
+          // 利用者がまだ位置を確定していない初期状態では上端anchorを保ち、
+          // 手動操作後はユーザーが選んだanchorを維持する。
+          const preferredYAnchor = kind === 'panelInfo' ? anchor?.yAnchor ?? 'top' : undefined
+          confirmedAnchorRef.current = deriveAnchor(next, nextContainer, preferredYAnchor)
           return next
         }
 
@@ -604,7 +608,7 @@ export function FloatingPanel({
     onRectChange(initialRect)
     // [Issue #25 追加修正] 初期配置が確定した時点のanchorを記録する
     // (以後のcontainer resizeはこのanchorからの距離を保つ)。
-    confirmedAnchorRef.current = deriveAnchor(initialRect, nextContainer)
+    confirmedAnchorRef.current = deriveAnchor(initialRect, nextContainer, kind === 'panelInfo' ? 'top' : undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, visibleKinds, initialTopOffset])
 
