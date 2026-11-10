@@ -7,6 +7,7 @@ import {
   judgmentMethodLabel,
   parseDesignDataRef,
 } from '../../domain/drawingEvidencePresentation'
+import { EstimateResultNotePopover } from './EstimateResultNotePopover'
 import { EstimateResultQuantityCell } from './EstimateResultQuantityCell'
 import './EstimateDetail.css'
 
@@ -16,7 +17,7 @@ import './EstimateDetail.css'
  * 5タブ構成を廃止し、積算結果の正本であるEstimateResultを中心とした
  * タブへ置き換える(Phase 5指示4章)。AI/手動は「積算結果の種類」ではなく
  * 根拠情報の取得元であるため(指示1章)、タブの軸からは外し、行の根拠詳細
- * (`理由`ボタンのtitle)側で確認できるようにする。
+ * (`理由`/`根拠`ボタンのポップオーバー)側で確認できるようにする。
  *
  * - `all`: 全EstimateResult(絞り込みなし)。
  * - `design_data`/`drawing_judgment`:
@@ -342,24 +343,18 @@ export function EstimateDetail({
                         ⚠要確認
                       </span>
                     )}
-                    {result.judgment_reason != null && (
-                      <button
-                        type="button"
-                        className="estimate-detail__reason-button"
-                        title={result.judgment_reason}
-                        aria-label="判定理由"
-                      >
-                        理由
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="estimate-detail__reason-button"
-                      title={evidenceSummaryText(result, detectionById)}
-                      aria-label="根拠"
-                    >
-                      根拠
-                    </button>
+                    <EstimateResultNotePopover
+                      label="理由"
+                      ariaLabel="判定理由"
+                      heading="判定理由"
+                      text={result.judgment_reason?.trim() ? result.judgment_reason : '理由情報なし'}
+                    />
+                    <EstimateResultNotePopover
+                      label="根拠"
+                      ariaLabel="根拠"
+                      heading="根拠"
+                      text={evidenceSummaryText(result, detectionById)}
+                    />
                   </td>
                 </tr>
               )
